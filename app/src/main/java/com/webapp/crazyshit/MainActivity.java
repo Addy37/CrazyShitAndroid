@@ -176,7 +176,7 @@ public class MainActivity extends Activity {
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(13, 13, 15));
-        webView.setAlpha(0f);
+        webView.setAlpha(1f);
         swipeRefresh.addView(webView, match());
         swipeRefresh.setOnChildScrollUpCallback((parent, child) -> webView.canScrollVertically(-1));
 
@@ -219,7 +219,7 @@ public class MainActivity extends Activity {
         menuParams.setMargins(0, 0, dp(12), dp(12));
         webFrame.addView(menuButton, menuParams);
 
-        buildMiniPlayerUi();
+        // Create the Media3 mini-player lazily only after a video is minimized.
 
         videoFrame = new FrameLayout(this);
         videoFrame.setBackgroundColor(Color.BLACK);
@@ -367,10 +367,6 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 swipeRefresh.setRefreshing(false);
                 updateBackCallback();
-                if (!initialPageShown) {
-                    initialPageShown = true;
-                    webView.animate().alpha(1f).setDuration(220L).start();
-                }
                 installPopupGuard();
                 if (probingNativeVideo && nativePlayerEnabled() && isSameSite(Uri.parse(url))) {
                     probeNativeVideo(url, 0, false);
@@ -709,6 +705,7 @@ public class MainActivity extends Activity {
 
     private void startMiniPlayer(Intent data) {
         stopMiniPlayer();
+        if (miniPlayerCard == null) buildMiniPlayerUi();
         miniMediaUrl = data.getStringExtra(PlayerActivity.EXTRA_MEDIA_URL);
         miniPageUrl = data.getStringExtra(PlayerActivity.EXTRA_PAGE_URL);
         miniTitle = data.getStringExtra(PlayerActivity.EXTRA_TITLE);
