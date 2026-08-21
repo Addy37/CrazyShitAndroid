@@ -1,52 +1,33 @@
-# CrazyShit Unofficial v1.2.0
+# CrazyShit Unofficial v1.3.0
 
-A video-focused update that adds a dedicated native Android player while keeping the normal website as a safe fallback.
+A browsing-cleanup update focused on stopping intrusive ad redirects, popups, and popunders without interfering with the native video player.
 
-## New native video player
+## New and improved
 
-- Adds a dedicated Android Media3 / ExoPlayer player
-- Compatible video-page taps can automatically hand off to native playback
-- Supports direct MP4, HLS, DASH, WebM, and M4V links when exposed by the page/session
-- Looks for the page's active HTML5 video source and common video metadata
-- Briefly retries extraction for JavaScript-loaded players
-- Watches the WebView session for direct media requests as a fallback when the DOM does not expose a source
-- Passes the current User-Agent, Referer, Origin, and relevant site cookies to the media request when needed
-- Falls back to the normal webpage if native playback fails
-- Does not bypass DRM, encryption, paywalls, authentication, or access controls
+- New **Block ads & pop-ups** setting, enabled by default
+- Blocks common third-party ad-network requests inside the WebView
+- Prevents JavaScript popup windows and popunders
+- Removes `target=_blank` behavior so links cannot quietly spawn extra browser windows
+- Blocks accidental third-party page redirects from normal taps while ad blocking is enabled
+- Same-site CrazyShit.com navigation continues to work normally
+- Direct MP4, HLS, DASH, WebM, and M4V media links can still hand off to the native player
+- Long-press remains available when you intentionally want to open a real external link
+- Ad blocking can be disabled at any time from the app's three-dot menu
 
-## Player experience
+## Existing v1.2 features retained
 
-- Picture-in-Picture on supported Android devices
-- Full-sensor rotation
-- Keeps the screen awake during playback
-- Remembers playback position and resumes later
-- Playback speed choices from 0.5x to 2x
-- Restart video action
-- Share the original video page
-- Open the normal webpage at any time
-
-## Controls
-
-- **Open videos in native player** toggle in the three-dot app menu, enabled by default
-- **Play current page in native player** for a manual one-off attempt
-- Direct compatible media links can open straight in the player
-
-## Existing v1.1 features retained
-
+- Dedicated Android Media3 / ExoPlayer video player
+- MP4, HLS, and DASH playback
+- Picture-in-Picture
+- Playback-speed selection
+- Resume position
 - Pull to refresh
-- WebView Picture-in-Picture/fullscreen support
-- Android Custom Tabs for external links
-- Modern Android back handling
-- Built-in update checker
-- Long-press link/image actions
-- Downloads, file uploads, Safe Browsing, first-party sessions, and HTTPS-only traffic
+- Update checker
+- Custom Tabs for intentionally opened external pages
+- HTTPS-only WebView traffic, Safe Browsing, and third-party-cookie blocking
 
-## Privacy
+## Notes
 
-The wrapper adds no analytics, advertising SDK, or tracking backend. The native player may reuse the existing site's User-Agent, Referer, and relevant cookies strictly to request the same media stream the current WebView session already exposes.
+The blocker is intentionally conservative around first-party CrazyShit.com content and direct media streams. It does not modify or redistribute website media, bypass access controls, or remove server-side content.
 
-## Unofficial status
-
-This project is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com. No CrazyShit.com media is bundled in the APK. The app loads the live website at runtime.
-
-See `README.md`, `PRIVACY.md`, and `NOTICE.md` in the repository for more information.
+This project remains unofficial and is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
