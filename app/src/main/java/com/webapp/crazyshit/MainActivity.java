@@ -862,12 +862,12 @@ public class MainActivity extends Activity {
         handleParams.setMargins(0, 0, 0, dp(14));
         content.addView(handle, handleParams);
 
-        TextView title = sheetText("CrazyShit Unofficial", 22, Color.WHITE);
+        TextView title = sheetText("CrazyShit Jeremy Edition", 22, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setPadding(dp(6), 0, dp(6), dp(4));
         content.addView(title);
 
-        TextView subtitle = sheetText("Quick controls", 13, Color.rgb(165, 165, 174));
+        TextView subtitle = sheetText("Jeremy Edition • Quick controls", 13, Color.rgb(255, 122, 69));
         subtitle.setPadding(dp(6), 0, dp(6), dp(8));
         content.addView(subtitle);
 
@@ -1109,7 +1109,7 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle("18+ / Graphic Content")
                 .setMessage(
-                        "CrazyShit Unofficial opens CrazyShit.com, which contains adult and graphic material. " +
+                        "CrazyShit Jeremy Edition opens CrazyShit.com, which contains adult and graphic material. " +
                         "Continue only if you are 18 or older and want to view that type of content.\n\n" +
                         "This community app is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com."
                 )
