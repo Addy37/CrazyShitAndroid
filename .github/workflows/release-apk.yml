@@ -38,36 +38,42 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
-      - name: Check signing secrets
+      - name: Restore private release signing key
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
         run: |
-          test -n "$ANDROID_KEYSTORE_BASE64" || { echo "Missing ANDROID_KEYSTORE_BASE64"; exit 1; }
-          test -n "$ANDROID_KEYSTORE_PASSWORD" || { echo "Missing ANDROID_KEYSTORE_PASSWORD"; exit 1; }
-          test -n "$ANDROID_KEY_ALIAS" || { echo "Missing ANDROID_KEY_ALIAS"; exit 1; }
-          test -n "$ANDROID_KEY_PASSWORD" || { echo "Missing ANDROID_KEY_PASSWORD"; exit 1; }
+          python - <<'PY'
+          import base64, json, os, pathlib, sys
 
-      - name: Restore release keystore
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/crazyshit-unofficial-release.jks"
-          chmod 600 "$RUNNER_TEMP/crazyshit-unofficial-release.jks"
+          raw = os.environ.get("SIGNING_BUNDLE", "")
+          if not raw:
+              sys.exit("Missing repository secret: ANDROID_SIGNING_BUNDLE")
+
+          data = json.loads(raw)
+          required = ["keystore_base64", "store_password", "key_alias", "key_password"]
+          missing = [key for key in required if not data.get(key)]
+          if missing:
+              sys.exit("Signing bundle is missing: " + ", ".join(missing))
+
+          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "crazyshit-unofficial-release.jks"
+          keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
+          keystore.chmod(0o600)
+
+          env_file = pathlib.Path(os.environ["GITHUB_ENV"])
+          with env_file.open("a", encoding="utf-8") as f:
+              f.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
+              f.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")
+              f.write(f"ANDROID_KEY_ALIAS={data['key_alias']}\n")
+              f.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
+          PY
 
       - name: Build signed release APK
         env:
           APP_VERSION_NAME: ${{ inputs.version }}
           APP_VERSION_CODE: ${{ github.run_number }}
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/crazyshit-unofficial-release.jks
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Prepare release files
+      - name: Prepare and verify release files
         env:
           VERSION: ${{ inputs.version }}
         run: |
