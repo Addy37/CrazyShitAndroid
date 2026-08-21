@@ -15,12 +15,14 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Rational;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -39,15 +41,26 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 
 import androidx.browser.customtabs.CustomTabsIntent;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.MimeTypes;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.ui.PlayerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+
+import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.materialswitch.MaterialSwitch;
 
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -59,7 +72,10 @@ import java.net.HttpURLConnection;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
+@UnstableApi
 public class MainActivity extends Activity {
     private static final String HOME = "https://crazyshit.com/";
     private static final String RELEASE_API = "https://api.github.com/repos/Addy37/CrazyShitAndroid/releases/latest";
@@ -68,6 +84,7 @@ public class MainActivity extends Activity {
     private static final int PICK_FILE = 1001;
     private static final int STORAGE_PERMISSION = 1002;
     private static final int NATIVE_PLAYER = 2001;
+    private static final int FAVORITES = 2002;
 
     private static final String[] BLOCKED_AD_HOSTS = {
             "doubleclick.net",
@@ -108,11 +125,23 @@ public class MainActivity extends Activity {
     private boolean backCallbackRegistered;
     private volatile boolean probingNativeVideo;
     private volatile String lastDetectedMediaUrl;
+    private boolean initialPageShown;
+
+    private MaterialCardView miniPlayerCard;
+    private PlayerView miniPlayerView;
+    private TextView miniTitleView;
+    private ExoPlayer miniPlayer;
+    private String miniMediaUrl;
+    private String miniPageUrl;
+    private String miniTitle;
+    private String miniUserAgent;
+    private String miniCookies;
+    private boolean miniResumePlayback;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setStatusBarColor(Color.rgb(17, 17, 17));
+        getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
 
         buildUi();
@@ -131,7 +160,7 @@ public class MainActivity extends Activity {
 
     private void buildUi() {
         root = new FrameLayout(this);
-        root.setBackgroundColor(Color.rgb(17, 17, 17));
+        root.setBackgroundColor(Color.rgb(13, 13, 15));
 
         webFrame = new FrameLayout(this);
         root.addView(webFrame, match());
@@ -146,7 +175,8 @@ public class MainActivity extends Activity {
         webFrame.addView(swipeRefresh, match());
 
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(17, 17, 17));
+        webView.setBackgroundColor(Color.rgb(13, 13, 15));
+        webView.setAlpha(0f);
         swipeRefresh.addView(webView, match());
         swipeRefresh.setOnChildScrollUpCallback((parent, child) -> webView.canScrollVertically(-1));
 
@@ -167,7 +197,7 @@ public class MainActivity extends Activity {
         updateBanner.setTextSize(14);
         updateBanner.setGravity(Gravity.CENTER);
         updateBanner.setPadding(dp(12), dp(10), dp(12), dp(10));
-        updateBanner.setBackgroundColor(Color.rgb(35, 35, 35));
+        updateBanner.setBackground(rounded(Color.rgb(35, 35, 40), dp(16)));
         updateBanner.setVisibility(View.GONE);
         updateBanner.setElevation(dp(5));
         FrameLayout.LayoutParams updateParams = new FrameLayout.LayoutParams(-1, -2);
@@ -180,15 +210,16 @@ public class MainActivity extends Activity {
         menuButton.setTextColor(Color.WHITE);
         menuButton.setTextSize(28);
         menuButton.setGravity(Gravity.CENTER);
-        menuButton.setBackgroundColor(Color.argb(220, 28, 28, 28));
-        menuButton.setAlpha(0.78f);
-        menuButton.setElevation(dp(6));
+        menuButton.setBackground(rounded(Color.argb(238, 30, 30, 34), dp(24)));
+        menuButton.setElevation(dp(8));
         menuButton.setContentDescription("App menu");
         menuButton.setOnClickListener(v -> showAppMenu());
-        FrameLayout.LayoutParams menuParams = new FrameLayout.LayoutParams(dp(48), dp(48));
+        FrameLayout.LayoutParams menuParams = new FrameLayout.LayoutParams(dp(50), dp(50));
         menuParams.gravity = Gravity.BOTTOM | Gravity.END;
         menuParams.setMargins(0, 0, dp(12), dp(12));
         webFrame.addView(menuButton, menuParams);
+
+        buildMiniPlayerUi();
 
         videoFrame = new FrameLayout(this);
         videoFrame.setBackgroundColor(Color.BLACK);
@@ -196,6 +227,65 @@ public class MainActivity extends Activity {
         root.addView(videoFrame, match());
 
         setContentView(root);
+    }
+
+    private void buildMiniPlayerUi() {
+        miniPlayerCard = new MaterialCardView(this);
+        miniPlayerCard.setCardBackgroundColor(Color.rgb(24, 24, 28));
+        miniPlayerCard.setRadius(dp(20));
+        miniPlayerCard.setCardElevation(dp(8));
+        miniPlayerCard.setStrokeWidth(1);
+        miniPlayerCard.setStrokeColor(Color.rgb(55, 55, 62));
+        miniPlayerCard.setVisibility(View.GONE);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(6), dp(6), dp(6), dp(6));
+
+        miniPlayerView = new PlayerView(this);
+        miniPlayerView.setUseController(false);
+        miniPlayerView.setBackgroundColor(Color.BLACK);
+        miniPlayerView.setOnClickListener(v -> reopenMiniPlayer());
+        row.addView(miniPlayerView, new LinearLayout.LayoutParams(dp(132), dp(76)));
+
+        miniTitleView = new TextView(this);
+        miniTitleView.setTextColor(Color.WHITE);
+        miniTitleView.setTextSize(14);
+        miniTitleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        miniTitleView.setMaxLines(2);
+        miniTitleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        miniTitleView.setPadding(dp(12), 0, dp(8), 0);
+        miniTitleView.setOnClickListener(v -> reopenMiniPlayer());
+        row.addView(miniTitleView, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        TextView expand = new TextView(this);
+        expand.setText("↗");
+        expand.setTextColor(Color.WHITE);
+        expand.setTextSize(22);
+        expand.setGravity(Gravity.CENTER);
+        expand.setContentDescription("Open full player");
+        expand.setOnClickListener(v -> reopenMiniPlayer());
+        row.addView(expand, new LinearLayout.LayoutParams(dp(44), dp(56)));
+
+        TextView close = new TextView(this);
+        close.setText("×");
+        close.setTextColor(Color.WHITE);
+        close.setTextSize(24);
+        close.setGravity(Gravity.CENTER);
+        close.setContentDescription("Close mini player");
+        close.setOnClickListener(v -> {
+            haptic(v);
+            stopMiniPlayer();
+            restoreKnownUpdate();
+        });
+        row.addView(close, new LinearLayout.LayoutParams(dp(44), dp(56)));
+
+        miniPlayerCard.addView(row);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, dp(88));
+        params.gravity = Gravity.BOTTOM;
+        params.setMargins(dp(12), 0, dp(12), dp(68));
+        webFrame.addView(miniPlayerCard, params);
     }
 
     private FrameLayout.LayoutParams match() {
@@ -207,7 +297,7 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
         box.setPadding(dp(24), dp(24), dp(24), dp(24));
-        box.setBackgroundColor(Color.rgb(17, 17, 17));
+        box.setBackgroundColor(Color.rgb(13, 13, 15));
 
         TextView title = new TextView(this);
         title.setText("Couldn't load the site");
@@ -277,6 +367,10 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 swipeRefresh.setRefreshing(false);
                 updateBackCallback();
+                if (!initialPageShown) {
+                    initialPageShown = true;
+                    webView.animate().alpha(1f).setDuration(220L).start();
+                }
                 installPopupGuard();
                 if (probingNativeVideo && nativePlayerEnabled() && isSameSite(Uri.parse(url))) {
                     probeNativeVideo(url, 0, false);
@@ -326,7 +420,6 @@ public class MainActivity extends Activity {
                     callback.onCustomViewHidden();
                     return;
                 }
-
                 customView = view;
                 customViewCallback = callback;
                 videoFrame.addView(view, match());
@@ -361,14 +454,12 @@ public class MainActivity extends Activity {
 
         webView.setDownloadListener((url, userAgent, disposition, mime, length) ->
                 startDownload(new PendingDownload(url, userAgent, disposition, mime)));
-
         webView.setOnLongClickListener(v -> handleLongPress());
     }
 
     private boolean handleLongPress() {
         WebView.HitTestResult hit = webView.getHitTestResult();
         if (hit == null) return false;
-
         String url = hit.getExtra();
         if (url == null || (!url.startsWith("http://") && !url.startsWith("https://"))) return false;
 
@@ -382,7 +473,7 @@ public class MainActivity extends Activity {
     private void showLongPressMenu(String url, boolean image) {
         String[] items = image
                 ? new String[]{"Open", "Share", "Copy link", "Save image"}
-                : new String[]{"Open", "Share", "Copy link"};
+                : new String[]{"Open", "Share", "Copy link", "Save for later"};
 
         new AlertDialog.Builder(this)
                 .setItems(items, (dialog, which) -> {
@@ -390,6 +481,8 @@ public class MainActivity extends Activity {
                         Uri uri = Uri.parse(url);
                         if (nativePlayerEnabled() && isDirectMedia(uri)) {
                             openNativePlayer(url, currentUrl(), "Video");
+                        } else if (isSameSite(uri)) {
+                            webView.loadUrl(url);
                         } else {
                             openExternal(uri);
                         }
@@ -404,6 +497,13 @@ public class MainActivity extends Activity {
                                 null,
                                 null
                         ));
+                    } else if (!image && which == 3) {
+                        String pageTitle = webView.getTitle();
+                        FavoriteStore.add(this,
+                                pageTitle == null ? "Saved video" : pageTitle,
+                                url);
+                        Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+                        haptic(webView);
                     }
                 })
                 .show();
@@ -429,7 +529,9 @@ public class MainActivity extends Activity {
 
             if (adBlockingEnabled()) {
                 if (fromUserGesture) {
-                    Toast.makeText(this, "Blocked an external ad/pop-up. Long-press a real external link to open it.", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this,
+                            "Blocked an external ad/pop-up. Long-press a real external link to open it.",
+                            Toast.LENGTH_SHORT).show();
                 }
                 return true;
             }
@@ -570,32 +672,131 @@ public class MainActivity extends Activity {
             probingNativeVideo = false;
             lastDetectedMediaUrl = null;
             if (networkMedia != null && !networkMedia.isEmpty()) {
-                openNativePlayer(networkMedia, pageUrl, webView.getTitle() == null ? "Video" : webView.getTitle());
+                openNativePlayer(networkMedia,
+                        pageUrl,
+                        webView.getTitle() == null ? "Video" : webView.getTitle());
                 if (webView.canGoBack()) webView.goBack();
             } else if (userInitiated) {
-                Toast.makeText(this, "No direct video stream found on this page.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this,
+                        "No direct video stream found on this page.",
+                        Toast.LENGTH_SHORT).show();
             }
         });
     }
 
     private void openNativePlayer(String mediaUrl, String pageUrl, String title) {
+        stopMiniPlayer();
         try {
             Intent intent = new Intent(this, PlayerActivity.class);
             intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, mediaUrl);
             intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, pageUrl);
             intent.putExtra(PlayerActivity.EXTRA_TITLE, title);
-            intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, webView.getSettings().getUserAgentString());
+            intent.putExtra(PlayerActivity.EXTRA_USER_AGENT,
+                    webView.getSettings().getUserAgentString());
 
             String cookies = CookieManager.getInstance().getCookie(mediaUrl);
             if ((cookies == null || cookies.isEmpty()) && pageUrl != null) {
                 cookies = CookieManager.getInstance().getCookie(pageUrl);
             }
             if (cookies != null) intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
-
             startActivityForResult(intent, NATIVE_PLAYER);
         } catch (Exception e) {
-            Toast.makeText(this, "Couldn't open the native player.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this,
+                    "Couldn't open the native player.",
+                    Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private void startMiniPlayer(Intent data) {
+        stopMiniPlayer();
+        miniMediaUrl = data.getStringExtra(PlayerActivity.EXTRA_MEDIA_URL);
+        miniPageUrl = data.getStringExtra(PlayerActivity.EXTRA_PAGE_URL);
+        miniTitle = data.getStringExtra(PlayerActivity.EXTRA_TITLE);
+        miniUserAgent = data.getStringExtra(PlayerActivity.EXTRA_USER_AGENT);
+        miniCookies = data.getStringExtra(PlayerActivity.EXTRA_COOKIES);
+        long startPosition = data.getLongExtra(PlayerActivity.EXTRA_START_POSITION, 0L);
+        if (miniMediaUrl == null || miniMediaUrl.isEmpty()) return;
+
+        try {
+            DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory();
+            if (miniUserAgent != null && !miniUserAgent.isEmpty()) {
+                httpFactory.setUserAgent(miniUserAgent);
+            }
+
+            Map<String, String> headers = new HashMap<>();
+            if (miniPageUrl != null && !miniPageUrl.isEmpty()) {
+                headers.put("Referer", miniPageUrl);
+                try {
+                    Uri page = Uri.parse(miniPageUrl);
+                    if (page.getScheme() != null && page.getHost() != null) {
+                        headers.put("Origin", page.getScheme() + "://" + page.getHost());
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (miniCookies != null && !miniCookies.isEmpty()) {
+                headers.put("Cookie", miniCookies);
+            }
+            if (!headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
+
+            miniPlayer = new ExoPlayer.Builder(this)
+                    .setMediaSourceFactory(new DefaultMediaSourceFactory(this)
+                            .setDataSourceFactory(httpFactory))
+                    .build();
+            miniPlayerView.setPlayer(miniPlayer);
+
+            MediaItem.Builder item = new MediaItem.Builder().setUri(miniMediaUrl);
+            String lower = miniMediaUrl.toLowerCase();
+            if (lower.contains(".m3u8")) item.setMimeType(MimeTypes.APPLICATION_M3U8);
+            else if (lower.contains(".mpd")) item.setMimeType(MimeTypes.APPLICATION_MPD);
+            miniPlayer.setMediaItem(item.build());
+            if (startPosition > 0L) miniPlayer.seekTo(startPosition);
+            miniPlayer.prepare();
+            miniPlayer.play();
+            miniResumePlayback = true;
+
+            miniTitleView.setText(
+                    miniTitle == null || miniTitle.isEmpty() ? "Video" : miniTitle
+            );
+            miniPlayerCard.setVisibility(View.VISIBLE);
+            updateBanner.setVisibility(View.GONE);
+        } catch (Exception e) {
+            stopMiniPlayer();
+            Toast.makeText(this,
+                    "Couldn't start the mini-player.",
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void reopenMiniPlayer() {
+        if (miniPlayer == null || miniMediaUrl == null) return;
+        haptic(miniPlayerCard);
+        long position = miniPlayer.getCurrentPosition();
+
+        Intent intent = new Intent(this, PlayerActivity.class);
+        intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, miniMediaUrl);
+        intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, miniPageUrl);
+        intent.putExtra(PlayerActivity.EXTRA_TITLE, miniTitle);
+        intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, miniUserAgent);
+        intent.putExtra(PlayerActivity.EXTRA_COOKIES, miniCookies);
+        intent.putExtra(PlayerActivity.EXTRA_START_POSITION, position);
+        stopMiniPlayer();
+        startActivityForResult(intent, NATIVE_PLAYER);
+    }
+
+    private void stopMiniPlayer() {
+        miniResumePlayback = false;
+        if (miniPlayerView != null) miniPlayerView.setPlayer(null);
+        if (miniPlayer != null) {
+            miniPlayer.release();
+            miniPlayer = null;
+        }
+        if (miniPlayerCard != null) miniPlayerCard.setVisibility(View.GONE);
+        miniMediaUrl = null;
+        miniPageUrl = null;
+        miniTitle = null;
+        miniUserAgent = null;
+        miniCookies = null;
     }
 
     private void openExternal(Uri uri) {
@@ -619,86 +820,231 @@ public class MainActivity extends Activity {
             intent.addCategory(Intent.CATEGORY_BROWSABLE);
             startActivity(intent);
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, "No app can open this link.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this,
+                    "No app can open this link.",
+                    Toast.LENGTH_SHORT).show();
         }
     }
 
     private void showAppMenu() {
-        PopupMenu menu = new PopupMenu(this, menuButton);
-        menu.getMenu().add(0, 1, 0, "Home");
-        menu.getMenu().add(0, 2, 1, "Refresh");
-        menu.getMenu().add(0, 3, 2, "Share page");
-        menu.getMenu().add(0, 4, 3, "Open in browser");
-        menu.getMenu().add(0, 7, 4, "Open videos in native player")
-                .setCheckable(true)
-                .setChecked(nativePlayerEnabled());
-        menu.getMenu().add(0, 8, 5, "Play current page in native player");
-        menu.getMenu().add(0, 9, 6, "Block ads & pop-ups")
-                .setCheckable(true)
-                .setChecked(adBlockingEnabled());
-        menu.getMenu().add(0, 5, 7, "Check for updates");
-        menu.getMenu().add(0, 6, 8, "Clear site data");
+        haptic(menuButton);
+        BottomSheetDialog sheet = new BottomSheetDialog(this);
 
-        menu.setOnMenuItemClickListener(item -> {
-            switch (item.getItemId()) {
-                case 1:
-                    probingNativeVideo = false;
-                    webView.loadUrl(HOME);
-                    return true;
-                case 2:
-                    probingNativeVideo = false;
-                    swipeRefresh.setRefreshing(true);
-                    webView.reload();
-                    return true;
-                case 3:
-                    shareText(currentUrl());
-                    return true;
-                case 4:
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(16), dp(10), dp(16), dp(28));
+        content.setBackgroundColor(Color.rgb(18, 18, 21));
+
+        TextView handle = new TextView(this);
+        handle.setBackground(rounded(Color.rgb(88, 88, 96), dp(3)));
+        LinearLayout.LayoutParams handleParams =
+                new LinearLayout.LayoutParams(dp(42), dp(5));
+        handleParams.gravity = Gravity.CENTER_HORIZONTAL;
+        handleParams.setMargins(0, 0, 0, dp(14));
+        content.addView(handle, handleParams);
+
+        TextView title = sheetText("CrazyShit Unofficial", 22, Color.WHITE);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setPadding(dp(6), 0, dp(6), dp(4));
+        content.addView(title);
+
+        TextView subtitle = sheetText("Quick controls", 13, Color.rgb(165, 165, 174));
+        subtitle.setPadding(dp(6), 0, dp(6), dp(8));
+        content.addView(subtitle);
+
+        addSheetSection(content, "Browsing");
+        addSheetAction(content, "Home", "Go to the CrazyShit homepage", () -> {
+            probingNativeVideo = false;
+            webView.loadUrl(HOME);
+            sheet.dismiss();
+        });
+        addSheetAction(content, "Refresh", "Reload the current page", () -> {
+            probingNativeVideo = false;
+            swipeRefresh.setRefreshing(true);
+            webView.reload();
+            sheet.dismiss();
+        });
+        addSheetAction(content, "Share page", currentUrl(), () -> {
+            shareText(currentUrl());
+            sheet.dismiss();
+        });
+        addSheetAction(content,
+                "Open in browser",
+                "Open the current page outside the app",
+                () -> {
                     openExternal(Uri.parse(currentUrl()));
-                    return true;
-                case 5:
-                    checkForUpdates(true);
-                    return true;
-                case 6:
-                    confirmClearSiteData();
-                    return true;
-                case 7:
-                    boolean enabled = !nativePlayerEnabled();
-                    getSharedPreferences("app_prefs", MODE_PRIVATE)
-                            .edit()
-                            .putBoolean("native_player_enabled", enabled)
-                            .apply();
-                    item.setChecked(enabled);
-                    Toast.makeText(
-                            this,
-                            enabled ? "Native video player enabled." : "Native video player disabled.",
-                            Toast.LENGTH_SHORT
-                    ).show();
-                    return true;
-                case 8:
+                    sheet.dismiss();
+                });
+        addSheetAction(content,
+                "Watch Later",
+                "Open locally saved video pages",
+                () -> {
+                    startActivityForResult(
+                            new Intent(this, FavoritesActivity.class),
+                            FAVORITES
+                    );
+                    sheet.dismiss();
+                });
+
+        addSheetSection(content, "Video");
+        addSheetSwitch(
+                content,
+                "Native video player",
+                "Open compatible streams in the dedicated player",
+                "native_player_enabled",
+                true,
+                null
+        );
+        addSheetAction(content,
+                "Play current page",
+                "Try to detect a video on this page",
+                () -> {
                     probingNativeVideo = true;
                     lastDetectedMediaUrl = null;
                     probeNativeVideo(currentUrl(), 0, true);
-                    return true;
-                case 9:
-                    boolean blockAds = !adBlockingEnabled();
-                    getSharedPreferences("app_prefs", MODE_PRIVATE)
-                            .edit()
-                            .putBoolean("ad_blocking_enabled", blockAds)
-                            .apply();
-                    item.setChecked(blockAds);
-                    Toast.makeText(
-                            this,
-                            blockAds ? "Ad and pop-up blocking enabled." : "Ad and pop-up blocking disabled.",
-                            Toast.LENGTH_SHORT
-                    ).show();
-                    webView.reload();
-                    return true;
-                default:
-                    return false;
-            }
+                    sheet.dismiss();
+                });
+
+        addSheetSection(content, "Privacy");
+        addSheetSwitch(
+                content,
+                "Block ads & pop-ups",
+                "Stop ad hosts, popunders and redirect hijacks",
+                "ad_blocking_enabled",
+                true,
+                webView::reload
+        );
+
+        addSheetSection(content, "App");
+        addSheetAction(content,
+                "Settings",
+                "Playback, privacy, haptics and Watch Later",
+                () -> {
+                    startActivity(new Intent(this, SettingsActivity.class));
+                    sheet.dismiss();
+                });
+        addSheetAction(content,
+                "Check for updates",
+                "Look for a newer GitHub release",
+                () -> {
+                    checkForUpdates(true);
+                    sheet.dismiss();
+                });
+        addSheetAction(content,
+                "Clear site data",
+                "Sign out and clear website data",
+                () -> {
+                    sheet.dismiss();
+                    confirmClearSiteData();
+                });
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        sheet.setContentView(scroll);
+        sheet.show();
+    }
+
+    private void addSheetSection(LinearLayout root, String label) {
+        TextView view = sheetText(label.toUpperCase(), 11, Color.rgb(155, 155, 166));
+        view.setTypeface(null, android.graphics.Typeface.BOLD);
+        view.setPadding(dp(8), dp(18), dp(8), dp(6));
+        root.addView(view);
+    }
+
+    private void addSheetAction(
+            LinearLayout root,
+            String title,
+            String subtitle,
+            Runnable action
+    ) {
+        MaterialCardView card = sheetCard();
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(15), dp(12), dp(14), dp(12));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(v -> {
+            haptic(v);
+            action.run();
         });
-        menu.show();
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.addView(sheetText(title, 16, Color.WHITE));
+        TextView sub = sheetText(subtitle, 12, Color.rgb(170, 170, 180));
+        sub.setMaxLines(1);
+        sub.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        sub.setPadding(0, dp(3), 0, 0);
+        copy.addView(sub);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        TextView arrow = sheetText("›", 26, Color.rgb(190, 190, 198));
+        row.addView(arrow);
+        card.addView(row);
+        root.addView(card, sheetCardParams());
+    }
+
+    private void addSheetSwitch(
+            LinearLayout root,
+            String title,
+            String subtitle,
+            String key,
+            boolean defaultValue,
+            Runnable afterChange
+    ) {
+        MaterialCardView card = sheetCard();
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(15), dp(12), dp(10), dp(12));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.addView(sheetText(title, 16, Color.WHITE));
+        TextView sub = sheetText(subtitle, 12, Color.rgb(170, 170, 180));
+        sub.setPadding(0, dp(3), 0, 0);
+        copy.addView(sub);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        MaterialSwitch toggle = new MaterialSwitch(this);
+        toggle.setChecked(getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean(key, defaultValue));
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            getSharedPreferences("app_prefs", MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(key, checked)
+                    .apply();
+            haptic(button);
+            if (afterChange != null) afterChange.run();
+        });
+        row.addView(toggle);
+        card.addView(row);
+        root.addView(card, sheetCardParams());
+    }
+
+    private MaterialCardView sheetCard() {
+        MaterialCardView card = new MaterialCardView(this);
+        card.setCardBackgroundColor(Color.rgb(28, 28, 32));
+        card.setRadius(dp(18));
+        card.setCardElevation(0f);
+        card.setStrokeWidth(1);
+        card.setStrokeColor(Color.rgb(48, 48, 55));
+        return card;
+    }
+
+    private LinearLayout.LayoutParams sheetCardParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(4), 0, dp(4));
+        return params;
+    }
+
+    private TextView sheetText(String value, int size, int color) {
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        return view;
     }
 
     private void confirmClearSiteData() {
@@ -713,7 +1059,9 @@ public class MainActivity extends Activity {
                         webView.clearCache(true);
                         webView.clearHistory();
                         webView.loadUrl(HOME);
-                        Toast.makeText(this, "Site data cleared.", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this,
+                                "Site data cleared.",
+                                Toast.LENGTH_SHORT).show();
                     });
                 })
                 .show();
@@ -727,7 +1075,8 @@ public class MainActivity extends Activity {
     }
 
     private void copyText(String text) {
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipboardManager clipboard =
+                (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         clipboard.setPrimaryClip(ClipData.newPlainText("Link", text));
         Toast.makeText(this, "Copied.", Toast.LENGTH_SHORT).show();
     }
@@ -765,9 +1114,13 @@ public class MainActivity extends Activity {
 
     private void startDownload(PendingDownload download) {
         if (Build.VERSION.SDK_INT <= 28 &&
-                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+                        PackageManager.PERMISSION_GRANTED) {
             pendingDownload = download;
-            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, STORAGE_PERMISSION);
+            requestPermissions(
+                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                    STORAGE_PERMISSION
+            );
             return;
         }
         enqueueDownload(download);
@@ -775,29 +1128,46 @@ public class MainActivity extends Activity {
 
     private void enqueueDownload(PendingDownload download) {
         try {
-            String name = URLUtil.guessFileName(download.url, download.disposition, download.mime);
-            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(download.url));
+            String name = URLUtil.guessFileName(
+                    download.url,
+                    download.disposition,
+                    download.mime
+            );
+            DownloadManager.Request request =
+                    new DownloadManager.Request(Uri.parse(download.url));
             request.setTitle(name);
             request.setDescription("Downloading from CrazyShit");
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name);
+            request.setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+            );
+            request.setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_DOWNLOADS,
+                    name
+            );
 
-            if (download.mime != null && !download.mime.isEmpty()) request.setMimeType(download.mime);
-            if (download.userAgent != null) request.addRequestHeader("User-Agent", download.userAgent);
+            if (download.mime != null && !download.mime.isEmpty()) {
+                request.setMimeType(download.mime);
+            }
+            if (download.userAgent != null) {
+                request.addRequestHeader("User-Agent", download.userAgent);
+            }
 
             String cookies = CookieManager.getInstance().getCookie(download.url);
             if (cookies != null) request.addRequestHeader("Cookie", cookies);
 
             ((DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE)).enqueue(request);
-            Toast.makeText(this, "Downloading " + name, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this,
+                    "Downloading " + name,
+                    Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
-            Toast.makeText(this, "Couldn't start the download.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this,
+                    "Couldn't start the download.",
+                    Toast.LENGTH_SHORT).show();
         }
     }
 
     private void leaveVideo() {
         if (customView == null) return;
-
         videoFrame.removeView(customView);
         videoFrame.setVisibility(View.GONE);
         webFrame.setVisibility(View.VISIBLE);
@@ -817,10 +1187,14 @@ public class MainActivity extends Activity {
             WindowInsetsController controller = getWindow().getInsetsController();
             if (controller != null) {
                 if (enabled) {
-                    controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                    controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                    controller.hide(WindowInsets.Type.statusBars() |
+                            WindowInsets.Type.navigationBars());
+                    controller.setSystemBarsBehavior(
+                            WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    );
                 } else {
-                    controller.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                    controller.show(WindowInsets.Type.statusBars() |
+                            WindowInsets.Type.navigationBars());
                 }
             }
         } else {
@@ -834,16 +1208,20 @@ public class MainActivity extends Activity {
 
     private boolean pipSupported() {
         return Build.VERSION.SDK_INT >= 26 &&
-                getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);
+                getPackageManager().hasSystemFeature(
+                        PackageManager.FEATURE_PICTURE_IN_PICTURE
+                );
     }
 
     private void configurePip(boolean videoActive) {
         if (!pipSupported()) return;
-
         try {
-            PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
-                    .setAspectRatio(new Rational(16, 9));
-            if (Build.VERSION.SDK_INT >= 31) builder.setAutoEnterEnabled(videoActive);
+            PictureInPictureParams.Builder builder =
+                    new PictureInPictureParams.Builder()
+                            .setAspectRatio(new Rational(16, 9));
+            if (Build.VERSION.SDK_INT >= 31) {
+                builder.setAutoEnterEnabled(videoActive);
+            }
             setPictureInPictureParams(builder.build());
         } catch (Exception ignored) {
         }
@@ -852,12 +1230,15 @@ public class MainActivity extends Activity {
     @Override
     public void onUserLeaveHint() {
         super.onUserLeaveHint();
-        if (customView != null && pipSupported() && Build.VERSION.SDK_INT < 31) {
+        if (customView != null &&
+                pipSupported() &&
+                Build.VERSION.SDK_INT < 31) {
             try {
-                PictureInPictureParams params = new PictureInPictureParams.Builder()
-                        .setAspectRatio(new Rational(16, 9))
-                        .build();
-                enterPictureInPictureMode(params);
+                enterPictureInPictureMode(
+                        new PictureInPictureParams.Builder()
+                                .setAspectRatio(new Rational(16, 9))
+                                .build()
+                );
             } catch (Exception ignored) {
             }
         }
@@ -872,8 +1253,8 @@ public class MainActivity extends Activity {
 
     private void updateBackCallback() {
         if (Build.VERSION.SDK_INT < 33 || backCallback == null) return;
-
-        boolean shouldIntercept = customView != null || (webView != null && webView.canGoBack());
+        boolean shouldIntercept =
+                customView != null || (webView != null && webView.canGoBack());
         OnBackInvokedDispatcher dispatcher = getOnBackInvokedDispatcher();
 
         if (shouldIntercept && !backCallbackRegistered) {
@@ -906,7 +1287,6 @@ public class MainActivity extends Activity {
             super.onBackPressed();
             return;
         }
-
         if (customView != null || webView.canGoBack()) handleInAppBack();
         else super.onBackPressed();
     }
@@ -926,7 +1306,11 @@ public class MainActivity extends Activity {
         long lastCheck = prefs.getLong("last_update_check", 0L);
 
         if (!userInitiated && now - lastCheck < UPDATE_CHECK_INTERVAL_MS) return;
-        if (userInitiated) Toast.makeText(this, "Checking for updates…", Toast.LENGTH_SHORT).show();
+        if (userInitiated) {
+            Toast.makeText(this,
+                    "Checking for updates…",
+                    Toast.LENGTH_SHORT).show();
+        }
 
         new Thread(() -> {
             HttpURLConnection connection = null;
@@ -935,7 +1319,10 @@ public class MainActivity extends Activity {
                 connection.setConnectTimeout(7000);
                 connection.setReadTimeout(7000);
                 connection.setRequestProperty("Accept", "application/vnd.github+json");
-                connection.setRequestProperty("User-Agent", "CrazyShit-Unofficial-Android");
+                connection.setRequestProperty(
+                        "User-Agent",
+                        "CrazyShit-Unofficial-Android"
+                );
 
                 int status = connection.getResponseCode();
                 if (status != HttpURLConnection.HTTP_OK) {
@@ -943,8 +1330,11 @@ public class MainActivity extends Activity {
                 }
 
                 StringBuilder jsonText = new StringBuilder();
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                        connection.getInputStream(), StandardCharsets.UTF_8))) {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(
+                                connection.getInputStream(),
+                                StandardCharsets.UTF_8
+                        ))) {
                     String line;
                     while ((line = reader.readLine()) != null) jsonText.append(line);
                 }
@@ -952,24 +1342,34 @@ public class MainActivity extends Activity {
                 JSONObject json = new JSONObject(jsonText.toString());
                 String latest = normalizeVersion(json.optString("tag_name", ""));
                 String releaseUrl = json.optString("html_url", RELEASE_PAGE);
-                if (latest.isEmpty()) throw new IllegalStateException("No version returned");
+                if (latest.isEmpty()) {
+                    throw new IllegalStateException("No version returned");
+                }
 
                 boolean newer = compareVersions(latest, currentVersion()) > 0;
-                SharedPreferences.Editor editor = prefs.edit().putLong("last_update_check", now);
+                SharedPreferences.Editor editor =
+                        prefs.edit().putLong("last_update_check", now);
                 if (newer) {
                     editor.putString("available_version", latest)
                             .putString("available_release_url", releaseUrl);
                 } else {
-                    editor.remove("available_version").remove("available_release_url");
+                    editor.remove("available_version")
+                            .remove("available_release_url");
                 }
                 editor.apply();
 
                 runOnUiThread(() -> {
-                    if (newer) showUpdateBanner(latest, releaseUrl);
-                    else {
+                    if (newer) {
+                        if (miniPlayerCard == null ||
+                                miniPlayerCard.getVisibility() != View.VISIBLE) {
+                            showUpdateBanner(latest, releaseUrl);
+                        }
+                    } else {
                         updateBanner.setVisibility(View.GONE);
                         if (userInitiated) {
-                            Toast.makeText(this, "You're up to date.", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(this,
+                                    "You're up to date.",
+                                    Toast.LENGTH_SHORT).show();
                         }
                     }
                 });
@@ -1004,7 +1404,9 @@ public class MainActivity extends Activity {
             } else {
                 info = getPackageManager().getPackageInfo(getPackageName(), 0);
             }
-            return normalizeVersion(info.versionName == null ? "0.0.0" : info.versionName);
+            return normalizeVersion(info.versionName == null
+                    ? "0.0.0"
+                    : info.versionName);
         } catch (Exception e) {
             return "0.0.0";
         }
@@ -1012,7 +1414,9 @@ public class MainActivity extends Activity {
 
     private String normalizeVersion(String version) {
         String value = version == null ? "" : version.trim();
-        if (value.startsWith("v") || value.startsWith("V")) value = value.substring(1);
+        if (value.startsWith("v") || value.startsWith("V")) {
+            value = value.substring(1);
+        }
         int dash = value.indexOf('-');
         if (dash >= 0) value = value.substring(0, dash);
         return value;
@@ -1043,14 +1447,22 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == PICK_FILE && fileCallback != null) {
-            fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+            fileCallback.onReceiveValue(
+                    WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+            );
             fileCallback = null;
             return;
         }
 
         if (requestCode == NATIVE_PLAYER) {
+            if (data != null &&
+                    data.getBooleanExtra(PlayerActivity.EXTRA_MINIMIZED, false)) {
+                startMiniPlayer(data);
+                return;
+            }
             if (data != null) {
-                String fallbackPage = data.getStringExtra(PlayerActivity.EXTRA_FALLBACK_PAGE);
+                String fallbackPage =
+                        data.getStringExtra(PlayerActivity.EXTRA_FALLBACK_PAGE);
                 if (fallbackPage != null && !fallbackPage.isEmpty()) {
                     probingNativeVideo = false;
                     webView.loadUrl(fallbackPage);
@@ -1059,20 +1471,53 @@ public class MainActivity extends Activity {
             return;
         }
 
+        if (requestCode == FAVORITES &&
+                resultCode == RESULT_OK &&
+                data != null) {
+            String selectedUrl =
+                    data.getStringExtra(FavoritesActivity.EXTRA_SELECTED_URL);
+            if (selectedUrl != null && !selectedUrl.isEmpty()) {
+                webView.loadUrl(selectedUrl);
+            }
+            return;
+        }
+
         super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] results
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
         if (requestCode == STORAGE_PERMISSION && pendingDownload != null) {
-            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+            if (results.length > 0 &&
+                    results[0] == PackageManager.PERMISSION_GRANTED) {
                 enqueueDownload(pendingDownload);
             } else {
-                Toast.makeText(this, "Storage permission is needed for downloads.", Toast.LENGTH_LONG).show();
+                Toast.makeText(this,
+                        "Storage permission is needed for downloads.",
+                        Toast.LENGTH_LONG).show();
             }
             pendingDownload = null;
         }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (miniPlayer != null && miniResumePlayback) miniPlayer.play();
+    }
+
+    @Override
+    protected void onStop() {
+        if (miniPlayer != null) {
+            miniResumePlayback = miniPlayer.isPlaying();
+            miniPlayer.pause();
+        }
+        super.onStop();
     }
 
     @Override
@@ -1083,7 +1528,9 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (Build.VERSION.SDK_INT >= 33 && backCallbackRegistered && backCallback != null) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+                backCallbackRegistered &&
+                backCallback != null) {
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backCallback);
             backCallbackRegistered = false;
         }
@@ -1093,6 +1540,8 @@ public class MainActivity extends Activity {
             fileCallback = null;
         }
 
+        stopMiniPlayer();
+
         if (webView != null) {
             webView.stopLoading();
             webView.setWebChromeClient(null);
@@ -1100,6 +1549,19 @@ public class MainActivity extends Activity {
             webView.destroy();
         }
         super.onDestroy();
+    }
+
+    private void haptic(View view) {
+        if (!getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean("haptics_enabled", true)) return;
+        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+    }
+
+    private GradientDrawable rounded(int color, int radius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(radius);
+        return drawable;
     }
 
     private int dp(int value) {
@@ -1112,7 +1574,12 @@ public class MainActivity extends Activity {
         final String disposition;
         final String mime;
 
-        PendingDownload(String url, String userAgent, String disposition, String mime) {
+        PendingDownload(
+                String url,
+                String userAgent,
+                String disposition,
+                String mime
+        ) {
             this.url = url;
             this.userAgent = userAgent;
             this.disposition = disposition;
