@@ -1,17 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.CrazyShit" parent="@android:style/Theme.Material.NoActionBar">
+    <style name="Theme.CrazyShit" parent="Theme.Material3.Dark.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowBackground">@color/app_background</item>
-        <item name="android:statusBarColor">#111111</item>
+        <item name="android:statusBarColor">@color/app_background</item>
         <item name="android:navigationBarColor">#000000</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:colorAccent">#FFFFFF</item>
-        <item name="android:windowSplashScreenBackground">#111111</item>
+        <item name="colorPrimary">@color/app_primary</item>
+        <item name="colorOnPrimary">@color/app_on_primary</item>
+        <item name="colorSurface">@color/app_surface</item>
+        <item name="colorOnSurface">@color/app_on_surface</item>
+        <item name="colorSurfaceVariant">@color/app_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/app_on_surface_variant</item>
+        <item name="android:windowSplashScreenBackground">@color/app_background</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_legacy</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">#111111</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/app_background</item>
     </style>
 </resources>
