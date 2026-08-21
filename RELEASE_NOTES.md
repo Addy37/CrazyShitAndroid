@@ -1,20 +1,13 @@
-# CrazyShit Unofficial v1.4.2
+# CrazyShit Unofficial v1.4.3
 
-A runtime compatibility hotfix for the v1.4 modern UI on Android 12 and newer.
+A small Android system-bar compatibility update focused on keeping website controls readable on modern edge-to-edge devices.
 
-## Fixed
+## Improved
 
-- Fixes the three-dot app menu crashing on Android 12+ devices.
-- Fixes the in-app mini-player crashing when returning from native video playback.
-- Corrects the Android 12+ theme override so Material 3 widgets use the same compatible theme as the rest of the app.
-- Adds explicit Android 13+ Back handling inside the native video player.
-- Back from native video now follows the app's **Minimize player on Back** setting instead of letting the system finish the player unexpectedly.
-- Keeps the v1.4 Material 3 UI, Settings, Watch Later, player gestures, adaptive icon, ad blocking, native video player, and mini-player.
-
-## Root cause
-
-The base app theme was Material 3, but the Android 12+ `values-v31` theme still inherited the platform `Theme.Material.NoActionBar`. Material 3 controls such as the bottom sheet and mini-player card can throw a runtime theme-enforcement exception under that mismatch even though the project compiles successfully. v1.4.2 makes the Android 12+ theme consistently Material 3.
-
-The player Activity also had Android's predictive Back system enabled without registering its own `OnBackInvokedCallback`, while its minimize-to-browser behavior lived in `onBackPressed()`. v1.4.2 registers the platform Back callback directly and routes it through the same minimize/return logic used by the player's Back button.
+- The website/browser area now respects the Android status bar, navigation bar, and display cutout safe areas.
+- Top-of-page controls no longer sit underneath the clock, notification icons, or camera cutout on Android 15/16 edge-to-edge layouts.
+- Bottom browser controls also stay clear of the gesture/navigation area.
+- Native video playback and HTML5 fullscreen video still use the full display when fullscreen is requested.
+- Keeps the v1.4 Material 3 UI, Settings, Watch Later, mini-player, ad blocking, native video player, gestures, and Android 13+ Back handling.
 
 This project remains unofficial and is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
