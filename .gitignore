@@ -5,3 +5,8 @@ build/
 **/build/
 *.iml
 CrazyShit.apk
+*.jks
+*.keystore
+GITHUB_SECRETS.txt
+GITHUB_SECRET_ONE_LINE.txt
+CrazyShitSigningBackup*
