@@ -22,7 +22,6 @@ import android.os.Environment;
 import android.util.Rational;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
@@ -51,6 +50,7 @@ import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import org.json.JSONObject;
+import org.json.JSONTokener;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -66,6 +66,7 @@ public class MainActivity extends Activity {
     private static final long UPDATE_CHECK_INTERVAL_MS = 6L * 60L * 60L * 1000L;
     private static final int PICK_FILE = 1001;
     private static final int STORAGE_PERMISSION = 1002;
+    private static final int NATIVE_PLAYER = 2001;
 
     private FrameLayout root;
     private FrameLayout webFrame;
@@ -82,6 +83,8 @@ public class MainActivity extends Activity {
     private PendingDownload pendingDownload;
     private OnBackInvokedCallback backCallback;
     private boolean backCallbackRegistered;
+    private volatile boolean probingNativeVideo;
+    private volatile String lastDetectedMediaUrl;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -113,6 +116,8 @@ public class MainActivity extends Activity {
         swipeRefresh = new SwipeRefreshLayout(this);
         swipeRefresh.setOnRefreshListener(() -> {
             errorView.setVisibility(View.GONE);
+            probingNativeVideo = false;
+            lastDetectedMediaUrl = null;
             if (webView.getUrl() == null) webView.loadUrl(HOME); else webView.reload();
         });
         webFrame.addView(swipeRefresh, match());
@@ -230,12 +235,12 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return route(request.getUrl());
+                return route(request.getUrl(), request.hasGesture());
             }
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return route(Uri.parse(url));
+                return route(Uri.parse(url), true);
             }
 
             @Override
@@ -247,6 +252,17 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 swipeRefresh.setRefreshing(false);
                 updateBackCallback();
+                if (probingNativeVideo && nativePlayerEnabled() && isSameSite(Uri.parse(url))) {
+                    probeNativeVideo(url, 0, false);
+                }
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (probingNativeVideo && isDirectMedia(request.getUrl())) {
+                    lastDetectedMediaUrl = request.getUrl().toString();
+                }
+                return super.shouldInterceptRequest(view, request);
             }
 
             @Override
@@ -340,10 +356,18 @@ public class MainActivity extends Activity {
 
         new AlertDialog.Builder(this)
                 .setItems(items, (dialog, which) -> {
-                    if (which == 0) openExternal(Uri.parse(url));
-                    else if (which == 1) shareText(url);
-                    else if (which == 2) copyText(url);
-                    else if (image && which == 3) {
+                    if (which == 0) {
+                        Uri uri = Uri.parse(url);
+                        if (nativePlayerEnabled() && isDirectMedia(uri)) {
+                            openNativePlayer(url, currentUrl(), "Video");
+                        } else {
+                            openExternal(uri);
+                        }
+                    } else if (which == 1) {
+                        shareText(url);
+                    } else if (which == 2) {
+                        copyText(url);
+                    } else if (image && which == 3) {
                         startDownload(new PendingDownload(
                                 url,
                                 webView.getSettings().getUserAgentString(),
@@ -355,15 +379,24 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    private boolean route(Uri uri) {
+    private boolean route(Uri uri, boolean fromUserGesture) {
         if (uri == null || uri.getScheme() == null) return false;
         String scheme = uri.getScheme();
 
         if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
-            String host = uri.getHost();
-            if (host != null && (host.equalsIgnoreCase("crazyshit.com") || host.toLowerCase().endsWith(".crazyshit.com"))) {
+            if (nativePlayerEnabled() && fromUserGesture && isDirectMedia(uri)) {
+                openNativePlayer(uri.toString(), currentUrl(), "Video");
+                return true;
+            }
+
+            if (isSameSite(uri)) {
+                if (nativePlayerEnabled() && fromUserGesture) {
+                    probingNativeVideo = true;
+                    lastDetectedMediaUrl = null;
+                }
                 return false;
             }
+
             openExternal(uri);
             return true;
         }
@@ -384,6 +417,111 @@ public class MainActivity extends Activity {
 
         openSystemIntent(uri);
         return true;
+    }
+
+    private boolean isSameSite(Uri uri) {
+        String host = uri == null ? null : uri.getHost();
+        return host != null &&
+                (host.equalsIgnoreCase("crazyshit.com") || host.toLowerCase().endsWith(".crazyshit.com"));
+    }
+
+    private boolean isDirectMedia(Uri uri) {
+        if (uri == null) return false;
+        String value = uri.toString().toLowerCase();
+        return value.contains(".m3u8") ||
+                value.contains(".mpd") ||
+                value.contains(".mp4") ||
+                value.contains(".webm") ||
+                value.contains(".m4v");
+    }
+
+    private boolean nativePlayerEnabled() {
+        return getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean("native_player_enabled", true);
+    }
+
+    private void probeNativeVideo(String pageUrl, int attempt, boolean userInitiated) {
+        if (webView == null || pageUrl == null || pageUrl.isEmpty()) return;
+
+        String js = "(function(){" +
+                "function ok(u){return typeof u==='string' && /^https?:\\/\\//i.test(u);}" +
+                "var c=[];" +
+                "var v=document.querySelector('video');" +
+                "if(v){if(ok(v.currentSrc))c.push(v.currentSrc);if(ok(v.src))c.push(v.src);" +
+                "v.querySelectorAll('source[src]').forEach(function(s){if(ok(s.src))c.push(s.src);});}" +
+                "document.querySelectorAll('video source[src],source[type*=video][src]').forEach(function(s){if(ok(s.src))c.push(s.src);});" +
+                "['meta[property=\\\"og:video\\\"]','meta[property=\\\"og:video:url\\\"]','meta[property=\\\"og:video:secure_url\\\"]','meta[name=\\\"twitter:player:stream\\\"]'].forEach(function(q){var m=document.querySelector(q);if(m&&ok(m.content))c.push(m.content);});" +
+                "c=c.filter(function(u,i,a){return a.indexOf(u)===i;});" +
+                "c.sort(function(a,b){function s(u){u=u.toLowerCase();if(u.indexOf('.m3u8')>=0)return 0;if(u.indexOf('.mpd')>=0)return 1;if(u.indexOf('.mp4')>=0)return 2;if(u.indexOf('.webm')>=0)return 3;return 4;}return s(a)-s(b);});" +
+                "if(!c.length)return null;" +
+                "return JSON.stringify({src:c[0],page:location.href,title:document.title||'Video'});" +
+                "})()";
+
+        webView.evaluateJavascript(js, raw -> {
+            String mediaUrl = null;
+            String actualPage = pageUrl;
+            String pageTitle = "Video";
+
+            try {
+                if (raw != null && !"null".equals(raw)) {
+                    Object decoded = new JSONTokener(raw).nextValue();
+                    if (decoded instanceof String) {
+                        JSONObject result = new JSONObject((String) decoded);
+                        mediaUrl = result.optString("src", "");
+                        actualPage = result.optString("page", pageUrl);
+                        pageTitle = result.optString("title", "Video");
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+
+            if (mediaUrl != null && !mediaUrl.isEmpty()) {
+                probingNativeVideo = false;
+                lastDetectedMediaUrl = null;
+                openNativePlayer(mediaUrl, actualPage, pageTitle);
+                if (webView.canGoBack()) webView.goBack();
+                return;
+            }
+
+            if (attempt < 2 && currentUrl().equals(pageUrl)) {
+                int nextAttempt = attempt + 1;
+                webView.postDelayed(
+                        () -> probeNativeVideo(pageUrl, nextAttempt, userInitiated),
+                        650L * nextAttempt
+                );
+                return;
+            }
+
+            String networkMedia = lastDetectedMediaUrl;
+            probingNativeVideo = false;
+            lastDetectedMediaUrl = null;
+            if (networkMedia != null && !networkMedia.isEmpty()) {
+                openNativePlayer(networkMedia, pageUrl, webView.getTitle() == null ? "Video" : webView.getTitle());
+                if (webView.canGoBack()) webView.goBack();
+            } else if (userInitiated) {
+                Toast.makeText(this, "No direct video stream found on this page.", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void openNativePlayer(String mediaUrl, String pageUrl, String title) {
+        try {
+            Intent intent = new Intent(this, PlayerActivity.class);
+            intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, mediaUrl);
+            intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, pageUrl);
+            intent.putExtra(PlayerActivity.EXTRA_TITLE, title);
+            intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, webView.getSettings().getUserAgentString());
+
+            String cookies = CookieManager.getInstance().getCookie(mediaUrl);
+            if ((cookies == null || cookies.isEmpty()) && pageUrl != null) {
+                cookies = CookieManager.getInstance().getCookie(pageUrl);
+            }
+            if (cookies != null) intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
+
+            startActivityForResult(intent, NATIVE_PLAYER);
+        } catch (Exception e) {
+            Toast.makeText(this, "Couldn't open the native player.", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void openExternal(Uri uri) {
@@ -417,15 +555,21 @@ public class MainActivity extends Activity {
         menu.getMenu().add(0, 2, 1, "Refresh");
         menu.getMenu().add(0, 3, 2, "Share page");
         menu.getMenu().add(0, 4, 3, "Open in browser");
-        menu.getMenu().add(0, 5, 4, "Check for updates");
-        menu.getMenu().add(0, 6, 5, "Clear site data");
+        menu.getMenu().add(0, 7, 4, "Open videos in native player")
+                .setCheckable(true)
+                .setChecked(nativePlayerEnabled());
+        menu.getMenu().add(0, 8, 5, "Play current page in native player");
+        menu.getMenu().add(0, 5, 6, "Check for updates");
+        menu.getMenu().add(0, 6, 7, "Clear site data");
 
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 1:
+                    probingNativeVideo = false;
                     webView.loadUrl(HOME);
                     return true;
                 case 2:
+                    probingNativeVideo = false;
                     swipeRefresh.setRefreshing(true);
                     webView.reload();
                     return true;
@@ -440,6 +584,24 @@ public class MainActivity extends Activity {
                     return true;
                 case 6:
                     confirmClearSiteData();
+                    return true;
+                case 7:
+                    boolean enabled = !nativePlayerEnabled();
+                    getSharedPreferences("app_prefs", MODE_PRIVATE)
+                            .edit()
+                            .putBoolean("native_player_enabled", enabled)
+                            .apply();
+                    item.setChecked(enabled);
+                    Toast.makeText(
+                            this,
+                            enabled ? "Native video player enabled." : "Native video player disabled.",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                    return true;
+                case 8:
+                    probingNativeVideo = true;
+                    lastDetectedMediaUrl = null;
+                    probeNativeVideo(currentUrl(), 0, true);
                     return true;
                 default:
                     return false;
@@ -636,6 +798,8 @@ public class MainActivity extends Activity {
     }
 
     private void handleInAppBack() {
+        probingNativeVideo = false;
+        lastDetectedMediaUrl = null;
         if (customView != null) {
             leaveVideo();
         } else if (webView.canGoBack()) {
@@ -792,6 +956,18 @@ public class MainActivity extends Activity {
             fileCallback = null;
             return;
         }
+
+        if (requestCode == NATIVE_PLAYER) {
+            if (data != null) {
+                String fallbackPage = data.getStringExtra(PlayerActivity.EXTRA_FALLBACK_PAGE);
+                if (fallbackPage != null && !fallbackPage.isEmpty()) {
+                    probingNativeVideo = false;
+                    webView.loadUrl(fallbackPage);
+                }
+            }
+            return;
+        }
+
         super.onActivityResult(requestCode, resultCode, data);
     }
 
