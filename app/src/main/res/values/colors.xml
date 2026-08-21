@@ -3,8 +3,8 @@
     <color name="app_background">#0D0D0F</color>
     <color name="app_surface">#17171A</color>
     <color name="app_surface_variant">#242428</color>
-    <color name="app_primary">#F5F5F5</color>
-    <color name="app_on_primary">#111113</color>
+    <color name="app_primary">#FF5A1F</color>
+    <color name="app_on_primary">#0D0D0F</color>
     <color name="app_on_surface">#F4F4F5</color>
     <color name="app_on_surface_variant">#C7C7CC</color>
     <color name="icon_background">#0D0D0F</color>
