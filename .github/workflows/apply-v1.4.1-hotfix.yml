@@ -1,0 +1,68 @@
+name: Apply v1.4.1 Startup Hotfix
+
+on:
+  push:
+    branches: [ v1.4.1-hotfix ]
+    paths:
+      - HOTFIX_TRIGGER
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.4.1-hotfix
+
+      - name: Patch startup behavior
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('app/src/main/java/com/webapp/crazyshit/MainActivity.java')
+          s = p.read_text()
+
+          def rep(old, new):
+              global s
+              if old not in s:
+                  raise SystemExit('Expected source block not found: ' + old[:160])
+              s = s.replace(old, new, 1)
+
+          rep('        webView.setAlpha(0f);\n', '        webView.setAlpha(1f);\n')
+
+          rep(
+              '        buildMiniPlayerUi();\n\n        videoFrame = new FrameLayout(this);',
+              '        // Create the Media3 mini-player lazily only after a video is minimized.\n\n        videoFrame = new FrameLayout(this);'
+          )
+
+          rep(
+              '''                if (!initialPageShown) {\n                    initialPageShown = true;\n                    webView.animate().alpha(1f).setDuration(220L).start();\n                }\n''',
+              ''
+          )
+
+          rep(
+              '''    private void startMiniPlayer(Intent data) {\n        stopMiniPlayer();\n        miniMediaUrl = data.getStringExtra(PlayerActivity.EXTRA_MEDIA_URL);''',
+              '''    private void startMiniPlayer(Intent data) {\n        stopMiniPlayer();\n        if (miniPlayerCard == null) buildMiniPlayerUi();\n        miniMediaUrl = data.getStringExtra(PlayerActivity.EXTRA_MEDIA_URL);'''
+          )
+
+          p.write_text(s)
+
+          g = Path('app/build.gradle.kts')
+          t = g.read_text()
+          t = t.replace('versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 5',
+                        'versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 6', 1)
+          t = t.replace('versionName = System.getenv("APP_VERSION_NAME") ?: "1.4.0"',
+                        'versionName = System.getenv("APP_VERSION_NAME") ?: "1.4.1"', 1)
+          g.write_text(t)
+          PY
+
+      - name: Commit hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- app/src/main/java/com/webapp/crazyshit/MainActivity.java app/build.gradle.kts
+          git commit -m "Fix v1.4 startup loading"
+          git push origin HEAD:v1.4.1-hotfix
