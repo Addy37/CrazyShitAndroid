@@ -24,6 +24,8 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
@@ -72,6 +74,7 @@ public class PlayerActivity extends Activity {
     private boolean failureShown;
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
     private AudioManager audioManager;
+    private OnBackInvokedCallback systemBackCallback;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -100,6 +103,7 @@ public class PlayerActivity extends Activity {
         buildPlayer();
         configurePip();
         setFullscreenUi(true);
+        configureBackHandling();
     }
 
     private void buildUi() {
@@ -130,12 +134,7 @@ public class PlayerActivity extends Activity {
         backButton.setTextSize(34);
         backButton.setOnClickListener(v -> {
             haptic(v);
-            if (getSharedPreferences("app_prefs", MODE_PRIVATE)
-                    .getBoolean("minimize_on_back", true)) {
-                minimizeToBrowser();
-            } else {
-                finish();
-            }
+            handleBackNavigation();
         });
         topBar.addView(backButton, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
@@ -575,14 +574,28 @@ public class PlayerActivity extends Activity {
         if (playerView != null) playerView.setUseController(!isInPictureInPictureMode);
     }
 
-    @Override
-    public void onBackPressed() {
+    private void configureBackHandling() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            systemBackCallback = this::handleBackNavigation;
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                    systemBackCallback
+            );
+        }
+    }
+
+    private void handleBackNavigation() {
         if (getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean("minimize_on_back", true)) {
             minimizeToBrowser();
         } else {
-            super.onBackPressed();
+            finish();
         }
+    }
+
+    @Override
+    public void onBackPressed() {
+        handleBackNavigation();
     }
 
     private void setFullscreenUi(boolean enabled) {
@@ -666,6 +679,13 @@ public class PlayerActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (Build.VERSION.SDK_INT >= 33 && systemBackCallback != null) {
+            try {
+                getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(systemBackCallback);
+            } catch (Exception ignored) {
+            }
+            systemBackCallback = null;
+        }
         savePosition();
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
