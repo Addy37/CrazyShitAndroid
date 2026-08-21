@@ -1,4 +1,4 @@
-# CrazyShit Unofficial for Android
+# CrazyShit Jeremy Edition for Android
 
 An unofficial Android wrapper for [CrazyShit.com](https://crazyshit.com/), built as a lightweight WebView app with a more native Android browsing and video experience.
 
@@ -119,7 +119,7 @@ The Material 3 Settings screen includes controls for:
 Public releases are distributed through GitHub Releases.
 
 - Latest release page: `https://github.com/Addy37/CrazyShitAndroid/releases/latest`
-- Latest APK asset: `https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit-Unofficial.apk`
+- Latest APK asset: `https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit-Jeremy-Edition.apk`
 
 Android may ask you to allow **Install unknown apps** for your browser or file manager before sideloading.
 
