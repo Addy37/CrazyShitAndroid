@@ -53,6 +53,7 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URISyntaxException;
@@ -67,6 +68,28 @@ public class MainActivity extends Activity {
     private static final int PICK_FILE = 1001;
     private static final int STORAGE_PERMISSION = 1002;
     private static final int NATIVE_PLAYER = 2001;
+
+    private static final String[] BLOCKED_AD_HOSTS = {
+            "doubleclick.net",
+            "googlesyndication.com",
+            "googleadservices.com",
+            "adservice.google.com",
+            "exoclick.com",
+            "exosrv.com",
+            "trafficjunky.net",
+            "juicyads.com",
+            "adsterra.com",
+            "popads.net",
+            "popcash.net",
+            "propellerads.com",
+            "hilltopads.net",
+            "clickadu.com",
+            "onclicka.com",
+            "ero-advertising.com",
+            "tsyndicate.com",
+            "adcash.com",
+            "adnxs.com"
+    };
 
     private FrameLayout root;
     private FrameLayout webFrame;
@@ -225,6 +248,8 @@ public class MainActivity extends Activity {
         settings.setAllowContentAccess(true);
         settings.setAllowFileAccess(false);
         settings.setMediaPlaybackRequiresUserGesture(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setSupportMultipleWindows(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         if (Build.VERSION.SDK_INT >= 26) settings.setSafeBrowsingEnabled(true);
 
@@ -252,6 +277,7 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 swipeRefresh.setRefreshing(false);
                 updateBackCallback();
+                installPopupGuard();
                 if (probingNativeVideo && nativePlayerEnabled() && isSameSite(Uri.parse(url))) {
                     probeNativeVideo(url, 0, false);
                 }
@@ -259,8 +285,12 @@ public class MainActivity extends Activity {
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                if (probingNativeVideo && isDirectMedia(request.getUrl())) {
-                    lastDetectedMediaUrl = request.getUrl().toString();
+                Uri requestUri = request.getUrl();
+                if (adBlockingEnabled() && isBlockedAdHost(requestUri)) {
+                    return emptyWebResponse();
+                }
+                if (probingNativeVideo && isDirectMedia(requestUri)) {
+                    lastDetectedMediaUrl = requestUri.toString();
                 }
                 return super.shouldInterceptRequest(view, request);
             }
@@ -397,6 +427,13 @@ public class MainActivity extends Activity {
                 return false;
             }
 
+            if (adBlockingEnabled()) {
+                if (fromUserGesture) {
+                    Toast.makeText(this, "Blocked an external ad/pop-up. Long-press a real external link to open it.", Toast.LENGTH_SHORT).show();
+                }
+                return true;
+            }
+
             openExternal(uri);
             return true;
         }
@@ -438,6 +475,43 @@ public class MainActivity extends Activity {
     private boolean nativePlayerEnabled() {
         return getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean("native_player_enabled", true);
+    }
+
+    private boolean adBlockingEnabled() {
+        return getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean("ad_blocking_enabled", true);
+    }
+
+    private boolean isBlockedAdHost(Uri uri) {
+        String host = uri == null ? null : uri.getHost();
+        if (host == null || isSameSite(uri)) return false;
+        host = host.toLowerCase();
+        for (String blocked : BLOCKED_AD_HOSTS) {
+            if (host.equals(blocked) || host.endsWith("." + blocked)) return true;
+        }
+        return false;
+    }
+
+    private WebResourceResponse emptyWebResponse() {
+        return new WebResourceResponse(
+                "text/plain",
+                "utf-8",
+                new ByteArrayInputStream(new byte[0])
+        );
+    }
+
+    private void installPopupGuard() {
+        if (!adBlockingEnabled() || webView == null) return;
+
+        String js = "(function(){" +
+                "if(window.__csPopupGuard)return;window.__csPopupGuard=true;" +
+                "function same(u){try{var x=new URL(u,location.href),h=x.hostname.toLowerCase();return h==='crazyshit.com'||h.endsWith('.crazyshit.com');}catch(e){return false;}}" +
+                "window.open=function(u){if(u&&same(u)){location.href=new URL(u,location.href).href;}return null;};" +
+                "function fix(a){if(a&&a.tagName==='A'&&a.hasAttribute('target'))a.removeAttribute('target');}" +
+                "document.querySelectorAll('a[target]').forEach(fix);" +
+                "new MutationObserver(function(ms){ms.forEach(function(m){if(m.type==='attributes')fix(m.target);m.addedNodes.forEach(function(n){if(n.nodeType===1){fix(n);n.querySelectorAll&&n.querySelectorAll('a[target]').forEach(fix);}});});}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['target']});" +
+                "})()";
+        webView.evaluateJavascript(js, null);
     }
 
     private void probeNativeVideo(String pageUrl, int attempt, boolean userInitiated) {
@@ -559,8 +633,11 @@ public class MainActivity extends Activity {
                 .setCheckable(true)
                 .setChecked(nativePlayerEnabled());
         menu.getMenu().add(0, 8, 5, "Play current page in native player");
-        menu.getMenu().add(0, 5, 6, "Check for updates");
-        menu.getMenu().add(0, 6, 7, "Clear site data");
+        menu.getMenu().add(0, 9, 6, "Block ads & pop-ups")
+                .setCheckable(true)
+                .setChecked(adBlockingEnabled());
+        menu.getMenu().add(0, 5, 7, "Check for updates");
+        menu.getMenu().add(0, 6, 8, "Clear site data");
 
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
@@ -602,6 +679,20 @@ public class MainActivity extends Activity {
                     probingNativeVideo = true;
                     lastDetectedMediaUrl = null;
                     probeNativeVideo(currentUrl(), 0, true);
+                    return true;
+                case 9:
+                    boolean blockAds = !adBlockingEnabled();
+                    getSharedPreferences("app_prefs", MODE_PRIVATE)
+                            .edit()
+                            .putBoolean("ad_blocking_enabled", blockAds)
+                            .apply();
+                    item.setChecked(blockAds);
+                    Toast.makeText(
+                            this,
+                            blockAds ? "Ad and pop-up blocking enabled." : "Ad and pop-up blocking disabled.",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                    webView.reload();
                     return true;
                 default:
                     return false;

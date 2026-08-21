@@ -16,6 +16,9 @@ CrazyShit.com contains adult, graphic, violent, and otherwise sensitive material
 - Native player forwards the current site User-Agent, Referer, and relevant cookies when needed for playback
 - Optional **Open videos in native player** toggle, enabled by default
 - Manual **Play current page in native player** action for pages that do not auto-detect
+- Built-in **Block ads & pop-ups** mode, enabled by default
+- Blocks common third-party ad-network requests, popup windows, popunders, and accidental third-party redirects
+- Same-site navigation and direct media handoff remain allowed while the blocker is active
 - Pull to refresh
 - Picture-in-Picture for legacy fullscreen WebView video on supported Android devices
 - Fullscreen HTML5 video with sensor rotation and keep-screen-awake handling
@@ -23,9 +26,9 @@ CrazyShit.com contains adult, graphic, violent, and otherwise sensitive material
 - Modern Android back handling
 - File uploads
 - Downloads to the Android Downloads folder with native feedback
-- Outside web links open in Android Custom Tabs
+- Intentional outside web links can still be opened from long-press actions or the browser controls
 - Built-in GitHub Releases update checker
-- Small three-dot app menu for Home, Refresh, Share, Browser, Native Player, Updates, and Clear site data
+- Small three-dot app menu for Home, Refresh, Share, Browser, Native Player, Ad Blocking, Updates, and Clear site data
 - Long-press links and images to open, share, copy, or save
 - Native loading progress
 - Native connection/error screen
@@ -52,6 +55,22 @@ Native-player features include:
 - Return to the normal webpage if the stream cannot be played
 
 You can disable automatic native playback from the app's three-dot menu at any time.
+
+## Ad and pop-up blocking
+
+The app includes a lightweight WebView blocker intended mainly to stop intrusive ad pages from hijacking normal video taps.
+
+With **Block ads & pop-ups** enabled, the app:
+
+- disables JavaScript-created popup windows
+- keeps `target=_blank` links from spawning separate windows
+- blocks common third-party ad-network hosts inside the WebView
+- blocks normal third-party page redirects from taps so popunder ads do not replace the intended page
+- continues to allow CrazyShit.com pages and compatible direct media streams used by the native player
+
+The setting is enabled by default and can be toggled from the app's three-dot menu. If you intentionally want to open a legitimate external link while the blocker is enabled, long-press the link and choose **Open**.
+
+No blocker can guarantee every future ad or redirect will be caught because websites can change their scripts and ad providers. The goal here is to stop the common intrusive behavior without rewriting the site itself.
 
 ## Download
 
