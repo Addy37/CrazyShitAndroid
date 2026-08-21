@@ -41,6 +41,7 @@ jobs:
           raw = os.environ.get("SIGNING_BUNDLE", "")
           if not raw:
               sys.exit("Missing repository secret: ANDROID_SIGNING_BUNDLE")
+          raw = raw.replace("\r", "").replace("\n", "")
           data = json.loads(raw)
           required = ["keystore_base64", "store_password", "key_alias", "key_password"]
           missing = [key for key in required if not data.get(key)]
