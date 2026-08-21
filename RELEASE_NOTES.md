@@ -1,25 +1,27 @@
-# CrazyShit Unofficial v1.0.0
+# CrazyShit Unofficial v1.1.0
 
-First public release of the community-made Android wrapper for CrazyShit.com.
+A native-experience update focused on video, navigation, updates, sharing, and WebView security.
 
-## Included
+## New and improved
 
-- Native Android WebView shell
-- Fullscreen HTML5 video support
-- Persistent website login cookies and sessions
-- Android back-button and back-gesture support
-- File uploads through the Android picker
-- Downloads to the Android Downloads folder
-- External domains open in the normal browser
-- Native loading progress and connection-error screen
-- Android launcher icon and splash screen
-- One-time 18+ / graphic-content warning
-- HTTPS-only app traffic
-- Android Safe Browsing where supported
+- Pull down to refresh the current page
+- Picture-in-Picture for fullscreen video when leaving the app on supported Android devices
+- Better fullscreen video behavior with sensor rotation and keep-screen-awake handling
+- External web links open in Android Custom Tabs instead of abruptly switching to a full browser window
+- Modern Android back handling with predictive back-to-home behavior when the WebView has no page history
+- Built-in GitHub Releases update checker, with a small in-app update banner when a newer version is available
+- Compact three-dot app menu with Home, Refresh, Share, Open in browser, Check for updates, and Clear site data
+- Long-press links and images to open, share, copy, or save images
+- Improved download feedback showing the file name
+- First-run warning now explicitly identifies the app as an unofficial community project
 
-## Privacy
+## Security and privacy changes
 
-The wrapper adds no analytics, advertising SDK, or tracking backend. The loaded website and its third-party services may have their own cookies, analytics, advertising, and privacy practices.
+- Mixed HTTP content is blocked inside the WebView
+- Third-party WebView cookies are disabled
+- Android Safe Browsing remains enabled where supported
+- CrazyShit.com itself remains first-party and keeps normal login/session cookies
+- No analytics, advertising SDK, or tracking backend is added by the wrapper
 
 ## Unofficial status
 
