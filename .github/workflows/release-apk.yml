@@ -70,6 +70,8 @@ jobs:
           missing = [key for key in required if not data.get(key)]
           if missing:
               sys.exit("Signing bundle is missing: " + ", ".join(missing))
+          for key in ("store_password", "key_alias", "key_password"):
+              print(f"::add-mask::{data[key]}")
           keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "crazyshit-unofficial-release.jks"
           keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
           keystore.chmod(0o600)
