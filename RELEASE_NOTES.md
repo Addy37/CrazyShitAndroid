@@ -1,13 +1,15 @@
-# CrazyShit Unofficial v1.4.3
+# CrazyShit Jeremy Edition
 
-A small Android system-bar compatibility update focused on keeping website controls readable on modern edge-to-edge devices.
+A one-time themed v1.4.4 release of the existing CrazyShit Android app, built as the **Jeremy Edition**.
 
-## Improved
+## Jeremy Edition
 
-- The website/browser area now respects the Android status bar, navigation bar, and display cutout safe areas.
-- Top-of-page controls no longer sit underneath the clock, notification icons, or camera cutout on Android 15/16 edge-to-edge layouts.
-- Bottom browser controls also stay clear of the gesture/navigation area.
-- Native video playback and HTML5 fullscreen video still use the full display when fullscreen is requested.
-- Keeps the v1.4 Material 3 UI, Settings, Watch Later, mini-player, ad blocking, native video player, gestures, and Android 13+ Back handling.
+- New custom Jeremy launcher icon with the CrazyShit Jeremy Edition artwork.
+- Android 12+ splash screen now uses the Jeremy Edition icon.
+- App name is now **CrazyShit Jeremy Edition**.
+- Bottom-sheet controls and Settings branding identify this special edition.
+- Material 3 accent color now matches the orange Jeremy Edition artwork.
+- Keeps the same Android package name and signing identity, so it installs directly over v1.4.3 as a normal update.
+- Keeps all existing browsing, native video player, mini-player, ad blocking, Watch Later, system-bar compatibility, Picture-in-Picture, gestures, and Back handling features.
 
-This project remains unofficial and is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
+This is a special one-time Jeremy Edition. The project remains unofficial and is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
