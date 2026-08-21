@@ -1,0 +1,527 @@
+name: Apply v1.4 Modern UI Patch
+
+on:
+  push:
+    branches: [ v1.4-modern-ui ]
+    paths:
+      - V1_4_UI_TRIGGER
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.4-modern-ui
+
+      - name: Patch MainActivity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('app/src/main/java/com/webapp/crazyshit/MainActivity.java')
+          s = p.read_text()
+
+          def rep(old, new):
+              global s
+              if old not in s:
+                  raise SystemExit('Expected block not found: ' + old[:180])
+              s = s.replace(old, new, 1)
+
+          rep('import android.graphics.Color;\n', 'import android.graphics.Color;\nimport android.graphics.drawable.GradientDrawable;\n')
+          rep('import android.view.Gravity;\n', 'import android.view.Gravity;\nimport android.view.HapticFeedbackConstants;\n')
+          rep('import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;\n', '''import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;\nimport androidx.media3.common.MediaItem;\nimport androidx.media3.common.MimeTypes;\nimport androidx.media3.common.util.UnstableApi;\nimport androidx.media3.datasource.DefaultHttpDataSource;\nimport androidx.media3.exoplayer.ExoPlayer;\nimport androidx.media3.exoplayer.source.DefaultMediaSourceFactory;\nimport androidx.media3.ui.PlayerView;\n\nimport com.google.android.material.bottomsheet.BottomSheetDialog;\nimport com.google.android.material.button.MaterialButton;\nimport com.google.android.material.card.MaterialCardView;\nimport com.google.android.material.materialswitch.MaterialSwitch;\n''')
+          rep('import java.nio.charset.StandardCharsets;\n', 'import java.nio.charset.StandardCharsets;\nimport java.util.HashMap;\nimport java.util.Map;\n')
+          rep('public class MainActivity extends Activity {', '@UnstableApi\npublic class MainActivity extends Activity {')
+          rep('    private static final int NATIVE_PLAYER = 2001;\n', '    private static final int NATIVE_PLAYER = 2001;\n    private static final int FAVORITES = 2002;\n')
+          rep('    private volatile String lastDetectedMediaUrl;\n', '''    private volatile String lastDetectedMediaUrl;\n    private MaterialCardView miniPlayerCard;\n    private PlayerView miniPlayerView;\n    private TextView miniTitleView;\n    private ExoPlayer miniPlayer;\n    private String miniMediaUrl;\n    private String miniPageUrl;\n    private String miniTitle;\n    private String miniUserAgent;\n    private String miniCookies;\n    private boolean miniResumePlayback;\n    private boolean initialPageShown;\n''')
+
+          rep('        root.setBackgroundColor(Color.rgb(17, 17, 17));', '        root.setBackgroundColor(Color.rgb(13, 13, 15));')
+          rep('        webView.setBackgroundColor(Color.rgb(17, 17, 17));\n        swipeRefresh.addView(webView, match());', '        webView.setBackgroundColor(Color.rgb(13, 13, 15));\n        webView.setAlpha(0f);\n        swipeRefresh.addView(webView, match());')
+          rep('        menuButton.setBackgroundColor(Color.argb(220, 28, 28, 28));\n        menuButton.setAlpha(0.78f);', '        menuButton.setBackground(rounded(Color.argb(235, 30, 30, 34), dp(24)));\n        menuButton.setAlpha(1f);')
+          rep('        webFrame.addView(menuButton, menuParams);\n\n        videoFrame = new FrameLayout(this);', '        webFrame.addView(menuButton, menuParams);\n        buildMiniPlayerUi();\n\n        videoFrame = new FrameLayout(this);')
+
+          marker = '    private FrameLayout.LayoutParams match() {'
+          insert = r'''
+    private void buildMiniPlayerUi() {
+        miniPlayerCard = new MaterialCardView(this);
+        miniPlayerCard.setCardBackgroundColor(Color.rgb(24, 24, 28));
+        miniPlayerCard.setRadius(dp(20));
+        miniPlayerCard.setCardElevation(dp(8));
+        miniPlayerCard.setStrokeWidth(1);
+        miniPlayerCard.setStrokeColor(Color.rgb(55, 55, 62));
+        miniPlayerCard.setVisibility(View.GONE);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(6), dp(6), dp(6), dp(6));
+
+        miniPlayerView = new PlayerView(this);
+        miniPlayerView.setUseController(false);
+        miniPlayerView.setBackgroundColor(Color.BLACK);
+        miniPlayerView.setOnClickListener(v -> reopenMiniPlayer());
+        row.addView(miniPlayerView, new LinearLayout.LayoutParams(dp(132), dp(76)));
+
+        miniTitleView = new TextView(this);
+        miniTitleView.setTextColor(Color.WHITE);
+        miniTitleView.setTextSize(14);
+        miniTitleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        miniTitleView.setMaxLines(2);
+        miniTitleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        miniTitleView.setPadding(dp(12), 0, dp(8), 0);
+        miniTitleView.setOnClickListener(v -> reopenMiniPlayer());
+        row.addView(miniTitleView, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        TextView expand = new TextView(this);
+        expand.setText("↗");
+        expand.setTextColor(Color.WHITE);
+        expand.setTextSize(22);
+        expand.setGravity(Gravity.CENTER);
+        expand.setContentDescription("Open full player");
+        expand.setOnClickListener(v -> reopenMiniPlayer());
+        row.addView(expand, new LinearLayout.LayoutParams(dp(44), dp(56)));
+
+        TextView close = new TextView(this);
+        close.setText("×");
+        close.setTextColor(Color.WHITE);
+        close.setTextSize(24);
+        close.setGravity(Gravity.CENTER);
+        close.setContentDescription("Close mini player");
+        close.setOnClickListener(v -> {
+            haptic(v);
+            stopMiniPlayer();
+        });
+        row.addView(close, new LinearLayout.LayoutParams(dp(44), dp(56)));
+
+        miniPlayerCard.addView(row);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, dp(88));
+        params.gravity = Gravity.BOTTOM;
+        params.setMargins(dp(12), 0, dp(12), dp(68));
+        webFrame.addView(miniPlayerCard, params);
+    }
+
+'''
+          if marker not in s:
+              raise SystemExit('match marker missing')
+          s = s.replace(marker, insert + marker, 1)
+
+          rep('''            public void onPageFinished(WebView view, String url) {\n                swipeRefresh.setRefreshing(false);\n                updateBackCallback();\n                installPopupGuard();''', '''            public void onPageFinished(WebView view, String url) {\n                swipeRefresh.setRefreshing(false);\n                updateBackCallback();\n                if (!initialPageShown) {\n                    initialPageShown = true;\n                    webView.animate().alpha(1f).setDuration(220L).start();\n                }\n                installPopupGuard();''')
+
+          start = s.index('    private void showLongPressMenu(String url, boolean image) {')
+          end = s.index('    private boolean route(Uri uri, boolean fromUserGesture) {', start)
+          s = s[:start] + r'''    private void showLongPressMenu(String url, boolean image) {
+        String[] items = image
+                ? new String[]{"Open", "Share", "Copy link", "Save image"}
+                : new String[]{"Open", "Share", "Copy link", "Save for later"};
+
+        new AlertDialog.Builder(this)
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        Uri uri = Uri.parse(url);
+                        if (nativePlayerEnabled() && isDirectMedia(uri)) {
+                            openNativePlayer(url, currentUrl(), "Video");
+                        } else if (isSameSite(uri)) {
+                            webView.loadUrl(url);
+                        } else {
+                            openExternal(uri);
+                        }
+                    } else if (which == 1) {
+                        shareText(url);
+                    } else if (which == 2) {
+                        copyText(url);
+                    } else if (image && which == 3) {
+                        startDownload(new PendingDownload(
+                                url,
+                                webView.getSettings().getUserAgentString(),
+                                null,
+                                null
+                        ));
+                    } else if (!image && which == 3) {
+                        String title = webView.getTitle();
+                        FavoriteStore.add(this, title == null ? "Saved video" : title, url);
+                        Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+                        haptic(webView);
+                    }
+                })
+                .show();
+    }
+
+''' + s[end:]
+
+          rep('''    private void openNativePlayer(String mediaUrl, String pageUrl, String title) {\n        try {''', '''    private void openNativePlayer(String mediaUrl, String pageUrl, String title) {\n        stopMiniPlayer();\n        try {''')
+
+          marker = '    private void openExternal(Uri uri) {'
+          insert = r'''
+    private void startMiniPlayer(Intent data) {
+        stopMiniPlayer();
+        miniMediaUrl = data.getStringExtra(PlayerActivity.EXTRA_MEDIA_URL);
+        miniPageUrl = data.getStringExtra(PlayerActivity.EXTRA_PAGE_URL);
+        miniTitle = data.getStringExtra(PlayerActivity.EXTRA_TITLE);
+        miniUserAgent = data.getStringExtra(PlayerActivity.EXTRA_USER_AGENT);
+        miniCookies = data.getStringExtra(PlayerActivity.EXTRA_COOKIES);
+        long startPosition = data.getLongExtra(PlayerActivity.EXTRA_START_POSITION, 0L);
+        if (miniMediaUrl == null || miniMediaUrl.isEmpty()) return;
+
+        try {
+            DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory();
+            if (miniUserAgent != null && !miniUserAgent.isEmpty()) httpFactory.setUserAgent(miniUserAgent);
+            Map<String, String> headers = new HashMap<>();
+            if (miniPageUrl != null && !miniPageUrl.isEmpty()) {
+                headers.put("Referer", miniPageUrl);
+                try {
+                    Uri page = Uri.parse(miniPageUrl);
+                    if (page.getScheme() != null && page.getHost() != null) {
+                        headers.put("Origin", page.getScheme() + "://" + page.getHost());
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (miniCookies != null && !miniCookies.isEmpty()) headers.put("Cookie", miniCookies);
+            if (!headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
+
+            miniPlayer = new ExoPlayer.Builder(this)
+                    .setMediaSourceFactory(new DefaultMediaSourceFactory(this)
+                            .setDataSourceFactory(httpFactory))
+                    .build();
+            miniPlayerView.setPlayer(miniPlayer);
+
+            MediaItem.Builder item = new MediaItem.Builder().setUri(miniMediaUrl);
+            String lower = miniMediaUrl.toLowerCase();
+            if (lower.contains(".m3u8")) item.setMimeType(MimeTypes.APPLICATION_M3U8);
+            else if (lower.contains(".mpd")) item.setMimeType(MimeTypes.APPLICATION_MPD);
+            miniPlayer.setMediaItem(item.build());
+            if (startPosition > 0L) miniPlayer.seekTo(startPosition);
+            miniPlayer.prepare();
+            miniPlayer.play();
+            miniResumePlayback = true;
+            miniTitleView.setText(miniTitle == null || miniTitle.isEmpty() ? "Video" : miniTitle);
+            miniPlayerCard.setVisibility(View.VISIBLE);
+            updateBanner.setVisibility(View.GONE);
+        } catch (Exception e) {
+            stopMiniPlayer();
+            Toast.makeText(this, "Couldn't start the mini-player.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void reopenMiniPlayer() {
+        if (miniPlayer == null || miniMediaUrl == null) return;
+        haptic(miniPlayerCard);
+        long position = miniPlayer.getCurrentPosition();
+        Intent intent = new Intent(this, PlayerActivity.class);
+        intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, miniMediaUrl);
+        intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, miniPageUrl);
+        intent.putExtra(PlayerActivity.EXTRA_TITLE, miniTitle);
+        intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, miniUserAgent);
+        intent.putExtra(PlayerActivity.EXTRA_COOKIES, miniCookies);
+        intent.putExtra(PlayerActivity.EXTRA_START_POSITION, position);
+        stopMiniPlayer();
+        startActivityForResult(intent, NATIVE_PLAYER);
+    }
+
+    private void stopMiniPlayer() {
+        miniResumePlayback = false;
+        if (miniPlayerView != null) miniPlayerView.setPlayer(null);
+        if (miniPlayer != null) {
+            miniPlayer.release();
+            miniPlayer = null;
+        }
+        if (miniPlayerCard != null) miniPlayerCard.setVisibility(View.GONE);
+        miniMediaUrl = null;
+        miniPageUrl = null;
+        miniTitle = null;
+        miniUserAgent = null;
+        miniCookies = null;
+        restoreKnownUpdate();
+    }
+
+'''
+          if marker not in s:
+              raise SystemExit('openExternal marker missing')
+          s = s.replace(marker, insert + marker, 1)
+
+          start = s.index('    private void showAppMenu() {')
+          end = s.index('    private void confirmClearSiteData() {', start)
+          s = s[:start] + r'''    private void showAppMenu() {
+        haptic(menuButton);
+        BottomSheetDialog sheet = new BottomSheetDialog(this);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(16), dp(10), dp(16), dp(28));
+        root.setBackgroundColor(Color.rgb(18, 18, 21));
+
+        TextView handle = new TextView(this);
+        handle.setBackground(rounded(Color.rgb(88, 88, 96), dp(3)));
+        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(dp(42), dp(5));
+        handleParams.gravity = Gravity.CENTER_HORIZONTAL;
+        handleParams.setMargins(0, 0, 0, dp(14));
+        root.addView(handle, handleParams);
+
+        TextView title = sheetText("CrazyShit Unofficial", 22, Color.WHITE);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setPadding(dp(6), 0, dp(6), dp(4));
+        root.addView(title);
+        TextView subtitle = sheetText("Quick controls", 13, Color.rgb(165, 165, 174));
+        subtitle.setPadding(dp(6), 0, dp(6), dp(8));
+        root.addView(subtitle);
+
+        addSheetSection(root, "Browsing");
+        addSheetAction(root, "Home", "Go to the CrazyShit homepage", () -> {
+            probingNativeVideo = false;
+            webView.loadUrl(HOME);
+            sheet.dismiss();
+        });
+        addSheetAction(root, "Refresh", "Reload the current page", () -> {
+            probingNativeVideo = false;
+            swipeRefresh.setRefreshing(true);
+            webView.reload();
+            sheet.dismiss();
+        });
+        addSheetAction(root, "Share page", currentUrl(), () -> {
+            shareText(currentUrl());
+            sheet.dismiss();
+        });
+        addSheetAction(root, "Open in browser", "Open the current page outside the app", () -> {
+            openExternal(Uri.parse(currentUrl()));
+            sheet.dismiss();
+        });
+        addSheetAction(root, "Watch Later", "Open your saved video pages", () -> {
+            startActivityForResult(new Intent(this, FavoritesActivity.class), FAVORITES);
+            sheet.dismiss();
+        });
+
+        addSheetSection(root, "Video");
+        addSheetSwitch(root,
+                "Native video player",
+                "Open compatible streams in the dedicated player",
+                "native_player_enabled",
+                true,
+                null);
+        addSheetAction(root, "Play current page", "Try to detect a video on this page", () -> {
+            probingNativeVideo = true;
+            lastDetectedMediaUrl = null;
+            probeNativeVideo(currentUrl(), 0, true);
+            sheet.dismiss();
+        });
+
+        addSheetSection(root, "Privacy");
+        addSheetSwitch(root,
+                "Block ads & pop-ups",
+                "Stop ad hosts, popunders and redirect hijacks",
+                "ad_blocking_enabled",
+                true,
+                () -> webView.reload());
+
+        addSheetSection(root, "App");
+        addSheetAction(root, "Settings", "Playback, privacy, haptics and Watch Later", () -> {
+            startActivity(new Intent(this, SettingsActivity.class));
+            sheet.dismiss();
+        });
+        addSheetAction(root, "Check for updates", "Look for a newer GitHub release", () -> {
+            checkForUpdates(true);
+            sheet.dismiss();
+        });
+        addSheetAction(root, "Clear site data", "Sign out and clear website data", () -> {
+            sheet.dismiss();
+            confirmClearSiteData();
+        });
+
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(root, new android.widget.ScrollView.LayoutParams(-1, -2));
+        sheet.setContentView(scroll);
+        sheet.show();
+    }
+
+    private void addSheetSection(LinearLayout root, String label) {
+        TextView view = sheetText(label.toUpperCase(), 11, Color.rgb(155, 155, 166));
+        view.setTypeface(null, android.graphics.Typeface.BOLD);
+        view.setPadding(dp(8), dp(18), dp(8), dp(6));
+        root.addView(view);
+    }
+
+    private void addSheetAction(LinearLayout root, String title, String subtitle, Runnable action) {
+        MaterialCardView card = sheetCard();
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(15), dp(12), dp(14), dp(12));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(v -> {
+            haptic(v);
+            action.run();
+        });
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.addView(sheetText(title, 16, Color.WHITE));
+        TextView sub = sheetText(subtitle, 12, Color.rgb(170, 170, 180));
+        sub.setMaxLines(1);
+        sub.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        sub.setPadding(0, dp(3), 0, 0);
+        copy.addView(sub);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        TextView arrow = sheetText("›", 26, Color.rgb(190, 190, 198));
+        row.addView(arrow);
+        card.addView(row);
+        root.addView(card, sheetCardParams());
+    }
+
+    private void addSheetSwitch(
+            LinearLayout root,
+            String title,
+            String subtitle,
+            String key,
+            boolean defaultValue,
+            Runnable afterChange
+    ) {
+        MaterialCardView card = sheetCard();
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(15), dp(12), dp(10), dp(12));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.addView(sheetText(title, 16, Color.WHITE));
+        TextView sub = sheetText(subtitle, 12, Color.rgb(170, 170, 180));
+        sub.setPadding(0, dp(3), 0, 0);
+        copy.addView(sub);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        MaterialSwitch toggle = new MaterialSwitch(this);
+        toggle.setChecked(getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean(key, defaultValue));
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            getSharedPreferences("app_prefs", MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(key, checked)
+                    .apply();
+            haptic(button);
+            if (afterChange != null) afterChange.run();
+        });
+        row.addView(toggle);
+        card.addView(row);
+        root.addView(card, sheetCardParams());
+    }
+
+    private MaterialCardView sheetCard() {
+        MaterialCardView card = new MaterialCardView(this);
+        card.setCardBackgroundColor(Color.rgb(28, 28, 32));
+        card.setRadius(dp(18));
+        card.setCardElevation(0f);
+        card.setStrokeWidth(1);
+        card.setStrokeColor(Color.rgb(48, 48, 55));
+        return card;
+    }
+
+    private LinearLayout.LayoutParams sheetCardParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(4), 0, dp(4));
+        return params;
+    }
+
+    private TextView sheetText(String value, int size, int color) {
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        return view;
+    }
+
+''' + s[end:]
+
+          old = r'''        if (requestCode == NATIVE_PLAYER) {
+            if (data != null) {
+                String fallbackPage = data.getStringExtra(PlayerActivity.EXTRA_FALLBACK_PAGE);
+                if (fallbackPage != null && !fallbackPage.isEmpty()) {
+                    probingNativeVideo = false;
+                    webView.loadUrl(fallbackPage);
+                }
+            }
+            return;
+        }
+
+        super.onActivityResult(requestCode, resultCode, data);'''
+          new = r'''        if (requestCode == NATIVE_PLAYER) {
+            if (data != null && data.getBooleanExtra(PlayerActivity.EXTRA_MINIMIZED, false)) {
+                startMiniPlayer(data);
+                return;
+            }
+            if (data != null) {
+                String fallbackPage = data.getStringExtra(PlayerActivity.EXTRA_FALLBACK_PAGE);
+                if (fallbackPage != null && !fallbackPage.isEmpty()) {
+                    probingNativeVideo = false;
+                    webView.loadUrl(fallbackPage);
+                }
+            }
+            return;
+        }
+
+        if (requestCode == FAVORITES && resultCode == RESULT_OK && data != null) {
+            String selectedUrl = data.getStringExtra(FavoritesActivity.EXTRA_SELECTED_URL);
+            if (selectedUrl != null && !selectedUrl.isEmpty()) {
+                webView.loadUrl(selectedUrl);
+            }
+            return;
+        }
+
+        super.onActivityResult(requestCode, resultCode, data);'''
+          rep(old, new)
+
+          marker = '    @Override\n    protected void onSaveInstanceState(Bundle outState) {'
+          lifecycle = r'''    @Override
+    protected void onStart() {
+        super.onStart();
+        if (miniPlayer != null && miniResumePlayback) miniPlayer.play();
+    }
+
+    @Override
+    protected void onStop() {
+        if (miniPlayer != null) {
+            miniResumePlayback = miniPlayer.isPlaying();
+            miniPlayer.pause();
+        }
+        super.onStop();
+    }
+
+'''
+          if marker not in s:
+              raise SystemExit('save state marker missing')
+          s = s.replace(marker, lifecycle + marker, 1)
+
+          rep('''        if (webView != null) {\n            webView.stopLoading();''', '''        stopMiniPlayer();\n\n        if (webView != null) {\n            webView.stopLoading();''')
+
+          marker = '    private int dp(int value) {'
+          helpers = r'''    private void haptic(View view) {
+        if (!getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean("haptics_enabled", true)) return;
+        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+    }
+
+    private GradientDrawable rounded(int color, int radius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(radius);
+        return drawable;
+    }
+
+'''
+          if marker not in s:
+              raise SystemExit('dp marker missing')
+          s = s.replace(marker, helpers + marker, 1)
+
+          p.write_text(s)
+          PY
+
+      - name: Commit modern UI patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- app/src/main/java/com/webapp/crazyshit/MainActivity.java
+          git commit -m "Add modern bottom sheet and in-app mini-player"
+          git push origin HEAD:v1.4-modern-ui
