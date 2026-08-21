@@ -1,1 +1,0 @@
-Temporary branch marker for the ad/pop-up blocking implementation. This file will be removed before merge.
