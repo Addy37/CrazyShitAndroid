@@ -1,0 +1,49 @@
+name: Apply v1.4.2 Runtime Fix
+
+on:
+  push:
+    branches: [ v1.4.2-runtime-fix ]
+    paths:
+      - V1_4_2_FIX_TRIGGER
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.4.2-runtime-fix
+
+      - name: Patch PlayerActivity back handling
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/webapp/crazyshit/PlayerActivity.java')
+          s = p.read_text()
+
+          def rep(old, new):
+              global s
+              if old not in s:
+                  raise SystemExit('Expected block not found: ' + old[:160])
+              s = s.replace(old, new, 1)
+
+          rep('import android.view.WindowManager;\n', 'import android.view.WindowManager;\nimport android.window.OnBackInvokedCallback;\nimport android.window.OnBackInvokedDispatcher;\n')
+          rep('    private AudioManager audioManager;\n', '    private AudioManager audioManager;\n    private OnBackInvokedCallback systemBackCallback;\n')
+          rep('        setFullscreenUi(true);\n', '        setFullscreenUi(true);\n        configureBackHandling();\n')
+          rep('''        backButton.setOnClickListener(v -> {\n            haptic(v);\n            if (getSharedPreferences("app_prefs", MODE_PRIVATE)\n                    .getBoolean("minimize_on_back", true)) {\n                minimizeToBrowser();\n            } else {\n                finish();\n            }\n        });''', '''        backButton.setOnClickListener(v -> {\n            haptic(v);\n            handleBackNavigation();\n        });''')
+          rep('''    @Override\n    public void onBackPressed() {\n        if (getSharedPreferences("app_prefs", MODE_PRIVATE)\n                .getBoolean("minimize_on_back", true)) {\n            minimizeToBrowser();\n        } else {\n            super.onBackPressed();\n        }\n    }\n''', '''    private void configureBackHandling() {\n        if (Build.VERSION.SDK_INT >= 33) {\n            systemBackCallback = this::handleBackNavigation;\n            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(\n                    OnBackInvokedDispatcher.PRIORITY_DEFAULT,\n                    systemBackCallback\n            );\n        }\n    }\n\n    private void handleBackNavigation() {\n        if (getSharedPreferences("app_prefs", MODE_PRIVATE)\n                .getBoolean("minimize_on_back", true)) {\n            minimizeToBrowser();\n        } else {\n            finish();\n        }\n    }\n\n    @Override\n    public void onBackPressed() {\n        handleBackNavigation();\n    }\n''')
+          rep('''    @Override\n    protected void onDestroy() {\n        savePosition();''', '''    @Override\n    protected void onDestroy() {\n        if (Build.VERSION.SDK_INT >= 33 && systemBackCallback != null) {\n            try {\n                getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(systemBackCallback);\n            } catch (Exception ignored) {\n            }\n            systemBackCallback = null;\n        }\n        savePosition();''')
+
+          p.write_text(s)
+          PY
+
+      - name: Commit patch
+        run: |
+          git config user.name "Addy37"
+          git config user.email "92006667+Addy37@users.noreply.github.com"
+          git add app/src/main/java/com/webapp/crazyshit/PlayerActivity.java
+          git commit -m "Fix predictive back handling in native player" || exit 0
+          git push origin HEAD:v1.4.2-runtime-fix
