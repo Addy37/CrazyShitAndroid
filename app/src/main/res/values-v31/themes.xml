@@ -16,7 +16,7 @@
         <item name="colorSurfaceVariant">@color/app_surface_variant</item>
         <item name="colorOnSurfaceVariant">@color/app_on_surface_variant</item>
         <item name="android:windowSplashScreenBackground">@color/app_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_legacy</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/jeremy_launcher</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@color/app_background</item>
     </style>
 </resources>
