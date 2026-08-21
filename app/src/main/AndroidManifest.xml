@@ -18,6 +18,13 @@
         android:usesCleartextTraffic="false">
 
         <activity
+            android:name=".PlayerActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false"
+            android:screenOrientation="unspecified"
+            android:supportsPictureInPicture="true" />
+
+        <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"
