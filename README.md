@@ -10,16 +10,22 @@ CrazyShit.com contains adult, graphic, violent, and otherwise sensitive material
 
 ## Features
 
-- Fullscreen HTML5 video
-- Persistent login cookies and sessions
-- Android back-button and back-gesture handling
+- Pull to refresh
+- Picture-in-Picture for fullscreen video on supported Android devices
+- Fullscreen HTML5 video with sensor rotation and keep-screen-awake handling
+- Persistent first-party login cookies and sessions
+- Modern Android back handling
 - File uploads
-- Downloads to the Android Downloads folder
-- External domains open in the user's normal browser
+- Downloads to the Android Downloads folder with native feedback
+- Outside web links open in Android Custom Tabs
+- Built-in GitHub Releases update checker
+- Small three-dot app menu for Home, Refresh, Share, Browser, Updates, and Clear site data
+- Long-press links and images to open, share, copy, or save
 - Native loading progress
 - Native connection/error screen
 - Android launcher icon and splash screen
-- HTTPS-only app traffic
+- HTTPS-only app traffic with mixed HTTP content blocked
+- Third-party WebView cookies disabled
 - Android Safe Browsing enabled where supported
 - No analytics, advertising SDKs, or tracking added by this wrapper
 
@@ -32,11 +38,17 @@ Public releases are distributed through GitHub Releases.
 
 Android may ask you to allow **Install unknown apps** for your browser or file manager before sideloading.
 
+## Updates
+
+The app checks GitHub Releases periodically. If a newer version is available, a small native banner appears with a link to the release page. You can also use the app's three-dot menu and choose **Check for updates**.
+
+The app never silently installs updates.
+
 ## Privacy
 
-This wrapper itself does not operate an account system, analytics service, ad network, or tracking backend. It loads the live CrazyShit.com website, so the website's own cookies, analytics, ads, privacy terms, and other third-party services may still apply.
+This wrapper itself does not operate an account system, analytics service, ad network, or tracking backend. It loads the live CrazyShit.com website, so the website's own first-party cookies, analytics, ads, privacy terms, and other third-party services may still apply.
 
-See [PRIVACY.md](PRIVACY.md) for details.
+Third-party cookies are disabled inside the wrapper. See [PRIVACY.md](PRIVACY.md) for details.
 
 ## Credits and ownership
 
@@ -56,7 +68,7 @@ If a rights holder has a concern about this wrapper, see [NOTICE.md](NOTICE.md) 
 
 ## Building
 
-GitHub Actions validates the Android project on pushes and pull requests. A separate release workflow can build a signed release APK when the repository signing secrets are configured.
+GitHub Actions validates the Android project on pushes and pull requests. A separate release workflow builds a signed release APK when the repository signing secret is configured.
 
 Toolchain:
 
@@ -64,6 +76,8 @@ Toolchain:
 - Android Gradle Plugin 8.6.1
 - Gradle 8.7
 - Java 17
+- AndroidX Browser / Custom Tabs
+- AndroidX SwipeRefreshLayout
 
 ## License
 
