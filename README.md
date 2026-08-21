@@ -10,8 +10,14 @@ CrazyShit.com contains adult, graphic, violent, and otherwise sensitive material
 
 ## Features
 
+- Dedicated native Media3/ExoPlayer video player for compatible video pages and direct media links
+- Automatic MP4, HLS, and DASH playback when a usable stream is exposed by the page
+- Native-player Picture-in-Picture, playback-speed control, resume position, sharing, and normal-page fallback
+- Native player forwards the current site User-Agent, Referer, and relevant cookies when needed for playback
+- Optional **Open videos in native player** toggle, enabled by default
+- Manual **Play current page in native player** action for pages that do not auto-detect
 - Pull to refresh
-- Picture-in-Picture for fullscreen video on supported Android devices
+- Picture-in-Picture for legacy fullscreen WebView video on supported Android devices
 - Fullscreen HTML5 video with sensor rotation and keep-screen-awake handling
 - Persistent first-party login cookies and sessions
 - Modern Android back handling
@@ -19,7 +25,7 @@ CrazyShit.com contains adult, graphic, violent, and otherwise sensitive material
 - Downloads to the Android Downloads folder with native feedback
 - Outside web links open in Android Custom Tabs
 - Built-in GitHub Releases update checker
-- Small three-dot app menu for Home, Refresh, Share, Browser, Updates, and Clear site data
+- Small three-dot app menu for Home, Refresh, Share, Browser, Native Player, Updates, and Clear site data
 - Long-press links and images to open, share, copy, or save
 - Native loading progress
 - Native connection/error screen
@@ -28,6 +34,24 @@ CrazyShit.com contains adult, graphic, violent, and otherwise sensitive material
 - Third-party WebView cookies disabled
 - Android Safe Browsing enabled where supported
 - No analytics, advertising SDKs, or tracking added by this wrapper
+
+## Native video player
+
+When you tap a same-site link, the app can inspect the resulting page for a usable HTML5 video stream. If it finds a compatible MP4, HLS, or DASH source, playback moves into the dedicated Android player. If the page does not expose a usable stream, the normal webpage remains available.
+
+The player does not bypass DRM, encryption, paywalls, authentication, or access controls. It only plays media URLs that the page or WebView session already exposes to the device.
+
+Native-player features include:
+
+- Android Media3 / ExoPlayer playback
+- MP4, HLS, and DASH support
+- Picture-in-Picture
+- Resume from the last playback position
+- Playback-speed selection
+- Share the original page
+- Return to the normal webpage if the stream cannot be played
+
+You can disable automatic native playback from the app's three-dot menu at any time.
 
 ## Download
 
@@ -48,7 +72,9 @@ The app never silently installs updates.
 
 This wrapper itself does not operate an account system, analytics service, ad network, or tracking backend. It loads the live CrazyShit.com website, so the website's own first-party cookies, analytics, ads, privacy terms, and other third-party services may still apply.
 
-Third-party cookies are disabled inside the wrapper. See [PRIVACY.md](PRIVACY.md) for details.
+Third-party cookies are disabled inside the wrapper. When the native player is used, the app may pass the existing site session's User-Agent, Referer, and relevant cookies directly to the media server so the same stream can play outside the WebView. Those values are not sent to an app-operated analytics or tracking service.
+
+See [PRIVACY.md](PRIVACY.md) for details.
 
 ## Credits and ownership
 
@@ -56,6 +82,7 @@ Third-party cookies are disabled inside the wrapper. See [PRIVACY.md](PRIVACY.md
 - CrazyShit.com: https://crazyshit.com/
 - CrazyShit.com Terms, Privacy, 2257, DMCA, and Contact links are available from the footer of the website.
 - Android platform and WebView technology: Android Open Source Project / Google.
+- Native video playback: AndroidX Media3 / ExoPlayer by the Android Open Source Project / Google.
 - Community Android wrapper source: **Addy37**, licensed under the MIT License.
 
 No CrazyShit.com videos, images, user uploads, or other website media are bundled with this repository or APK. The app loads the live website at runtime.
@@ -78,6 +105,7 @@ Toolchain:
 - Java 17
 - AndroidX Browser / Custom Tabs
 - AndroidX SwipeRefreshLayout
+- AndroidX Media3 / ExoPlayer
 
 ## License
 
