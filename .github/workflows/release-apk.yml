@@ -61,22 +61,18 @@ jobs:
         run: |
           python - <<'PY'
           import base64, json, os, pathlib, sys
-
           raw = os.environ.get("SIGNING_BUNDLE", "")
           if not raw:
               sys.exit("Missing repository secret: ANDROID_SIGNING_BUNDLE")
-
           raw = raw.replace("\r", "").replace("\n", "")
           data = json.loads(raw)
           required = ["keystore_base64", "store_password", "key_alias", "key_password"]
           missing = [key for key in required if not data.get(key)]
           if missing:
               sys.exit("Signing bundle is missing: " + ", ".join(missing))
-
           keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "crazyshit-unofficial-release.jks"
           keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
           keystore.chmod(0o600)
-
           env_file = pathlib.Path(os.environ["GITHUB_ENV"])
           with env_file.open("a", encoding="utf-8") as f:
               f.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
@@ -92,7 +88,7 @@ jobs:
         run: |
           cp app/build/outputs/apk/release/app-release.apk CrazyShit-Unofficial.apk
           cp CrazyShit-Unofficial.apk "CrazyShit-Unofficial-v${VERSION}.apk"
-          apksigner verify --verbose --print-certs CrazyShit-Unofficial.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs CrazyShit-Unofficial.apk
           sha256sum CrazyShit-Unofficial.apk > SHA256SUMS.txt
           sha256sum "CrazyShit-Unofficial-v${VERSION}.apk" >> SHA256SUMS.txt
 
