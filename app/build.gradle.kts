@@ -51,6 +51,6 @@ android {
 }
 
 dependencies {
-    implementation("androidx.browser:browser:1.10.0")
+    implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.2.0")
 }
