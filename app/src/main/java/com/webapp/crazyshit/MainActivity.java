@@ -163,6 +163,28 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(13, 13, 15));
 
         webFrame = new FrameLayout(this);
+        webFrame.setOnApplyWindowInsetsListener((view, insets) -> {
+            int left;
+            int top;
+            int right;
+            int bottom;
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets safe = insets.getInsets(
+                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
+                );
+                left = safe.left;
+                top = safe.top;
+                right = safe.right;
+                bottom = safe.bottom;
+            } else {
+                left = insets.getSystemWindowInsetLeft();
+                top = insets.getSystemWindowInsetTop();
+                right = insets.getSystemWindowInsetRight();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            view.setPadding(left, top, right, bottom);
+            return insets;
+        });
         root.addView(webFrame, match());
 
         swipeRefresh = new SwipeRefreshLayout(this);
