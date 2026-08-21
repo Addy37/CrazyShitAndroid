@@ -1,1 +1,2 @@
 Trigger GitHub Actions APK verification build.
+Retry after compile fix.
