@@ -72,7 +72,7 @@ jobs:
 
       - name: Remove non-workflow stable-prep temporary files
         run: |
-          rm -f STABLE_BRANDING_SCAN.txt STABLE_PREP_RETRY
+          rm -f STABLE_BRANDING_SCAN.txt STABLE_PREP_RETRY STABLE_PREP_RETRY2
 
       - name: Scan code and docs for old public branding
         run: |
@@ -108,10 +108,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/src SIGNING.md PRIVACY.md NOTICE.md NATIVE_V2_PLAN.md STABLE_BRANDING_SCAN.txt STABLE_PREP_RETRY 2>/dev/null || true
+          git add app/src SIGNING.md PRIVACY.md NOTICE.md NATIVE_V2_PLAN.md STABLE_BRANDING_SCAN.txt STABLE_PREP_RETRY STABLE_PREP_RETRY2 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "Stable code and docs already normalized."
             exit 0
           fi
           git commit -m "Normalize CrazyShit stable source [skip ci]"
+          git pull --rebase origin v2-stable-prep
           git push origin HEAD:v2-stable-prep
