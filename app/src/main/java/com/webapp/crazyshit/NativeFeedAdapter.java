@@ -22,22 +22,17 @@ import com.bumptech.glide.load.model.LazyHeaders;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdapter.Holder> {
     private static final String SITE = "https://crazyshit.com/";
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
-
-    private static final ExecutorService THUMBNAIL_IO = Executors.newFixedThreadPool(4);
-    private static final ConcurrentHashMap<String, String> THUMBNAIL_CACHE = new ConcurrentHashMap<>();
-    private static final Set<String> THUMBNAIL_LOADING = ConcurrentHashMap.newKeySet();
-    private static final Set<String> THUMBNAIL_FAILED = ConcurrentHashMap.newKeySet();
 
     public interface Listener {
         void onOpen(NativeContentItem item);
@@ -46,6 +41,9 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private final List<NativeContentItem> items = new ArrayList<>();
     private final Listener listener;
+    private final Map<String, String> resolvedThumbnails = new HashMap<>();
+    private final Set<String> requestedThumbnails = new HashSet<>();
+    private RenderedThumbnailResolver renderedThumbnailResolver;
 
     public NativeFeedAdapter(Listener listener) {
         this.listener = listener;
@@ -79,6 +77,17 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return items.size();
     }
 
+    public void setResolvedThumbnail(String pageUrl, String thumbnailUrl) {
+        if (pageUrl == null || pageUrl.isEmpty() || thumbnailUrl == null || thumbnailUrl.isEmpty()) return;
+        resolvedThumbnails.put(pageUrl, thumbnailUrl);
+        for (int i = 0; i < items.size(); i++) {
+            if (pageUrl.equals(items.get(i).url)) {
+                notifyItemChanged(i, "thumbnail");
+                break;
+            }
+        }
+    }
+
     @Override
     public long getItemId(int position) {
         return items.get(position).url.hashCode();
@@ -87,6 +96,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        if (renderedThumbnailResolver == null) {
+            renderedThumbnailResolver = new RenderedThumbnailResolver(
+                    parent.getContext(),
+                    this::setResolvedThumbnail
+            );
+        }
+
         int margin = dp(parent, 12);
 
         MaterialCardView card = new MaterialCardView(parent.getContext());
@@ -147,19 +163,26 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        bind(holder, position);
+    }
+
+    @Override
+    public void onBindViewHolder(@NonNull Holder holder, int position, @NonNull List<Object> payloads) {
+        if (!payloads.isEmpty() && payloads.contains("thumbnail")) {
+            loadThumbnail(holder, items.get(position));
+            return;
+        }
+        bind(holder, position);
+    }
+
+    private void bind(Holder holder, int position) {
         NativeContentItem item = items.get(position);
-        holder.boundUrl = item.url;
         holder.title.setText(item.title);
         holder.meta.setText(buildMeta(item));
+        loadThumbnail(holder, item);
 
-        String imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
-        if (imageUrl.isEmpty()) imageUrl = THUMBNAIL_CACHE.getOrDefault(item.url, "");
-
-        if (imageUrl.isEmpty()) {
-            clearImage(holder);
-            resolveThumbnailAsync(holder, item);
-        } else {
-            loadImage(holder, imageUrl, item.url);
+        if (requestedThumbnails.add(item.url) && renderedThumbnailResolver != null) {
+            renderedThumbnailResolver.request(item.url);
         }
 
         holder.card.setOnClickListener(v -> listener.onOpen(item));
@@ -169,44 +192,19 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         });
     }
 
-    private void resolveThumbnailAsync(Holder holder, NativeContentItem item) {
-        if (item.url == null || item.url.isEmpty()) return;
-        if (THUMBNAIL_FAILED.contains(item.url)) return;
+    private void loadThumbnail(Holder holder, NativeContentItem item) {
+        String imageUrl = resolvedThumbnails.get(item.url);
+        if (imageUrl == null || imageUrl.isEmpty()) imageUrl = item.imageUrl;
 
-        String cached = THUMBNAIL_CACHE.get(item.url);
-        if (cached != null && !cached.isEmpty()) {
-            loadImage(holder, cached, item.url);
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            Glide.with(holder.image).clear(holder.image);
+            holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
             return;
         }
 
-        if (!THUMBNAIL_LOADING.add(item.url)) return;
-        android.content.Context appContext = holder.image.getContext().getApplicationContext();
-        String pageUrl = item.url;
-
-        THUMBNAIL_IO.execute(() -> {
-            String resolved = ThumbnailResolver.resolve(appContext, pageUrl);
-            THUMBNAIL_LOADING.remove(pageUrl);
-            if (resolved == null || resolved.trim().isEmpty()) {
-                THUMBNAIL_FAILED.add(pageUrl);
-                return;
-            }
-
-            THUMBNAIL_CACHE.put(pageUrl, resolved);
-            holder.image.post(() -> {
-                if (!pageUrl.equals(holder.boundUrl)) return;
-                loadImage(holder, resolved, pageUrl);
-            });
-        });
-    }
-
-    private void clearImage(Holder holder) {
-        Glide.with(holder.image).clear(holder.image);
-        holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
-    }
-
-    private void loadImage(Holder holder, String imageUrl, String pageUrl) {
+        Object source = imageUrl.startsWith("file://") ? imageUrl : withSiteHeaders(imageUrl, item.url);
         Glide.with(holder.image)
-                .load(withSiteHeaders(imageUrl, pageUrl))
+                .load(source)
                 .centerCrop()
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
@@ -217,7 +215,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
-        holder.boundUrl = null;
         Glide.with(holder.image).clear(holder.image);
         super.onViewRecycled(holder);
     }
@@ -236,7 +233,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         try {
             String cookies = CookieManager.getInstance().getCookie(imageUrl);
             if (cookies == null || cookies.trim().isEmpty()) {
-                cookies = CookieManager.getInstance().getCookie(pageUrl);
+                cookies = CookieManager.getInstance().getCookie(pageUrl == null ? SITE : pageUrl);
             }
             if (cookies == null || cookies.trim().isEmpty()) {
                 cookies = CookieManager.getInstance().getCookie(SITE);
@@ -267,7 +264,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final ImageView image;
         final TextView title;
         final TextView meta;
-        String boundUrl;
 
         Holder(MaterialCardView card, ImageView image, TextView title, TextView meta) {
             super(card);
