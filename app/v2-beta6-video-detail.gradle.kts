@@ -53,3 +53,5 @@ tasks.matching {
 }.configureEach {
     dependsOn("wireV2Beta6VideoDetail")
 }
+
+apply(from = "v2-beta7-video-polish.gradle.kts")
