@@ -47,6 +47,13 @@
             android:exported="false" />
 
         <activity
+            android:name=".VideoDetailActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:screenOrientation="unspecified" />
+
+        <activity
             android:name=".PlayerActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"
