@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
@@ -53,10 +54,11 @@ final class RenderedThumbnailResolver {
     private final Context context;
     private final Callback callback;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService io = Executors.newFixedThreadPool(2);
+    private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final ArrayDeque<String> queue = new ArrayDeque<>();
     private final Map<String, Boolean> pending = new HashMap<>();
     private final CrazyShitRepository repository = new CrazyShitRepository();
+    private final SharedPreferences cachePrefs;
 
     private WebView webView;
     private String currentPage;
@@ -64,21 +66,42 @@ final class RenderedThumbnailResolver {
     private int attempt;
 
     RenderedThumbnailResolver(Context context, Callback callback) {
-        this.context = context;
+        this.context = context.getApplicationContext();
         this.callback = callback;
+        this.cachePrefs = this.context.getSharedPreferences("native_thumbnail_cache", Context.MODE_PRIVATE);
         createWebView();
     }
 
     void request(String pageUrl) {
         if (pageUrl == null || pageUrl.isEmpty()) return;
+
+        String cached = cachedResult(pageUrl);
+        if (isUsable(cached)) {
+            if (callback != null) main.post(() -> callback.onResolved(pageUrl, cached));
+            return;
+        }
+
         synchronized (pending) {
-            if (pending.containsKey(pageUrl)) return;
+            if (Boolean.TRUE.equals(pending.get(pageUrl))) return;
             pending.put(pageUrl, Boolean.TRUE);
         }
         main.post(() -> {
             queue.offer(pageUrl);
             startNext();
         });
+    }
+
+    private String cachedResult(String pageUrl) {
+        try {
+            File file = new File(new File(context.getCacheDir(), "native_thumbnails"), sha256(pageUrl) + ".jpg");
+            if (file.exists() && file.length() > 1024) return Uri.fromFile(file).toString();
+        } catch (Exception ignored) {
+        }
+        try {
+            return cachePrefs.getString(pageUrl, "");
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     private void createWebView() {
@@ -102,7 +125,7 @@ final class RenderedThumbnailResolver {
                 public void onPageFinished(WebView view, String url) {
                     if (!busy || currentPage == null) return;
                     attempt = 0;
-                    main.postDelayed(RenderedThumbnailResolver.this::probeRenderedPage, 900L);
+                    main.postDelayed(RenderedThumbnailResolver.this::probeRenderedPage, 250L);
                 }
             });
         });
@@ -134,7 +157,7 @@ final class RenderedThumbnailResolver {
                 }
                 attempt++;
                 if (attempt < 3) {
-                    main.postDelayed(this::probeRenderedPage, attempt == 1 ? 1000L : 1500L);
+                    main.postDelayed(this::probeRenderedPage, attempt == 1 ? 350L : 650L);
                 } else {
                     fallbackToVideo(page);
                 }
@@ -180,16 +203,14 @@ final class RenderedThumbnailResolver {
 
             retriever.setDataSource(mediaUrl, headers);
             Bitmap bitmap = retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
-            if (bitmap == null) {
-                bitmap = retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
-            }
+            if (bitmap == null) bitmap = retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
             if (bitmap == null) return "";
 
             File dir = new File(context.getCacheDir(), "native_thumbnails");
             if (!dir.exists()) dir.mkdirs();
             File file = new File(dir, sha256(pageUrl) + ".jpg");
             try (FileOutputStream out = new FileOutputStream(file)) {
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 84, out);
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 82, out);
             }
             bitmap.recycle();
             return Uri.fromFile(file).toString();
@@ -204,8 +225,14 @@ final class RenderedThumbnailResolver {
     }
 
     private void finish(String page, String result) {
-        if (page != null && callback != null && isUsable(result)) {
-            callback.onResolved(page, result);
+        if (page != null && isUsable(result)) {
+            if (result.startsWith("http://") || result.startsWith("https://")) {
+                try {
+                    cachePrefs.edit().putString(page, result).apply();
+                } catch (Exception ignored) {
+                }
+            }
+            if (callback != null) callback.onResolved(page, result);
         }
         if (page != null) {
             synchronized (pending) {
