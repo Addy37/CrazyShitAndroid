@@ -6,6 +6,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -15,12 +16,20 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdapter.Holder> {
+    private static final String SITE = "https://crazyshit.com/";
+    private static final String USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
+
     public interface Listener {
         void onOpen(NativeContentItem item);
         void onLongPress(NativeContentItem item, View anchor);
@@ -96,10 +105,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         TextView play = new TextView(parent.getContext());
         play.setText("▶");
         play.setTextColor(Color.WHITE);
-        play.setTextSize(27);
+        play.setTextSize(25);
         play.setGravity(Gravity.CENTER);
-        play.setBackground(new ColorDrawable(Color.argb(165, 0, 0, 0)));
-        FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(dp(parent, 54), dp(parent, 54));
+        play.setBackground(new ColorDrawable(Color.argb(145, 0, 0, 0)));
+        FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(dp(parent, 50), dp(parent, 50));
         playParams.gravity = Gravity.CENTER;
         mediaFrame.addView(play, playParams);
 
@@ -138,8 +147,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
         } else {
             Glide.with(holder.image)
-                    .load(item.imageUrl)
+                    .load(withSiteHeaders(item.imageUrl))
                     .centerCrop()
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                    .dontAnimate()
                     .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
                     .error(new ColorDrawable(Color.rgb(20, 20, 23)))
                     .into(holder.image);
@@ -153,8 +164,34 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     @Override
+    public void onViewRecycled(@NonNull Holder holder) {
+        Glide.with(holder.image).clear(holder.image);
+        super.onViewRecycled(holder);
+    }
+
+    @Override
     public int getItemCount() {
         return items.size();
+    }
+
+    private GlideUrl withSiteHeaders(String imageUrl) {
+        LazyHeaders.Builder headers = new LazyHeaders.Builder()
+                .addHeader("User-Agent", USER_AGENT)
+                .addHeader("Referer", SITE)
+                .addHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+
+        try {
+            String cookies = CookieManager.getInstance().getCookie(imageUrl);
+            if (cookies == null || cookies.trim().isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie(SITE);
+            }
+            if (cookies != null && !cookies.trim().isEmpty()) {
+                headers.addHeader("Cookie", cookies);
+            }
+        } catch (Exception ignored) {
+        }
+
+        return new GlideUrl(imageUrl, headers.build());
     }
 
     private String buildMeta(NativeContentItem item) {
