@@ -23,12 +23,21 @@ import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdapter.Holder> {
     private static final String SITE = "https://crazyshit.com/";
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
+
+    private static final ExecutorService THUMBNAIL_IO = Executors.newFixedThreadPool(4);
+    private static final ConcurrentHashMap<String, String> THUMBNAIL_CACHE = new ConcurrentHashMap<>();
+    private static final Set<String> THUMBNAIL_LOADING = ConcurrentHashMap.newKeySet();
+    private static final Set<String> THUMBNAIL_FAILED = ConcurrentHashMap.newKeySet();
 
     public interface Listener {
         void onOpen(NativeContentItem item);
@@ -139,21 +148,18 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
+        holder.boundUrl = item.url;
         holder.title.setText(item.title);
         holder.meta.setText(buildMeta(item));
 
-        if (item.imageUrl == null || item.imageUrl.isEmpty()) {
-            Glide.with(holder.image).clear(holder.image);
-            holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
+        String imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
+        if (imageUrl.isEmpty()) imageUrl = THUMBNAIL_CACHE.getOrDefault(item.url, "");
+
+        if (imageUrl.isEmpty()) {
+            clearImage(holder);
+            resolveThumbnailAsync(holder, item);
         } else {
-            Glide.with(holder.image)
-                    .load(withSiteHeaders(item.imageUrl))
-                    .centerCrop()
-                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                    .dontAnimate()
-                    .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
-                    .error(new ColorDrawable(Color.rgb(20, 20, 23)))
-                    .into(holder.image);
+            loadImage(holder, imageUrl, item.url);
         }
 
         holder.card.setOnClickListener(v -> listener.onOpen(item));
@@ -163,8 +169,55 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         });
     }
 
+    private void resolveThumbnailAsync(Holder holder, NativeContentItem item) {
+        if (item.url == null || item.url.isEmpty()) return;
+        if (THUMBNAIL_FAILED.contains(item.url)) return;
+
+        String cached = THUMBNAIL_CACHE.get(item.url);
+        if (cached != null && !cached.isEmpty()) {
+            loadImage(holder, cached, item.url);
+            return;
+        }
+
+        if (!THUMBNAIL_LOADING.add(item.url)) return;
+        android.content.Context appContext = holder.image.getContext().getApplicationContext();
+        String pageUrl = item.url;
+
+        THUMBNAIL_IO.execute(() -> {
+            String resolved = ThumbnailResolver.resolve(appContext, pageUrl);
+            THUMBNAIL_LOADING.remove(pageUrl);
+            if (resolved == null || resolved.trim().isEmpty()) {
+                THUMBNAIL_FAILED.add(pageUrl);
+                return;
+            }
+
+            THUMBNAIL_CACHE.put(pageUrl, resolved);
+            holder.image.post(() -> {
+                if (!pageUrl.equals(holder.boundUrl)) return;
+                loadImage(holder, resolved, pageUrl);
+            });
+        });
+    }
+
+    private void clearImage(Holder holder) {
+        Glide.with(holder.image).clear(holder.image);
+        holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
+    }
+
+    private void loadImage(Holder holder, String imageUrl, String pageUrl) {
+        Glide.with(holder.image)
+                .load(withSiteHeaders(imageUrl, pageUrl))
+                .centerCrop()
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                .dontAnimate()
+                .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
+                .error(new ColorDrawable(Color.rgb(20, 20, 23)))
+                .into(holder.image);
+    }
+
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        holder.boundUrl = null;
         Glide.with(holder.image).clear(holder.image);
         super.onViewRecycled(holder);
     }
@@ -174,14 +227,17 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return items.size();
     }
 
-    private GlideUrl withSiteHeaders(String imageUrl) {
+    private GlideUrl withSiteHeaders(String imageUrl, String pageUrl) {
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
                 .addHeader("User-Agent", USER_AGENT)
-                .addHeader("Referer", SITE)
+                .addHeader("Referer", pageUrl == null || pageUrl.isEmpty() ? SITE : pageUrl)
                 .addHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
 
         try {
             String cookies = CookieManager.getInstance().getCookie(imageUrl);
+            if (cookies == null || cookies.trim().isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie(pageUrl);
+            }
             if (cookies == null || cookies.trim().isEmpty()) {
                 cookies = CookieManager.getInstance().getCookie(SITE);
             }
@@ -211,6 +267,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final ImageView image;
         final TextView title;
         final TextView meta;
+        String boundUrl;
 
         Holder(MaterialCardView card, ImageView image, TextView title, TextView meta) {
             super(card);
