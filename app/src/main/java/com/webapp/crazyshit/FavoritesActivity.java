@@ -4,23 +4,36 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
+import android.webkit.CookieManager;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
 import java.text.DateFormat;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Local library for Continue Watching, History and Watch Later.
@@ -32,6 +45,10 @@ public class FavoritesActivity extends Activity {
     private static final int TAB_CONTINUE = 0;
     private static final int TAB_HISTORY = 1;
     private static final int TAB_WATCH_LATER = 2;
+    private static final String SITE = "https://crazyshit.com/";
+    private static final String USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
     private LinearLayout listContainer;
     private MaterialButton continueTab;
@@ -40,11 +57,21 @@ public class FavoritesActivity extends Activity {
     private TextView clearAction;
     private int tab = TAB_CONTINUE;
 
+    private final Map<String, ImageView> thumbnailTargets = new HashMap<>();
+    private final Map<String, String> resolvedThumbnails = new HashMap<>();
+    private final Set<String> requestedThumbnails = new HashSet<>();
+    private RenderedThumbnailResolver[] thumbnailResolvers;
+    private int resolverCursor;
+
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
+        thumbnailResolvers = new RenderedThumbnailResolver[] {
+                new RenderedThumbnailResolver(this, this::onThumbnailResolved),
+                new RenderedThumbnailResolver(this, this::onThumbnailResolved)
+        };
         buildUi();
     }
 
@@ -143,11 +170,12 @@ public class FavoritesActivity extends Activity {
         continueTab.setEnabled(tab != TAB_CONTINUE);
         historyTab.setEnabled(tab != TAB_HISTORY);
         watchLaterTab.setEnabled(tab != TAB_WATCH_LATER);
-        clearAction.setText(tab == TAB_WATCH_LATER ? "CLEAR" : "CLEAR");
+        clearAction.setText("CLEAR");
     }
 
     private void renderItems() {
         if (listContainer == null) return;
+        thumbnailTargets.clear();
         listContainer.removeAllViews();
         if (tab == TAB_WATCH_LATER) {
             renderWatchLater();
@@ -181,16 +209,25 @@ public class FavoritesActivity extends Activity {
     private MaterialCardView makeHistoryCard(PlaybackHistoryStore.Item item, boolean continueOnly) {
         MaterialCardView card = card();
         LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(dp(16), dp(14), dp(14), dp(12));
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.TOP);
+        row.setPadding(dp(8), dp(8), dp(10), dp(8));
         row.setClickable(true);
         row.setFocusable(true);
         row.setOnClickListener(v -> select(item.pageUrl));
 
-        TextView title = text(item.title, 16, Color.WHITE);
+        row.addView(makeThumbnail(item.pageUrl), new LinearLayout.LayoutParams(dp(138), dp(88)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(12), dp(5), 0, 0);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        TextView title = text(item.title, 15, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
-        row.addView(title);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        copy.addView(title);
 
         int percent = item.progressPercent();
         String progressText;
@@ -202,37 +239,40 @@ public class FavoritesActivity extends Activity {
             progressText = formatTime(item.positionMs) + " watched";
         }
         TextView progressLabel = text(progressText, 12, Color.rgb(190, 190, 198));
-        progressLabel.setPadding(0, dp(7), 0, 0);
-        row.addView(progressLabel);
+        progressLabel.setPadding(0, dp(5), 0, 0);
+        copy.addView(progressLabel);
 
         if (item.durationMs > 0L && !item.complete) {
             ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
             bar.setMax(100);
             bar.setProgress(percent);
-            LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(-1, dp(5));
-            barParams.setMargins(0, dp(8), 0, dp(3));
-            row.addView(bar, barParams);
+            LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(-1, dp(4));
+            barParams.setMargins(0, dp(6), 0, dp(2));
+            copy.addView(bar, barParams);
         }
+
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.HORIZONTAL);
+        footer.setGravity(Gravity.CENTER_VERTICAL);
+        footer.setPadding(0, dp(5), 0, 0);
 
         String watched = item.lastWatched > 0L
                 ? "Watched " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                 .format(new Date(item.lastWatched))
                 : "Watched";
-        TextView date = text(watched, 11, Color.rgb(135, 135, 145));
-        date.setPadding(0, dp(7), 0, 0);
-        row.addView(date);
+        TextView date = text(watched, 10, Color.rgb(135, 135, 145));
+        date.setMaxLines(1);
+        date.setEllipsize(TextUtils.TruncateAt.END);
+        footer.addView(date, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setGravity(Gravity.END);
-        MaterialButton remove = new MaterialButton(this);
-        remove.setText(continueOnly ? "Remove" : "Delete");
+        MaterialButton remove = compactAction(continueOnly ? "Remove" : "Delete");
         remove.setOnClickListener(v -> {
             haptic(v);
             PlaybackHistoryStore.remove(this, item.pageUrl);
             renderItems();
         });
-        actions.addView(remove, new LinearLayout.LayoutParams(-2, -2));
-        row.addView(actions);
+        footer.addView(remove, new LinearLayout.LayoutParams(-2, dp(38)));
+        copy.addView(footer);
 
         card.addView(row);
         return card;
@@ -252,40 +292,140 @@ public class FavoritesActivity extends Activity {
     private MaterialCardView makeWatchLaterCard(FavoriteStore.Item item) {
         MaterialCardView card = card();
         LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(dp(16), dp(14), dp(14), dp(12));
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.TOP);
+        row.setPadding(dp(8), dp(8), dp(10), dp(8));
         row.setClickable(true);
         row.setFocusable(true);
         row.setOnClickListener(v -> select(item.url));
 
-        TextView title = text(item.title, 16, Color.WHITE);
+        row.addView(makeThumbnail(item.url), new LinearLayout.LayoutParams(dp(138), dp(88)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(12), dp(5), 0, 0);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        TextView title = text(item.title, 15, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
-        row.addView(title);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        copy.addView(title);
 
         String date = item.savedAt > 0L
                 ? "Saved " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                 .format(new Date(item.savedAt))
                 : "Saved";
-        TextView saved = text(date, 12, Color.rgb(145, 145, 155));
-        saved.setPadding(0, dp(7), 0, 0);
-        row.addView(saved);
+        TextView saved = text(date, 11, Color.rgb(145, 145, 155));
+        saved.setPadding(0, dp(6), 0, 0);
+        saved.setMaxLines(1);
+        saved.setEllipsize(TextUtils.TruncateAt.END);
+        copy.addView(saved);
 
-        MaterialButton remove = new MaterialButton(this);
-        remove.setText("Remove");
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.END);
+        actions.setPadding(0, dp(8), 0, 0);
+        MaterialButton remove = compactAction("Remove");
         remove.setOnClickListener(v -> {
             haptic(v);
             FavoriteStore.remove(this, item.url);
             Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
             renderItems();
         });
-        LinearLayout.LayoutParams removeParams = new LinearLayout.LayoutParams(-2, -2);
-        removeParams.gravity = Gravity.END;
-        removeParams.setMargins(0, dp(8), 0, 0);
-        row.addView(remove, removeParams);
+        actions.addView(remove, new LinearLayout.LayoutParams(-2, dp(38)));
+        copy.addView(actions);
 
         card.addView(row);
         return card;
+    }
+
+    private FrameLayout makeThumbnail(String pageUrl) {
+        FrameLayout media = new FrameLayout(this);
+        media.setBackgroundColor(Color.rgb(18, 18, 21));
+
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setBackgroundColor(Color.rgb(18, 18, 21));
+        media.addView(image, new FrameLayout.LayoutParams(-1, -1));
+
+        TextView play = text("▶", 20, Color.WHITE);
+        play.setGravity(Gravity.CENTER);
+        play.setBackground(new ColorDrawable(Color.argb(115, 0, 0, 0)));
+        FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(dp(38), dp(38));
+        playParams.gravity = Gravity.CENTER;
+        media.addView(play, playParams);
+
+        thumbnailTargets.put(pageUrl, image);
+        String resolved = resolvedThumbnails.get(pageUrl);
+        if (resolved != null && !resolved.isEmpty()) {
+            loadThumbnail(image, resolved, pageUrl);
+        } else {
+            requestThumbnail(pageUrl);
+        }
+        return media;
+    }
+
+    private void requestThumbnail(String pageUrl) {
+        if (pageUrl == null || pageUrl.isEmpty() || thumbnailResolvers == null) return;
+        if (!requestedThumbnails.add(pageUrl)) return;
+        RenderedThumbnailResolver resolver = thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
+        resolver.request(pageUrl);
+    }
+
+    private void onThumbnailResolved(String pageUrl, String thumbnailUrl) {
+        if (pageUrl == null || pageUrl.isEmpty() || thumbnailUrl == null || thumbnailUrl.isEmpty()) return;
+        resolvedThumbnails.put(pageUrl, thumbnailUrl);
+        ImageView target = thumbnailTargets.get(pageUrl);
+        if (target != null) loadThumbnail(target, thumbnailUrl, pageUrl);
+    }
+
+    private void loadThumbnail(ImageView image, String imageUrl, String pageUrl) {
+        if (isFinishing() || image == null || imageUrl == null || imageUrl.isEmpty()) return;
+        Object source = imageUrl.startsWith("file://") ? imageUrl : withSiteHeaders(imageUrl, pageUrl);
+        try {
+            Glide.with(image)
+                    .load(source)
+                    .centerCrop()
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                    .dontAnimate()
+                    .placeholder(new ColorDrawable(Color.rgb(18, 18, 21)))
+                    .error(new ColorDrawable(Color.rgb(18, 18, 21)))
+                    .into(image);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private GlideUrl withSiteHeaders(String imageUrl, String pageUrl) {
+        LazyHeaders.Builder headers = new LazyHeaders.Builder()
+                .addHeader("User-Agent", USER_AGENT)
+                .addHeader("Referer", pageUrl == null || pageUrl.isEmpty() ? SITE : pageUrl)
+                .addHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+        try {
+            String cookies = CookieManager.getInstance().getCookie(imageUrl);
+            if (cookies == null || cookies.trim().isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie(pageUrl == null ? SITE : pageUrl);
+            }
+            if (cookies == null || cookies.trim().isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie(SITE);
+            }
+            if (cookies != null && !cookies.trim().isEmpty()) headers.addHeader("Cookie", cookies);
+        } catch (Exception ignored) {
+        }
+        return new GlideUrl(imageUrl, headers.build());
+    }
+
+    private MaterialButton compactAction(String label) {
+        MaterialButton button = new MaterialButton(this);
+        button.setText(label);
+        button.setTextSize(11);
+        button.setAllCaps(false);
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
+        button.setMinWidth(0);
+        button.setMinimumWidth(0);
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        return button;
     }
 
     private void showEmpty(String titleValue, String bodyValue) {
