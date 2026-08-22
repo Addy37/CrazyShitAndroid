@@ -84,6 +84,11 @@ public class SettingsActivity extends Activity {
                 "Back returns to browsing with the video in the in-app mini-player.",
                 "minimize_on_back",
                 true);
+        addSwitch(root,
+                "Swipe down to minimize",
+                "Drag down from the upper part of a playing video to shrink it into the in-app mini-player.",
+                "swipe_down_minimize",
+                true);
 
         addSection(root, "Browsing & privacy");
         addSwitch(root,
@@ -98,9 +103,13 @@ public class SettingsActivity extends Activity {
                 true);
 
         addSection(root, "Library");
-        addAction(root, "Watch Later", "View locally saved video pages.", () ->
+        addAction(root, "Library", "Continue Watching, History and Watch Later.", () ->
                 startActivity(new Intent(this, FavoritesActivity.class)));
-        addAction(root, "Clear Watch Later", "Remove all locally saved items.", () -> {
+        addAction(root, "Clear watch history", "Remove History and Continue Watching from this device.", () -> {
+            PlaybackHistoryStore.clear(this);
+            Toast.makeText(this, "Watch history cleared.", Toast.LENGTH_SHORT).show();
+        });
+        addAction(root, "Clear Watch Later", "Remove all locally saved Watch Later items.", () -> {
             FavoriteStore.clear(this);
             Toast.makeText(this, "Watch Later cleared.", Toast.LENGTH_SHORT).show();
         });

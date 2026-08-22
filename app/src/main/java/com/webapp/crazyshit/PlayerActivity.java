@@ -46,6 +46,7 @@ import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 @UnstableApi
@@ -61,17 +62,23 @@ public class PlayerActivity extends Activity {
 
     private ExoPlayer player;
     private PlayerView playerView;
-    private TextView backButton;
+    private FrameLayout videoSurface;
     private TextView menuButton;
     private TextView titleView;
     private TextView gestureLabel;
     private LinearLayout topBar;
+
     private String mediaUrl;
     private String pageUrl;
     private String title;
     private String userAgent;
     private String cookies;
+
     private boolean failureShown;
+    private boolean minimizing;
+    private boolean dragMinimize;
+    private float dragStartY;
+    private float dragLastY;
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
     private AudioManager audioManager;
     private OnBackInvokedCallback systemBackCallback;
@@ -90,10 +97,9 @@ public class PlayerActivity extends Activity {
             finish();
             return;
         }
-
         if (title == null || title.trim().isEmpty()) title = "Video";
-        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
 
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -108,7 +114,13 @@ public class PlayerActivity extends Activity {
 
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(Color.rgb(8, 8, 10));
+
+        videoSurface = new FrameLayout(this);
+        videoSurface.setBackgroundColor(Color.BLACK);
+        videoSurface.setPivotX(getResources().getDisplayMetrics().widthPixels / 2f);
+        videoSurface.setPivotY(0f);
+        root.addView(videoSurface, new FrameLayout.LayoutParams(-1, -1));
 
         playerView = new PlayerView(this);
         playerView.setBackgroundColor(Color.BLACK);
@@ -118,7 +130,7 @@ public class PlayerActivity extends Activity {
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         playerView.setKeepScreenOn(true);
         playerView.setResizeMode(resizeMode);
-        root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
+        videoSurface.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
         topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
@@ -128,9 +140,9 @@ public class PlayerActivity extends Activity {
         FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, dp(60));
         topParams.gravity = Gravity.TOP;
         topParams.setMargins(dp(10), dp(10), dp(10), 0);
-        root.addView(topBar, topParams);
+        videoSurface.addView(topBar, topParams);
 
-        backButton = topButton("‹", "Back or minimize");
+        TextView backButton = topButton("‹", "Back or minimize");
         backButton.setTextSize(34);
         backButton.setOnClickListener(v -> {
             haptic(v);
@@ -167,7 +179,7 @@ public class PlayerActivity extends Activity {
         gestureLabel.setElevation(dp(12));
         FrameLayout.LayoutParams gestureParams = new FrameLayout.LayoutParams(-2, -2);
         gestureParams.gravity = Gravity.CENTER;
-        root.addView(gestureLabel, gestureParams);
+        videoSurface.addView(gestureLabel, gestureParams);
 
         setContentView(root);
         configureGestures();
@@ -212,10 +224,9 @@ public class PlayerActivity extends Activity {
         playerView.setPlayer(player);
 
         MediaItem.Builder item = new MediaItem.Builder().setUri(mediaUrl);
-        String lower = mediaUrl.toLowerCase();
+        String lower = mediaUrl.toLowerCase(Locale.US);
         if (lower.contains(".m3u8")) item.setMimeType(MimeTypes.APPLICATION_M3U8);
         else if (lower.contains(".mpd")) item.setMimeType(MimeTypes.APPLICATION_MPD);
-
         player.setMediaItem(item.build());
 
         long requestedPosition = getIntent().getLongExtra(EXTRA_START_POSITION, -1L);
@@ -233,11 +244,14 @@ public class PlayerActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
-                if (playbackState == Player.STATE_ENDED && rememberPositionEnabled()) {
-                    getSharedPreferences("player_positions", MODE_PRIVATE)
-                            .edit()
-                            .remove(positionKey())
-                            .apply();
+                if (playbackState == Player.STATE_ENDED) {
+                    if (rememberPositionEnabled()) {
+                        getSharedPreferences("player_positions", MODE_PRIVATE)
+                                .edit()
+                                .remove(positionKey())
+                                .apply();
+                    }
+                    recordHistory(true);
                 }
             }
 
@@ -267,6 +281,7 @@ public class PlayerActivity extends Activity {
 
                     @Override
                     public boolean onSingleTapConfirmed(MotionEvent e) {
+                        if (dragMinimize) return true;
                         if (playerView.isControllerFullyVisible()) {
                             playerView.hideController();
                             topBar.setVisibility(View.GONE);
@@ -279,7 +294,7 @@ public class PlayerActivity extends Activity {
 
                     @Override
                     public boolean onDoubleTap(MotionEvent e) {
-                        if (player == null) return true;
+                        if (player == null || dragMinimize) return true;
                         long delta = e.getX() < playerView.getWidth() / 2f ? -10_000L : 10_000L;
                         long duration = player.getDuration();
                         long target = Math.max(0L, player.getCurrentPosition() + delta);
@@ -308,6 +323,8 @@ public class PlayerActivity extends Activity {
                     case MotionEvent.ACTION_DOWN:
                         downX = event.getX();
                         downY = event.getY();
+                        dragStartY = downY;
+                        dragLastY = downY;
                         downPosition = player == null ? 0L : player.getCurrentPosition();
                         startVolume = audioManager == null
                                 ? 0
@@ -316,16 +333,33 @@ public class PlayerActivity extends Activity {
                         if (startBrightness < 0f) startBrightness = 0.5f;
                         moved = false;
                         horizontal = false;
+                        dragMinimize = false;
                         return true;
 
                     case MotionEvent.ACTION_MOVE:
                         float dx = event.getX() - downX;
                         float dy = event.getY() - downY;
+                        dragLastY = event.getY();
+
                         if (!moved && Math.hypot(dx, dy) > dp(18)) {
                             moved = true;
                             horizontal = Math.abs(dx) > Math.abs(dy);
+                            boolean upperStart = downY < playerView.getHeight() * 0.38f;
+                            if (!horizontal && dy > 0 && upperStart &&
+                                    getSharedPreferences("app_prefs", MODE_PRIVATE)
+                                            .getBoolean("swipe_down_minimize", true)) {
+                                dragMinimize = true;
+                                playerView.hideController();
+                                topBar.setVisibility(View.GONE);
+                            }
                         }
                         if (!moved) return true;
+
+                        if (dragMinimize) {
+                            if (dy < 0f) dy = 0f;
+                            applyMinimizeDrag(dy);
+                            return true;
+                        }
 
                         if (horizontal) {
                             if (player == null) return true;
@@ -354,6 +388,11 @@ public class PlayerActivity extends Activity {
 
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL:
+                        if (dragMinimize) {
+                            float drag = Math.max(0f, event.getY() - downY);
+                            finishMinimizeDrag(drag);
+                            return true;
+                        }
                         if (moved) {
                             haptic(playerView);
                             hideGestureSoon();
@@ -364,6 +403,47 @@ public class PlayerActivity extends Activity {
                 }
             }
         });
+    }
+
+    private void applyMinimizeDrag(float dy) {
+        if (videoSurface == null) return;
+        float height = Math.max(1f, playerView.getHeight());
+        float progress = clamp(dy / (height * 0.55f), 0f, 1f);
+        float scale = 1f - (0.30f * progress);
+        videoSurface.setScaleX(scale);
+        videoSurface.setScaleY(scale);
+        videoSurface.setTranslationY(dy * 0.62f);
+        videoSurface.setAlpha(1f - (0.08f * progress));
+    }
+
+    private void finishMinimizeDrag(float dy) {
+        float threshold = playerView.getHeight() * 0.20f;
+        if (dy >= threshold) {
+            haptic(playerView);
+            minimizing = true;
+            recordHistory(false);
+            videoSurface.animate()
+                    .scaleX(0.68f)
+                    .scaleY(0.68f)
+                    .translationY(playerView.getHeight() * 0.34f)
+                    .alpha(0.96f)
+                    .setDuration(170L)
+                    .withEndAction(this::minimizeToBrowser)
+                    .start();
+        } else {
+            videoSurface.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .translationY(0f)
+                    .alpha(1f)
+                    .setDuration(180L)
+                    .withEndAction(() -> {
+                        dragMinimize = false;
+                        topBar.setVisibility(View.VISIBLE);
+                        playerView.showController();
+                    })
+                    .start();
+        }
     }
 
     private void showPlayerMenu() {
@@ -402,6 +482,8 @@ public class PlayerActivity extends Activity {
                     toggleWatchLater();
                     return true;
                 case 8:
+                    minimizing = true;
+                    recordHistory(false);
                     minimizeToBrowser();
                     return true;
                 default:
@@ -478,7 +560,6 @@ public class PlayerActivity extends Activity {
     private void showPlaybackFailure() {
         if (failureShown || isFinishing()) return;
         failureShown = true;
-
         new AlertDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
                 .setMessage("This video isn't exposing a stream the native player can use. You can open the normal webpage instead.")
@@ -489,6 +570,7 @@ public class PlayerActivity extends Activity {
     }
 
     private void returnToWebPage() {
+        recordHistory(false);
         if (pageUrl != null && !pageUrl.isEmpty()) {
             Intent result = new Intent();
             result.putExtra(EXTRA_FALLBACK_PAGE, pageUrl);
@@ -498,6 +580,10 @@ public class PlayerActivity extends Activity {
     }
 
     private void minimizeToBrowser() {
+        if (isFinishing()) return;
+        minimizing = true;
+        savePosition();
+        recordHistory(false);
         Intent result = new Intent();
         result.putExtra(EXTRA_MINIMIZED, true);
         result.putExtra(EXTRA_MEDIA_URL, mediaUrl);
@@ -522,11 +608,29 @@ public class PlayerActivity extends Activity {
     private void savePosition() {
         if (player == null || !rememberPositionEnabled()) return;
         long position = player.getCurrentPosition();
-        long duration = player.getDuration();
+        long duration = safeDuration();
         SharedPreferences prefs = getSharedPreferences("player_positions", MODE_PRIVATE);
         if (position > 3000L && (duration <= 0L || position < duration - 5000L)) {
             prefs.edit().putLong(positionKey(), position).apply();
         }
+    }
+
+    private void recordHistory(boolean ended) {
+        if (player == null || pageUrl == null || pageUrl.trim().isEmpty()) return;
+        PlaybackHistoryStore.record(
+                this,
+                title,
+                pageUrl,
+                Math.max(0L, player.getCurrentPosition()),
+                safeDuration(),
+                ended
+        );
+    }
+
+    private long safeDuration() {
+        if (player == null) return 0L;
+        long duration = player.getDuration();
+        return duration > 0L && duration < Long.MAX_VALUE / 2 ? duration : 0L;
     }
 
     private boolean pipSupported() {
@@ -553,6 +657,7 @@ public class PlayerActivity extends Activity {
     @Override
     public void onUserLeaveHint() {
         super.onUserLeaveHint();
+        if (minimizing) return;
         if (autoPipEnabled() && pipSupported() && Build.VERSION.SDK_INT < 31 &&
                 player != null && player.isPlaying()) {
             try {
@@ -569,6 +674,7 @@ public class PlayerActivity extends Activity {
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        resetMinimizeTransform();
         if (topBar != null) topBar.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
         if (gestureLabel != null) gestureLabel.setVisibility(View.GONE);
         if (playerView != null) playerView.setUseController(!isInPictureInPictureMode);
@@ -589,6 +695,7 @@ public class PlayerActivity extends Activity {
                 .getBoolean("minimize_on_back", true)) {
             minimizeToBrowser();
         } else {
+            recordHistory(false);
             finish();
         }
     }
@@ -619,7 +726,7 @@ public class PlayerActivity extends Activity {
     }
 
     private void showGesture(String text) {
-        if (gestureLabel == null) return;
+        if (gestureLabel == null || dragMinimize) return;
         gestureLabel.setText(text);
         gestureLabel.setAlpha(1f);
         gestureLabel.setVisibility(View.VISIBLE);
@@ -644,13 +751,23 @@ public class PlayerActivity extends Activity {
         }
     };
 
+    private void resetMinimizeTransform() {
+        dragMinimize = false;
+        if (videoSurface == null) return;
+        videoSurface.animate().cancel();
+        videoSurface.setScaleX(1f);
+        videoSurface.setScaleY(1f);
+        videoSurface.setTranslationY(0f);
+        videoSurface.setAlpha(1f);
+    }
+
     private String formatTime(long millis) {
         long total = Math.max(0L, millis / 1000L);
         long hours = total / 3600L;
         long minutes = (total % 3600L) / 60L;
         long seconds = total % 60L;
-        if (hours > 0) return String.format("%d:%02d:%02d", hours, minutes, seconds);
-        return String.format("%d:%02d", minutes, seconds);
+        if (hours > 0) return String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds);
+        return String.format(Locale.US, "%d:%02d", minutes, seconds);
     }
 
     private void haptic(View view) {
@@ -673,6 +790,7 @@ public class PlayerActivity extends Activity {
     @Override
     protected void onStop() {
         savePosition();
+        recordHistory(false);
         if (player != null && !isInPictureInPictureMode()) player.pause();
         super.onStop();
     }
@@ -687,6 +805,7 @@ public class PlayerActivity extends Activity {
             systemBackCallback = null;
         }
         savePosition();
+        recordHistory(false);
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
             player.release();
