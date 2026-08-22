@@ -23,8 +23,6 @@ public final class MemeRepository {
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
     public List<NativeContentItem> fetch(Context context, int page) throws IOException {
-        // The current memes landing page is a single Recent feed. Avoid guessing a
-        // pagination route that could collide with individual /memes/<id>-<slug> pages.
         if (page > 1) return new ArrayList<>();
 
         Document doc = fetchDocument(context, MEMES);
@@ -43,7 +41,7 @@ public final class MemeRepository {
             if (title.isEmpty()) title = "Meme";
 
             found.putIfAbsent(url, new NativeContentItem(
-                    NativeContentItem.KIND_MEDIA,
+                    NativeContentItem.KIND_MEME,
                     title,
                     url,
                     image,

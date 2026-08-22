@@ -1,11 +1,13 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -15,7 +17,6 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -51,7 +52,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         pages[PAGE_TRENDING] = buildFeedPage(PAGE_TRENDING, "native_view_trending", CrazyShitRepository.TRENDING, false);
         pages[PAGE_MEMES] = buildFeedPage(PAGE_MEMES, "native_view_memes", MemeRepository.MEMES, true);
 
-        // Eager-load all tabs. The adjacent page is already rendered when the drag starts.
         for (Page page : pages) load(page, false);
     }
 
@@ -158,17 +158,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
             @Override
             public void onOpen(NativeContentItem item) {
-                host.onOpenItem(item, page.meme);
+                if (page.meme || item.isMeme()) openMeme(item);
+                else host.onOpenItem(item, false);
             }
 
             @Override
             public void onLongPress(NativeContentItem item, View anchor) {
-                host.onLongPressItem(item, anchor, page.meme);
+                if (page.meme || item.isMeme()) showMemeMenu(item, anchor);
+                else host.onLongPressItem(item, anchor, false);
             }
 
             @Override
             public void onComments(NativeContentItem item) {
-                if (!page.meme) host.onOpenComments(item);
+                if (!page.meme && !item.isMeme()) host.onOpenComments(item);
             }
         });
         page.recycler.setAdapter(page.adapter);
@@ -194,6 +196,45 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         });
 
         return page;
+    }
+
+    private void openMeme(NativeContentItem item) {
+        if (item == null) return;
+        Intent intent = new Intent(activity, MemeViewerActivity.class);
+        intent.putExtra(MemeViewerActivity.EXTRA_TITLE, item.title);
+        intent.putExtra(MemeViewerActivity.EXTRA_PAGE_URL, item.url);
+        intent.putExtra(MemeViewerActivity.EXTRA_IMAGE_URL, item.imageUrl);
+        activity.startActivity(intent);
+    }
+
+    private void showMemeMenu(NativeContentItem item, View anchor) {
+        if (item == null || anchor == null) return;
+        PopupMenu menu = new PopupMenu(activity, anchor);
+        menu.getMenu().add(0, 1, 0, "View image");
+        menu.getMenu().add(0, 2, 1, "Share");
+        menu.getMenu().add(0, 3, 2, "Open meme page");
+        menu.setOnMenuItemClickListener(clicked -> {
+            if (clicked.getItemId() == 1) {
+                openMeme(item);
+                return true;
+            }
+            if (clicked.getItemId() == 2) {
+                Intent share = new Intent(Intent.ACTION_SEND);
+                share.setType("text/plain");
+                share.putExtra(Intent.EXTRA_TEXT, item.url);
+                share.putExtra(Intent.EXTRA_SUBJECT, item.title);
+                activity.startActivity(Intent.createChooser(share, "Share meme"));
+                return true;
+            }
+            if (clicked.getItemId() == 3) {
+                Intent web = new Intent(activity, WebFallbackActivity.class);
+                web.putExtra(WebFallbackActivity.EXTRA_URL, item.url);
+                activity.startActivity(web);
+                return true;
+            }
+            return false;
+        });
+        menu.show();
     }
 
     private void applyLayout(Page page) {

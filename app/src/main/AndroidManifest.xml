@@ -52,6 +52,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".MemeViewerActivity"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
             android:name=".VideoDetailActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"
