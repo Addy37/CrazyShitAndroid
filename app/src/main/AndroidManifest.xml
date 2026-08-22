@@ -37,9 +37,16 @@
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"
-            android:exported="true"
+            android:exported="false"
             android:screenOrientation="unspecified"
-            android:supportsPictureInPicture="true">
+            android:supportsPictureInPicture="true" />
+
+        <activity
+            android:name=".NativeMainActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="true"
+            android:screenOrientation="unspecified">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
