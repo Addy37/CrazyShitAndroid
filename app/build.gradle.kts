@@ -40,6 +40,9 @@ android {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
             resValue("string", "app_name", "CrazyShit Jeremy v2 Test")
+            signingConfigs.findByName("release")?.let {
+                signingConfig = it
+            }
         }
         release {
             isMinifyEnabled = false
@@ -58,6 +61,7 @@ android {
 dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.browser:browser:1.8.0")
+    implementation("androidx.core:core:1.15.0")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.2.0")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("org.jsoup:jsoup:1.23.1")
