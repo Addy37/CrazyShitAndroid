@@ -173,7 +173,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         emptyView.setOnClickListener(v -> openFallback(feedBaseUrl));
         content.addView(emptyView, new FrameLayout.LayoutParams(-1, -1));
 
-        feedAdapter = new NativeFeedAdapter(new NativeFeedAdapter.Listener() {
+        feedAdapter = new NativeFeedAdapter(this, new NativeFeedAdapter.Listener() {
             @Override
             public void onOpen(NativeContentItem item) {
                 haptic(recycler);
@@ -185,6 +185,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 haptic(anchor);
                 showItemMenu(item, anchor);
             }
+
+            @Override
+            public void onComments(NativeContentItem item) {
+                haptic(recycler);
+                openComments(item);
+            }
         });
 
         categoryAdapter = new NativeCategoryAdapter(item -> {
@@ -195,11 +201,16 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(RecyclerView view, int dx, int dy) {
-                if (dy <= 0 || loading || endReached || !isFeedScreen()) return;
+                if (!isFeedScreen()) return;
                 RecyclerView.LayoutManager lm = view.getLayoutManager();
                 if (!(lm instanceof LinearLayoutManager)) return;
+                int first = ((LinearLayoutManager) lm).findFirstVisibleItemPosition();
                 int last = ((LinearLayoutManager) lm).findLastVisibleItemPosition();
-                if (last >= Math.max(0, feedAdapter.getItemCount() - 5)) loadFeed(true);
+                feedAdapter.preloadVisible(first, last);
+                if (dy > 0 && !loading && !endReached &&
+                        last >= Math.max(0, feedAdapter.getItemCount() - 5)) {
+                    loadFeed(true);
+                }
             }
         });
 
@@ -326,8 +337,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         endReached = false;
         loading = false;
         headerTitle.setText(feedTitle);
-        headerSubtitle.setText("Jeremy Edition  •  Native v2");
-        recycler.setLayoutManager(new LinearLayoutManager(this));
+        headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " + viewModeLabel(currentViewMode()));
+        applyFeedLayout();
         recycler.setAdapter(feedAdapter);
         feedAdapter.replace(new ArrayList<>());
         emptyView.setVisibility(View.GONE);
@@ -485,12 +496,79 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         startActivity(intent);
     }
 
+    private void openComments(NativeContentItem item) {
+        if (item == null || item.url == null || item.url.isEmpty()) return;
+        Intent intent = new Intent(this, CommentsActivity.class);
+        intent.putExtra(CommentsActivity.EXTRA_PAGE_URL, item.url);
+        intent.putExtra(CommentsActivity.EXTRA_TITLE, item.title);
+        intent.putExtra(CommentsActivity.EXTRA_COUNT, item.comments);
+        startActivity(intent);
+    }
+
+    private String viewPreferenceKey() {
+        if (screen == Screen.TRENDING) return "native_view_trending";
+        if (screen == Screen.CATEGORY) return "native_view_category";
+        if (screen == Screen.SEARCH) return "native_view_search";
+        return "native_view_home";
+    }
+
+    private int currentViewMode() {
+        return getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getInt(viewPreferenceKey(), NativeFeedAdapter.VIEW_LARGE);
+    }
+
+    private String viewModeLabel(int mode) {
+        if (mode == NativeFeedAdapter.VIEW_COMPACT) return "Compact";
+        if (mode == NativeFeedAdapter.VIEW_GRID) return "Grid";
+        return "Large";
+    }
+
+    private void applyFeedLayout() {
+        int mode = currentViewMode();
+        feedAdapter.setViewMode(mode);
+        if (mode == NativeFeedAdapter.VIEW_GRID) {
+            recycler.setLayoutManager(new GridLayoutManager(this, 2));
+        } else {
+            recycler.setLayoutManager(new LinearLayoutManager(this));
+        }
+    }
+
+    private void showViewStyleDialog() {
+        if (!isFeedScreen()) {
+            Toast.makeText(this, "View styles apply to feeds.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] choices = {"Large cards", "Compact list", "2-column grid"};
+        int selected = currentViewMode();
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("View style")
+                .setSingleChoiceItems(choices, selected, null)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Apply", null)
+                .create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            int checked = dialog.getListView().getCheckedItemPosition();
+            if (checked < 0) checked = NativeFeedAdapter.VIEW_LARGE;
+            getSharedPreferences("app_prefs", MODE_PRIVATE)
+                    .edit()
+                    .putInt(viewPreferenceKey(), checked)
+                    .apply();
+            applyFeedLayout();
+            headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " + viewModeLabel(checked));
+            dialog.dismiss();
+        }));
+        dialog.show();
+    }
+
     private void showItemMenu(NativeContentItem item, View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
         boolean saved = FavoriteStore.contains(this, item.url);
         menu.getMenu().add(0, 1, 0, saved ? "Remove from Watch Later" : "Save to Watch Later");
-        menu.getMenu().add(0, 2, 1, "Share");
-        menu.getMenu().add(0, 3, 2, "Open website page");
+        if (item.comments != null && !item.comments.isEmpty()) {
+            menu.getMenu().add(0, 4, 1, "View comments");
+        }
+        menu.getMenu().add(0, 2, 2, "Share");
+        menu.getMenu().add(0, 3, 3, "Open website page");
         menu.setOnMenuItemClickListener(clicked -> {
             if (clicked.getItemId() == 1) {
                 if (FavoriteStore.contains(this, item.url)) {
@@ -500,6 +578,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     FavoriteStore.add(this, item.title, item.url);
                     Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
                 }
+                return true;
+            }
+            if (clicked.getItemId() == 4) {
+                openComments(item);
                 return true;
             }
             if (clicked.getItemId() == 2) {
@@ -563,6 +645,15 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         subtitle.setPadding(0, 0, 0, dp(10));
         content.addView(subtitle);
 
+        if (isFeedScreen()) {
+            int mode = currentViewMode();
+            String label = mode == NativeFeedAdapter.VIEW_COMPACT ? "Compact list" :
+                    mode == NativeFeedAdapter.VIEW_GRID ? "2-column grid" : "Large cards";
+            addSheetAction(content, "View style", label + " • change how posts are displayed", () -> {
+                sheet.dismiss();
+                showViewStyleDialog();
+            });
+        }
         addSheetAction(content, "Settings", "Playback, privacy, haptics and app options", () -> {
             startActivity(new Intent(this, SettingsActivity.class));
             sheet.dismiss();
