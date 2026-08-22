@@ -14,7 +14,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -35,6 +34,10 @@ public final class CrazyShitRepository {
 
     private static final Pattern MEDIA_IN_SCRIPT = Pattern.compile(
             "(?i)https?://[^\\s\\\"'<>]+?\\.(?:m3u8|mpd|mp4|webm|m4v)(?:\\?[^\\s\\\"'<>]*)?"
+    );
+
+    private static final Pattern CSS_URL = Pattern.compile(
+            "(?i)url\\(\\s*['\\\"]?([^'\\\")]+)['\\\"]?\\s*\\)"
     );
 
     public List<NativeContentItem> fetchFeed(Context context, String baseUrl, int page)
@@ -173,6 +176,7 @@ public final class CrazyShitRepository {
         Connection connection = Jsoup.connect(url)
                 .userAgent(USER_AGENT)
                 .referrer(BASE)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
                 .timeout(18000)
                 .maxBodySize(5 * 1024 * 1024)
                 .followRedirects(true)
@@ -192,15 +196,15 @@ public final class CrazyShitRepository {
     private Element findCardScope(Element link) {
         Element best = link;
         Element current = link;
-        for (int i = 0; i < 6 && current != null; i++) {
+        for (int i = 0; i < 7 && current != null; i++) {
             current = current.parent();
             if (current == null) break;
             String text = clean(current.text());
-            boolean hasImage = !current.select("img").isEmpty();
+            boolean hasVisual = !current.select("img,source,video[poster],[data-src],[data-bg],[data-background],[style*=url]").isEmpty();
             boolean hasHeading = !current.select("h1,h2,h3,h4,h5").isEmpty();
-            if ((hasImage || hasHeading) && text.length() > 3 && text.length() < 900) {
+            if ((hasVisual || hasHeading) && text.length() > 3 && text.length() < 1100) {
                 best = current;
-                if (hasImage && hasHeading) break;
+                if (hasVisual && hasHeading) break;
             }
         }
         return best;
@@ -236,33 +240,79 @@ public final class CrazyShitRepository {
     }
 
     private String findImage(Element link, Element scope) {
-        String direct = imageFromElements(link == null ? new Elements() : link.select("img"));
-        if (!direct.isEmpty()) return direct;
+        if (link != null) {
+            String direct = imageFromElements(link.select("img,source,video[poster],[data-src],[data-bg],[data-background],[data-background-image],[data-poster],[data-thumb],[data-thumbnail],[style*=url]"));
+            if (!direct.isEmpty()) return direct;
+            direct = imageFromElement(link);
+            if (!direct.isEmpty()) return direct;
+        }
+
         if (scope != null) {
-            direct = imageFromElements(scope.select("img"));
+            String direct = imageFromElements(scope.select("img,source,video[poster],[data-src],[data-bg],[data-background],[data-background-image],[data-poster],[data-thumb],[data-thumbnail],[style*=url]"));
+            if (!direct.isEmpty()) return direct;
+            direct = imageFromElement(scope);
             if (!direct.isEmpty()) return direct;
         }
         return "";
     }
 
-    private String imageFromElements(Elements images) {
-        for (Element image : images) {
-            String[] attrs = {"data-src", "data-original", "data-lazy-src", "src"};
-            for (String attr : attrs) {
-                if (!image.hasAttr(attr)) continue;
-                String value = normalizeUrl(image.absUrl(attr));
-                if (value.isEmpty()) value = normalizeUrl(image.attr(attr));
-                if (goodImage(value)) return value;
-            }
+    private String imageFromElements(Elements elements) {
+        for (Element element : elements) {
+            String value = imageFromElement(element);
+            if (!value.isEmpty()) return value;
+        }
+        return "";
+    }
 
-            String srcset = image.attr("data-srcset");
-            if (srcset.isEmpty()) srcset = image.attr("srcset");
-            if (!srcset.isEmpty()) {
-                String first = srcset.split(",")[0].trim().split("\\s+")[0];
+    private String imageFromElement(Element element) {
+        if (element == null) return "";
+
+        String[] attrs = {
+                "data-src",
+                "data-original",
+                "data-lazy-src",
+                "data-image",
+                "data-poster",
+                "data-thumb",
+                "data-thumbnail",
+                "data-bg",
+                "data-background",
+                "data-background-image",
+                "poster",
+                "src"
+        };
+
+        for (String attr : attrs) {
+            if (!element.hasAttr(attr)) continue;
+            String raw = element.attr(attr);
+            String value = normalizeUrl(element.absUrl(attr));
+            if (value.isEmpty()) value = normalizeUrl(raw);
+            if (goodImage(value)) return value;
+        }
+
+        String[] srcSetAttrs = {"data-srcset", "srcset"};
+        for (String attr : srcSetAttrs) {
+            String srcset = element.attr(attr);
+            if (srcset == null || srcset.trim().isEmpty()) continue;
+            String[] candidates = srcset.split(",");
+            for (int i = candidates.length - 1; i >= 0; i--) {
+                String part = candidates[i].trim();
+                if (part.isEmpty()) continue;
+                String first = part.split("\\s+")[0];
                 String value = normalizeUrl(first);
                 if (goodImage(value)) return value;
             }
         }
+
+        String style = element.attr("style");
+        if (style != null && !style.isEmpty()) {
+            Matcher matcher = CSS_URL.matcher(style.replace("&amp;", "&"));
+            while (matcher.find()) {
+                String value = normalizeUrl(matcher.group(1));
+                if (goodImage(value)) return value;
+            }
+        }
+
         return "";
     }
 
@@ -331,12 +381,16 @@ public final class CrazyShitRepository {
         String lower = value.toLowerCase(Locale.US);
         if (!lower.startsWith("http://") && !lower.startsWith("https://")) return false;
         if (lower.startsWith("data:")) return false;
+        if (lower.contains("spacer") || lower.contains("blank.gif") || lower.contains("placeholder")) return false;
         return !lower.contains("logo") && !lower.contains("sprite") && !lower.contains("avatar");
     }
 
     private String normalizeUrl(String value) {
         if (value == null) return "";
-        String url = value.trim().replace("&amp;", "&").replace("\\/", "/");
+        String url = value.trim()
+                .replace("&amp;", "&")
+                .replace("\\/", "/")
+                .replace("\\u0026", "&");
         if (url.startsWith("//")) return "https:" + url;
         if (url.startsWith("/")) return BASE.substring(0, BASE.length() - 1) + url;
         return url;
