@@ -19,6 +19,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
 import android.widget.FrameLayout;
@@ -105,6 +106,9 @@ public class VideoDetailActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0);
+        }
 
         mediaUrl = getIntent().getStringExtra(PlayerActivity.EXTRA_MEDIA_URL);
         pageUrl = getIntent().getStringExtra(PlayerActivity.EXTRA_PAGE_URL);
@@ -178,13 +182,20 @@ public class VideoDetailActivity extends Activity {
             @Override
             public void onDrag(float distancePx, float progress) {
                 if (minimizing) return;
+                playerView.hideController();
                 playerContainer.setPivotX(playerContainer.getWidth() / 2f);
-                float scale = 1f - (0.20f * progress);
+
+                float scale = 1f - (0.08f * progress);
+                float shift = Math.min(dp(38), distancePx * 0.22f);
                 playerContainer.setScaleX(scale);
                 playerContainer.setScaleY(scale);
-                playerContainer.setTranslationY(distancePx * 0.70f);
-                playerContainer.setAlpha(1f - (0.06f * progress));
-                if (detailsScroll != null) detailsScroll.setAlpha(1f - (0.22f * progress));
+                playerContainer.setTranslationY(shift);
+                playerContainer.setAlpha(1f);
+
+                if (detailsScroll != null) {
+                    detailsScroll.setAlpha(1f - (0.42f * progress));
+                    detailsScroll.setTranslationY(Math.min(dp(12), distancePx * 0.04f));
+                }
             }
 
             @Override
@@ -196,7 +207,11 @@ public class VideoDetailActivity extends Activity {
         });
         shell.addView(playerContainer, new LinearLayout.LayoutParams(-1, portraitPlayerHeight()));
 
-        playerView = new PlayerView(this);
+        playerView = (PlayerView) getLayoutInflater().inflate(
+                R.layout.view_video_player_texture,
+                playerContainer,
+                false
+        );
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setUseController(true);
         playerView.setControllerAutoShow(true);
@@ -284,28 +299,53 @@ public class VideoDetailActivity extends Activity {
 
     private void finishSwipeMinimize() {
         minimizing = true;
+        updateSwipeEnabled();
         savePlaybackState(false);
         haptic(playerContainer);
-        float targetY = Math.max(dp(110), Math.min(dp(210), root.getHeight() * 0.24f));
+
+        playerContainer.animate().cancel();
+        if (detailsScroll != null) detailsScroll.animate().cancel();
+
+        if (detailsScroll != null) {
+            detailsScroll.animate()
+                    .alpha(0f)
+                    .translationY(dp(10))
+                    .setDuration(90L)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+
         playerContainer.animate()
-                .scaleX(0.76f)
-                .scaleY(0.76f)
-                .translationY(targetY)
-                .alpha(0.96f)
-                .setDuration(160L)
+                .scaleX(0.94f)
+                .scaleY(0.94f)
+                .translationY(dp(28))
+                .alpha(0f)
+                .setDuration(110L)
+                .setInterpolator(new DecelerateInterpolator())
                 .withEndAction(this::minimizeToFeed)
                 .start();
     }
 
     private void restoreFromSwipe() {
+        playerContainer.animate().cancel();
         playerContainer.animate()
                 .scaleX(1f)
                 .scaleY(1f)
                 .translationY(0f)
                 .alpha(1f)
-                .setDuration(180L)
+                .setDuration(150L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> playerView.showController())
                 .start();
-        if (detailsScroll != null) detailsScroll.animate().alpha(1f).setDuration(180L).start();
+        if (detailsScroll != null) {
+            detailsScroll.animate().cancel();
+            detailsScroll.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(150L)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
     }
 
     private View buildCommentsCard() {
@@ -750,6 +790,7 @@ public class VideoDetailActivity extends Activity {
         if (detailsScroll != null) {
             detailsScroll.setVisibility(landscape ? View.GONE : View.VISIBLE);
             detailsScroll.setAlpha(1f);
+            detailsScroll.setTranslationY(0f);
         }
         LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) playerContainer.getLayoutParams();
         if (landscape) {
@@ -819,6 +860,7 @@ public class VideoDetailActivity extends Activity {
         } else {
             savePlaybackState(false);
             finish();
+            suppressCloseTransition();
         }
     }
 
@@ -839,6 +881,16 @@ public class VideoDetailActivity extends Activity {
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
         setResult(RESULT_OK, result);
         finish();
+        suppressCloseTransition();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void suppressCloseTransition() {
+        if (Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0);
+        } else {
+            overridePendingTransition(0, 0);
+        }
     }
 
     @Override
