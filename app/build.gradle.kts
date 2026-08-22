@@ -73,3 +73,119 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
 }
+
+// v2 beta bridge: keep the large native source stable while the test channel is being
+// hardened. The build workspace receives these small, idempotent integrations before
+// Java compilation. This can be removed once v2 is promoted and the source is folded in.
+val wireV2BetaRuntime by tasks.registering {
+    doLast {
+        val nativeFile = file("src/main/java/com/webapp/crazyshit/NativeMainActivity.java")
+        var native = nativeFile.readText()
+
+        if (!native.contains("private AppUpdater appUpdater;")) {
+            native = native.replace(
+                "    private NativeMiniPlayer miniPlayer;\n",
+                "    private NativeMiniPlayer miniPlayer;\n    private AppUpdater appUpdater;\n"
+            )
+            native = native.replace(
+                "        buildUi();\n        configureBack();",
+                "        buildUi();\n        appUpdater = new AppUpdater(this);\n        configureBack();"
+            )
+            native = native.replace(
+                """        addSheetAction(content, "Login / account", "Open the website account flow", () -> {
+            openFallback(CrazyShitRepository.BASE + "login/");
+            sheet.dismiss();
+        });""",
+                """        addSheetAction(content, "Login / account", "Sign in here and return automatically", () -> {
+            startActivity(new Intent(this, LoginActivity.class));
+            sheet.dismiss();
+        });"""
+            )
+            native = native.replace(
+                """        addSheetAction(content, "Check for updates", "Check the latest GitHub release", () -> {
+            checkForUpdates(true);
+            sheet.dismiss();
+        });""",
+                """        addSheetAction(content, "Check for updates", "Download and install updates inside the app", () -> {
+            checkForUpdates(true);
+            sheet.dismiss();
+        });"""
+            )
+            val checkStart = native.indexOf("    private void checkForUpdates(boolean manual) {")
+            val checkEnd = native.indexOf("    private String currentVersion()", checkStart)
+            if (checkStart >= 0 && checkEnd > checkStart) {
+                native = native.substring(0, checkStart) +
+                    "    private void checkForUpdates(boolean manual) {\n" +
+                    "        if (appUpdater != null) appUpdater.check(manual);\n" +
+                    "    }\n\n" +
+                    native.substring(checkEnd)
+            }
+            native = native.replace(
+                """    protected void onResume() {
+        super.onResume();
+        if (miniPlayer != null) miniPlayer.onResume();
+    }""",
+                """    protected void onResume() {
+        super.onResume();
+        if (miniPlayer != null) miniPlayer.onResume();
+        if (appUpdater != null) appUpdater.onHostResume();
+    }"""
+            )
+            native = native.replace(
+                """    protected void onDestroy() {
+        if (miniPlayer != null) miniPlayer.stop();
+        io.shutdownNow();
+        super.onDestroy();
+    }""",
+                """    protected void onDestroy() {
+        if (miniPlayer != null) miniPlayer.stop();
+        if (appUpdater != null) appUpdater.close();
+        io.shutdownNow();
+        super.onDestroy();
+    }"""
+            )
+            nativeFile.writeText(native)
+        }
+
+        val commentsFile = file("src/main/java/com/webapp/crazyshit/CommentsActivity.java")
+        var comments = commentsFile.readText()
+        if (!comments.contains("LOGIN_REQUEST = 4201")) {
+            comments = comments.replace(
+                "    public static final String EXTRA_COUNT = \"count\";\n",
+                "    public static final String EXTRA_COUNT = \"count\";\n    private static final int LOGIN_REQUEST = 4201;\n"
+            )
+            comments = comments.replace(
+                """    private void openLogin() {
+        refreshWhenResumed = true;
+        Intent intent = new Intent(this, WebFallbackActivity.class);
+        intent.putExtra(WebFallbackActivity.EXTRA_URL, CrazyShitRepository.BASE + "login/");
+        startActivity(intent);
+    }""",
+                """    private void openLogin() {
+        Intent intent = new Intent(this, LoginActivity.class);
+        intent.putExtra(LoginActivity.EXTRA_RETURN_URL, pageUrl);
+        startActivityForResult(intent, LOGIN_REQUEST);
+    }"""
+            )
+            val resumeAnchor = "    @Override\n    protected void onResume() {"
+            comments = comments.replace(
+                resumeAnchor,
+                "    @Override\n" +
+                "    protected void onActivityResult(int requestCode, int resultCode, Intent data) {\n" +
+                "        super.onActivityResult(requestCode, resultCode, data);\n" +
+                "        if (requestCode == LOGIN_REQUEST && resultCode == RESULT_OK) {\n" +
+                "            try { CookieManager.getInstance().flush(); } catch (Exception ignored) {}\n" +
+                "            if (extractor != null) extractor.postDelayed(this::loadComments, 180L);\n" +
+                "        }\n" +
+                "    }\n\n" + resumeAnchor
+            )
+            commentsFile.writeText(comments)
+        }
+    }
+}
+
+tasks.matching {
+    it.name == "preDebugBuild" || it.name == "preReleaseBuild"
+}.configureEach {
+    dependsOn(wireV2BetaRuntime)
+}
