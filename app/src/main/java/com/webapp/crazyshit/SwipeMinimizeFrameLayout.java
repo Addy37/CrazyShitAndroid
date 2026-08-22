@@ -3,12 +3,13 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 
 /**
- * A FrameLayout that lets child controls handle normal taps/seeks, but takes over
- * once a deliberate downward vertical drag is detected.
+ * Lets child controls handle normal taps and seeks, then takes over only after
+ * a deliberate downward drag. A fast downward flick can also commit minimize.
  */
 public final class SwipeMinimizeFrameLayout extends FrameLayout {
     public interface Listener {
@@ -23,6 +24,7 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
     private float downX;
     private float downY;
     private float lastDistance;
+    private VelocityTracker velocityTracker;
 
     public SwipeMinimizeFrameLayout(Context context) {
         this(context, null);
@@ -50,6 +52,7 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
         if (!swipeEnabled) return super.onInterceptTouchEvent(event);
+        trackVelocity(event);
 
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
@@ -62,8 +65,9 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
             case MotionEvent.ACTION_MOVE:
                 float dx = event.getX() - downX;
                 float dy = event.getY() - downY;
-                if (!dragging && dy > touchSlop && dy > Math.abs(dx) * 1.15f) {
+                if (!dragging && dy > touchSlop && dy > Math.abs(dx) * 1.10f) {
                     dragging = true;
+                    getParent().requestDisallowInterceptTouchEvent(true);
                     lastDistance = Math.max(0f, dy);
                     dispatchDrag(lastDistance);
                     return true;
@@ -83,6 +87,7 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (!swipeEnabled) return super.onTouchEvent(event);
+        trackVelocity(event);
 
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
@@ -94,8 +99,11 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
             case MotionEvent.ACTION_UP:
                 if (dragging) {
                     lastDistance = Math.max(lastDistance, event.getY() - downY);
-                    float threshold = Math.min(Math.max(getHeight() * 0.24f, dp(84)), dp(150));
-                    boolean minimize = lastDistance >= threshold;
+                    float threshold = Math.min(Math.max(getHeight() * 0.22f, dp(72)), dp(132));
+                    float velocityY = currentVelocityY();
+                    boolean fastFlick = velocityY > dp(650);
+                    boolean minimize = lastDistance >= threshold ||
+                            (lastDistance >= dp(34) && fastFlick);
                     if (listener != null) listener.onRelease(minimize, lastDistance);
                     resetGesture();
                     return true;
@@ -115,14 +123,37 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
 
     private void dispatchDrag(float distance) {
         if (listener == null) return;
-        float range = Math.max(dp(180), getHeight() * 0.75f);
-        float progress = Math.max(0f, Math.min(1f, distance / range));
-        listener.onDrag(distance, progress);
+        float range = Math.max(dp(150), getHeight() * 0.62f);
+        float raw = Math.max(0f, Math.min(1f, distance / range));
+        float eased = 1f - ((1f - raw) * (1f - raw));
+        listener.onDrag(distance, eased);
+    }
+
+    private void trackVelocity(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            if (velocityTracker != null) velocityTracker.recycle();
+            velocityTracker = VelocityTracker.obtain();
+        }
+        if (velocityTracker != null) velocityTracker.addMovement(event);
+    }
+
+    private float currentVelocityY() {
+        if (velocityTracker == null) return 0f;
+        velocityTracker.computeCurrentVelocity(1000);
+        return velocityTracker.getYVelocity();
     }
 
     private void resetGesture() {
         dragging = false;
         lastDistance = 0f;
+        if (velocityTracker != null) {
+            velocityTracker.recycle();
+            velocityTracker = null;
+        }
+        try {
+            getParent().requestDisallowInterceptTouchEvent(false);
+        } catch (Exception ignored) {
+        }
     }
 
     private int dp(int value) {
