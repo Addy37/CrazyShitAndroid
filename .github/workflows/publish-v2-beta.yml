@@ -1,0 +1,116 @@
+name: Publish Signed v2 Beta
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - BETA_VERSION
+
+permissions:
+  contents: write
+
+jobs:
+  beta:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out v2 pull request head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Resolve beta version
+        run: |
+          VERSION="$(tr -d '[:space:]' < BETA_VERSION)"
+          test -n "$VERSION" || { echo "Beta version is empty"; exit 1; }
+          VERSION_CODE=$((200000 + GITHUB_RUN_NUMBER))
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "APP_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
+          echo "APP_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "APK_NAME=CrazyShit-Jeremy-v2-Test.apk" >> "$GITHUB_ENV"
+
+      - name: Check whether beta is already published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "SKIP_BETA=true" >> "$GITHUB_ENV"
+            echo "v${VERSION} is already published."
+          else
+            echo "SKIP_BETA=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up Java 17
+        if: env.SKIP_BETA != 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        if: env.SKIP_BETA != 'true'
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android API 35
+        if: env.SKIP_BETA != 'true'
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.7
+        if: env.SKIP_BETA != 'true'
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.7'
+          cache-provider: basic
+
+      - name: Restore persistent signing key
+        if: env.SKIP_BETA != 'true'
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python - <<'PY'
+          import base64, json, os, pathlib, sys
+          raw = os.environ.get("SIGNING_BUNDLE", "")
+          if not raw:
+              sys.exit("Missing repository secret: ANDROID_SIGNING_BUNDLE")
+          raw = raw.replace("\r", "").replace("\n", "")
+          data = json.loads(raw)
+          required = ["keystore_base64", "store_password", "key_alias", "key_password"]
+          missing = [key for key in required if not data.get(key)]
+          if missing:
+              sys.exit("Signing bundle is missing: " + ", ".join(missing))
+          for key in ("store_password", "key_alias", "key_password"):
+              print(f"::add-mask::{data[key]}")
+          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "crazyshit-v2-beta.jks"
+          keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
+          keystore.chmod(0o600)
+          with pathlib.Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as f:
+              f.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
+              f.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")
+              f.write(f"ANDROID_KEY_ALIAS={data['key_alias']}\n")
+              f.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
+          PY
+
+      - name: Build persistently signed beta APK
+        if: env.SKIP_BETA != 'true'
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Prepare and verify beta APK
+        if: env.SKIP_BETA != 'true'
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk "$APK_NAME"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK_NAME"
+          sha256sum "$APK_NAME" > SHA256SUMS-BETA.txt
+
+      - name: Publish prerelease
+        if: env.SKIP_BETA != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${VERSION}" \
+            "$APK_NAME" \
+            SHA256SUMS-BETA.txt \
+            --target "${{ github.event.pull_request.head.sha }}" \
+            --title "CrazyShit Jeremy v2 ${VERSION}" \
+            --notes "Persistently signed v2 beta. Future v2 beta updates can install directly over this build and can be downloaded from inside the app." \
+            --prerelease
