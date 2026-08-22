@@ -5,7 +5,35 @@ tasks.register("wireV2Beta20ChaosLandscapeAutoUpdate") {
         val nativeFile = file("src/main/java/com/webapp/crazyshit/NativeMainActivity.java")
         var native = nativeFile.readText()
         if (!native.contains("BETA20_CHAOS_LANDSCAPE")) {
-            val legacyAnchor = "    private void showLegacyContent() {"
+            // First add the calls while showPagerChrome and showLegacyContent are still adjacent.
+            native = native.replace(
+                """        if (headerSubtitle != null && primaryPagerAdapter != null) {
+            if (position == MainPagerAdapter.PAGE_CHAOS) {
+                headerSubtitle.setText("Random video feed  •  Swipe up/down");
+            } else {
+                headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
+                        viewModeLabel(primaryPagerAdapter.viewMode(position)));
+            }
+        }
+    }
+
+    private void showLegacyContent() {""",
+                """        if (headerSubtitle != null && primaryPagerAdapter != null) {
+            if (position == MainPagerAdapter.PAGE_CHAOS) {
+                headerSubtitle.setText("Random video feed  •  Swipe up/down");
+            } else {
+                headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
+                        viewModeLabel(primaryPagerAdapter.viewMode(position)));
+            }
+        }
+        applyChaosFullscreenChrome();
+    }
+
+    private void showLegacyContent() {
+        exitChaosFullscreenChrome();"""
+            )
+
+            val legacyAnchor = "    private void showLegacyContent() {\n        exitChaosFullscreenChrome();"
             val fullscreenMethods = """
     // BETA20_CHAOS_LANDSCAPE
     private void applyChaosFullscreenChrome() {
@@ -17,7 +45,9 @@ tasks.register("wireV2Beta20ChaosLandscapeAutoUpdate") {
     private void setChaosFullscreenChrome(boolean fullscreen) {
         View topBar = null;
         if (headerTitle != null && headerTitle.getParent() instanceof View) {
-            topBar = (View) headerTitle.getParent();
+            View labels = (View) headerTitle.getParent();
+            if (labels.getParent() instanceof View) topBar = (View) labels.getParent();
+            else topBar = labels;
         }
         if (topBar != null) topBar.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
         if (bottomNavigation != null) {
@@ -61,33 +91,6 @@ tasks.register("wireV2Beta20ChaosLandscapeAutoUpdate") {
             if (native.contains(legacyAnchor)) {
                 native = native.replace(legacyAnchor, fullscreenMethods + legacyAnchor)
             }
-
-            native = native.replace(
-                """        if (headerSubtitle != null && primaryPagerAdapter != null) {
-            if (position == MainPagerAdapter.PAGE_CHAOS) {
-                headerSubtitle.setText("Random video feed  •  Swipe up/down");
-            } else {
-                headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
-                        viewModeLabel(primaryPagerAdapter.viewMode(position)));
-            }
-        }
-    }
-
-    private void showLegacyContent() {""",
-                """        if (headerSubtitle != null && primaryPagerAdapter != null) {
-            if (position == MainPagerAdapter.PAGE_CHAOS) {
-                headerSubtitle.setText("Random video feed  •  Swipe up/down");
-            } else {
-                headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
-                        viewModeLabel(primaryPagerAdapter.viewMode(position)));
-            }
-        }
-        applyChaosFullscreenChrome();
-    }
-
-    private void showLegacyContent() {
-        exitChaosFullscreenChrome();"""
-            )
 
             val backAnchor = "    @Override\n    public void onBackPressed() {"
             if (native.contains(backAnchor)) {
