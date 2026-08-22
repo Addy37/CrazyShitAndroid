@@ -179,8 +179,84 @@ val wireV2BetaRuntime by tasks.registering {
                 "        }\n" +
                 "    }\n\n" + resumeAnchor
             )
-            commentsFile.writeText(comments)
         }
+
+        if (!comments.contains("BETA4_USERNAME_PAIRING")) {
+            val oldRender = """    private void renderComments(JSONArray comments, boolean loginRequired) {
+        loadedComments.clear();
+        Set<String> rendered = new HashSet<>();
+        for (int i = 0; i < comments.length(); i++) {
+            JSONObject item = comments.optJSONObject(i);
+            if (item == null) continue;
+            String author = clean(item.optString("author"));
+            String time = clean(item.optString("time"));
+            String text = clean(item.optString("text"));
+            String avatar = clean(item.optString("avatar"));
+            String score = clean(item.optString("score"));
+            int depth = Math.max(0, Math.min(4, item.optInt("depth", 0)));
+            if (!isRealCommentText(text)) continue;
+            String key = (author + "|" + text).toLowerCase();
+            if (!rendered.add(key)) continue;
+            loadedComments.add(new CommentItem(author, time, text, avatar, score, depth, i));
+        }
+        lastLoginRequired = loginRequired;
+        renderLoadedComments();
+    }
+"""
+            val newRender = """    // BETA4_USERNAME_PAIRING
+    private void renderComments(JSONArray comments, boolean loginRequired) {
+        loadedComments.clear();
+        Set<String> rendered = new HashSet<>();
+        for (int i = 0; i < comments.length(); i++) {
+            JSONObject item = comments.optJSONObject(i);
+            if (item == null) continue;
+            String author = clean(item.optString("author"));
+            String time = clean(item.optString("time"));
+            String text = clean(item.optString("text"));
+            String avatar = clean(item.optString("avatar"));
+            String score = clean(item.optString("score"));
+            int depth = Math.max(0, Math.min(4, item.optInt("depth", 0)));
+
+            boolean handleRow = author.isEmpty() && text.matches("^@[A-Za-z0-9][A-Za-z0-9_.-]{1,39}$");
+            if (handleRow && i + 1 < comments.length()) {
+                JSONObject next = comments.optJSONObject(i + 1);
+                if (next != null) {
+                    String nextAuthor = clean(next.optString("author"));
+                    String nextText = clean(next.optString("text"));
+                    boolean nextIsHandle = nextText.matches("^@[A-Za-z0-9][A-Za-z0-9_.-]{1,39}$");
+                    if (nextAuthor.isEmpty() && isRealCommentText(nextText) && !nextIsHandle) {
+                        String nextTime = clean(next.optString("time"));
+                        String nextAvatar = clean(next.optString("avatar"));
+                        String nextScore = clean(next.optString("score"));
+                        int nextDepth = Math.max(0, Math.min(4, next.optInt("depth", depth)));
+
+                        author = text;
+                        text = nextText;
+                        if (time.isEmpty()) time = nextTime;
+                        if (avatar.isEmpty()) avatar = nextAvatar;
+                        if (score.isEmpty()) score = nextScore;
+                        depth = Math.min(depth, nextDepth);
+                        i++;
+                    }
+                }
+            }
+
+            if (!isRealCommentText(text)) continue;
+            if (text.matches("^@[A-Za-z0-9][A-Za-z0-9_.-]{1,39}$")) continue;
+            String key = (author + "|" + text).toLowerCase();
+            if (!rendered.add(key)) continue;
+            loadedComments.add(new CommentItem(author, time, text, avatar, score, depth, i));
+        }
+        lastLoginRequired = loginRequired;
+        renderLoadedComments();
+    }
+"""
+            if (comments.contains(oldRender)) {
+                comments = comments.replace(oldRender, newRender)
+            }
+        }
+
+        commentsFile.writeText(comments)
     }
 }
 
