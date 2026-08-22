@@ -116,6 +116,11 @@ public class SettingsActivity extends Activity {
         });
 
         addSection(root, "App");
+        addSwitch(root,
+                "Automatic updates",
+                "Automatically check and download new builds. Android still asks for final install confirmation.",
+                "auto_update_enabled",
+                true);
         addAction(root, "Check for updates", "Check your current beta or stable channel and install inside the app.", () -> {
             if (appUpdater != null) appUpdater.check(true);
         });
@@ -126,7 +131,7 @@ public class SettingsActivity extends Activity {
         });
 
         TextView footer = new TextView(this);
-        footer.setText("CrazyShit Jeremy Edition\nJeremy Edition • Community Android wrapper\nNot affiliated with or endorsed by CrazyShit.com");
+        footer.setText("CrazyShit\nCommunity Android client\nNot affiliated with or endorsed by CrazyShit.com");
         footer.setTextColor(Color.rgb(150, 150, 158));
         footer.setTextSize(12);
         footer.setGravity(Gravity.CENTER);

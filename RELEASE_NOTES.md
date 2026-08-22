@@ -1,27 +1,36 @@
-# CrazyShit Jeremy Edition v2.0.0
+# CrazyShit v2.0.0
 
-A major architecture update that turns Jeremy Edition from a WebView-first wrapper into a native Android browsing app with the website retained as a compatibility fallback.
+CrazyShit 2.0 is a major rebuild of the Android client. The primary browsing experience is now native Android, with the live website retained as a compatibility fallback for flows that need it.
 
-## Native v2
+## Highlights
 
-- New native Home feed rendered with Android RecyclerView cards.
-- Native Trending feed.
-- Native Categories grid and category feeds.
-- Native Search results.
-- Infinite feed pagination as you scroll.
-- Material bottom navigation for Home, Trending, Categories, Watch Later, and More.
-- Native Jeremy Edition header and search controls.
-- Content cards are built from the public CrazyShit.com HTML at runtime with Jsoup. No proxy or unofficial remote API is introduced.
-- Tapping a media card first tries to resolve an exposed MP4/HLS/DASH/WebM/M4V stream and opens the existing Media3 player directly.
-- If the page cannot be represented natively, the app opens an in-app compatibility WebView instead of failing.
-- Existing site cookies remain available for fallback login/account flows and compatible stream requests.
-- Existing native mini-player behavior is retained when returning from the Media3 player.
-- Existing Watch Later, playback resume, PiP, gestures, ad/pop-up protection, Settings, GitHub update checks, themed Jeremy icon, and Android system-bar handling are retained.
+- Native Home and Trending feeds with pagination and retained tab state
+- Real-time horizontal swiping between Home, Trending, Chaos, and Memes
+- **Chaos**, a featured vertical random-video feed with autoplay, next/previous swiping, preloading, duplicate prevention, and recent-view avoidance
+- Chaos landscape mode with immersive fullscreen playback while keeping vertical next/previous swipes active
+- Native **Memes** feed and static image viewer
+- Native Library with Continue Watching, History, Watch Later, thumbnails, progress, and swipeable Library tabs
+- Native video detail screen with Media3 playback, comments, related videos, sharing, and Watch Later
+- In-app mini-player, swipe-down minimize, resume position, PiP, speed controls, seek gestures, brightness/volume gestures, and Fit/Fill/Zoom modes
+- Native comments and reply composer using the current CrazyShit.com session
+- Dedicated sign-in flow and **My Profile** entry for the logged-in site account
+- Native Categories and Search with WebView fallback when the site cannot be represented reliably
+- Manual updater plus **Automatic updates**, enabled by default
+- Automatic update downloads are package-verified before Android opens the required installer confirmation
+- Material dark interface with Chaos emphasized as the center navigation tab
+
+## Native architecture
+
+The app reads the public CrazyShit.com HTML directly at runtime with Jsoup. It does not use a project-operated proxy or fabricated remote API. Media playback only uses stream URLs already exposed by the website to the current device/session.
+
+The compatibility WebView remains available for unsupported interactive pages, site changes, or account flows that need the full website.
 
 ## Compatibility
 
-The package name and signing identity remain unchanged, so v2.0.0 installs directly over v1.4.4 and retains the app's existing local preferences/data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.0 can install over earlier signed stable releases such as v1.4.4 while retaining their app data.
 
-Because CrazyShit.com does not expose a documented public API for this client, the native repository parses the site's public HTML. The compatibility WebView remains available as a safety net if a future site redesign changes that markup.
+Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit. Beta-only local data does not automatically transfer to the stable package.
 
-This project remains unofficial and is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
+## Project status
+
+This Android client is an independent community project. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.

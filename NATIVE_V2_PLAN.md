@@ -1,4 +1,4 @@
-# CrazyShit Jeremy Edition v2
+# CrazyShit v2
 
 v2 moves the primary browsing experience from WebView to native Android UI while keeping the existing WebView as a compatibility fallback.
 

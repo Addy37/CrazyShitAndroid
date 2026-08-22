@@ -8,6 +8,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -506,8 +507,12 @@ public final class ChaosFeedView extends FrameLayout {
             poster.setBackgroundColor(Color.BLACK);
             root.addView(poster, new FrameLayout.LayoutParams(-1, -1));
 
-            playerView = new PlayerView(activity);
+            // BETA19_CHAOS_OVERLAY_CLEANUP
+            playerView = (PlayerView) LayoutInflater.from(activity)
+                    .inflate(R.layout.view_video_player_texture, root, false);
             playerView.setUseController(false);
+            playerView.setControllerAutoShow(false);
+            playerView.hideController();
             playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
             playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
             playerView.setBackgroundColor(Color.BLACK);
@@ -531,7 +536,7 @@ public final class ChaosFeedView extends FrameLayout {
             lower.setOrientation(LinearLayout.HORIZONTAL);
             lower.setGravity(Gravity.BOTTOM);
             lower.setPadding(dp(16), dp(18), dp(10), dp(18));
-            lower.setBackgroundColor(Color.argb(100, 0, 0, 0));
+            lower.setBackgroundColor(Color.TRANSPARENT);
             FrameLayout.LayoutParams lowerParams = new FrameLayout.LayoutParams(-1, -2);
             lowerParams.gravity = Gravity.BOTTOM;
             root.addView(lower, lowerParams);
@@ -539,6 +544,7 @@ public final class ChaosFeedView extends FrameLayout {
             LinearLayout copy = new LinearLayout(activity);
             copy.setOrientation(LinearLayout.VERTICAL);
             copy.setGravity(Gravity.BOTTOM);
+            copy.setBackgroundColor(Color.TRANSPARENT);
             lower.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
             title = new TextView(activity);
@@ -557,6 +563,7 @@ public final class ChaosFeedView extends FrameLayout {
             LinearLayout actions = new LinearLayout(activity);
             actions.setOrientation(LinearLayout.VERTICAL);
             actions.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            actions.setBackgroundColor(Color.TRANSPARENT);
             lower.addView(actions, new LinearLayout.LayoutParams(dp(82), -2));
 
             save = actionButton("☆\nSave");
@@ -600,18 +607,19 @@ public final class ChaosFeedView extends FrameLayout {
             TextView button = new TextView(activity);
             button.setText(value);
             button.setTextColor(Color.WHITE);
-            button.setTextSize(12);
+            button.setTextSize(10);
             button.setGravity(Gravity.CENTER);
-            button.setBackgroundColor(Color.argb(105, 0, 0, 0));
-            button.setPadding(dp(4), dp(7), dp(4), dp(7));
+            button.setBackgroundColor(Color.TRANSPARENT);
+            button.setShadowLayer(dp(2), 0f, dp(1), Color.BLACK);
+            button.setPadding(dp(2), dp(3), dp(2), dp(3));
             button.setClickable(true);
             button.setFocusable(true);
             return button;
         }
 
         private LinearLayout.LayoutParams actionParams() {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(74), dp(60));
-            params.setMargins(0, dp(4), 0, dp(4));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(54), dp(48));
+            params.setMargins(0, dp(2), 0, dp(2));
             return params;
         }
 

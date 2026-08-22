@@ -62,6 +62,8 @@ final class AppUpdater {
         }
 
         SharedPreferences prefs = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
+        // BETA20_AUTO_UPDATE
+        if (!manual && !prefs.getBoolean("auto_update_enabled", true)) return;
         String key = betaChannel ? "beta_last_update_check" : "stable_last_update_check";
         long now = System.currentTimeMillis();
         long last = prefs.getLong(key, 0L);
@@ -78,7 +80,16 @@ final class AppUpdater {
                 activity.runOnUiThread(() -> {
                     checking = false;
                     if (newer) {
-                        showUpdateDialog(release, current);
+                        if (!manual && prefs.getBoolean("auto_update_enabled", true)) {
+                            Toast.makeText(
+                                    activity,
+                                    "Update " + release.version + " found. Downloading…",
+                                    Toast.LENGTH_SHORT
+                            ).show();
+                            downloadAndInstall(release);
+                        } else {
+                            showUpdateDialog(release, current);
+                        }
                     } else if (manual) {
                         if (betaChannel) {
                             String latest = release == null ? "not found" : release.version;
@@ -178,7 +189,7 @@ final class AppUpdater {
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
             connection.setRequestProperty("Accept", "application/vnd.github+json");
-            connection.setRequestProperty("User-Agent", "CrazyShit-Jeremy-Edition-Android");
+            connection.setRequestProperty("User-Agent", "CrazyShit-Android");
             connection.setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0");
             connection.setRequestProperty("Pragma", "no-cache");
             int code = connection.getResponseCode();
@@ -257,7 +268,7 @@ final class AppUpdater {
                 connection.setInstanceFollowRedirects(true);
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(30000);
-                connection.setRequestProperty("User-Agent", "CrazyShit-Jeremy-Edition-Android");
+                connection.setRequestProperty("User-Agent", "CrazyShit-Android");
                 int code = connection.getResponseCode();
                 if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
 

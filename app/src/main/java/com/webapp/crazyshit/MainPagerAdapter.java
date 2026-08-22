@@ -28,10 +28,11 @@ import java.util.concurrent.Executors;
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
     public static final int PAGE_HOME = 0;
     public static final int PAGE_TRENDING = 1;
-    public static final int PAGE_MEMES = 2;
-    public static final int PAGE_CHAOS = 3;
+    // BETA18_CHAOS_CENTER
+    public static final int PAGE_CHAOS = 2;
+    public static final int PAGE_MEMES = 3;
     public static final int PAGE_COUNT = 4;
-    private static final int FEED_PAGE_COUNT = 3;
+    private static final int FEED_PAGE_COUNT = 4;
 
     public interface Host {
         void onOpenItem(NativeContentItem item, boolean meme);
@@ -68,7 +69,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         });
         chaosView.setActive(false);
 
-        for (Page page : pages) load(page, false);
+        for (Page page : pages) if (page != null) load(page, false);
     }
 
     public String titleFor(int position) {

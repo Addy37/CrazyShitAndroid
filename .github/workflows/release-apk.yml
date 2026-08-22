@@ -37,8 +37,8 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "APP_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
-          echo "APK_PRIMARY=CrazyShit-Jeremy-Edition.apk" >> "$GITHUB_ENV"
-          echo "RELEASE_TITLE=CrazyShit Jeremy Edition v${VERSION}" >> "$GITHUB_ENV"
+          echo "APK_PRIMARY=CrazyShit.apk" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=CrazyShit v${VERSION}" >> "$GITHUB_ENV"
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -75,7 +75,7 @@ jobs:
               sys.exit("Signing bundle is missing: " + ", ".join(missing))
           for key in ("store_password", "key_alias", "key_password"):
               print(f"::add-mask::{data[key]}")
-          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "crazyshit-unofficial-release.jks"
+          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "crazyshit-release.jks"
           keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
           keystore.chmod(0o600)
           env_file = pathlib.Path(os.environ["GITHUB_ENV"])

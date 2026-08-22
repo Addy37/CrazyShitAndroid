@@ -31,6 +31,7 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
@@ -51,8 +52,9 @@ import java.util.concurrent.Executors;
 public class NativeMainActivity extends Activity implements NativeMiniPlayer.Host {
     private static final int NAV_HOME = 1;
     private static final int NAV_TRENDING = 2;
-    private static final int NAV_CATEGORIES = 3;
-    private static final int NAV_SAVED = 4;
+    private static final int NAV_MEMES = 3;
+    private static final int NAV_CHAOS = 4;
+    private static final int NAV_CATEGORIES = 6;
     private static final int NAV_MORE = 5;
     private static final int PLAYER_REQUEST = 3001;
     private static final int FAVORITES_REQUEST = 3002;
@@ -63,6 +65,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private enum Screen {
         HOME,
         TRENDING,
+        MEMES,
+        CHAOS,
         CATEGORIES,
         CATEGORY,
         SEARCH
@@ -70,6 +74,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final CrazyShitRepository repository = new CrazyShitRepository();
+    private final MemeRepository memeRepository = new MemeRepository();
 
     private FrameLayout overlayRoot;
     private LinearLayout shell;
@@ -83,6 +88,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private NativeFeedAdapter feedAdapter;
     private NativeCategoryAdapter categoryAdapter;
     private NativeMiniPlayer miniPlayer;
+    private FrameLayout legacyContent;
+    private ViewPager2 primaryPager;
+    private MainPagerAdapter primaryPagerAdapter;
+    private AppUpdater appUpdater;
 
     private Screen screen = Screen.HOME;
     private String feedBaseUrl = CrazyShitRepository.HOME;
@@ -98,6 +107,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
         buildUi();
+        appUpdater = new AppUpdater(this);
         configureBack();
 
         SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
@@ -142,8 +152,43 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
         shell.addView(buildTopBar(), new LinearLayout.LayoutParams(-1, dp(70)));
 
+        // BETA15_LIVE_PAGER
         FrameLayout content = new FrameLayout(this);
-        shell.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
+        legacyContent = content;
+        legacyContent.setVisibility(View.GONE);
+        shell.addView(content, new LinearLayout.LayoutParams(-1, 0, 0f));
+
+        primaryPagerAdapter = new MainPagerAdapter(this, new MainPagerAdapter.Host() {
+            @Override
+            public void onOpenItem(NativeContentItem item, boolean meme) {
+                haptic(primaryPager);
+                if (meme) openFallback(item.url);
+                else openNativeItem(item);
+            }
+
+            @Override
+            public void onLongPressItem(NativeContentItem item, View anchor, boolean meme) {
+                haptic(anchor);
+                showItemMenu(item, anchor);
+            }
+
+            @Override
+            public void onOpenComments(NativeContentItem item) {
+                openComments(item);
+            }
+        });
+
+        primaryPager = new ViewPager2(this);
+        primaryPager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
+        primaryPager.setOffscreenPageLimit(MainPagerAdapter.PAGE_COUNT - 1);
+        primaryPager.setAdapter(primaryPagerAdapter);
+        primaryPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                showPagerChrome(position);
+            }
+        });
+        shell.addView(primaryPager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         swipeRefresh = new SwipeRefreshLayout(this);
         swipeRefresh.setColorSchemeColors(Color.rgb(255, 90, 31));
@@ -221,8 +266,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         Menu menu = bottomNavigation.getMenu();
         menu.add(Menu.NONE, NAV_HOME, 0, "Home").setIcon(R.drawable.ic_nav_home);
         menu.add(Menu.NONE, NAV_TRENDING, 1, "Trending").setIcon(R.drawable.ic_nav_trending);
-        menu.add(Menu.NONE, NAV_CATEGORIES, 2, "Categories").setIcon(R.drawable.ic_nav_categories);
-        menu.add(Menu.NONE, NAV_SAVED, 3, "Saved").setIcon(R.drawable.ic_nav_saved);
+        menu.add(Menu.NONE, NAV_CHAOS, 2, "Chaos").setIcon(R.drawable.ic_nav_chaos);
+        menu.add(Menu.NONE, NAV_MEMES, 3, "Memes").setIcon(R.drawable.ic_nav_memes);
         menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
         bottomNavigation.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
@@ -234,13 +279,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 showTrending();
                 return true;
             }
-            if (id == NAV_CATEGORIES) {
-                showCategories();
+            if (id == NAV_MEMES) {
+                showMemes();
                 return true;
             }
-            if (id == NAV_SAVED) {
-                startActivityForResult(new Intent(this, FavoritesActivity.class), FAVORITES_REQUEST);
-                return false;
+            if (id == NAV_CHAOS) {
+                showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
+                return true;
             }
             if (id == NAV_MORE) {
                 showMoreSheet();
@@ -248,7 +293,18 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
             return false;
         });
-        shell.addView(bottomNavigation, new LinearLayout.LayoutParams(-1, dp(74)));
+        // BETA18_FEATURED_CHAOS_NAV
+        shell.addView(bottomNavigation, new LinearLayout.LayoutParams(-1, dp(76)));
+        bottomNavigation.post(() -> {
+            View chaosItem = bottomNavigation.findViewById(NAV_CHAOS);
+            if (chaosItem != null) {
+                chaosItem.setScaleX(1.13f);
+                chaosItem.setScaleY(1.13f);
+                chaosItem.setTranslationY(-dp(2));
+                chaosItem.setElevation(dp(5));
+                chaosItem.setContentDescription("Chaos featured tab");
+            }
+        });
 
         miniPlayer = new NativeMiniPlayer(this, overlayRoot, this);
         setContentView(overlayRoot);
@@ -278,7 +334,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         labels.addView(headerTitle);
 
         headerSubtitle = new TextView(this);
-        headerSubtitle.setText("Jeremy Edition  •  Native v2");
+        headerSubtitle.setText("CrazyShit");
         headerSubtitle.setTextColor(Color.rgb(168, 168, 178));
         headerSubtitle.setTextSize(12);
         labels.addView(headerSubtitle);
@@ -299,23 +355,149 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showHome() {
-        selectNavSilently(NAV_HOME);
-        screen = Screen.HOME;
-        feedBaseUrl = CrazyShitRepository.HOME;
-        feedTitle = "Home";
-        prepareFeed();
-        loadFeed(false);
+        showPrimaryPage(MainPagerAdapter.PAGE_HOME, true);
     }
 
     private void showTrending() {
-        screen = Screen.TRENDING;
-        feedBaseUrl = CrazyShitRepository.TRENDING;
-        feedTitle = "Trending";
-        prepareFeed();
-        loadFeed(false);
+        showPrimaryPage(MainPagerAdapter.PAGE_TRENDING, true);
+    }
+
+    // BETA14_FINAL_TABS
+    private void showMemes() {
+        showPrimaryPage(MainPagerAdapter.PAGE_MEMES, true);
+    }
+
+    private void showPrimaryPage(int position, boolean smooth) {
+        if (primaryPager == null) return;
+        showPagerChrome(position);
+        primaryPager.setCurrentItem(position, smooth);
+    }
+
+    // BETA17_CHAOS
+    private void showPagerChrome(int position) {
+        if (legacyContent != null) {
+            legacyContent.setVisibility(View.GONE);
+            LinearLayout.LayoutParams old = (LinearLayout.LayoutParams) legacyContent.getLayoutParams();
+            old.weight = 0f;
+            old.height = 0;
+            legacyContent.setLayoutParams(old);
+        }
+        if (primaryPager != null) {
+            primaryPager.setVisibility(View.VISIBLE);
+            LinearLayout.LayoutParams pp = (LinearLayout.LayoutParams) primaryPager.getLayoutParams();
+            pp.weight = 1f;
+            pp.height = 0;
+            primaryPager.setLayoutParams(pp);
+        }
+
+        if (position == MainPagerAdapter.PAGE_TRENDING) {
+            screen = Screen.TRENDING;
+            feedBaseUrl = CrazyShitRepository.TRENDING;
+            feedTitle = "Trending";
+            selectNavSilently(NAV_TRENDING);
+        } else if (position == MainPagerAdapter.PAGE_MEMES) {
+            screen = Screen.MEMES;
+            feedBaseUrl = MemeRepository.MEMES;
+            feedTitle = "Memes";
+            selectNavSilently(NAV_MEMES);
+        } else if (position == MainPagerAdapter.PAGE_CHAOS) {
+            screen = Screen.CHAOS;
+            feedBaseUrl = CrazyShitRepository.HOME;
+            feedTitle = "Chaos";
+            selectNavSilently(NAV_CHAOS);
+        } else {
+            screen = Screen.HOME;
+            feedBaseUrl = CrazyShitRepository.HOME;
+            feedTitle = "Home";
+            selectNavSilently(NAV_HOME);
+        }
+
+        if (primaryPagerAdapter != null) primaryPagerAdapter.setPrimaryActive(position);
+        if (headerTitle != null) headerTitle.setText(feedTitle);
+        if (headerSubtitle != null && primaryPagerAdapter != null) {
+            if (position == MainPagerAdapter.PAGE_CHAOS) {
+                headerSubtitle.setText("Random video feed  •  Swipe up/down");
+            } else {
+                headerSubtitle.setText("CrazyShit  •  " +
+                        viewModeLabel(primaryPagerAdapter.viewMode(position)));
+            }
+        }
+        applyChaosFullscreenChrome();
+    }
+
+
+    // BETA20_CHAOS_LANDSCAPE
+    private void applyChaosFullscreenChrome() {
+        boolean landscape = getResources().getConfiguration().orientation ==
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        setChaosFullscreenChrome(screen == Screen.CHAOS && landscape);
+    }
+
+    private void setChaosFullscreenChrome(boolean fullscreen) {
+        View topBar = null;
+        if (headerTitle != null && headerTitle.getParent() instanceof View) {
+            View labels = (View) headerTitle.getParent();
+            if (labels.getParent() instanceof View) topBar = (View) labels.getParent();
+            else topBar = labels;
+        }
+        if (topBar != null) topBar.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
+        if (bottomNavigation != null) {
+            bottomNavigation.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
+        }
+
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                int types = WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars();
+                if (fullscreen) {
+                    controller.hide(types);
+                    controller.setSystemBarsBehavior(
+                            android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    );
+                } else {
+                    controller.show(types);
+                }
+            }
+        } else {
+            if (fullscreen) {
+                getWindow().getDecorView().setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                );
+            } else {
+                getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+            }
+        }
+    }
+
+    private void exitChaosFullscreenChrome() {
+        setChaosFullscreenChrome(false);
+    }
+
+    private void showLegacyContent() {
+        exitChaosFullscreenChrome();
+        if (primaryPager != null) {
+            primaryPager.setVisibility(View.GONE);
+            LinearLayout.LayoutParams pp = (LinearLayout.LayoutParams) primaryPager.getLayoutParams();
+            pp.weight = 0f;
+            pp.height = 0;
+            primaryPager.setLayoutParams(pp);
+        }
+        if (legacyContent != null) {
+            legacyContent.setVisibility(View.VISIBLE);
+            LinearLayout.LayoutParams old = (LinearLayout.LayoutParams) legacyContent.getLayoutParams();
+            old.weight = 1f;
+            old.height = 0;
+            legacyContent.setLayoutParams(old);
+        }
     }
 
     private void showCategory(NativeContentItem category) {
+        showLegacyContent();
         screen = Screen.CATEGORY;
         feedBaseUrl = category.url;
         feedTitle = category.title;
@@ -324,6 +506,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showSearch(String query) {
+        showLegacyContent();
         screen = Screen.SEARCH;
         feedBaseUrl = repository.searchUrl(query);
         feedTitle = "Search: " + query;
@@ -337,7 +520,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         endReached = false;
         loading = false;
         headerTitle.setText(feedTitle);
-        headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " + viewModeLabel(currentViewMode()));
+        headerSubtitle.setText("CrazyShit  •  " + viewModeLabel(currentViewMode()));
         applyFeedLayout();
         recycler.setAdapter(feedAdapter);
         feedAdapter.replace(new ArrayList<>());
@@ -347,12 +530,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showCategories() {
+        showLegacyContent();
         screen = Screen.CATEGORIES;
         generation++;
         loading = false;
         endReached = true;
         headerTitle.setText("Categories");
-        headerSubtitle.setText("Jeremy Edition  •  Native v2");
+        headerSubtitle.setText("CrazyShit");
         recycler.setLayoutManager(new GridLayoutManager(this, 2));
         recycler.setAdapter(categoryAdapter);
         categoryAdapter.replace(new ArrayList<>());
@@ -395,7 +579,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
         io.execute(() -> {
             try {
-                List<NativeContentItem> result = repository.fetchFeed(this, requestBase, requestPage);
+                List<NativeContentItem> result = screen == Screen.MEMES
+                        ? memeRepository.fetch(this, requestPage)
+                        : repository.fetchFeed(this, requestBase, requestPage);
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || !requestBase.equals(feedBaseUrl)) return;
                     loading = false;
@@ -439,12 +625,16 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private boolean isFeedScreen() {
-        return screen == Screen.HOME || screen == Screen.TRENDING ||
+        return screen == Screen.HOME || screen == Screen.TRENDING || screen == Screen.MEMES ||
                 screen == Screen.CATEGORY || screen == Screen.SEARCH;
     }
 
     private void openNativeItem(NativeContentItem item) {
         if (item == null || item.url.isEmpty()) return;
+        if (screen == Screen.MEMES) {
+            openFallback(item.url);
+            return;
+        }
         progress.setVisibility(View.VISIBLE);
         final int requestGeneration = generation;
         io.execute(() -> {
@@ -458,12 +648,42 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 if (requestGeneration != generation) return;
                 progress.setVisibility(View.GONE);
                 if (resolved != null && resolved.mediaUrl != null && !resolved.mediaUrl.isEmpty()) {
-                    openPlayer(resolved);
+                    openVideoDetail(resolved, item);
                 } else {
                     openFallback(item.url);
                 }
             });
         });
+    }
+
+
+    // BETA6_VIDEO_DETAIL
+    private void openVideoDetail(CrazyShitRepository.StreamInfo stream, NativeContentItem item) {
+        Intent intent = new Intent(this, VideoDetailActivity.class);
+        intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, stream.mediaUrl);
+        intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, stream.pageUrl);
+        intent.putExtra(PlayerActivity.EXTRA_TITLE,
+                item != null && item.title != null && !item.title.trim().isEmpty()
+                        ? item.title : stream.title);
+        if (item != null) {
+            intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
+            intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
+            intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
+        }
+        try {
+            intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, WebSettings.getDefaultUserAgent(this));
+        } catch (Exception ignored) {
+        }
+        try {
+            String cookies = CookieManager.getInstance().getCookie(stream.mediaUrl);
+            if ((cookies == null || cookies.isEmpty()) && stream.pageUrl != null) {
+                cookies = CookieManager.getInstance().getCookie(stream.pageUrl);
+            }
+            if (cookies != null) intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
+        } catch (Exception ignored) {
+        }
+        miniPlayer.stop();
+        startActivityForResult(intent, PLAYER_REQUEST);
     }
 
     private void openPlayer(CrazyShitRepository.StreamInfo stream) {
@@ -507,6 +727,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private String viewPreferenceKey() {
         if (screen == Screen.TRENDING) return "native_view_trending";
+        if (screen == Screen.MEMES) return "native_view_memes";
         if (screen == Screen.CATEGORY) return "native_view_category";
         if (screen == Screen.SEARCH) return "native_view_search";
         return "native_view_home";
@@ -525,6 +746,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void applyFeedLayout() {
         int mode = currentViewMode();
+        if (primaryPager != null && primaryPager.getVisibility() == View.VISIBLE && primaryPagerAdapter != null) {
+            primaryPagerAdapter.setViewMode(primaryPager.getCurrentItem(), mode);
+            return;
+        }
         feedAdapter.setViewMode(mode);
         if (mode == NativeFeedAdapter.VIEW_GRID) {
             recycler.setLayoutManager(new GridLayoutManager(this, 2));
@@ -554,7 +779,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     .putInt(viewPreferenceKey(), checked)
                     .apply();
             applyFeedLayout();
-            headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " + viewModeLabel(checked));
+            headerSubtitle.setText("CrazyShit  •  " + viewModeLabel(checked));
             dialog.dismiss();
         }));
         dialog.show();
@@ -638,7 +863,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         content.setPadding(dp(18), dp(14), dp(18), dp(28));
         content.setBackgroundColor(Color.rgb(18, 18, 21));
 
-        TextView title = sheetText("CrazyShit Jeremy Edition", 22, Color.WHITE);
+        TextView title = sheetText("CrazyShit", 22, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         content.addView(title);
         TextView subtitle = sheetText("Native v2 controls", 13, Color.rgb(170, 170, 180));
@@ -658,15 +883,27 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             startActivity(new Intent(this, SettingsActivity.class));
             sheet.dismiss();
         });
-        addSheetAction(content, "Login / account", "Open the website account flow", () -> {
-            openFallback(CrazyShitRepository.BASE + "login/");
+        addSheetAction(content, "Login / account", "Sign in here and return automatically", () -> {
+            startActivity(new Intent(this, LoginActivity.class));
+            sheet.dismiss();
+        });
+        addSheetAction(content, "Library", "Continue, History and Watch Later", () -> {
+            startActivityForResult(new Intent(this, FavoritesActivity.class), FAVORITES_REQUEST);
+            sheet.dismiss();
+        });
+        addSheetAction(content, "Categories", "Browse every CrazyShit category", () -> {
+            showCategories();
+            sheet.dismiss();
+        });
+        addSheetAction(content, "My profile", "Open the profile for your signed-in account", () -> {
+            startActivity(new Intent(this, ProfileActivity.class));
             sheet.dismiss();
         });
         addSheetAction(content, "Open full website", "Use the compatibility browser", () -> {
             openFallback(CrazyShitRepository.HOME);
             sheet.dismiss();
         });
-        addSheetAction(content, "Check for updates", "Check the latest GitHub release", () -> {
+        addSheetAction(content, "Check for updates", "Download and install updates inside the app", () -> {
             checkForUpdates(true);
             sheet.dismiss();
         });
@@ -714,7 +951,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         new AlertDialog.Builder(this)
                 .setTitle("18+ / Graphic Content")
                 .setMessage(
-                        "CrazyShit Jeremy Edition connects to CrazyShit.com, which contains adult and graphic material. " +
+                        "CrazyShit connects to CrazyShit.com, which contains adult and graphic material. " +
                         "Continue only if you are 18 or older and want to view that type of content.\n\n" +
                         "This community app is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com."
                 )
@@ -731,56 +968,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void checkForUpdates(boolean manual) {
-        SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
-        long now = System.currentTimeMillis();
-        long last = prefs.getLong("native_last_update_check", 0L);
-        if (!manual && now - last < UPDATE_INTERVAL_MS) return;
-        prefs.edit().putLong("native_last_update_check", now).apply();
-
-        io.execute(() -> {
-            HttpURLConnection connection = null;
-            try {
-                connection = (HttpURLConnection) new URL(RELEASE_API).openConnection();
-                connection.setConnectTimeout(8000);
-                connection.setReadTimeout(8000);
-                connection.setRequestProperty("Accept", "application/vnd.github+json");
-                connection.setRequestProperty("User-Agent", "CrazyShit-Jeremy-Edition-Android");
-                int code = connection.getResponseCode();
-                if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
-
-                BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(connection.getInputStream())
-                );
-                StringBuilder json = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) json.append(line);
-                reader.close();
-
-                JSONObject release = new JSONObject(json.toString());
-                String tag = release.optString("tag_name", "").replaceFirst("^[vV]", "");
-                String page = release.optString(
-                        "html_url",
-                        "https://github.com/Addy37/CrazyShitAndroid/releases/latest"
-                );
-                boolean newer = compareVersions(tag, currentVersion()) > 0;
-                runOnUiThread(() -> {
-                    if (newer) showUpdateDialog(tag, page);
-                    else if (manual) {
-                        Toast.makeText(this, "You're up to date.", Toast.LENGTH_SHORT).show();
-                    }
-                });
-            } catch (Exception e) {
-                if (manual) {
-                    runOnUiThread(() -> Toast.makeText(
-                            this,
-                            "Couldn't check for updates right now.",
-                            Toast.LENGTH_SHORT
-                    ).show());
-                }
-            } finally {
-                if (connection != null) connection.disconnect();
-            }
-        });
+        if (appUpdater != null) appUpdater.check(manual);
     }
 
     private String currentVersion() {
@@ -796,7 +984,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void showUpdateDialog(String version, String page) {
         new AlertDialog.Builder(this)
                 .setTitle("Update available")
-                .setMessage("CrazyShit Jeremy Edition " + version + " is available on GitHub.")
+                .setMessage("CrazyShit " + version + " is available on GitHub.")
                 .setNegativeButton("Later", null)
                 .setPositiveButton("View release", (dialog, which) -> {
                     try {
@@ -858,6 +1046,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     @Override
+    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyChaosFullscreenChrome();
+    }
+
+    @Override
     public void onBackPressed() {
         handleBackNavigation();
     }
@@ -903,17 +1097,26 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     protected void onPause() {
         super.onPause();
         if (miniPlayer != null) miniPlayer.onPause();
+        if (primaryPagerAdapter != null) primaryPagerAdapter.onHostPause();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         if (miniPlayer != null) miniPlayer.onResume();
+        if (primaryPagerAdapter != null) primaryPagerAdapter.onHostResume();
+        if (appUpdater != null) {
+            appUpdater.onHostResume();
+            appUpdater.check(false);
+        }
+        applyChaosFullscreenChrome();
     }
 
     @Override
     protected void onDestroy() {
         if (miniPlayer != null) miniPlayer.stop();
+        if (primaryPagerAdapter != null) primaryPagerAdapter.close();
+        if (appUpdater != null) appUpdater.close();
         io.shutdownNow();
         super.onDestroy();
     }
