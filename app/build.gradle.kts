@@ -265,3 +265,5 @@ tasks.matching {
 }.configureEach {
     dependsOn(wireV2BetaRuntime)
 }
+
+apply(from = "v2-beta5-replies.gradle.kts")
