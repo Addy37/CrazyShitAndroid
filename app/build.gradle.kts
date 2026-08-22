@@ -267,3 +267,4 @@ tasks.matching {
 }
 
 apply(from = "v2-beta5-replies.gradle.kts")
+apply(from = "v2-beta6-video-detail.gradle.kts")
