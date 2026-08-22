@@ -13,6 +13,7 @@ import android.widget.Toast;
 
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
+import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -43,6 +44,10 @@ public final class NativeMiniPlayer {
     private String title;
     private String userAgent;
     private String cookies;
+    private String views;
+    private String uploader;
+    private String comments;
+    private boolean reopenDetail;
     private boolean resumeAfterPause;
 
     public NativeMiniPlayer(Activity activity, FrameLayout overlayRoot, Host host) {
@@ -64,6 +69,10 @@ public final class NativeMiniPlayer {
         title = data.getStringExtra(PlayerActivity.EXTRA_TITLE);
         userAgent = data.getStringExtra(PlayerActivity.EXTRA_USER_AGENT);
         cookies = data.getStringExtra(PlayerActivity.EXTRA_COOKIES);
+        reopenDetail = data.getBooleanExtra(VideoDetailActivity.EXTRA_REOPEN_DETAIL, false);
+        views = data.getStringExtra(VideoDetailActivity.EXTRA_VIEWS);
+        uploader = data.getStringExtra(VideoDetailActivity.EXTRA_UPLOADER);
+        comments = data.getStringExtra(VideoDetailActivity.EXTRA_COMMENTS);
         long start = data.getLongExtra(PlayerActivity.EXTRA_START_POSITION, 0L);
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) return;
 
@@ -102,6 +111,12 @@ public final class NativeMiniPlayer {
             if (start > 0L) player.seekTo(start);
             player.prepare();
             player.play();
+            player.addListener(new Player.Listener() {
+                @Override
+                public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_ENDED) recordHistory(true);
+                }
+            });
             resumeAfterPause = true;
             card.setVisibility(View.VISIBLE);
         } catch (Exception e) {
@@ -113,6 +128,7 @@ public final class NativeMiniPlayer {
     public void onPause() {
         if (player == null) return;
         resumeAfterPause = player.isPlaying();
+        recordHistory(false);
         player.pause();
     }
 
@@ -121,6 +137,61 @@ public final class NativeMiniPlayer {
     }
 
     public void stop() {
+        resumeAfterPause = false;
+        recordHistory(false);
+        if (playerView != null) playerView.setPlayer(null);
+        if (player != null) {
+            player.release();
+            player = null;
+        }
+        if (card != null) card.setVisibility(View.GONE);
+        mediaUrl = null;
+        pageUrl = null;
+        title = null;
+        userAgent = null;
+        cookies = null;
+        views = null;
+        uploader = null;
+        comments = null;
+        reopenDetail = false;
+    }
+
+    private void reopen() {
+        if (player == null || mediaUrl == null) return;
+        long position = player.getCurrentPosition();
+        recordHistory(false);
+
+        Class<?> target = reopenDetail ? VideoDetailActivity.class : PlayerActivity.class;
+        Intent intent = new Intent(activity, target);
+        intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, mediaUrl);
+        intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, pageUrl);
+        intent.putExtra(PlayerActivity.EXTRA_TITLE, title);
+        intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent);
+        intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
+        intent.putExtra(PlayerActivity.EXTRA_START_POSITION, position);
+        if (reopenDetail) {
+            intent.putExtra(VideoDetailActivity.EXTRA_REOPEN_DETAIL, true);
+            intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, views);
+            intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, uploader);
+            intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, comments);
+        }
+        stopWithoutRecording();
+        host.reopenMiniPlayer(intent);
+    }
+
+    private void recordHistory(boolean ended) {
+        if (player == null || pageUrl == null || pageUrl.trim().isEmpty()) return;
+        PlaybackHistoryStore.record(
+                activity,
+                title,
+                pageUrl,
+                player.getCurrentPosition(),
+                Math.max(0L, player.getDuration()),
+                ended
+        );
+    }
+
+    private void stopWithoutRecording() {
         resumeAfterPause = false;
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
@@ -133,20 +204,10 @@ public final class NativeMiniPlayer {
         title = null;
         userAgent = null;
         cookies = null;
-    }
-
-    private void reopen() {
-        if (player == null || mediaUrl == null) return;
-        long position = player.getCurrentPosition();
-        Intent intent = new Intent(activity, PlayerActivity.class);
-        intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, mediaUrl);
-        intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, pageUrl);
-        intent.putExtra(PlayerActivity.EXTRA_TITLE, title);
-        intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent);
-        intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
-        intent.putExtra(PlayerActivity.EXTRA_START_POSITION, position);
-        stop();
-        host.reopenMiniPlayer(intent);
+        views = null;
+        uploader = null;
+        comments = null;
+        reopenDetail = false;
     }
 
     private void ensureUi() {
@@ -181,7 +242,7 @@ public final class NativeMiniPlayer {
         titleView.setOnClickListener(v -> reopen());
         row.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView expand = button("↗", "Open full player");
+        TextView expand = button("↗", "Open video details");
         expand.setOnClickListener(v -> reopen());
         row.addView(expand, new LinearLayout.LayoutParams(dp(42), dp(54)));
 
