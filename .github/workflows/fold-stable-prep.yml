@@ -42,18 +42,6 @@ jobs:
                   ("Jeremy Edition  •  Native v2", "CrazyShit"),
                   ("CrazyShit Jeremy Edition", "CrazyShit"),
               ],
-              ".github/workflows/build-apk.yml": [
-                  ("CrazyShit-Unofficial-debug.apk", "CrazyShit-debug.apk"),
-                  ("CrazyShit-Unofficial-debug", "CrazyShit-debug"),
-              ],
-              ".github/workflows/release-apk.yml": [
-                  ("CrazyShit-Jeremy-Edition.apk", "CrazyShit.apk"),
-                  ("CrazyShit Jeremy Edition v${VERSION}", "CrazyShit v${VERSION}"),
-              ],
-              ".github/workflows/publish-v2-beta.yml": [
-                  ("CrazyShit-Jeremy-v2-Test.apk", "CrazyShit-Beta.apk"),
-                  ("CrazyShit Jeremy v2", "CrazyShit Beta"),
-              ],
               "SIGNING.md": [
                   ("CrazyShit-Unofficial.apk", "CrazyShit.apk"),
               ],
@@ -82,17 +70,16 @@ jobs:
                   path.write_text(text, encoding="utf-8")
           PY
 
-      - name: Remove stable-prep temporary files
+      - name: Remove non-workflow stable-prep temporary files
         run: |
-          rm -f STABLE_BRANDING_SCAN.txt
-          rm -f .github/workflows/fold-v2-beta-patches.yml
+          rm -f STABLE_BRANDING_SCAN.txt STABLE_PREP_RETRY
 
-      - name: Scan for old public branding
+      - name: Scan code and docs for old public branding
         run: |
-          matches="$(grep -RInE --exclude-dir=.git --exclude='*.lock' 'Jeremy|CrazyShit-Unofficial|CrazyShit-Jeremy|v2 Test' . || true)"
+          matches="$(grep -RInE --exclude-dir=.git --exclude-dir=.github --exclude='*.lock' 'Jeremy|CrazyShit-Unofficial|CrazyShit-Jeremy|v2 Test' . || true)"
           if [ -n "$matches" ]; then
             echo "$matches"
-            echo "Old public branding remains."
+            echo "Old public branding remains in code/docs."
             exit 1
           fi
 
@@ -116,14 +103,14 @@ jobs:
       - name: Build clean-source debug APK
         run: gradle --no-daemon :app:assembleDebug
 
-      - name: Commit stable-prep normalization
+      - name: Commit stable code/doc normalization
         if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add app/src SIGNING.md PRIVACY.md NOTICE.md NATIVE_V2_PLAN.md STABLE_BRANDING_SCAN.txt STABLE_PREP_RETRY 2>/dev/null || true
           if git diff --cached --quiet; then
-            echo "Stable prep already normalized."
+            echo "Stable code and docs already normalized."
             exit 0
           fi
           git commit -m "Normalize CrazyShit stable source [skip ci]"
