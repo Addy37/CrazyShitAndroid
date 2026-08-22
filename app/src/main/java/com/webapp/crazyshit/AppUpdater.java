@@ -5,12 +5,10 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
-import android.view.Gravity;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -108,6 +106,11 @@ final class AppUpdater {
             waitingForInstallPermission = false;
             launchInstaller(pendingInstall);
         }
+    }
+
+    void close() {
+        cancelDownload = true;
+        io.shutdownNow();
     }
 
     private ReleaseInfo fetchStable() throws Exception {
