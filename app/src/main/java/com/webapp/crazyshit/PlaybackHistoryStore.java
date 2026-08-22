@@ -8,7 +8,6 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 /** Local-only playback history and Continue Watching data. */
@@ -16,7 +15,8 @@ public final class PlaybackHistoryStore {
     private static final String PREFS = "playback_history";
     private static final String KEY_ITEMS = "items";
     private static final int MAX_ITEMS = 200;
-    private static final long MIN_WATCH_MS = 30_000L;
+    private static final long MIN_HISTORY_MS = 5_000L;
+    private static final long MIN_CONTINUE_MS = 30_000L;
     private static final float COMPLETE_FRACTION = 0.95f;
 
     private PlaybackHistoryStore() {
@@ -31,7 +31,7 @@ public final class PlaybackHistoryStore {
             boolean ended
     ) {
         if (context == null || pageUrl == null || pageUrl.trim().isEmpty()) return;
-        if (!ended && positionMs < MIN_WATCH_MS) return;
+        if (!ended && positionMs < MIN_HISTORY_MS) return;
 
         List<Item> items = load(context);
         items.removeIf(item -> pageUrl.equals(item.pageUrl));
@@ -87,7 +87,7 @@ public final class PlaybackHistoryStore {
         ArrayList<Item> out = new ArrayList<>();
         for (Item item : load(context)) {
             if (item.complete) continue;
-            if (item.positionMs < MIN_WATCH_MS) continue;
+            if (item.positionMs < MIN_CONTINUE_MS) continue;
             if (item.durationMs > 0L && isComplete(item.positionMs, item.durationMs)) continue;
             out.add(item);
         }
