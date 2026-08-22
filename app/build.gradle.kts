@@ -10,8 +10,8 @@ android {
         applicationId = "com.addy37.crazyshitunofficial"
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 9
-        versionName = System.getenv("APP_VERSION_NAME") ?: "1.4.4"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 10
+        versionName = System.getenv("APP_VERSION_NAME") ?: "2.0.0"
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
@@ -54,6 +54,9 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.2.0")
+    implementation("androidx.recyclerview:recyclerview:1.4.0")
+    implementation("org.jsoup:jsoup:1.23.1")
+    implementation("com.github.bumptech.glide:glide:4.16.0")
 
     val media3Version = "1.9.4"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
