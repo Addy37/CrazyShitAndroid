@@ -36,6 +36,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            resValue("string", "app_name", "CrazyShit Jeremy v2 Test")
+        }
         release {
             isMinifyEnabled = false
             signingConfigs.findByName("release")?.let {
