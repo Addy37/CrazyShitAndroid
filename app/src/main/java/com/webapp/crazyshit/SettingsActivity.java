@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -22,11 +21,13 @@ import com.google.android.material.materialswitch.MaterialSwitch;
 
 public class SettingsActivity extends Activity {
     private SharedPreferences prefs;
+    private AppUpdater appUpdater;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        appUpdater = new AppUpdater(this);
         buildUi();
     }
 
@@ -115,12 +116,8 @@ public class SettingsActivity extends Activity {
         });
 
         addSection(root, "App");
-        addAction(root, "Check for updates", "Open the latest GitHub release.", () -> {
-            try {
-                startActivity(new Intent(Intent.ACTION_VIEW,
-                        Uri.parse("https://github.com/Addy37/CrazyShitAndroid/releases/latest")));
-            } catch (Exception ignored) {
-            }
+        addAction(root, "Check for updates", "Check your current beta or stable channel and install inside the app.", () -> {
+            if (appUpdater != null) appUpdater.check(true);
         });
         addAction(root, "Clear site data", "Sign out and remove website cookies and local storage.", () -> {
             CookieManager.getInstance().removeAllCookies(value -> CookieManager.getInstance().flush());
@@ -236,6 +233,18 @@ public class SettingsActivity extends Activity {
     private void haptic(View view) {
         if (!prefs.getBoolean("haptics_enabled", true)) return;
         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (appUpdater != null) appUpdater.onHostResume();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (appUpdater != null) appUpdater.close();
+        super.onDestroy();
     }
 
     private int dp(int value) {
