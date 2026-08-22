@@ -22,14 +22,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Keeps Home, Trending and Memes alive at the same time for a true ViewPager2 drag.
- * Every first page starts loading immediately, before the user swipes to it.
+ * Keeps Home, Trending, Memes and Chaos alive for true horizontal paging.
+ * Chaos itself owns a nested vertical ViewPager2 for Shorts/Reels-style playback.
  */
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
     public static final int PAGE_HOME = 0;
     public static final int PAGE_TRENDING = 1;
     public static final int PAGE_MEMES = 2;
-    public static final int PAGE_COUNT = 3;
+    public static final int PAGE_CHAOS = 3;
+    public static final int PAGE_COUNT = 4;
+    private static final int FEED_PAGE_COUNT = 3;
 
     public interface Host {
         void onOpenItem(NativeContentItem item, boolean meme);
@@ -42,7 +44,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final MemeRepository memeRepository = new MemeRepository();
     private final ExecutorService io = Executors.newFixedThreadPool(3);
-    private final Page[] pages = new Page[PAGE_COUNT];
+    private final Page[] pages = new Page[FEED_PAGE_COUNT];
+    private final ChaosFeedView chaosView;
 
     public MainPagerAdapter(Activity activity, Host host) {
         this.activity = activity;
@@ -52,21 +55,37 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         pages[PAGE_TRENDING] = buildFeedPage(PAGE_TRENDING, "native_view_trending", CrazyShitRepository.TRENDING, false);
         pages[PAGE_MEMES] = buildFeedPage(PAGE_MEMES, "native_view_memes", MemeRepository.MEMES, true);
 
+        chaosView = new ChaosFeedView(activity, new ChaosFeedView.Host() {
+            @Override
+            public void openDetails(NativeContentItem item) {
+                host.onOpenItem(item, false);
+            }
+
+            @Override
+            public void openComments(NativeContentItem item) {
+                host.onOpenComments(item);
+            }
+        });
+        chaosView.setActive(false);
+
         for (Page page : pages) load(page, false);
     }
 
     public String titleFor(int position) {
         if (position == PAGE_TRENDING) return "Trending";
         if (position == PAGE_MEMES) return "Memes";
+        if (position == PAGE_CHAOS) return "Chaos";
         return "Home";
     }
 
     public int viewMode(int position) {
+        if (position == PAGE_CHAOS) return NativeFeedAdapter.VIEW_LARGE;
         Page page = pageAt(position);
         return page == null ? NativeFeedAdapter.VIEW_LARGE : page.viewMode;
     }
 
     public void setViewMode(int position, int mode) {
+        if (position == PAGE_CHAOS) return;
         Page page = pageAt(position);
         if (page == null) return;
         int safe = mode;
@@ -82,6 +101,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void refresh(int position) {
+        if (position == PAGE_CHAOS) {
+            chaosView.refresh();
+            return;
+        }
         Page page = pageAt(position);
         if (page == null) return;
         page.generation++;
@@ -91,7 +114,20 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         load(page, false);
     }
 
+    public void setPrimaryActive(int position) {
+        chaosView.setActive(position == PAGE_CHAOS);
+    }
+
+    public void onHostResume() {
+        chaosView.onHostResume();
+    }
+
+    public void onHostPause() {
+        chaosView.onHostPause();
+    }
+
     public void close() {
+        chaosView.close();
         io.shutdownNow();
     }
 
@@ -116,13 +152,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
-        Page page = pageAt(position);
-        if (page == null) return;
-        if (page.root.getParent() instanceof ViewGroup) {
-            ((ViewGroup) page.root.getParent()).removeView(page.root);
+        View pageView;
+        if (position == PAGE_CHAOS) {
+            pageView = chaosView;
+        } else {
+            Page page = pageAt(position);
+            if (page == null) return;
+            pageView = page.root;
+        }
+        if (pageView.getParent() instanceof ViewGroup) {
+            ((ViewGroup) pageView.getParent()).removeView(pageView);
         }
         holder.container.removeAllViews();
-        holder.container.addView(page.root, new FrameLayout.LayoutParams(-1, -1));
+        holder.container.addView(pageView, new FrameLayout.LayoutParams(-1, -1));
     }
 
     private Page buildFeedPage(int index, String prefKey, String baseUrl, boolean meme) {
