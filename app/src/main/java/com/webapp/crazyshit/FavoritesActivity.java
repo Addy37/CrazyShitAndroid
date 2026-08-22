@@ -10,6 +10,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -19,6 +20,10 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
+
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.model.GlideUrl;
@@ -27,6 +32,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
 import java.text.DateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,8 +42,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Local library for Continue Watching, History and Watch Later.
- * The class name stays FavoritesActivity so v2's existing Saved nav can open it without a routing change.
+ * Local Library with three eagerly built pages. BETA14_LIBRARY_SWIPE is kept as a
+ * marker so the old gesture-patch is skipped. ViewPager2 now owns the drag itself.
  */
 public class FavoritesActivity extends Activity {
     public static final String EXTRA_SELECTED_URL = "selected_url";
@@ -45,19 +51,22 @@ public class FavoritesActivity extends Activity {
     private static final int TAB_CONTINUE = 0;
     private static final int TAB_HISTORY = 1;
     private static final int TAB_WATCH_LATER = 2;
+    private static final int PAGE_COUNT = 3;
     private static final String SITE = "https://crazyshit.com/";
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
-    private LinearLayout listContainer;
+    private final LinearLayout[] listContainers = new LinearLayout[PAGE_COUNT];
+    private final View[] pageViews = new View[PAGE_COUNT];
     private MaterialButton continueTab;
     private MaterialButton historyTab;
     private MaterialButton watchLaterTab;
     private TextView clearAction;
+    private ViewPager2 pager;
     private int tab = TAB_CONTINUE;
 
-    private final Map<String, ImageView> thumbnailTargets = new HashMap<>();
+    private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
     private RenderedThumbnailResolver[] thumbnailResolvers;
@@ -78,7 +87,7 @@ public class FavoritesActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        renderItems();
+        renderAllPages();
     }
 
     private void buildUi() {
@@ -122,7 +131,6 @@ public class FavoritesActivity extends Activity {
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setPadding(0, dp(12), 0, dp(8));
-
         continueTab = tabButton("Continue", TAB_CONTINUE);
         historyTab = tabButton("History", TAB_HISTORY);
         watchLaterTab = tabButton("Watch Later", TAB_WATCH_LATER);
@@ -131,16 +139,37 @@ public class FavoritesActivity extends Activity {
         tabs.addView(watchLaterTab, tabParams());
         root.addView(tabs);
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        listContainer = new LinearLayout(this);
-        listContainer.setOrientation(LinearLayout.VERTICAL);
-        listContainer.setPadding(0, dp(6), 0, dp(24));
-        scroll.addView(listContainer, new ScrollView.LayoutParams(-1, -2));
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        for (int i = 0; i < PAGE_COUNT; i++) pageViews[i] = buildPage(i);
+
+        pager = new ViewPager2(this);
+        pager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
+        pager.setOffscreenPageLimit(PAGE_COUNT - 1);
+        pager.setAdapter(new LibraryPagerAdapter());
+        pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                tab = position;
+                updateTabs();
+            }
+        });
+        root.addView(pager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         setContentView(root);
         updateTabs();
+    }
+
+    private View buildPage(int index) {
+        FrameLayout page = new FrameLayout(this);
+        page.setBackgroundColor(Color.rgb(13, 13, 15));
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(0, dp(6), 0, dp(24));
+        listContainers[index] = list;
+        scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
+        page.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        return page;
     }
 
     private MaterialButton tabButton(String label, int target) {
@@ -151,11 +180,9 @@ public class FavoritesActivity extends Activity {
         button.setMinWidth(0);
         button.setMinimumWidth(0);
         button.setOnClickListener(v -> {
-            if (tab == target) return;
+            if (pager == null || pager.getCurrentItem() == target) return;
             haptic(v);
-            tab = target;
-            updateTabs();
-            renderItems();
+            pager.setCurrentItem(target, true);
         });
         return button;
     }
@@ -173,26 +200,25 @@ public class FavoritesActivity extends Activity {
         clearAction.setText("CLEAR");
     }
 
-    private void renderItems() {
-        if (listContainer == null) return;
+    private void renderAllPages() {
         thumbnailTargets.clear();
-        listContainer.removeAllViews();
-        if (tab == TAB_WATCH_LATER) {
-            renderWatchLater();
-        } else if (tab == TAB_HISTORY) {
-            renderHistory(false);
-        } else {
-            renderHistory(true);
+        for (LinearLayout list : listContainers) {
+            if (list != null) list.removeAllViews();
         }
+        renderHistory(listContainers[TAB_CONTINUE], true);
+        renderHistory(listContainers[TAB_HISTORY], false);
+        renderWatchLater(listContainers[TAB_WATCH_LATER]);
     }
 
-    private void renderHistory(boolean continueOnly) {
+    private void renderHistory(LinearLayout target, boolean continueOnly) {
+        if (target == null) return;
         List<PlaybackHistoryStore.Item> items = continueOnly
                 ? PlaybackHistoryStore.continueWatching(this)
                 : PlaybackHistoryStore.load(this);
 
         if (items.isEmpty()) {
             showEmpty(
+                    target,
                     continueOnly ? "Nothing to continue" : "No watch history yet",
                     continueOnly
                             ? "Videos watched for at least 30 seconds appear here until they're nearly finished."
@@ -202,7 +228,7 @@ public class FavoritesActivity extends Activity {
         }
 
         for (PlaybackHistoryStore.Item item : items) {
-            listContainer.addView(makeHistoryCard(item, continueOnly), cardParams());
+            target.addView(makeHistoryCard(item, continueOnly), cardParams());
         }
     }
 
@@ -269,7 +295,7 @@ public class FavoritesActivity extends Activity {
         remove.setOnClickListener(v -> {
             haptic(v);
             PlaybackHistoryStore.remove(this, item.pageUrl);
-            renderItems();
+            renderAllPages();
         });
         footer.addView(remove, new LinearLayout.LayoutParams(-2, dp(38)));
         copy.addView(footer);
@@ -278,14 +304,15 @@ public class FavoritesActivity extends Activity {
         return card;
     }
 
-    private void renderWatchLater() {
+    private void renderWatchLater(LinearLayout target) {
+        if (target == null) return;
         List<FavoriteStore.Item> items = FavoriteStore.load(this);
         if (items.isEmpty()) {
-            showEmpty("Nothing saved yet", "Long-press a video card and choose Save to Watch Later.");
+            showEmpty(target, "Nothing saved yet", "Long-press a video card and choose Save to Watch Later.");
             return;
         }
         for (FavoriteStore.Item item : items) {
-            listContainer.addView(makeWatchLaterCard(item), cardParams());
+            target.addView(makeWatchLaterCard(item), cardParams());
         }
     }
 
@@ -330,7 +357,7 @@ public class FavoritesActivity extends Activity {
             haptic(v);
             FavoriteStore.remove(this, item.url);
             Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
-            renderItems();
+            renderAllPages();
         });
         actions.addView(remove, new LinearLayout.LayoutParams(-2, dp(38)));
         copy.addView(actions);
@@ -355,7 +382,7 @@ public class FavoritesActivity extends Activity {
         playParams.gravity = Gravity.CENTER;
         media.addView(play, playParams);
 
-        thumbnailTargets.put(pageUrl, image);
+        thumbnailTargets.computeIfAbsent(pageUrl, key -> new ArrayList<>()).add(image);
         String resolved = resolvedThumbnails.get(pageUrl);
         if (resolved != null && !resolved.isEmpty()) {
             loadThumbnail(image, resolved, pageUrl);
@@ -375,8 +402,11 @@ public class FavoritesActivity extends Activity {
     private void onThumbnailResolved(String pageUrl, String thumbnailUrl) {
         if (pageUrl == null || pageUrl.isEmpty() || thumbnailUrl == null || thumbnailUrl.isEmpty()) return;
         resolvedThumbnails.put(pageUrl, thumbnailUrl);
-        ImageView target = thumbnailTargets.get(pageUrl);
-        if (target != null) loadThumbnail(target, thumbnailUrl, pageUrl);
+        List<ImageView> targets = thumbnailTargets.get(pageUrl);
+        if (targets == null) return;
+        for (ImageView target : new ArrayList<>(targets)) {
+            loadThumbnail(target, thumbnailUrl, pageUrl);
+        }
     }
 
     private void loadThumbnail(ImageView image, String imageUrl, String pageUrl) {
@@ -428,7 +458,7 @@ public class FavoritesActivity extends Activity {
         return button;
     }
 
-    private void showEmpty(String titleValue, String bodyValue) {
+    private void showEmpty(LinearLayout target, String titleValue, String bodyValue) {
         LinearLayout empty = new LinearLayout(this);
         empty.setOrientation(LinearLayout.VERTICAL);
         empty.setGravity(Gravity.CENTER);
@@ -441,11 +471,11 @@ public class FavoritesActivity extends Activity {
         body.setPadding(0, dp(8), 0, 0);
         empty.addView(title);
         empty.addView(body);
-        listContainer.addView(empty);
+        target.addView(empty);
     }
 
     private void select(String url) {
-        haptic(listContainer);
+        haptic(pager == null ? clearAction : pager);
         Intent data = new Intent();
         data.putExtra(EXTRA_SELECTED_URL, url);
         setResult(RESULT_OK, data);
@@ -463,7 +493,7 @@ public class FavoritesActivity extends Activity {
                 .setPositiveButton("Clear", (dialog, which) -> {
                     if (watchLater) FavoriteStore.clear(this);
                     else PlaybackHistoryStore.clear(this);
-                    renderItems();
+                    renderAllPages();
                 })
                 .show();
     }
@@ -502,6 +532,7 @@ public class FavoritesActivity extends Activity {
     }
 
     private void haptic(View view) {
+        if (view == null) return;
         if (!getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean("haptics_enabled", true)) return;
         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
@@ -509,5 +540,39 @@ public class FavoritesActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private final class LibraryPagerAdapter extends RecyclerView.Adapter<PageHolder> {
+        @Override
+        public int getItemCount() {
+            return PAGE_COUNT;
+        }
+
+        @NonNull
+        @Override
+        public PageHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            FrameLayout container = new FrameLayout(parent.getContext());
+            container.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
+            return new PageHolder(container);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull PageHolder holder, int position) {
+            View page = pageViews[position];
+            if (page.getParent() instanceof ViewGroup) {
+                ((ViewGroup) page.getParent()).removeView(page);
+            }
+            holder.container.removeAllViews();
+            holder.container.addView(page, new FrameLayout.LayoutParams(-1, -1));
+        }
+    }
+
+    private static final class PageHolder extends RecyclerView.ViewHolder {
+        final FrameLayout container;
+
+        PageHolder(FrameLayout container) {
+            super(container);
+            this.container = container;
+        }
     }
 }
