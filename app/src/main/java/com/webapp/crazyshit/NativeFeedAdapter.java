@@ -130,6 +130,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void requestThumbnail(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
+        // Meme cards already carry their real static image URL from /memes.
+        if (item.isMeme() && item.imageUrl != null && !item.imageUrl.isEmpty()) return;
         if (resolvedThumbnails.containsKey(item.url)) return;
         if (!requestedThumbnails.add(item.url)) return;
         RenderedThumbnailResolver resolver = thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
@@ -162,7 +164,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         MediaViews media = addMedia(parent, column, 218, -1);
         CopyViews copy = addCopy(parent, column, 17, 13, 15, 15);
-        return new Holder(card, media.image, copy.title, copy.info, copy.comments);
+        return new Holder(card, media.image, media.play, copy.title, copy.info, copy.comments);
     }
 
     private Holder createCompactHolder(ViewGroup parent) {
@@ -174,7 +176,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         MediaViews media = addMedia(parent, row, 104, 148);
         CopyViews copy = addCopy(parent, row, 16, 12, 13, 13);
-        return new Holder(card, media.image, copy.title, copy.info, copy.comments);
+        return new Holder(card, media.image, media.play, copy.title, copy.info, copy.comments);
     }
 
     private Holder createGridHolder(ViewGroup parent) {
@@ -185,7 +187,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         MediaViews media = addMedia(parent, column, 128, -1);
         CopyViews copy = addCopy(parent, column, 14, 11, 10, 11);
-        return new Holder(card, media.image, copy.title, copy.info, copy.comments);
+        return new Holder(card, media.image, media.play, copy.title, copy.info, copy.comments);
     }
 
     private MaterialCardView baseCard(ViewGroup parent, int horizontalMargin, int verticalMargin, int radius) {
@@ -229,7 +231,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(dp(parent, size), dp(parent, size));
         playParams.gravity = Gravity.CENTER;
         mediaFrame.addView(play, playParams);
-        return new MediaViews(image);
+        return new MediaViews(image, play);
     }
 
     private CopyViews addCopy(
@@ -259,7 +261,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         title.setTextColor(Color.WHITE);
         title.setTextSize(titleSize);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setMaxLines(viewMode == VIEW_GRID ? 2 : 2);
+        title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
@@ -302,10 +304,14 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void bind(Holder holder, int position) {
         NativeContentItem item = items.get(position);
+        boolean meme = item.isMeme();
+
         holder.title.setText(item.title);
         holder.info.setText(buildInfo(item));
+        holder.play.setVisibility(meme ? View.GONE : View.VISIBLE);
+        holder.image.setScaleType(meme ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
 
-        if (item.comments != null && !item.comments.isEmpty()) {
+        if (!meme && item.comments != null && !item.comments.isEmpty()) {
             holder.comments.setVisibility(View.VISIBLE);
             holder.comments.setText(viewMode == VIEW_GRID ? "💬 " + item.comments : item.comments + " comments");
             holder.comments.setOnClickListener(v -> listener.onComments(item));
@@ -335,14 +341,14 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         }
 
         Object source = imageUrl.startsWith("file://") ? imageUrl : withSiteHeaders(imageUrl, item.url);
-        Glide.with(holder.image)
+        com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request = Glide.with(holder.image)
                 .load(source)
-                .centerCrop()
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
                 .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
-                .error(new ColorDrawable(Color.rgb(20, 20, 23)))
-                .into(holder.image);
+                .error(new ColorDrawable(Color.rgb(20, 20, 23)));
+        if (item.isMeme()) request.fitCenter(); else request.centerCrop();
+        request.into(holder.image);
     }
 
     @Override
@@ -379,8 +385,9 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private String buildInfo(NativeContentItem item) {
         ArrayList<String> parts = new ArrayList<>();
-        if (item.views != null && !item.views.isEmpty()) parts.add(item.views + " views");
+        if (!item.isMeme() && item.views != null && !item.views.isEmpty()) parts.add(item.views + " views");
         if (viewMode != VIEW_GRID && item.uploader != null && !item.uploader.isEmpty()) parts.add(item.uploader);
+        if (item.isMeme() && parts.isEmpty()) parts.add("Image");
         return TextUtils.join("  •  ", parts);
     }
 
@@ -390,7 +397,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private static final class MediaViews {
         final ImageView image;
-        MediaViews(ImageView image) { this.image = image; }
+        final TextView play;
+        MediaViews(ImageView image, TextView play) {
+            this.image = image;
+            this.play = play;
+        }
     }
 
     private static final class CopyViews {
@@ -407,14 +418,16 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     static final class Holder extends RecyclerView.ViewHolder {
         final MaterialCardView card;
         final ImageView image;
+        final TextView play;
         final TextView title;
         final TextView info;
         final TextView comments;
 
-        Holder(MaterialCardView card, ImageView image, TextView title, TextView info, TextView comments) {
+        Holder(MaterialCardView card, ImageView image, TextView play, TextView title, TextView info, TextView comments) {
             super(card);
             this.card = card;
             this.image = image;
+            this.play = play;
             this.title = title;
             this.info = info;
             this.comments = comments;
