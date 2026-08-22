@@ -1,0 +1,118 @@
+name: Stable Prep Normalize and Build
+
+on:
+  pull_request:
+    branches:
+      - v2-native-app
+
+permissions:
+  contents: write
+
+jobs:
+  stable-prep:
+    if: github.head_ref == 'v2-stable-prep'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out stable prep head
+        uses: actions/checkout@v6
+        with:
+          ref: v2-stable-prep
+          fetch-depth: 0
+
+      - name: Normalize stable branding
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              "app/src/main/java/com/webapp/crazyshit/AppUpdater.java": [
+                  ("CrazyShit-Jeremy-Edition-Android", "CrazyShit-Android"),
+              ],
+              "app/src/main/java/com/webapp/crazyshit/MainActivity.java": [
+                  ("CrazyShit Jeremy Edition", "CrazyShit"),
+                  ("Jeremy Edition • Quick controls", "Quick controls"),
+                  ("CrazyShit-Unofficial-Android", "CrazyShit-Android"),
+              ],
+              "app/src/main/java/com/webapp/crazyshit/SettingsActivity.java": [
+                  ("CrazyShit Jeremy Edition\\nJeremy Edition • Community Android wrapper\\nNot affiliated with or endorsed by CrazyShit.com",
+                   "CrazyShit\\nCommunity Android client\\nNot affiliated with or endorsed by CrazyShit.com"),
+              ],
+              "app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java": [
+                  ("Jeremy Edition  •  Native v2  •  ", "CrazyShit  •  "),
+                  ("Jeremy Edition  •  Native v2", "CrazyShit"),
+                  ("CrazyShit Jeremy Edition", "CrazyShit"),
+              ],
+              "SIGNING.md": [
+                  ("CrazyShit-Unofficial.apk", "CrazyShit.apk"),
+              ],
+              "PRIVACY.md": [
+                  ("CrazyShit Unofficial", "CrazyShit for Android"),
+              ],
+              "NOTICE.md": [
+                  ("## Unofficial status", "## Independent project status"),
+                  ("CrazyShit Unofficial is an independent community-made Android wrapper.",
+                   "CrazyShit for Android is an independent community-made Android client."),
+              ],
+              "NATIVE_V2_PLAN.md": [
+                  ("# CrazyShit Jeremy Edition v2", "# CrazyShit v2"),
+              ],
+          }
+
+          for filename, pairs in replacements.items():
+              path = Path(filename)
+              if not path.exists():
+                  continue
+              text = path.read_text(encoding="utf-8")
+              original = text
+              for old, new in pairs:
+                  text = text.replace(old, new)
+              if text != original:
+                  path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Remove non-workflow stable-prep temporary files
+        run: |
+          rm -f STABLE_BRANDING_SCAN.txt STABLE_PREP_RETRY STABLE_PREP_RETRY2
+
+      - name: Scan code and docs for old public branding
+        run: |
+          matches="$(grep -RInE --exclude-dir=.git --exclude-dir=.github --exclude='*.lock' 'Jeremy|CrazyShit-Unofficial|CrazyShit-Jeremy|v2 Test' . || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo "Old public branding remains in code/docs."
+            exit 1
+          fi
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android API 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.7
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.7'
+
+      - name: Build clean-source debug APK
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Commit stable code/doc normalization
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src SIGNING.md PRIVACY.md NOTICE.md NATIVE_V2_PLAN.md STABLE_BRANDING_SCAN.txt STABLE_PREP_RETRY STABLE_PREP_RETRY2 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "Stable code and docs already normalized."
+            exit 0
+          fi
+          git commit -m "Normalize CrazyShit stable source [skip ci]"
+          git pull --rebase origin v2-stable-prep
+          git push origin HEAD:v2-stable-prep

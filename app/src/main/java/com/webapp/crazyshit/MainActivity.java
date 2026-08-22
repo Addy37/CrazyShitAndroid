@@ -150,11 +150,12 @@ public class MainActivity extends Activity {
         restoreKnownUpdate();
         checkForUpdates(false);
 
+        String requestedStart = getIntent().getStringExtra("start_url");
         SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         if (!prefs.getBoolean("age_warning_accepted", false)) {
             showAgeWarning();
         } else if (state == null || webView.restoreState(state) == null) {
-            webView.loadUrl(HOME);
+            webView.loadUrl(requestedStart == null || requestedStart.isEmpty() ? HOME : requestedStart);
         }
     }
 
@@ -1120,7 +1121,8 @@ public class MainActivity extends Activity {
                             .edit()
                             .putBoolean("age_warning_accepted", true)
                             .apply();
-                    webView.loadUrl(HOME);
+                    String requestedStart = getIntent().getStringExtra("start_url");
+                    webView.loadUrl(requestedStart == null || requestedStart.isEmpty() ? HOME : requestedStart);
                 })
                 .show();
     }
