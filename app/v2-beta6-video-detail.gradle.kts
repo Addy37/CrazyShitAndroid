@@ -57,3 +57,4 @@ tasks.matching {
 apply(from = "v2-beta7-video-polish.gradle.kts")
 apply(from = "v2-beta14-final-tabs.gradle.kts")
 apply(from = "v2-beta17-chaos.gradle.kts")
+apply(from = "v2-beta18-chaos-polish.gradle.kts")
