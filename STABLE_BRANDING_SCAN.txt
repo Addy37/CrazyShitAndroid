@@ -1,0 +1,46 @@
+Stable branding scan
+====================
+
+./app/src/main/res/values/strings.xml:3:    <string name="app_name">CrazyShit Jeremy Edition</string>
+./app/src/main/res/values/strings.xml:4:    <string name="edition_name">Jeremy Edition</string>
+./app/src/main/java/com/webapp/crazyshit/AppUpdater.java:192:            connection.setRequestProperty("User-Agent", "CrazyShit-Jeremy-Edition-Android");
+./app/src/main/java/com/webapp/crazyshit/AppUpdater.java:271:                connection.setRequestProperty("User-Agent", "CrazyShit-Jeremy-Edition-Android");
+./app/src/main/java/com/webapp/crazyshit/MainActivity.java:866:        TextView title = sheetText("CrazyShit Jeremy Edition", 22, Color.WHITE);
+./app/src/main/java/com/webapp/crazyshit/MainActivity.java:871:        TextView subtitle = sheetText("Jeremy Edition • Quick controls", 13, Color.rgb(255, 122, 69));
+./app/src/main/java/com/webapp/crazyshit/MainActivity.java:1113:                        "CrazyShit Jeremy Edition opens CrazyShit.com, which contains adult and graphic material. " +
+./app/src/main/java/com/webapp/crazyshit/MainActivity.java:1345:                        "CrazyShit-Unofficial-Android"
+./app/src/main/java/com/webapp/crazyshit/SettingsActivity.java:134:        footer.setText("CrazyShit Jeremy Edition\nJeremy Edition • Community Android wrapper\nNot affiliated with or endorsed by CrazyShit.com");
+./app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java:337:        headerSubtitle.setText("Jeremy Edition  •  Native v2");
+./app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java:421:                headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
+./app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java:523:        headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " + viewModeLabel(currentViewMode()));
+./app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java:539:        headerSubtitle.setText("Jeremy Edition  •  Native v2");
+./app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java:782:            headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " + viewModeLabel(checked));
+./app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java:866:        TextView title = sheetText("CrazyShit Jeremy Edition", 22, Color.WHITE);
+./app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java:954:                        "CrazyShit Jeremy Edition connects to CrazyShit.com, which contains adult and graphic material. " +
+./app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java:987:                .setMessage("CrazyShit Jeremy Edition " + version + " is available on GitHub.")
+./app/v2-beta17-chaos.gradle.kts:55:            headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
+./app/v2-beta17-chaos.gradle.kts:64:                headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
+./app/build.gradle.kts:42:            resValue("string", "app_name", "CrazyShit Jeremy v2 Test")
+./app/v2-beta20-chaos-landscape-auto-update.gradle.kts:14:                headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
+./app/v2-beta20-chaos-landscape-auto-update.gradle.kts:25:                headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
+./app/v2-beta15-live-pager.gradle.kts:185:            headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
+./PRIVACY.md:5:CrazyShit Unofficial is a lightweight Android WebView wrapper with an optional native Media3 / ExoPlayer video player. The wrapper itself does not operate analytics, advertising, telemetry, accounts, or a remote backend.
+./SIGNING.md:28:The release page includes a fixed asset name, `CrazyShit-Unofficial.apk`, so the latest-download URL remains stable.
+./NOTICE.md:3:## Unofficial status
+./NOTICE.md:5:CrazyShit Unofficial is an independent community-made Android wrapper. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
+./NATIVE_V2_PLAN.md:1:# CrazyShit Jeremy Edition v2
+./.github/workflows/build-apk.yml:42:        run: cp app/build/outputs/apk/debug/app-debug.apk CrazyShit-Unofficial-debug.apk
+./.github/workflows/build-apk.yml:47:          name: CrazyShit-Unofficial-debug
+./.github/workflows/build-apk.yml:48:          path: CrazyShit-Unofficial-debug.apk
+./.github/workflows/release-apk.yml:40:          echo "APK_PRIMARY=CrazyShit-Jeremy-Edition.apk" >> "$GITHUB_ENV"
+./.github/workflows/release-apk.yml:41:          echo "RELEASE_TITLE=CrazyShit Jeremy Edition v${VERSION}" >> "$GITHUB_ENV"
+./RELEASE_NOTES.md:1:# CrazyShit Jeremy Edition v2.0.0
+./RELEASE_NOTES.md:3:A major architecture update that turns Jeremy Edition from a WebView-first wrapper into a native Android browsing app with the website retained as a compatibility fallback.
+./RELEASE_NOTES.md:13:- Native Jeremy Edition header and search controls.
+./RELEASE_NOTES.md:19:- Existing Watch Later, playback resume, PiP, gestures, ad/pop-up protection, Settings, GitHub update checks, themed Jeremy icon, and Android system-bar handling are retained.
+./README.md:1:# CrazyShit Jeremy Edition for Android
+./README.md:5:> **Unofficial project:** This app is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
+./README.md:67:- CrazyShit Jeremy Edition launcher and splash branding
+./README.md:68:- Material 3 dark UI with Jeremy orange accent
+./README.md:83:- Latest APK: `https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit-Jeremy-Edition.apk`
+./README.md:91:PR/debug builds use a `.dev` application ID suffix so experimental native builds can be installed beside the public Jeremy Edition app without replacing it.
