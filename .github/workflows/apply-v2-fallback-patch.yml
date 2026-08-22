@@ -1,0 +1,47 @@
+name: Apply v2 WebView fallback bridge
+
+on:
+  push:
+    branches: [ v2-native-app ]
+    paths:
+      - V2_FALLBACK_PATCH_TRIGGER
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v2-native-app
+
+      - name: Patch MainActivity start URL support
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/webapp/crazyshit/MainActivity.java')
+          s = p.read_text()
+
+          old = '''        SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);\n        if (!prefs.getBoolean("age_warning_accepted", false)) {\n            showAgeWarning();\n        } else if (state == null || webView.restoreState(state) == null) {\n            webView.loadUrl(HOME);\n        }\n'''
+          new = '''        String requestedStart = getIntent().getStringExtra("start_url");\n        SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);\n        if (!prefs.getBoolean("age_warning_accepted", false)) {\n            showAgeWarning();\n        } else if (state == null || webView.restoreState(state) == null) {\n            webView.loadUrl(requestedStart == null || requestedStart.isEmpty() ? HOME : requestedStart);\n        }\n'''
+          if old not in s:
+              raise SystemExit('onCreate block not found')
+          s = s.replace(old, new, 1)
+
+          old2 = '''                    webView.loadUrl(HOME);\n                })\n                .show();\n'''
+          new2 = '''                    String requestedStart = getIntent().getStringExtra("start_url");\n                    webView.loadUrl(requestedStart == null || requestedStart.isEmpty() ? HOME : requestedStart);\n                })\n                .show();\n'''
+          if old2 not in s:
+              raise SystemExit('age-warning load block not found')
+          s = s.replace(old2, new2, 1)
+          p.write_text(s)
+          PY
+
+      - name: Commit bridge
+        run: |
+          git config user.name "Addy37"
+          git config user.email "92006667+Addy37@users.noreply.github.com"
+          git add app/src/main/java/com/webapp/crazyshit/MainActivity.java
+          git commit -m "Allow native v2 to open exact fallback pages" || exit 0
+          git push origin HEAD:v2-native-app
