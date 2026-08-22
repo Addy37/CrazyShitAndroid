@@ -37,7 +37,7 @@ final class AppUpdater {
     private static final String STABLE_API =
             "https://api.github.com/repos/Addy37/CrazyShitAndroid/releases/latest";
     private static final String RELEASES_API =
-            "https://api.github.com/repos/Addy37/CrazyShitAndroid/releases?per_page=20";
+            "https://api.github.com/repos/Addy37/CrazyShitAndroid/releases?per_page=100";
     private static final long CHECK_INTERVAL_MS = 4L * 60L * 60L * 1000L;
     private static final Pattern NUMBER = Pattern.compile("\\d+");
 
@@ -80,11 +80,16 @@ final class AppUpdater {
                     if (newer) {
                         showUpdateDialog(release, current);
                     } else if (manual) {
-                        Toast.makeText(
-                                activity,
-                                betaChannel ? "You're on the latest v2 beta." : "You're up to date.",
-                                Toast.LENGTH_SHORT
-                        ).show();
+                        if (betaChannel) {
+                            String latest = release == null ? "not found" : release.version;
+                            Toast.makeText(
+                                    activity,
+                                    "No newer v2 beta found. Installed: " + current + " • Latest beta: " + latest,
+                                    Toast.LENGTH_LONG
+                            ).show();
+                        } else {
+                            Toast.makeText(activity, "You're up to date.", Toast.LENGTH_SHORT).show();
+                        }
                     }
                 });
             } catch (Exception e) {
@@ -121,6 +126,7 @@ final class AppUpdater {
 
     private ReleaseInfo fetchLatestBeta() throws Exception {
         JSONArray releases = new JSONArray(httpGet(RELEASES_API));
+        ReleaseInfo latest = null;
         for (int i = 0; i < releases.length(); i++) {
             JSONObject release = releases.optJSONObject(i);
             if (release == null || release.optBoolean("draft", false)) continue;
@@ -128,9 +134,12 @@ final class AppUpdater {
             String tag = release.optString("tag_name", "");
             if (!tag.toLowerCase(Locale.US).contains("beta")) continue;
             ReleaseInfo info = parseRelease(release, true);
-            if (info != null) return info;
+            if (info == null) continue;
+            if (latest == null || compareVersions(info.version, latest.version) > 0) {
+                latest = info;
+            }
         }
-        return null;
+        return latest;
     }
 
     private ReleaseInfo parseRelease(JSONObject release, boolean beta) {
@@ -165,10 +174,13 @@ final class AppUpdater {
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) new URL(address).openConnection();
+            connection.setUseCaches(false);
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
             connection.setRequestProperty("Accept", "application/vnd.github+json");
             connection.setRequestProperty("User-Agent", "CrazyShit-Jeremy-Edition-Android");
+            connection.setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0");
+            connection.setRequestProperty("Pragma", "no-cache");
             int code = connection.getResponseCode();
             if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
             InputStream in = connection.getInputStream();
