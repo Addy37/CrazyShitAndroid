@@ -6,7 +6,7 @@ on:
       version:
         description: Release version without the v prefix
         required: true
-        default: '1.0.0'
+        default: '2.0.0'
         type: string
   push:
     paths:
@@ -37,16 +37,8 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "APP_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
-
-          if [ "$VERSION" = "1.4.4" ]; then
-            echo "JEREMY_EDITION=true" >> "$GITHUB_ENV"
-            echo "APK_PRIMARY=CrazyShit-Jeremy-Edition.apk" >> "$GITHUB_ENV"
-            echo "RELEASE_TITLE=CrazyShit Jeremy Edition" >> "$GITHUB_ENV"
-          else
-            echo "JEREMY_EDITION=false" >> "$GITHUB_ENV"
-            echo "APK_PRIMARY=CrazyShit-Unofficial.apk" >> "$GITHUB_ENV"
-            echo "RELEASE_TITLE=CrazyShit Unofficial v${VERSION}" >> "$GITHUB_ENV"
-          fi
+          echo "APK_PRIMARY=CrazyShit-Jeremy-Edition.apk" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=CrazyShit Jeremy Edition v${VERSION}" >> "$GITHUB_ENV"
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -103,32 +95,14 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK_PRIMARY"
           sha256sum "$APK_PRIMARY" > SHA256SUMS.txt
 
-          if [ "$JEREMY_EDITION" != "true" ]; then
-            APK_VERSIONED="CrazyShit-Unofficial-v${VERSION}.apk"
-            cp "$APK_PRIMARY" "$APK_VERSIONED"
-            sha256sum "$APK_VERSIONED" >> SHA256SUMS.txt
-            echo "APK_VERSIONED=$APK_VERSIONED" >> "$GITHUB_ENV"
-          fi
-
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$JEREMY_EDITION" = "true" ]; then
-            gh release create "v${VERSION}" \
-              "$APK_PRIMARY" \
-              SHA256SUMS.txt \
-              --target "$GITHUB_SHA" \
-              --title "$RELEASE_TITLE" \
-              --notes-file RELEASE_NOTES.md \
-              --latest
-          else
-            gh release create "v${VERSION}" \
-              "$APK_PRIMARY" \
-              "$APK_VERSIONED" \
-              SHA256SUMS.txt \
-              --target "$GITHUB_SHA" \
-              --title "$RELEASE_TITLE" \
-              --notes-file RELEASE_NOTES.md \
-              --latest
-          fi
+          gh release create "v${VERSION}" \
+            "$APK_PRIMARY" \
+            SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TITLE" \
+            --notes-file RELEASE_NOTES.md \
+            --latest
