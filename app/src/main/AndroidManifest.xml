@@ -34,6 +34,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".ProfileActivity"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
             android:name=".CommentsActivity"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
