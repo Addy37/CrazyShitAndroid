@@ -1,4 +1,4 @@
-name: Stable Branding Scan
+name: Normalize Stable Branding
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  scan:
+  normalize:
     runs-on: ubuntu-latest
     steps:
       - name: Check out v2 stable prep
@@ -20,21 +20,72 @@ jobs:
           ref: v2-stable-prep
           fetch-depth: 0
 
-      - name: Scan old branding
+      - name: Normalize product branding in code and automation
         run: |
-          {
-            echo "Stable branding scan"
-            echo "===================="
-            echo
-            grep -RInE --exclude-dir=.git --exclude=STABLE_BRANDING_SCAN.txt \
-              'Jeremy|Unofficial|v2 Test|CrazyShit-Jeremy' . || true
-          } > STABLE_BRANDING_SCAN.txt
-          cat STABLE_BRANDING_SCAN.txt
+          python - <<'PY'
+          from pathlib import Path
 
-      - name: Commit report to stable prep
+          replacements = {
+              "app/src/main/java/com/webapp/crazyshit/AppUpdater.java": [
+                  ("CrazyShit-Jeremy-Edition-Android", "CrazyShit-Android"),
+              ],
+              "app/src/main/java/com/webapp/crazyshit/MainActivity.java": [
+                  ("CrazyShit Jeremy Edition", "CrazyShit"),
+                  ("Jeremy Edition • Quick controls", "Quick controls"),
+                  ("CrazyShit-Unofficial-Android", "CrazyShit-Android"),
+              ],
+              "app/src/main/java/com/webapp/crazyshit/SettingsActivity.java": [
+                  ("CrazyShit Jeremy Edition\\nJeremy Edition • Community Android wrapper\\nNot affiliated with or endorsed by CrazyShit.com",
+                   "CrazyShit\\nCommunity Android client\\nNot affiliated with or endorsed by CrazyShit.com"),
+              ],
+              "app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java": [
+                  ("Jeremy Edition  •  Native v2  •  ", "CrazyShit  •  "),
+                  ("Jeremy Edition  •  Native v2", "CrazyShit"),
+                  ("CrazyShit Jeremy Edition", "CrazyShit"),
+              ],
+              ".github/workflows/build-apk.yml": [
+                  ("CrazyShit-Unofficial-debug.apk", "CrazyShit-debug.apk"),
+                  ("CrazyShit-Unofficial-debug", "CrazyShit-debug"),
+              ],
+              ".github/workflows/release-apk.yml": [
+                  ("CrazyShit-Jeremy-Edition.apk", "CrazyShit.apk"),
+                  ("CrazyShit Jeremy Edition v${VERSION}", "CrazyShit v${VERSION}"),
+              ],
+              "SIGNING.md": [
+                  ("CrazyShit-Unofficial.apk", "CrazyShit.apk"),
+              ],
+              "PRIVACY.md": [
+                  ("CrazyShit Unofficial", "CrazyShit for Android"),
+              ],
+              "NOTICE.md": [
+                  ("## Unofficial status", "## Independent project status"),
+                  ("CrazyShit Unofficial is an independent community-made Android wrapper.",
+                   "CrazyShit for Android is an independent community-made Android client."),
+              ],
+              "NATIVE_V2_PLAN.md": [
+                  ("# CrazyShit Jeremy Edition v2", "# CrazyShit v2"),
+              ],
+          }
+
+          changed = []
+          for filename, pairs in replacements.items():
+              path = Path(filename)
+              if not path.exists():
+                  continue
+              text = path.read_text(encoding="utf-8")
+              original = text
+              for old, new in pairs:
+                  text = text.replace(old, new)
+              if text != original:
+                  path.write_text(text, encoding="utf-8")
+                  changed.append(filename)
+          print("Changed:", *changed, sep="\n- ")
+          PY
+
+      - name: Commit normalized branding to stable prep
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add STABLE_BRANDING_SCAN.txt
-          git commit -m "Add stable branding scan report" || exit 0
+          git add app/src .github/workflows/build-apk.yml .github/workflows/release-apk.yml SIGNING.md PRIVACY.md NOTICE.md NATIVE_V2_PLAN.md
+          git commit -m "Normalize stable CrazyShit branding" || exit 0
           git push origin HEAD:v2-stable-prep
