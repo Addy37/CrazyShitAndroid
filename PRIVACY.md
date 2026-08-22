@@ -2,7 +2,7 @@
 
 ## Summary
 
-CrazyShit Unofficial is a lightweight Android WebView wrapper with an optional native Media3 / ExoPlayer video player. The wrapper itself does not operate analytics, advertising, telemetry, accounts, or a remote backend.
+CrazyShit for Android is a lightweight Android WebView wrapper with an optional native Media3 / ExoPlayer video player. The wrapper itself does not operate analytics, advertising, telemetry, accounts, or a remote backend.
 
 ## Website data
 

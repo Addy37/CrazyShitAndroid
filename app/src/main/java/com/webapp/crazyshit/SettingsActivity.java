@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -22,11 +21,13 @@ import com.google.android.material.materialswitch.MaterialSwitch;
 
 public class SettingsActivity extends Activity {
     private SharedPreferences prefs;
+    private AppUpdater appUpdater;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        appUpdater = new AppUpdater(this);
         buildUi();
     }
 
@@ -84,6 +85,11 @@ public class SettingsActivity extends Activity {
                 "Back returns to browsing with the video in the in-app mini-player.",
                 "minimize_on_back",
                 true);
+        addSwitch(root,
+                "Swipe down to minimize",
+                "Drag down from the upper part of a playing video to shrink it into the in-app mini-player.",
+                "swipe_down_minimize",
+                true);
 
         addSection(root, "Browsing & privacy");
         addSwitch(root,
@@ -98,20 +104,25 @@ public class SettingsActivity extends Activity {
                 true);
 
         addSection(root, "Library");
-        addAction(root, "Watch Later", "View locally saved video pages.", () ->
+        addAction(root, "Library", "Continue Watching, History and Watch Later.", () ->
                 startActivity(new Intent(this, FavoritesActivity.class)));
-        addAction(root, "Clear Watch Later", "Remove all locally saved items.", () -> {
+        addAction(root, "Clear watch history", "Remove History and Continue Watching from this device.", () -> {
+            PlaybackHistoryStore.clear(this);
+            Toast.makeText(this, "Watch history cleared.", Toast.LENGTH_SHORT).show();
+        });
+        addAction(root, "Clear Watch Later", "Remove all locally saved Watch Later items.", () -> {
             FavoriteStore.clear(this);
             Toast.makeText(this, "Watch Later cleared.", Toast.LENGTH_SHORT).show();
         });
 
         addSection(root, "App");
-        addAction(root, "Check for updates", "Open the latest GitHub release.", () -> {
-            try {
-                startActivity(new Intent(Intent.ACTION_VIEW,
-                        Uri.parse("https://github.com/Addy37/CrazyShitAndroid/releases/latest")));
-            } catch (Exception ignored) {
-            }
+        addSwitch(root,
+                "Automatic updates",
+                "Automatically check and download new builds. Android still asks for final install confirmation.",
+                "auto_update_enabled",
+                true);
+        addAction(root, "Check for updates", "Check your current beta or stable channel and install inside the app.", () -> {
+            if (appUpdater != null) appUpdater.check(true);
         });
         addAction(root, "Clear site data", "Sign out and remove website cookies and local storage.", () -> {
             CookieManager.getInstance().removeAllCookies(value -> CookieManager.getInstance().flush());
@@ -120,7 +131,7 @@ public class SettingsActivity extends Activity {
         });
 
         TextView footer = new TextView(this);
-        footer.setText("CrazyShit Jeremy Edition\nJeremy Edition • Community Android wrapper\nNot affiliated with or endorsed by CrazyShit.com");
+        footer.setText("CrazyShit\nCommunity Android client\nNot affiliated with or endorsed by CrazyShit.com");
         footer.setTextColor(Color.rgb(150, 150, 158));
         footer.setTextSize(12);
         footer.setGravity(Gravity.CENTER);
@@ -227,6 +238,18 @@ public class SettingsActivity extends Activity {
     private void haptic(View view) {
         if (!prefs.getBoolean("haptics_enabled", true)) return;
         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (appUpdater != null) appUpdater.onHostResume();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (appUpdater != null) appUpdater.close();
+        super.onDestroy();
     }
 
     private int dp(int value) {
