@@ -334,7 +334,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         labels.addView(headerTitle);
 
         headerSubtitle = new TextView(this);
-        headerSubtitle.setText("Jeremy Edition  •  Native v2");
+        headerSubtitle.setText("CrazyShit");
         headerSubtitle.setTextColor(Color.rgb(168, 168, 178));
         headerSubtitle.setTextSize(12);
         labels.addView(headerSubtitle);
@@ -418,7 +418,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             if (position == MainPagerAdapter.PAGE_CHAOS) {
                 headerSubtitle.setText("Random video feed  •  Swipe up/down");
             } else {
-                headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " +
+                headerSubtitle.setText("CrazyShit  •  " +
                         viewModeLabel(primaryPagerAdapter.viewMode(position)));
             }
         }
@@ -520,7 +520,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         endReached = false;
         loading = false;
         headerTitle.setText(feedTitle);
-        headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " + viewModeLabel(currentViewMode()));
+        headerSubtitle.setText("CrazyShit  •  " + viewModeLabel(currentViewMode()));
         applyFeedLayout();
         recycler.setAdapter(feedAdapter);
         feedAdapter.replace(new ArrayList<>());
@@ -536,7 +536,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         loading = false;
         endReached = true;
         headerTitle.setText("Categories");
-        headerSubtitle.setText("Jeremy Edition  •  Native v2");
+        headerSubtitle.setText("CrazyShit");
         recycler.setLayoutManager(new GridLayoutManager(this, 2));
         recycler.setAdapter(categoryAdapter);
         categoryAdapter.replace(new ArrayList<>());
@@ -779,7 +779,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     .putInt(viewPreferenceKey(), checked)
                     .apply();
             applyFeedLayout();
-            headerSubtitle.setText("Jeremy Edition  •  Native v2  •  " + viewModeLabel(checked));
+            headerSubtitle.setText("CrazyShit  •  " + viewModeLabel(checked));
             dialog.dismiss();
         }));
         dialog.show();
@@ -863,7 +863,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         content.setPadding(dp(18), dp(14), dp(18), dp(28));
         content.setBackgroundColor(Color.rgb(18, 18, 21));
 
-        TextView title = sheetText("CrazyShit Jeremy Edition", 22, Color.WHITE);
+        TextView title = sheetText("CrazyShit", 22, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         content.addView(title);
         TextView subtitle = sheetText("Native v2 controls", 13, Color.rgb(170, 170, 180));
@@ -951,7 +951,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         new AlertDialog.Builder(this)
                 .setTitle("18+ / Graphic Content")
                 .setMessage(
-                        "CrazyShit Jeremy Edition connects to CrazyShit.com, which contains adult and graphic material. " +
+                        "CrazyShit connects to CrazyShit.com, which contains adult and graphic material. " +
                         "Continue only if you are 18 or older and want to view that type of content.\n\n" +
                         "This community app is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com."
                 )
@@ -984,7 +984,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void showUpdateDialog(String version, String page) {
         new AlertDialog.Builder(this)
                 .setTitle("Update available")
-                .setMessage("CrazyShit Jeremy Edition " + version + " is available on GitHub.")
+                .setMessage("CrazyShit " + version + " is available on GitHub.")
                 .setNegativeButton("Later", null)
                 .setPositiveButton("View release", (dialog, which) -> {
                     try {

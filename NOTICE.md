@@ -1,8 +1,8 @@
 # Credits, Ownership, and Removal Notice
 
-## Unofficial status
+## Independent project status
 
-CrazyShit Unofficial is an independent community-made Android wrapper. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
+CrazyShit for Android is an independent community-made Android client. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
 
 ## CrazyShit.com
 

@@ -131,7 +131,7 @@ public class SettingsActivity extends Activity {
         });
 
         TextView footer = new TextView(this);
-        footer.setText("CrazyShit Jeremy Edition\nJeremy Edition • Community Android wrapper\nNot affiliated with or endorsed by CrazyShit.com");
+        footer.setText("CrazyShit\nCommunity Android client\nNot affiliated with or endorsed by CrazyShit.com");
         footer.setTextColor(Color.rgb(150, 150, 158));
         footer.setTextSize(12);
         footer.setGravity(Gravity.CENTER);

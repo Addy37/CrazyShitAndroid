@@ -189,7 +189,7 @@ final class AppUpdater {
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
             connection.setRequestProperty("Accept", "application/vnd.github+json");
-            connection.setRequestProperty("User-Agent", "CrazyShit-Jeremy-Edition-Android");
+            connection.setRequestProperty("User-Agent", "CrazyShit-Android");
             connection.setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0");
             connection.setRequestProperty("Pragma", "no-cache");
             int code = connection.getResponseCode();
@@ -268,7 +268,7 @@ final class AppUpdater {
                 connection.setInstanceFollowRedirects(true);
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(30000);
-                connection.setRequestProperty("User-Agent", "CrazyShit-Jeremy-Edition-Android");
+                connection.setRequestProperty("User-Agent", "CrazyShit-Android");
                 int code = connection.getResponseCode();
                 if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
 
