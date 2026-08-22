@@ -2,9 +2,6 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -90,7 +87,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private Screen screen = Screen.HOME;
     private String feedBaseUrl = CrazyShitRepository.HOME;
     private String feedTitle = "Home";
-    private int currentPage = 0;
+    private int currentPage;
     private boolean loading;
     private boolean endReached;
     private int generation;
@@ -199,12 +196,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             @Override
             public void onScrolled(RecyclerView view, int dx, int dy) {
                 if (dy <= 0 || loading || endReached || !isFeedScreen()) return;
-                RecyclerView.LayoutManager layout = view.getLayoutManager();
-                if (!(layout instanceof LinearLayoutManager)) return;
-                int last = ((LinearLayoutManager) layout).findLastVisibleItemPosition();
-                if (last >= Math.max(0, feedAdapter.getItemCount() - 5)) {
-                    loadFeed(true);
-                }
+                RecyclerView.LayoutManager lm = view.getLayoutManager();
+                if (!(lm instanceof LinearLayoutManager)) return;
+                int last = ((LinearLayoutManager) lm).findLastVisibleItemPosition();
+                if (last >= Math.max(0, feedAdapter.getItemCount() - 5)) loadFeed(true);
             }
         });
 
@@ -219,25 +214,28 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         menu.add(Menu.NONE, NAV_SAVED, 3, "Saved").setIcon(R.drawable.ic_nav_saved);
         menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
         bottomNavigation.setOnItemSelectedListener(item -> {
-            switch (item.getItemId()) {
-                case NAV_HOME:
-                    showHome();
-                    return true;
-                case NAV_TRENDING:
-                    showTrending();
-                    return true;
-                case NAV_CATEGORIES:
-                    showCategories();
-                    return true;
-                case NAV_SAVED:
-                    startActivityForResult(new Intent(this, FavoritesActivity.class), FAVORITES_REQUEST);
-                    return false;
-                case NAV_MORE:
-                    showMoreSheet();
-                    return false;
-                default:
-                    return false;
+            int id = item.getItemId();
+            if (id == NAV_HOME) {
+                showHome();
+                return true;
             }
+            if (id == NAV_TRENDING) {
+                showTrending();
+                return true;
+            }
+            if (id == NAV_CATEGORIES) {
+                showCategories();
+                return true;
+            }
+            if (id == NAV_SAVED) {
+                startActivityForResult(new Intent(this, FavoritesActivity.class), FAVORITES_REQUEST);
+                return false;
+            }
+            if (id == NAV_MORE) {
+                showMoreSheet();
+                return false;
+            }
+            return false;
         });
         shell.addView(bottomNavigation, new LinearLayout.LayoutParams(-1, dp(74)));
 
@@ -269,7 +267,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         labels.addView(headerTitle);
 
         headerSubtitle = new TextView(this);
-        headerSubtitle.setText("Jeremy Edition  •  Native");
+        headerSubtitle.setText("Jeremy Edition  •  Native v2");
         headerSubtitle.setTextColor(Color.rgb(168, 168, 178));
         headerSubtitle.setTextSize(12);
         labels.addView(headerSubtitle);
@@ -290,6 +288,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showHome() {
+        selectNavSilently(NAV_HOME);
         screen = Screen.HOME;
         feedBaseUrl = CrazyShitRepository.HOME;
         feedTitle = "Home";
@@ -327,12 +326,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         endReached = false;
         loading = false;
         headerTitle.setText(feedTitle);
-        headerSubtitle.setText("Jeremy Edition  •  Native");
+        headerSubtitle.setText("Jeremy Edition  •  Native v2");
         recycler.setLayoutManager(new LinearLayoutManager(this));
         recycler.setAdapter(feedAdapter);
         feedAdapter.replace(new ArrayList<>());
         emptyView.setVisibility(View.GONE);
         progress.setVisibility(View.VISIBLE);
+        recycler.scrollToPosition(0);
     }
 
     private void showCategories() {
@@ -341,13 +341,14 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         loading = false;
         endReached = true;
         headerTitle.setText("Categories");
-        headerSubtitle.setText("Browse natively");
+        headerSubtitle.setText("Jeremy Edition  •  Native v2");
         recycler.setLayoutManager(new GridLayoutManager(this, 2));
         recycler.setAdapter(categoryAdapter);
         categoryAdapter.replace(new ArrayList<>());
         emptyView.setVisibility(View.GONE);
         progress.setVisibility(View.VISIBLE);
         swipeRefresh.setRefreshing(false);
+        recycler.scrollToPosition(0);
 
         final int requestGeneration = generation;
         io.execute(() -> {
@@ -359,7 +360,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     swipeRefresh.setRefreshing(false);
                     categoryAdapter.replace(result);
                     if (result.isEmpty()) {
-                        showNativeEmpty("Couldn't build the category list natively.\nTap to open the website.");
+                        showNativeEmpty("Couldn't build the category list natively.\nTap to open the website fallback.");
                     }
                 });
             } catch (Exception e) {
@@ -367,7 +368,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     if (requestGeneration != generation) return;
                     progress.setVisibility(View.GONE);
                     swipeRefresh.setRefreshing(false);
-                    showNativeEmpty("Couldn't load categories.\nTap to open the website.");
+                    showNativeEmpty("Couldn't load categories.\nTap to open the website fallback.");
                 });
             }
         });
@@ -418,13 +419,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             showCategories();
             return;
         }
-        if (isFeedScreen()) {
-            generation++;
-            currentPage = 0;
-            endReached = false;
-            loading = false;
-            loadFeed(false);
-        }
+        if (!isFeedScreen()) return;
+        generation++;
+        currentPage = 0;
+        endReached = false;
+        loading = false;
+        loadFeed(false);
     }
 
     private boolean isFeedScreen() {
@@ -477,8 +477,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void openFallback(String url) {
-        Intent intent = new Intent(this, MainActivity.class);
-        intent.putExtra("start_url", url == null || url.isEmpty() ? CrazyShitRepository.HOME : url);
+        Intent intent = new Intent(this, WebFallbackActivity.class);
+        intent.putExtra(
+                WebFallbackActivity.EXTRA_URL,
+                url == null || url.isEmpty() ? CrazyShitRepository.HOME : url
+        );
         startActivity(intent);
     }
 
@@ -537,9 +540,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 .create();
         dialog.setOnShowListener(d -> {
             input.requestFocus();
-            dialog.getWindow().setSoftInputMode(
-                    android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
-            );
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setSoftInputMode(
+                        android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
+                );
+            }
         });
         dialog.show();
     }
@@ -562,11 +567,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             startActivity(new Intent(this, SettingsActivity.class));
             sheet.dismiss();
         });
-        addSheetAction(content, "Login / account", "Open the secure website account page", () -> {
+        addSheetAction(content, "Login / account", "Open the website account flow", () -> {
             openFallback(CrazyShitRepository.BASE + "login/");
             sheet.dismiss();
         });
-        addSheetAction(content, "Open full website", "Use the compatibility WebView", () -> {
+        addSheetAction(content, "Open full website", "Use the compatibility browser", () -> {
             openFallback(CrazyShitRepository.HOME);
             sheet.dismiss();
         });
@@ -652,7 +657,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 int code = connection.getResponseCode();
                 if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
 
-                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(connection.getInputStream())
+                );
                 StringBuilder json = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) json.append(line);
@@ -660,20 +667,39 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
                 JSONObject release = new JSONObject(json.toString());
                 String tag = release.optString("tag_name", "").replaceFirst("^[vV]", "");
-                String page = release.optString("html_url",
-                        "https://github.com/Addy37/CrazyShitAndroid/releases/latest");
-                boolean newer = compareVersions(tag, BuildConfig.VERSION_NAME) > 0;
+                String page = release.optString(
+                        "html_url",
+                        "https://github.com/Addy37/CrazyShitAndroid/releases/latest"
+                );
+                boolean newer = compareVersions(tag, currentVersion()) > 0;
                 runOnUiThread(() -> {
                     if (newer) showUpdateDialog(tag, page);
-                    else if (manual) Toast.makeText(this, "You're up to date.", Toast.LENGTH_SHORT).show();
+                    else if (manual) {
+                        Toast.makeText(this, "You're up to date.", Toast.LENGTH_SHORT).show();
+                    }
                 });
             } catch (Exception e) {
-                if (manual) runOnUiThread(() -> Toast.makeText(this,
-                        "Couldn't check for updates right now.", Toast.LENGTH_SHORT).show());
+                if (manual) {
+                    runOnUiThread(() -> Toast.makeText(
+                            this,
+                            "Couldn't check for updates right now.",
+                            Toast.LENGTH_SHORT
+                    ).show());
+                }
             } finally {
                 if (connection != null) connection.disconnect();
             }
         });
+    }
+
+    private String currentVersion() {
+        try {
+            android.content.pm.PackageInfo info =
+                    getPackageManager().getPackageInfo(getPackageName(), 0);
+            return info.versionName == null ? "0.0.0" : info.versionName;
+        } catch (Exception e) {
+            return "0.0.0";
+        }
     }
 
     private void showUpdateDialog(String version, String page) {
@@ -722,14 +748,22 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void handleBackNavigation() {
         if (screen == Screen.CATEGORY) {
-            bottomNavigation.setSelectedItemId(NAV_CATEGORIES);
+            showCategories();
+            selectNavSilently(NAV_CATEGORIES);
             return;
         }
-        if (screen == Screen.SEARCH || screen == Screen.TRENDING || screen == Screen.CATEGORIES) {
-            bottomNavigation.setSelectedItemId(NAV_HOME);
+        if (screen != Screen.HOME) {
+            showHome();
+            selectNavSilently(NAV_HOME);
             return;
         }
         finish();
+    }
+
+    private void selectNavSilently(int id) {
+        if (bottomNavigation == null || bottomNavigation.getSelectedItemId() == id) return;
+        android.view.MenuItem item = bottomNavigation.getMenu().findItem(id);
+        if (item != null) item.setChecked(true);
     }
 
     @Override
