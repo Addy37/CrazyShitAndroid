@@ -229,3 +229,5 @@ tasks.matching {
 }.configureEach {
     dependsOn("wireV2Beta14FinalTabs")
 }
+
+apply(from = "v2-beta15-live-pager.gradle.kts")

@@ -64,6 +64,7 @@ dependencies {
     implementation("androidx.core:core:1.15.0")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.2.0")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
+    implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("org.jsoup:jsoup:1.23.1")
     implementation("com.github.bumptech.glide:glide:4.16.0")
 
