@@ -18,6 +18,11 @@
         android:usesCleartextTraffic="false">
 
         <activity
+            android:name=".CommentsActivity"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
             android:name=".SettingsActivity"
             android:exported="false" />
 
