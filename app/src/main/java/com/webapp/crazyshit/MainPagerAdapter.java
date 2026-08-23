@@ -201,18 +201,21 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
             @Override
             public void onOpen(NativeContentItem item) {
+                if (item == null || item.isSection()) return;
                 if (page.meme || item.isMeme()) openMeme(item);
                 else host.onOpenItem(item, false);
             }
 
             @Override
             public void onLongPress(NativeContentItem item, View anchor) {
+                if (item == null || item.isSection()) return;
                 if (page.meme || item.isMeme()) showMemeMenu(item, anchor);
                 else host.onLongPressItem(item, anchor, false);
             }
 
             @Override
             public void onComments(NativeContentItem item) {
+                if (item == null || item.isSection()) return;
                 if (!page.meme && !item.isMeme()) host.onOpenComments(item);
             }
         });
@@ -289,7 +292,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             position = Math.max(0, ((LinearLayoutManager) old).findFirstVisibleItemPosition());
         }
         if (page.viewMode == NativeFeedAdapter.VIEW_GRID) {
-            page.recycler.setLayoutManager(new GridLayoutManager(activity, 2));
+            GridLayoutManager grid = new GridLayoutManager(activity, 2);
+            grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+                @Override
+                public int getSpanSize(int adapterPosition) {
+                    return page.adapter.isSectionAt(adapterPosition) ? 2 : 1;
+                }
+            });
+            page.recycler.setLayoutManager(grid);
         } else {
             page.recycler.setLayoutManager(new LinearLayoutManager(activity));
         }
