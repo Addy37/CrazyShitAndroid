@@ -1,8 +1,12 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
@@ -39,6 +43,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
+    private static final long MIN_FEED_PROGRESS_MS = 5_000L;
 
     public interface Listener {
         void onOpen(NativeContentItem item);
@@ -52,6 +57,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
     private final RenderedThumbnailResolver[] thumbnailResolvers;
+    private final Map<String, PlaybackHistoryStore.Item> playbackByUrl = new HashMap<>();
+    private final SharedPreferences playbackPrefs;
+    private final SharedPreferences.OnSharedPreferenceChangeListener playbackListener;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private int resolverCursor;
     private int viewMode = VIEW_LARGE;
 
@@ -62,6 +71,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 new RenderedThumbnailResolver(this.context, this::setResolvedThumbnail),
                 new RenderedThumbnailResolver(this.context, this::setResolvedThumbnail)
         };
+        playbackPrefs = this.context.getSharedPreferences("playback_history", Context.MODE_PRIVATE);
+        playbackListener = (prefs, key) -> {
+            if (!"items".equals(key)) return;
+            mainHandler.post(this::refreshPlaybackState);
+        };
+        playbackPrefs.registerOnSharedPreferenceChangeListener(playbackListener);
+        reloadPlaybackStates();
         setHasStableIds(true);
     }
 
@@ -80,6 +96,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     public void replace(List<NativeContentItem> next) {
         items.clear();
         if (next != null) items.addAll(next);
+        reloadPlaybackStates();
         notifyDataSetChanged();
         preloadRange(0, Math.min(12, items.size()));
     }
@@ -114,6 +131,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return items.size();
     }
 
+    public void refreshPlaybackState() {
+        reloadPlaybackStates();
+        notifyDataSetChanged();
+    }
+
     public void setResolvedThumbnail(String pageUrl, String thumbnailUrl) {
         if (pageUrl == null || pageUrl.isEmpty() || thumbnailUrl == null || thumbnailUrl.isEmpty()) return;
         resolvedThumbnails.put(pageUrl, thumbnailUrl);
@@ -122,6 +144,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 notifyItemChanged(i, "thumbnail");
                 break;
             }
+        }
+    }
+
+    private void reloadPlaybackStates() {
+        playbackByUrl.clear();
+        for (PlaybackHistoryStore.Item item : PlaybackHistoryStore.load(context)) {
+            if (item.pageUrl != null && !item.pageUrl.isEmpty()) playbackByUrl.put(item.pageUrl, item);
         }
     }
 
@@ -164,7 +193,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         MediaViews media = addMedia(parent, column, 218, -1);
         CopyViews copy = addCopy(parent, column, 17, 13, 15, 15);
-        return new Holder(card, media.image, media.play, copy.title, copy.info, copy.comments);
+        return new Holder(card, media, copy);
     }
 
     private Holder createCompactHolder(ViewGroup parent) {
@@ -176,7 +205,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         MediaViews media = addMedia(parent, row, 104, 148);
         CopyViews copy = addCopy(parent, row, 15, 12, 13, 11);
-        return new Holder(card, media.image, media.play, copy.title, copy.info, copy.comments);
+        return new Holder(card, media, copy);
     }
 
     private Holder createGridHolder(ViewGroup parent) {
@@ -187,7 +216,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         MediaViews media = addMedia(parent, column, 128, -1);
         CopyViews copy = addCopy(parent, column, 14, 11, 10, 11);
-        return new Holder(card, media.image, media.play, copy.title, copy.info, copy.comments);
+        return new Holder(card, media, copy);
     }
 
     private MaterialCardView baseCard(ViewGroup parent, int horizontalMargin, int verticalMargin, int radius) {
@@ -231,7 +260,33 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(dp(parent, size), dp(parent, size));
         playParams.gravity = Gravity.CENTER;
         mediaFrame.addView(play, playParams);
-        return new MediaViews(image, play);
+
+        TextView watchBadge = new TextView(parent.getContext());
+        watchBadge.setTextColor(Color.WHITE);
+        watchBadge.setTextSize(viewMode == VIEW_GRID ? 9.5f : 10.5f);
+        watchBadge.setTypeface(null, android.graphics.Typeface.BOLD);
+        watchBadge.setGravity(Gravity.CENTER);
+        watchBadge.setPadding(dp(parent, 8), dp(parent, 4), dp(parent, 8), dp(parent, 4));
+        watchBadge.setVisibility(View.GONE);
+        FrameLayout.LayoutParams badgeParams = new FrameLayout.LayoutParams(-2, -2);
+        badgeParams.gravity = Gravity.TOP | Gravity.START;
+        badgeParams.setMargins(dp(parent, 7), dp(parent, 7), dp(parent, 7), 0);
+        mediaFrame.addView(watchBadge, badgeParams);
+
+        FrameLayout progressTrack = new FrameLayout(parent.getContext());
+        progressTrack.setBackgroundColor(Color.argb(175, 17, 17, 20));
+        progressTrack.setVisibility(View.GONE);
+        FrameLayout.LayoutParams trackParams = new FrameLayout.LayoutParams(-1, dp(parent, 3));
+        trackParams.gravity = Gravity.BOTTOM;
+        mediaFrame.addView(progressTrack, trackParams);
+
+        View progressFill = new View(parent.getContext());
+        progressFill.setBackgroundColor(Color.rgb(255, 90, 31));
+        progressFill.setPivotX(0f);
+        progressFill.setScaleX(0f);
+        progressTrack.addView(progressFill, new FrameLayout.LayoutParams(-1, -1));
+
+        return new MediaViews(image, play, watchBadge, progressTrack, progressFill);
     }
 
     private CopyViews addCopy(
@@ -310,6 +365,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         holder.info.setText(buildInfo(item));
         holder.play.setVisibility(meme ? View.GONE : View.VISIBLE);
         holder.image.setScaleType(meme ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+        bindPlaybackState(holder, item);
 
         if (!meme && item.comments != null && !item.comments.isEmpty()) {
             holder.comments.setVisibility(View.VISIBLE);
@@ -332,6 +388,54 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             listener.onLongPress(item, v);
             return true;
         });
+    }
+
+    private void bindPlaybackState(Holder holder, NativeContentItem item) {
+        holder.image.setAlpha(1f);
+        holder.watchBadge.setVisibility(View.GONE);
+        holder.progressTrack.setVisibility(View.GONE);
+        holder.progressFill.setScaleX(0f);
+        holder.card.setStrokeColor(Color.rgb(50, 50, 57));
+        if (item == null || item.isMeme()) return;
+
+        PlaybackHistoryStore.Item history = playbackByUrl.get(item.url);
+        if (history == null) return;
+
+        if (history.complete) {
+            holder.image.setAlpha(0.74f);
+            holder.watchBadge.setText("✓ Watched");
+            holder.watchBadge.setBackground(rounded(Color.argb(220, 23, 23, 27), dp(holder.watchBadge, 12)));
+            holder.watchBadge.setVisibility(View.VISIBLE);
+            holder.card.setStrokeColor(Color.rgb(79, 61, 55));
+            return;
+        }
+
+        if (history.positionMs < MIN_FEED_PROGRESS_MS) return;
+        holder.watchBadge.setText("Continue  " + formatTime(history.positionMs));
+        holder.watchBadge.setBackground(rounded(Color.argb(230, 133, 47, 17), dp(holder.watchBadge, 12)));
+        holder.watchBadge.setVisibility(View.VISIBLE);
+
+        if (history.durationMs > 0L) {
+            float fraction = Math.max(0f, Math.min(1f, history.positionMs / (float) history.durationMs));
+            holder.progressFill.setScaleX(fraction);
+            holder.progressTrack.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private String formatTime(long millis) {
+        long total = Math.max(0L, millis / 1000L);
+        long hours = total / 3600L;
+        long minutes = (total % 3600L) / 60L;
+        long seconds = total % 60L;
+        if (hours > 0L) return String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds);
+        return String.format(Locale.US, "%d:%02d", minutes, seconds);
+    }
+
+    private GradientDrawable rounded(int color, int radiusPx) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(radiusPx);
+        return drawable;
     }
 
     private void loadThumbnail(Holder holder, NativeContentItem item) {
@@ -358,6 +462,9 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
         Glide.with(holder.image).clear(holder.image);
+        holder.image.setAlpha(1f);
+        holder.watchBadge.setVisibility(View.GONE);
+        holder.progressTrack.setVisibility(View.GONE);
         super.onViewRecycled(holder);
     }
 
@@ -434,9 +541,16 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private static final class MediaViews {
         final ImageView image;
         final TextView play;
-        MediaViews(ImageView image, TextView play) {
+        final TextView watchBadge;
+        final View progressTrack;
+        final View progressFill;
+
+        MediaViews(ImageView image, TextView play, TextView watchBadge, View progressTrack, View progressFill) {
             this.image = image;
             this.play = play;
+            this.watchBadge = watchBadge;
+            this.progressTrack = progressTrack;
+            this.progressFill = progressFill;
         }
     }
 
@@ -444,6 +558,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final TextView title;
         final TextView info;
         final TextView comments;
+
         CopyViews(TextView title, TextView info, TextView comments) {
             this.title = title;
             this.info = info;
@@ -455,18 +570,24 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final MaterialCardView card;
         final ImageView image;
         final TextView play;
+        final TextView watchBadge;
+        final View progressTrack;
+        final View progressFill;
         final TextView title;
         final TextView info;
         final TextView comments;
 
-        Holder(MaterialCardView card, ImageView image, TextView play, TextView title, TextView info, TextView comments) {
+        Holder(MaterialCardView card, MediaViews media, CopyViews copy) {
             super(card);
             this.card = card;
-            this.image = image;
-            this.play = play;
-            this.title = title;
-            this.info = info;
-            this.comments = comments;
+            this.image = media.image;
+            this.play = media.play;
+            this.watchBadge = media.watchBadge;
+            this.progressTrack = media.progressTrack;
+            this.progressFill = media.progressFill;
+            this.title = copy.title;
+            this.info = copy.info;
+            this.comments = copy.comments;
         }
     }
 }
