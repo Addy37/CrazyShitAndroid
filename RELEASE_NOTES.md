@@ -1,34 +1,16 @@
-# CrazyShit v2.5.0
+# CrazyShit v2.5.1
 
-CrazyShit 2.5.0 upgrades the main browse navigation around the site's Series and Categories collections while keeping Home and Chaos behavior intact.
+CrazyShit 2.5.1 fixes the missing artwork on the new Series and Categories tabs introduced in 2.5.0.
 
-## New main navigation
+## Series and Categories artwork fix
 
-- The main dock is now **Home | Series | Chaos | Categories | More**
-- Series replaces the old Trending tab
-- Categories replaces the old Memes tab
-- Chaos stays in the featured center position
-- The same labels and icons are applied to the adaptive landscape navigation rail
-
-## Series
-
-- Series is now a first-class native browse tab
-- Series cards use the site's artwork and collection titles
-- The parser uses the dedicated Series listing when available and can fall back to the Popular Series block on Home if the listing route changes
-- Tapping a series opens its videos in a native collection feed instead of dropping directly into the website
-
-## Categories with artwork
-
-- Categories now uses visual thumbnail cards inspired by the website instead of text-only boxes
-- Duplicate image/title links from the site are merged into one native category card
-- Tapping a category opens its videos in the same native collection feed
-- Category and Series grids stay 2-column in portrait and automatically become denser in landscape
-
-## Trending and Memes
-
-- Trending and Memes are no longer primary tabs
-- Both remain available under **More → Browse**
-- They open in the reusable native feed browser
+- Keeps the new **Home | Series | Chaos | Categories | More** navigation unchanged
+- Keeps the native 2-column Series and Categories grids unchanged
+- Adds a rendered browse-artwork resolver for cases where the website applies card images through lazy JavaScript or computed CSS instead of exposing a usable image URL in the raw HTML
+- The resolver loads the Series/Categories listing page once and maps each collection URL to the artwork shown by the rendered website
+- Direct image URLs found by the existing parser still take priority
+- Series can also read artwork from the Home Popular Series block when the dedicated Series listing does not expose every image
+- Glide keeps the site's User-Agent, Referer and cookies when loading resolved artwork
 
 ## Existing behavior kept
 
@@ -36,11 +18,12 @@ CrazyShit 2.5.0 upgrades the main browse navigation around the site's Series and
 - Continue, Watched, playback progress and resume feedback remain unchanged
 - Saved positions, History and Watch Later remain intact
 - Chaos playback and portrait controls remain unchanged
-- The floating dock and landscape rail styling remain intact
+- Trending and Memes remain available under **More → Browse**
+- Portrait and landscape navigation layouts remain unchanged
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.5.0 installs over v2.4.5 and earlier signed stable releases while retaining app data and watch history.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.5.1 installs over v2.5.0 and earlier signed stable releases while retaining app data and watch history.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
