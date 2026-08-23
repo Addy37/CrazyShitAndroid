@@ -1,52 +1,50 @@
-# CrazyShit v2.2.2
+# CrazyShit v2.2.3
 
-CrazyShit 2.2.2 is a focused navigation cleanup based on real-device testing. It removes the competing selection treatments from 2.2.1 and gives the bottom dock one clear visual hierarchy.
+CrazyShit 2.2.3 focuses on the swipe-down video minimize experience and the native mini-player handoff.
 
-## Simpler floating dock
+## Swipe-to-mini-player handoff
 
-- Reduced the portrait dock height again so more of the feed stays visible
-- Increased side breathing room and softened the dock outline to a near-neutral dark border
-- Removed the large orange selected-tab pill
-- Normal tabs now use a small orange underline that glides between destinations
-- Inactive labels are slightly smaller and dimmer so the selected destination reads cleanly
-- Navigation touch ripples are quieter and less visually busy
+- Swipe-down now makes the playing video follow the gesture instead of barely shrinking and then disappearing
+- Releasing a committed swipe animates the video directly toward the mini-player video slot at the bottom of the feed
+- Video controls and detail content fade away progressively during the gesture so the transition feels like one continuous action
+- Canceling the gesture smoothly restores the full video page and controls
+- The Activity close animation remains suppressed so Android does not add a second competing transition
 
-## True Chaos center button
+## Decoder handoff polish
 
-- Chaos now uses a separate 54dp circular floating button layered above the dock instead of stretching the built-in nav icon
-- The original center icon is hidden while the Chaos label remains in the dock
-- The floating button uses a white Chaos glyph, orange surface and subtle elevation
-- Selecting Chaos gives the button a short spring response and a slightly brighter treatment
-- Tapping the floating Chaos button still routes through the existing navigation logic
+- A tiny frame snapshot is captured from the playing TextureView when the minimize gesture commits
+- The snapshot is passed through the existing activity result and displayed over the mini-player video surface while its ExoPlayer resumes
+- The snapshot fades away as soon as the mini-player reaches READY, reducing black flashes during the player-to-player handoff
+- Temporary snapshot files are removed from app cache after the transition
 
-## Existing polish kept
+## Mini-player cleanup
 
-- Compact view counts and tighter comments metadata
-- Two-line compact titles
-- Collapsing header with subtitle-first fade
-- Animated skeleton loading on normal feeds
-- Feed depth motion
-- Mini-player entrance and live progress line
-- Video-detail transition
-- Animated splash artwork
-- Grouped More screen
+- Mini-player height reduced slightly for a cleaner floating-card shape
+- Video area increased to 132 x 74dp so the minimized video reads more clearly
+- Title and action spacing tightened
+- Mini-player now sits closer to the 2.2.2 floating dock while keeping a visible gap between the two layers
+- Direct swipe handoffs skip the old slide-in animation because the outgoing video already lands at the destination
+- Normal mini-player launches still keep a subtle entrance animation
+
+## Existing UI kept
+
+- 2.2.2 floating dock with small selected underline
+- Separate circular Chaos center button
+- Compact feed metadata and two-line titles
+- Collapsing header and skeleton loading
+- Mini-player progress line
+- Video-detail page controls and related videos
 
 ## Chaos playback kept untouched
 
-- Portrait title and action controls stay visible
-- Empty lower-overlay space passes taps and long presses through to the video
-- Hold for 2x playback
-- Swipe up/down between clips
-- Auto-advance
-- Remember mute state
-- Not interested filtering
-- Scrubbable progress bar with inactivity fade
-- Preloading and recent-view avoidance
+- Portrait Chaos title and action controls remain visible
+- Empty lower-overlay space passes gestures through to the video
+- Hold for 2x, swipe navigation, auto-advance, mute memory, scrubbing and preload behavior are unchanged
 - Ambient/blur background remains disabled
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.2.2 installs over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.2.3 installs over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
