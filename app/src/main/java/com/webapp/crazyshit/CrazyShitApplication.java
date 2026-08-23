@@ -35,6 +35,9 @@ public final class CrazyShitApplication extends Application {
                     LandscapeMoreDialog.attachSoon(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
                 }
+                if (activity instanceof VideoDetailActivity) {
+                    VideoDetailControllerPolish.applySoon(activity);
+                }
             }
 
             @Override
