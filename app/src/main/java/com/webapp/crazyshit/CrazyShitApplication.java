@@ -20,6 +20,13 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
                 if (activity instanceof VideoDetailActivity) {
+                    NativeMainActivity host = currentNativeActivity.get();
+                    if (host != null && UnifiedVideoController.routeLegacyDetail(
+                            host,
+                            (VideoDetailActivity) activity
+                    )) {
+                        return;
+                    }
                     VideoDetailTransitionPolish.apply(activity);
                 }
             }
@@ -39,8 +46,13 @@ public final class CrazyShitApplication extends Application {
                     UiPolishController.attach(nativeActivity);
                     FlashUiController.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
+                    UnifiedVideoController.onHostResumed(nativeActivity);
+                    nativeActivity.getWindow().getDecorView().postDelayed(
+                            () -> UnifiedVideoLayerGuard.raise(nativeActivity),
+                            260L
+                    );
                 }
-                if (activity instanceof VideoDetailActivity) {
+                if (activity instanceof VideoDetailActivity && !activity.isFinishing()) {
                     VideoDetailControllerPolish.applySoon(activity);
                     MiniPlayerHandoffPolish.applySoon(activity);
                 }
@@ -49,7 +61,9 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityPaused(Activity activity) {
                 if (activity instanceof NativeMainActivity) {
-                    ChaosPortraitPolish.stop((NativeMainActivity) activity);
+                    NativeMainActivity nativeActivity = (NativeMainActivity) activity;
+                    UnifiedVideoController.onHostPaused(nativeActivity);
+                    ChaosPortraitPolish.stop(nativeActivity);
                 }
             }
 
@@ -66,6 +80,7 @@ public final class CrazyShitApplication extends Application {
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     ChaosPortraitPolish.stop(nativeActivity);
+                    UnifiedVideoController.onHostDestroyed(nativeActivity);
                     FlashUiController.detach(nativeActivity);
                     UiPolishController.detach(nativeActivity);
                     LandscapeUiController.detach(nativeActivity);
@@ -89,6 +104,11 @@ public final class CrazyShitApplication extends Application {
                     UiPolishController.attach(activity);
                     FlashUiController.attach(activity);
                     ChaosPortraitPolish.start(activity);
+                    UnifiedVideoController.onHostConfigurationChanged(activity);
+                    activity.getWindow().getDecorView().postDelayed(
+                            () -> UnifiedVideoLayerGuard.raise(activity),
+                            260L
+                    );
                 },
                 80L
         );
