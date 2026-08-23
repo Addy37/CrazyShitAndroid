@@ -1,31 +1,27 @@
-# CrazyShit v2.0.6
+# CrazyShit v2.0.7
 
-CrazyShit 2.0.6 is a landscape-focused UI update that keeps the portrait experience intact while making wide-screen browsing feel intentional instead of stretched.
+CrazyShit 2.0.7 is a small landscape UI polish update.
 
 ## What's new
 
-- Landscape now replaces the tall bottom navigation bar with a slim left-side navigation rail
-- The landscape rail keeps Home, Trending, Chaos, Memes, and More within easy reach while giving content more vertical room
-- The top bar becomes much shorter in landscape, hides the redundant subtitle, and keeps Search easy to reach
+- Fixed the selected Home item looking slightly clipped on shorter landscape screens
+- Tightened the landscape navigation rail spacing for compact-height phones
+- Added a little more breathing room between the CrazyShit logo and the first navigation item
+- Reduced rail item height slightly on short landscape displays so all five destinations fit more comfortably
+- Disabled child clipping on the landscape rail so rounded selected-tab backgrounds render cleanly
+
+## Existing landscape improvements from 2.0.6
+
+- Landscape uses a slim left-side navigation rail instead of the tall bottom navigation bar
+- The top bar is shorter and hides the redundant subtitle
 - Home, Trending, and Memes automatically use a denser 2-column grid on normal landscape phones
-- Extra-wide screens can expand native feeds to 3 columns and Categories to 4 columns
-- Native feed margins and padding are tightened in landscape to show more content at once
-- Rotating back to portrait restores the existing portrait navigation and the user's normal feed style
-- Chaos keeps its immersive landscape behavior and hides the navigation rail and header while playing fullscreen
-- The adaptive layout responds at runtime when the device rotates instead of requiring an app restart
-
-## Existing Chaos improvements
-
-- Press and hold the video to temporarily play at 2x speed, then release to return to the prior speed
-- Chaos remembers your mute state between clips and app sessions
-- Not interested permanently hides a clip from Chaos on the current device
-- Chaos controls and the scrubbable progress bar fade away after inactivity and return with a tap
-- Increased Chaos look-ahead keeps nearby clips prepared for smoother next/previous swipes
-- Preloaded clips do not get written to playback history unless they were actually started
+- Extra-wide screens can expand feeds to 3 columns and Categories to 4 columns
+- Chaos keeps its immersive landscape behavior and hides the rail and header while playing fullscreen
+- Rotating back to portrait restores the normal portrait layout and feed style
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.6 can install over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.7 can install over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
