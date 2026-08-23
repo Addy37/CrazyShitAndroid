@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -51,6 +52,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final Host host;
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final BrowseRepository browseRepository = new BrowseRepository();
+    private final BrowseArtworkResolver browseArtworkResolver;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
     private final ChaosFeedView chaosView;
@@ -58,6 +60,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     public MainPagerAdapter(Activity activity, Host host) {
         this.activity = activity;
         this.host = host;
+        this.browseArtworkResolver = new BrowseArtworkResolver(activity);
         setHasStableIds(true);
 
         pages[PAGE_HOME] = buildFeedPage(PAGE_HOME, "native_view_home", CrazyShitRepository.HOME);
@@ -142,6 +145,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void close() {
         chaosView.close();
+        browseArtworkResolver.close();
         io.shutdownNow();
     }
 
@@ -332,6 +336,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     } else {
                         page.browseAdapter.replace(result);
                         page.endReached = true;
+                        requestBrowseArtwork(page, generation);
                     }
 
                     if (page.itemCount() == 0) {
@@ -360,6 +365,30 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 });
             }
         });
+    }
+
+    private void requestBrowseArtwork(Page page, int generation) {
+        if (page == null || page.browseAdapter == null || !page.browseAdapter.hasMissingArtwork()) return;
+
+        if (page.kind == PageKind.CATEGORIES) {
+            browseArtworkResolver.request(BrowseRepository.CATEGORIES, "/category/", (source, artwork) -> {
+                if (generation != page.generation) return;
+                page.browseAdapter.applyArtwork(artwork);
+            });
+            return;
+        }
+
+        if (page.kind == PageKind.SERIES) {
+            browseArtworkResolver.request(BrowseRepository.SERIES, "/series/", (source, artwork) -> {
+                if (generation != page.generation) return;
+                page.browseAdapter.applyArtwork(artwork);
+                if (!page.browseAdapter.hasMissingArtwork()) return;
+                browseArtworkResolver.request(CrazyShitRepository.HOME, "/series/", (home, fallback) -> {
+                    if (generation != page.generation) return;
+                    page.browseAdapter.applyArtwork(fallback);
+                });
+            });
+        }
     }
 
     private Page pageAt(int position) {
