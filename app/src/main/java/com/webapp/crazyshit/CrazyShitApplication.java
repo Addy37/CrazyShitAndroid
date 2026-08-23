@@ -25,6 +25,7 @@ public final class CrazyShitApplication extends Application {
                             host,
                             (VideoDetailActivity) activity
                     )) {
+                        UnifiedVideoLayerGuard.raise(host);
                         return;
                     }
                     VideoDetailTransitionPolish.apply(activity);
@@ -49,7 +50,7 @@ public final class CrazyShitApplication extends Application {
                     UnifiedVideoController.onHostResumed(nativeActivity);
                     nativeActivity.getWindow().getDecorView().postDelayed(
                             () -> UnifiedVideoLayerGuard.raise(nativeActivity),
-                            260L
+                            180L
                     );
                 }
                 if (activity instanceof VideoDetailActivity && !activity.isFinishing()) {
@@ -107,7 +108,7 @@ public final class CrazyShitApplication extends Application {
                     UnifiedVideoController.onHostConfigurationChanged(activity);
                     activity.getWindow().getDecorView().postDelayed(
                             () -> UnifiedVideoLayerGuard.raise(activity),
-                            260L
+                            180L
                     );
                 },
                 80L
