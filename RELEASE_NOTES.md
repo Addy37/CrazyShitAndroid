@@ -1,50 +1,33 @@
-# CrazyShit v2.2.3
+# CrazyShit v2.2.4
 
-CrazyShit 2.2.3 focuses on the swipe-down video minimize experience and the native mini-player handoff.
+CrazyShit 2.2.4 finishes the swipe-down mini-player handoff so the video lands more naturally on top of the feed instead of disappearing and letting the mini-player pop in afterward.
 
-## Swipe-to-mini-player handoff
+## Feed-visible handoff
 
-- Swipe-down now makes the playing video follow the gesture instead of barely shrinking and then disappearing
-- Releasing a committed swipe animates the video directly toward the mini-player video slot at the bottom of the feed
-- Video controls and detail content fade away progressively during the gesture so the transition feels like one continuous action
-- Canceling the gesture smoothly restores the full video page and controls
-- The Activity close animation remains suppressed so Android does not add a second competing transition
+- A committed swipe now exits the detail Activity earlier so Home is already visible behind the final part of the minimize animation
+- The exact on-screen bounds of the shrinking video are carried back to the feed
+- The captured video frame continues moving on top of Home from those bounds into the real mini-player video slot
+- The final travel uses the actual laid-out mini-player PlayerView position rather than an estimated destination
+- The last part of the motion uses a faster soft deceleration so the video settles into the dock instead of drifting
 
-## Decoder handoff polish
+## Mini-player landing
 
-- A tiny frame snapshot is captured from the playing TextureView when the minimize gesture commits
-- The snapshot is passed through the existing activity result and displayed over the mini-player video surface while its ExoPlayer resumes
-- The snapshot fades away as soon as the mini-player reaches READY, reducing black flashes during the player-to-player handoff
-- Temporary snapshot files are removed from app cache after the transition
+- The mini-player card starts transparent during a direct handoff
+- Its background, title and action buttons fade in around the traveling video while the frame is still moving
+- The traveling frame remains over the destination until the mini-player ExoPlayer reaches READY
+- Once playback is ready, the bridge frame fades out to reveal the live video without an extra black flash
+- Existing fallback behavior remains available if a frame snapshot or geometry cannot be captured
 
-## Mini-player cleanup
+## Existing behavior kept
 
-- Mini-player height reduced slightly for a cleaner floating-card shape
-- Video area increased to 132 x 74dp so the minimized video reads more clearly
-- Title and action spacing tightened
-- Mini-player now sits closer to the 2.2.2 floating dock while keeping a visible gap between the two layers
-- Direct swipe handoffs skip the old slide-in animation because the outgoing video already lands at the destination
-- Normal mini-player launches still keep a subtle entrance animation
-
-## Existing UI kept
-
-- 2.2.2 floating dock with small selected underline
-- Separate circular Chaos center button
-- Compact feed metadata and two-line titles
-- Collapsing header and skeleton loading
-- Mini-player progress line
-- Video-detail page controls and related videos
-
-## Chaos playback kept untouched
-
-- Portrait Chaos title and action controls remain visible
-- Empty lower-overlay space passes gestures through to the video
-- Hold for 2x, swipe navigation, auto-advance, mute memory, scrubbing and preload behavior are unchanged
-- Ambient/blur background remains disabled
+- Swipe-down gesture thresholds and cancel-to-restore behavior remain
+- Mini-player reopen, close, history, Continue Watching and progress tracking remain
+- The 2.2.2 floating dock remains unchanged
+- Chaos playback and portrait controls remain untouched
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.2.3 installs over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.2.4 installs over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 

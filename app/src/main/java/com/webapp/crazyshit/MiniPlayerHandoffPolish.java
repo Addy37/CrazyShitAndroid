@@ -21,15 +21,19 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
- * v2.2.3 swipe-to-mini-player handoff.
+ * v2.2.4 swipe-to-mini-player handoff.
  *
- * Replaces the detail screen's simple fade-out gesture with a coordinated animation that follows
- * the user's finger, lands the playing video on the mini-player video slot, and passes a tiny frame
- * snapshot to the feed so the decoder handoff does not flash black.
+ * The detail screen now exits earlier after a committed swipe. The feed receives the exact visual
+ * bounds of the shrinking video plus a tiny frame snapshot, then finishes the travel on top of the
+ * already-visible feed so the video visibly lands in the real mini-player media slot.
  */
 final class MiniPlayerHandoffPolish {
     static final String EXTRA_DIRECT_HANDOFF = "mini_handoff_direct";
     static final String EXTRA_SNAPSHOT_PATH = "mini_handoff_snapshot";
+    static final String EXTRA_SOURCE_LEFT = "mini_handoff_source_left";
+    static final String EXTRA_SOURCE_TOP = "mini_handoff_source_top";
+    static final String EXTRA_SOURCE_WIDTH = "mini_handoff_source_width";
+    static final String EXTRA_SOURCE_HEIGHT = "mini_handoff_source_height";
 
     private MiniPlayerHandoffPolish() {
     }
@@ -81,13 +85,13 @@ final class MiniPlayerHandoffPolish {
         if (geometry == null) return;
 
         float p = Math.max(0f, Math.min(1f, progress));
-        float scaleProgress = Math.min(0.56f, p * 0.56f);
+        float scaleProgress = Math.min(0.52f, p * 0.52f);
         float scaleX = lerp(1f, geometry.targetScaleX, scaleProgress);
         float scaleY = lerp(1f, geometry.targetScaleY, scaleProgress);
 
-        float horizontal = geometry.targetTranslationX * Math.min(0.50f, p * 0.50f);
-        float fingerFollow = Math.max(0f, distancePx) * 1.10f;
-        float vertical = Math.min(geometry.targetTranslationY * 0.62f, fingerFollow);
+        float horizontal = geometry.targetTranslationX * Math.min(0.44f, p * 0.44f);
+        float fingerFollow = Math.max(0f, distancePx) * 1.08f;
+        float vertical = Math.min(geometry.targetTranslationY * 0.56f, fingerFollow);
 
         container.setPivotX(0f);
         container.setPivotY(0f);
@@ -97,10 +101,10 @@ final class MiniPlayerHandoffPolish {
         container.setTranslationY(vertical);
         container.setAlpha(1f);
 
-        setPlayerChromeAlpha(container, playerView, 1f - Math.min(0.92f, p * 1.18f));
+        setPlayerChromeAlpha(container, playerView, 1f - Math.min(0.94f, p * 1.22f));
 
         if (details != null) {
-            details.setAlpha(1f - (0.76f * p));
+            details.setAlpha(1f - (0.82f * p));
             details.setTranslationY(Math.min(dp(activity, 18), distancePx * 0.08f));
             details.setScaleX(1f - (0.018f * p));
             details.setScaleY(1f - (0.018f * p));
@@ -119,13 +123,9 @@ final class MiniPlayerHandoffPolish {
         invoke(activity, "savePlaybackState", new Class<?>[] { boolean.class }, false);
         haptic(activity, container);
 
-        Geometry geometry = geometry(activity, root, container);
-        if (geometry == null) {
-            finishToFeed(activity, null);
-            return;
-        }
-
         String snapshot = captureSnapshot(activity, playerView);
+        Geometry geometry = geometry(activity, root, container);
+
         playerView.hideController();
         container.animate().cancel();
         if (details != null) details.animate().cancel();
@@ -133,10 +133,10 @@ final class MiniPlayerHandoffPolish {
         if (details != null) {
             details.animate()
                     .alpha(0f)
-                    .translationY(dp(activity, 20))
-                    .scaleX(0.975f)
-                    .scaleY(0.975f)
-                    .setDuration(170L)
+                    .translationY(dp(activity, 16))
+                    .scaleX(0.982f)
+                    .scaleY(0.982f)
+                    .setDuration(82L)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
         }
@@ -144,15 +144,26 @@ final class MiniPlayerHandoffPolish {
         fadePlayerChrome(container, playerView);
         container.setPivotX(0f);
         container.setPivotY(0f);
+
+        if (geometry == null) {
+            finishToFeed(activity, snapshot, captureVisualBounds(container));
+            return;
+        }
+
+        float settleX = lerp(container.getTranslationX(), geometry.targetTranslationX, 0.58f);
+        float settleY = lerp(container.getTranslationY(), geometry.targetTranslationY, 0.56f);
+        float settleScaleX = lerp(container.getScaleX(), geometry.targetScaleX, 0.46f);
+        float settleScaleY = lerp(container.getScaleY(), geometry.targetScaleY, 0.46f);
+
         container.animate()
-                .translationX(geometry.targetTranslationX)
-                .translationY(geometry.targetTranslationY)
-                .scaleX(geometry.targetScaleX)
-                .scaleY(geometry.targetScaleY)
+                .translationX(settleX)
+                .translationY(settleY)
+                .scaleX(settleScaleX)
+                .scaleY(settleScaleY)
                 .alpha(1f)
-                .setDuration(235L)
-                .setInterpolator(new DecelerateInterpolator(1.45f))
-                .withEndAction(() -> finishToFeed(activity, snapshot))
+                .setDuration(96L)
+                .setInterpolator(new DecelerateInterpolator(1.18f))
+                .withEndAction(() -> finishToFeed(activity, snapshot, captureVisualBounds(container)))
                 .start();
     }
 
@@ -219,6 +230,19 @@ final class MiniPlayerHandoffPolish {
         return new Geometry(targetScaleX, targetScaleY, targetTranslationX, targetTranslationY);
     }
 
+    private static VisualBounds captureVisualBounds(View view) {
+        if (view == null || view.getWidth() <= 0 || view.getHeight() <= 0) return null;
+        try {
+            int[] location = new int[2];
+            view.getLocationOnScreen(location);
+            int width = Math.max(1, Math.round(view.getWidth() * view.getScaleX()));
+            int height = Math.max(1, Math.round(view.getHeight() * view.getScaleY()));
+            return new VisualBounds(location[0], location[1], width, height);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     private static String captureSnapshot(VideoDetailActivity activity, PlayerView playerView) {
         try {
             View surface = playerView.getVideoSurfaceView();
@@ -226,15 +250,15 @@ final class MiniPlayerHandoffPolish {
             TextureView texture = (TextureView) surface;
             if (!texture.isAvailable()) return null;
 
-            int width = dp(activity, NativeMiniPlayer.VIDEO_WIDTH_DP);
-            int height = dp(activity, NativeMiniPlayer.VIDEO_HEIGHT_DP);
+            int width = dp(activity, 320);
+            int height = dp(activity, 180);
             Bitmap bitmap = texture.getBitmap(width, height);
             if (bitmap == null) return null;
 
             File file = new File(activity.getCacheDir(),
                     "mini_handoff_" + System.currentTimeMillis() + ".jpg");
             try (FileOutputStream out = new FileOutputStream(file)) {
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out);
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out);
             } finally {
                 bitmap.recycle();
             }
@@ -244,7 +268,11 @@ final class MiniPlayerHandoffPolish {
         }
     }
 
-    private static void finishToFeed(VideoDetailActivity activity, String snapshotPath) {
+    private static void finishToFeed(
+            VideoDetailActivity activity,
+            String snapshotPath,
+            VisualBounds sourceBounds
+    ) {
         if (activity.isFinishing()) return;
         invoke(activity, "savePlaybackState", new Class<?>[] { boolean.class }, false);
 
@@ -259,9 +287,17 @@ final class MiniPlayerHandoffPolish {
         result.putExtra(VideoDetailActivity.EXTRA_VIEWS, stringField(activity, "views"));
         result.putExtra(VideoDetailActivity.EXTRA_UPLOADER, stringField(activity, "uploader"));
         result.putExtra(VideoDetailActivity.EXTRA_COMMENTS, stringField(activity, "comments"));
-        result.putExtra(EXTRA_DIRECT_HANDOFF, true);
+
+        boolean direct = snapshotPath != null && !snapshotPath.isEmpty() && sourceBounds != null;
+        result.putExtra(EXTRA_DIRECT_HANDOFF, direct);
         if (snapshotPath != null && !snapshotPath.isEmpty()) {
             result.putExtra(EXTRA_SNAPSHOT_PATH, snapshotPath);
+        }
+        if (sourceBounds != null) {
+            result.putExtra(EXTRA_SOURCE_LEFT, sourceBounds.left);
+            result.putExtra(EXTRA_SOURCE_TOP, sourceBounds.top);
+            result.putExtra(EXTRA_SOURCE_WIDTH, sourceBounds.width);
+            result.putExtra(EXTRA_SOURCE_HEIGHT, sourceBounds.height);
         }
 
         ExoPlayer player = field(activity, "player", ExoPlayer.class);
@@ -281,7 +317,7 @@ final class MiniPlayerHandoffPolish {
             View child = container.getChildAt(i);
             if (child == playerView) continue;
             child.animate().cancel();
-            child.animate().alpha(0f).setDuration(110L).start();
+            child.animate().alpha(0f).setDuration(70L).start();
         }
     }
 
@@ -385,6 +421,20 @@ final class MiniPlayerHandoffPolish {
             this.targetScaleY = targetScaleY;
             this.targetTranslationX = targetTranslationX;
             this.targetTranslationY = targetTranslationY;
+        }
+    }
+
+    private static final class VisualBounds {
+        final int left;
+        final int top;
+        final int width;
+        final int height;
+
+        VisualBounds(int left, int top, int width, int height) {
+            this.left = left;
+            this.top = top;
+            this.width = width;
+            this.height = height;
         }
     }
 }
