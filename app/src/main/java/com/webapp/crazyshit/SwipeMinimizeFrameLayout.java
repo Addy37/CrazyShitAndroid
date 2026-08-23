@@ -19,6 +19,7 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
 
     private final int touchSlop;
     private Listener listener;
+    private Listener visualObserver;
     private boolean swipeEnabled = true;
     private boolean dragging;
     private float downX;
@@ -42,6 +43,14 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
 
     public void setListener(Listener listener) {
         this.listener = listener;
+    }
+
+    /**
+     * Secondary non-owning observer used for visual polish. It receives the same gesture progress
+     * without replacing the controller listener that owns minimize/restore behavior.
+     */
+    public void setVisualObserver(Listener observer) {
+        this.visualObserver = observer;
     }
 
     public void setSwipeEnabled(boolean enabled) {
@@ -104,7 +113,7 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
                     boolean fastFlick = velocityY > dp(650);
                     boolean minimize = lastDistance >= threshold ||
                             (lastDistance >= dp(34) && fastFlick);
-                    if (listener != null) listener.onRelease(minimize, lastDistance);
+                    dispatchRelease(minimize, lastDistance);
                     resetGesture();
                     return true;
                 }
@@ -112,7 +121,7 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
                 return super.onTouchEvent(event);
 
             case MotionEvent.ACTION_CANCEL:
-                if (dragging && listener != null) listener.onRelease(false, lastDistance);
+                if (dragging) dispatchRelease(false, lastDistance);
                 resetGesture();
                 return true;
 
@@ -122,11 +131,18 @@ public final class SwipeMinimizeFrameLayout extends FrameLayout {
     }
 
     private void dispatchDrag(float distance) {
-        if (listener == null) return;
         float range = Math.max(dp(150), getHeight() * 0.62f);
         float raw = Math.max(0f, Math.min(1f, distance / range));
         float eased = 1f - ((1f - raw) * (1f - raw));
-        listener.onDrag(distance, eased);
+        if (listener != null) listener.onDrag(distance, eased);
+        if (visualObserver != null) visualObserver.onDrag(distance, eased);
+    }
+
+    private void dispatchRelease(boolean minimize, float distance) {
+        // Let the visual observer prepare the final stacking/fade before the owning controller
+        // starts its settle animation. This avoids a one-frame card/player ordering flash.
+        if (visualObserver != null) visualObserver.onRelease(minimize, distance);
+        if (listener != null) listener.onRelease(minimize, distance);
     }
 
     private void trackVelocity(MotionEvent event) {
