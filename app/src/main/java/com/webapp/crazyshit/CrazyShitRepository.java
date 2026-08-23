@@ -40,42 +40,141 @@ public final class CrazyShitRepository {
             "(?i)url\\(\\s*['\\\"]?([^'\\\")]+)['\\\"]?\\s*\\)"
     );
 
+    private static final Pattern SECTION_HEADER = Pattern.compile(
+            "(?i)^(today(?:'|’)?s\\s+crazy\\s+shit|" +
+            "(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\s+" +
+            "(?:january|february|march|april|may|june|july|august|september|october|november|december)\\s+" +
+            "\\d{1,2}(?:st|nd|rd|th)?)\\b"
+    );
+
     public List<NativeContentItem> fetchFeed(Context context, String baseUrl, int page)
             throws IOException {
         Document doc = fetchDocument(context, pageUrl(baseUrl, page));
+        if (isHomeFeed(baseUrl)) return parseHomeFeed(doc, page);
+        return parsePlainFeed(doc);
+    }
+
+    private List<NativeContentItem> parseHomeFeed(Document doc, int page) {
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        LinkedHashMap<String, Integer> mediaPositions = new LinkedHashMap<>();
+        String pendingHeader = "";
+        int sectionOrdinal = 0;
+        int mediaCount = 0;
+
+        // Walk the real document order. Section titles become normal data items before the first
+        // unique media item in that group, so RecyclerView never needs to be mutated after layout.
+        for (Element node : doc.getAllElements()) {
+            String tag = node.tagName();
+            if (!"a".equalsIgnoreCase(tag)) {
+                String header = extractSectionHeader(node);
+                if (!header.isEmpty()) pendingHeader = header;
+                continue;
+            }
+
+            String url = normalizeUrl(node.absUrl("href"));
+            if (!isMediaPage(url)) continue;
+
+            NativeContentItem candidate = buildMediaItem(node, url);
+            Integer oldPosition = mediaPositions.get(url);
+            if (oldPosition != null) {
+                NativeContentItem old = result.get(oldPosition);
+                result.set(oldPosition, old.merge(candidate));
+                continue;
+            }
+            if (!validFeedItem(candidate)) continue;
+
+            if (!pendingHeader.isEmpty()) {
+                String sectionUrl = "section:home:" + page + ":" + (++sectionOrdinal) + ":" + slug(pendingHeader);
+                result.add(new NativeContentItem(
+                        NativeContentItem.KIND_SECTION,
+                        pendingHeader,
+                        sectionUrl,
+                        "",
+                        "",
+                        "",
+                        ""
+                ));
+                pendingHeader = "";
+            }
+
+            mediaPositions.put(url, result.size());
+            result.add(candidate);
+            mediaCount++;
+            if (mediaCount >= 60) break;
+        }
+
+        // If the site changes its section markup, fail soft and keep the working media feed.
+        if (mediaCount == 0) return parsePlainFeed(doc);
+        return result;
+    }
+
+    private List<NativeContentItem> parsePlainFeed(Document doc) {
         LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
 
         for (Element link : doc.select("a[href*=/cnt/medias/]")) {
             String url = normalizeUrl(link.absUrl("href"));
             if (!isMediaPage(url)) continue;
 
-            Element scope = findCardScope(link);
-            String title = findTitle(link, scope, url);
-            String image = findImage(link, scope);
-            Meta meta = findMeta(scope, title);
-
-            NativeContentItem candidate = new NativeContentItem(
-                    NativeContentItem.KIND_MEDIA,
-                    title,
-                    url,
-                    image,
-                    meta.views,
-                    meta.uploader,
-                    meta.comments
-            );
-
+            NativeContentItem candidate = buildMediaItem(link, url);
             NativeContentItem old = items.get(url);
             items.put(url, old == null ? candidate : old.merge(candidate));
         }
 
         ArrayList<NativeContentItem> result = new ArrayList<>();
         for (NativeContentItem item : items.values()) {
-            if (item.title.trim().length() < 3) continue;
-            if (looksLikeNavigation(item.title)) continue;
+            if (!validFeedItem(item)) continue;
             result.add(item);
             if (result.size() >= 60) break;
         }
         return result;
+    }
+
+    private NativeContentItem buildMediaItem(Element link, String url) {
+        Element scope = findCardScope(link);
+        String title = findTitle(link, scope, url);
+        String image = findImage(link, scope);
+        Meta meta = findMeta(scope, title);
+        return new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                title,
+                url,
+                image,
+                meta.views,
+                meta.uploader,
+                meta.comments
+        );
+    }
+
+    private boolean validFeedItem(NativeContentItem item) {
+        if (item == null || item.title.trim().length() < 3) return false;
+        return !looksLikeNavigation(item.title);
+    }
+
+    private String extractSectionHeader(Element element) {
+        if (element == null) return "";
+
+        String own = clean(element.ownText());
+        Matcher ownMatch = SECTION_HEADER.matcher(own);
+        if (ownMatch.find()) return clean(ownMatch.group(1));
+
+        // Some site headers wrap individual words in spans, so the container has no useful
+        // ownText(). Checking its combined text still stays safe because the pattern only accepts
+        // the known CrazyShit group/date formats and only at the beginning of the element.
+        String combined = clean(element.text());
+        Matcher combinedMatch = SECTION_HEADER.matcher(combined);
+        if (combinedMatch.find()) return clean(combinedMatch.group(1));
+        return "";
+    }
+
+    private boolean isHomeFeed(String baseUrl) {
+        String base = baseUrl == null || baseUrl.trim().isEmpty() ? HOME : baseUrl.trim();
+        return HOME.equals(ensureTrailingSlash(base));
+    }
+
+    private String slug(String value) {
+        String text = clean(value).toLowerCase(Locale.US).replace('’', '\'');
+        text = text.replaceAll("[^a-z0-9]+", "-");
+        return text.replaceAll("(^-+|-+$)", "");
     }
 
     public List<NativeContentItem> fetchCategories(Context context) throws IOException {
