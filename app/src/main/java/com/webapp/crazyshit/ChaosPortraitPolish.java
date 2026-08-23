@@ -19,11 +19,12 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Keeps the useful Chaos chrome visible while the app is in portrait orientation.
+ * Keeps the useful Chaos chrome visible while the app is in portrait orientation and keeps
+ * transparent chrome containers from stealing touches meant for the video.
  *
- * The ambient/blur experiment is intentionally disabled for now. This helper only targets
- * PlayerViews inside ChaosFeedView, cancels the normal 2.2 second chrome-hide callback, and
- * keeps title/actions/mute visible. The scrub bar keeps its own independent inactivity timer.
+ * The ambient/blur experiment is intentionally disabled for now. The title/actions/mute remain
+ * visible in portrait, the scrub bar keeps its independent inactivity timer, and empty space in
+ * the full-width lower chrome container is non-interactive so taps/holds can reach PlayerView.
  */
 final class ChaosPortraitPolish {
     private static final long TICK_MS = 180L;
@@ -84,6 +85,9 @@ final class ChaosPortraitPolish {
             if (content != null) {
                 List<PlayerView> views = new ArrayList<>();
                 collectChaosPlayers(content, false, views);
+                for (PlayerView playerView : views) {
+                    makeEmptyChromePassThrough(playerView);
+                }
                 if (portrait) {
                     for (PlayerView playerView : views) keepChromeVisible(playerView);
                 } else if (wasPortrait) {
@@ -104,6 +108,35 @@ final class ChaosPortraitPolish {
         for (int i = 0; i < group.getChildCount(); i++) {
             collectChaosPlayers(group.getChildAt(i), chaos, out);
         }
+    }
+
+    private static void makeEmptyChromePassThrough(PlayerView playerView) {
+        if (!(playerView.getParent() instanceof FrameLayout)) return;
+        FrameLayout root = (FrameLayout) playerView.getParent();
+        RecyclerView.ViewHolder holder = findHolder(root);
+
+        View lower = holder == null ? null : fieldValue(holder, "lower", View.class);
+        if (lower == null) {
+            for (int i = 0; i < root.getChildCount(); i++) {
+                View child = root.getChildAt(i);
+                if (child instanceof LinearLayout) {
+                    lower = child;
+                    break;
+                }
+            }
+        }
+        if (lower == null) return;
+
+        // The container itself used to own a long-press listener, making its entire transparent
+        // rectangle a touch target. Children such as title, comments, share, save and More remain
+        // interactive, but blank space now returns false so the PlayerView underneath can handle it.
+        lower.setOnTouchListener(null);
+        lower.setOnClickListener(null);
+        lower.setOnLongClickListener(null);
+        lower.setClickable(false);
+        lower.setLongClickable(false);
+        lower.setFocusable(false);
+        lower.setFocusableInTouchMode(false);
     }
 
     private static void keepChromeVisible(PlayerView playerView) {
