@@ -80,7 +80,6 @@ final class UiPolishController {
             NativeMainActivity activity = activityRef.get();
             if (!running || activity == null || activity.isFinishing()) return;
 
-            // Blend the system navigation area into the app instead of leaving a detached black strip.
             activity.getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
             activity.getWindow().setNavigationBarColor(Color.rgb(13, 13, 15));
 
@@ -156,12 +155,10 @@ final class UiPolishController {
         nav.setItemTextColor(tint);
         nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(48, 255, 90, 31)));
 
-        // Material versions differ slightly here, so keep the active indicator calls reflective.
+        // v2.2.1 draws its own moving indicator, so disable Material's extra selected bubble.
         try {
             Method enabled = nav.getClass().getMethod("setItemActiveIndicatorEnabled", boolean.class);
-            enabled.invoke(nav, true);
-            Method color = nav.getClass().getMethod("setItemActiveIndicatorColor", ColorStateList.class);
-            color.invoke(nav, ColorStateList.valueOf(Color.rgb(72, 37, 28)));
+            enabled.invoke(nav, false);
         } catch (Exception ignored) {
         }
     }
