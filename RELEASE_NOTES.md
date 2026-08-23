@@ -1,61 +1,32 @@
-# CrazyShit v2.3.0
+# CrazyShit v2.3.1
 
-CrazyShit 2.3.0 replaces the old cross-Activity minimize handoff with one unified native video session inside the main app shell.
+CrazyShit 2.3.1 cleans up the new unified video session introduced in 2.3.0, focusing on the two visual problems visible during swipe-down minimization.
 
-## One continuous player
+## Mini-player video fix
 
-- Normal video detail now lives inside `NativeMainActivity` instead of remaining a separate visible Activity
-- Full video, swipe-down minimization, mini-player playback and expand-back-up all share the same `PlayerView` and the same ExoPlayer instance
-- Minimizing no longer depends on a screenshot bridge, a second decoder, or recreating playback at the destination
-- Playback position, buffering state and the live frame remain attached to the same player during minimize and expand
+- The live unified `PlayerView` is kept above the mini-player card while it settles into the mini slot
+- The mini media placeholder becomes transparent once the live video is moving over it
+- The player receives an explicit higher Z-order so the mini card cannot cover the live frame with a black rectangle
+- Mini-player card elevation is reduced slightly so the video remains visually dominant while the card chrome stays underneath
 
-## Real swipe-to-mini motion
+## Cleaner minimize transition
 
-- The video follows the finger continuously toward the real mini-player slot
-- The detail layer fades away during the drag so the current feed is already visible underneath
-- The mini-player card fades in under the moving live video
-- Releasing a committed swipe settles the live player directly into the mini-player position
-- Canceling the gesture reverses the same transform back to full video
+- Detail text, buttons, comments and related cards fade away early during the drag instead of ghosting over the feed
+- The dark detail backdrop can still fade naturally behind the moving video, so Home is revealed cleanly instead of through a double-exposure effect
+- During expand, detail content returns only near the end of the reverse motion
+- The same live `PlayerView` and ExoPlayer remain attached throughout the entire minimize and expand sequence
 
-## Expand back to full video
+## Existing behavior kept
 
-- Tapping the mini-player video, title or expand action reverses the exact motion
-- The same live player grows back into the full video area while the detail page fades in around it
-- No playback restart is required when switching between full and mini states
-
-## Native video detail kept
-
-- Title and metadata
-- Comments
-- Watch Later
-- Share
-- Playback speed
-- Fit / Fill / Zoom
-- Fullscreen landscape playback
-- Related videos
-- Playback history and remembered position
-- Native playback failure fallback
-
-## Existing UI kept
-
-- v2.2.2 floating bottom dock and circular Chaos button remain unchanged
-- Feed polish, collapsing header, compact metadata and More redesign remain
-- Legacy video Activities remain available as a fallback path, but normal video launches are routed into the unified session
-
-## Chaos playback kept untouched
-
-- Persistent portrait title and action controls
-- Touch passthrough in empty lower overlay space
-- Hold for 2x
-- Swipe navigation and auto-advance
-- Remember mute state
-- Not interested filtering
-- Scrubbable progress bar and preload behavior
-- Ambient blur remains disabled
+- Swipe-down thresholds and cancel-to-restore behavior remain unchanged
+- Mini-player title, expand, close and progress controls remain unchanged
+- Full video detail keeps Comments, Watch Later, Share, speed, Fit / Fill / Zoom, fullscreen, related videos, history and remembered position
+- The 2.2.2 floating bottom dock remains unchanged
+- Chaos playback and portrait controls remain untouched
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.3.0 installs over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.3.1 installs over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
