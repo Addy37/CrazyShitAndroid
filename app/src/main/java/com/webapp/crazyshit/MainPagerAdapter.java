@@ -1,13 +1,11 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
-import android.content.Intent;
 import android.graphics.Color;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -22,17 +20,20 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Keeps Home, Trending, Memes and Chaos alive for true horizontal paging.
+ * Keeps Home, Series, Chaos and Categories alive for true horizontal paging.
  * Chaos itself owns a nested vertical ViewPager2 for Shorts/Reels-style playback.
  */
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
     public static final int PAGE_HOME = 0;
-    public static final int PAGE_TRENDING = 1;
-    // BETA18_CHAOS_CENTER
+    public static final int PAGE_SERIES = 1;
+    // Compatibility aliases let the existing shell keep its proven pager routing while the
+    // visible navigation is upgraded by SeriesCategoriesNavController.
+    public static final int PAGE_TRENDING = PAGE_SERIES;
     public static final int PAGE_CHAOS = 2;
-    public static final int PAGE_MEMES = 3;
+    public static final int PAGE_CATEGORIES = 3;
+    public static final int PAGE_MEMES = PAGE_CATEGORIES;
     public static final int PAGE_COUNT = 4;
-    private static final int FEED_PAGE_COUNT = 4;
+    private static final int PAGE_ARRAY_COUNT = 4;
 
     public interface Host {
         void onOpenItem(NativeContentItem item, boolean meme);
@@ -40,21 +41,28 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         void onOpenComments(NativeContentItem item);
     }
 
+    private enum PageKind {
+        FEED,
+        SERIES,
+        CATEGORIES
+    }
+
     private final Activity activity;
     private final Host host;
     private final CrazyShitRepository repository = new CrazyShitRepository();
-    private final MemeRepository memeRepository = new MemeRepository();
+    private final BrowseRepository browseRepository = new BrowseRepository();
     private final ExecutorService io = Executors.newFixedThreadPool(3);
-    private final Page[] pages = new Page[FEED_PAGE_COUNT];
+    private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
     private final ChaosFeedView chaosView;
 
     public MainPagerAdapter(Activity activity, Host host) {
         this.activity = activity;
         this.host = host;
         setHasStableIds(true);
-        pages[PAGE_HOME] = buildFeedPage(PAGE_HOME, "native_view_home", CrazyShitRepository.HOME, false);
-        pages[PAGE_TRENDING] = buildFeedPage(PAGE_TRENDING, "native_view_trending", CrazyShitRepository.TRENDING, false);
-        pages[PAGE_MEMES] = buildFeedPage(PAGE_MEMES, "native_view_memes", MemeRepository.MEMES, true);
+
+        pages[PAGE_HOME] = buildFeedPage(PAGE_HOME, "native_view_home", CrazyShitRepository.HOME);
+        pages[PAGE_SERIES] = buildBrowsePage(PAGE_SERIES, PageKind.SERIES);
+        pages[PAGE_CATEGORIES] = buildBrowsePage(PAGE_CATEGORIES, PageKind.CATEGORIES);
 
         chaosView = new ChaosFeedView(activity, new ChaosFeedView.Host() {
             @Override
@@ -73,8 +81,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public String titleFor(int position) {
-        if (position == PAGE_TRENDING) return "Trending";
-        if (position == PAGE_MEMES) return "Memes";
+        if (position == PAGE_SERIES) return "Series";
+        if (position == PAGE_CATEGORIES) return "Categories";
         if (position == PAGE_CHAOS) return "Chaos";
         return "Home";
     }
@@ -82,13 +90,16 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     public int viewMode(int position) {
         if (position == PAGE_CHAOS) return NativeFeedAdapter.VIEW_LARGE;
         Page page = pageAt(position);
-        return page == null ? NativeFeedAdapter.VIEW_LARGE : page.viewMode;
+        if (page == null) return NativeFeedAdapter.VIEW_LARGE;
+        if (page.kind != PageKind.FEED) return NativeFeedAdapter.VIEW_GRID;
+        return page.viewMode;
     }
 
     public void setViewMode(int position, int mode) {
         if (position == PAGE_CHAOS) return;
         Page page = pageAt(position);
-        if (page == null) return;
+        if (page == null || page.kind != PageKind.FEED) return;
+
         int safe = mode;
         if (safe < NativeFeedAdapter.VIEW_LARGE || safe > NativeFeedAdapter.VIEW_GRID) {
             safe = NativeFeedAdapter.VIEW_LARGE;
@@ -98,7 +109,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 .edit()
                 .putInt(page.preferenceKey, safe)
                 .apply();
-        applyLayout(page);
+        applyFeedLayout(page);
     }
 
     public void refresh(int position) {
@@ -121,6 +132,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void onHostResume() {
         chaosView.onHostResume();
+        Page home = pageAt(PAGE_HOME);
+        if (home != null && home.feedAdapter != null) home.feedAdapter.refreshPlaybackState();
     }
 
     public void onHostPause() {
@@ -168,8 +181,63 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         holder.container.addView(pageView, new FrameLayout.LayoutParams(-1, -1));
     }
 
-    private Page buildFeedPage(int index, String prefKey, String baseUrl, boolean meme) {
-        Page page = new Page(index, prefKey, baseUrl, meme);
+    private Page buildFeedPage(int index, String prefKey, String baseUrl) {
+        Page page = createPageShell(index, PageKind.FEED, prefKey, baseUrl);
+        page.feedAdapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
+            @Override
+            public void onOpen(NativeContentItem item) {
+                if (item == null || item.isSection()) return;
+                host.onOpenItem(item, false);
+            }
+
+            @Override
+            public void onLongPress(NativeContentItem item, View anchor) {
+                if (item == null || item.isSection()) return;
+                host.onLongPressItem(item, anchor, false);
+            }
+
+            @Override
+            public void onComments(NativeContentItem item) {
+                if (item == null || item.isSection()) return;
+                host.onOpenComments(item);
+            }
+        });
+        page.recycler.setAdapter(page.feedAdapter);
+        page.viewMode = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .getInt(prefKey, NativeFeedAdapter.VIEW_LARGE);
+        applyFeedLayout(page);
+
+        page.recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
+                RecyclerView.LayoutManager manager = view.getLayoutManager();
+                if (!(manager instanceof LinearLayoutManager)) return;
+                LinearLayoutManager lm = (LinearLayoutManager) manager;
+                int first = lm.findFirstVisibleItemPosition();
+                int last = lm.findLastVisibleItemPosition();
+                page.feedAdapter.preloadVisible(first, last);
+                if (dy > 0 && !page.loading && !page.endReached &&
+                        last >= Math.max(0, page.feedAdapter.getItemCount() - 5)) {
+                    load(page, true);
+                }
+            }
+        });
+        return page;
+    }
+
+    private Page buildBrowsePage(int index, PageKind kind) {
+        Page page = createPageShell(index, kind, "", "");
+        page.browseAdapter = new NativeCategoryAdapter(item -> {
+            if (item == null || item.url == null || item.url.isEmpty()) return;
+            activity.startActivity(NativeFeedBrowserActivity.create(activity, item.title, item.url, false));
+        });
+        page.recycler.setAdapter(page.browseAdapter);
+        page.recycler.setLayoutManager(new GridLayoutManager(activity, 2));
+        return page;
+    }
+
+    private Page createPageShell(int index, PageKind kind, String prefKey, String baseUrl) {
+        Page page = new Page(index, kind, prefKey, baseUrl);
         page.root = new FrameLayout(activity);
         page.root.setBackgroundColor(Color.rgb(13, 13, 15));
 
@@ -198,140 +266,79 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.empty.setVisibility(View.GONE);
         page.root.addView(page.empty, new FrameLayout.LayoutParams(-1, -1));
 
-        page.adapter = new NativeFeedAdapter(activity, new NativeFeedAdapter.Listener() {
-            @Override
-            public void onOpen(NativeContentItem item) {
-                if (item == null || item.isSection()) return;
-                if (page.meme || item.isMeme()) openMeme(item);
-                else host.onOpenItem(item, false);
-            }
-
-            @Override
-            public void onLongPress(NativeContentItem item, View anchor) {
-                if (item == null || item.isSection()) return;
-                if (page.meme || item.isMeme()) showMemeMenu(item, anchor);
-                else host.onLongPressItem(item, anchor, false);
-            }
-
-            @Override
-            public void onComments(NativeContentItem item) {
-                if (item == null || item.isSection()) return;
-                if (!page.meme && !item.isMeme()) host.onOpenComments(item);
-            }
-        });
-        page.recycler.setAdapter(page.adapter);
-        page.viewMode = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getInt(prefKey, NativeFeedAdapter.VIEW_LARGE);
-        applyLayout(page);
-
         page.refresh.setOnRefreshListener(() -> refresh(page.index));
-        page.recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
-                RecyclerView.LayoutManager manager = view.getLayoutManager();
-                if (!(manager instanceof LinearLayoutManager)) return;
-                LinearLayoutManager lm = (LinearLayoutManager) manager;
-                int first = lm.findFirstVisibleItemPosition();
-                int last = lm.findLastVisibleItemPosition();
-                page.adapter.preloadVisible(first, last);
-                if (dy > 0 && !page.loading && !page.endReached &&
-                        last >= Math.max(0, page.adapter.getItemCount() - 5)) {
-                    load(page, true);
-                }
-            }
-        });
-
         return page;
     }
 
-    private void openMeme(NativeContentItem item) {
-        if (item == null) return;
-        Intent intent = new Intent(activity, MemeViewerActivity.class);
-        intent.putExtra(MemeViewerActivity.EXTRA_TITLE, item.title);
-        intent.putExtra(MemeViewerActivity.EXTRA_PAGE_URL, item.url);
-        intent.putExtra(MemeViewerActivity.EXTRA_IMAGE_URL, item.imageUrl);
-        activity.startActivity(intent);
-    }
-
-    private void showMemeMenu(NativeContentItem item, View anchor) {
-        if (item == null || anchor == null) return;
-        PopupMenu menu = new PopupMenu(activity, anchor);
-        menu.getMenu().add(0, 1, 0, "View image");
-        menu.getMenu().add(0, 2, 1, "Share");
-        menu.getMenu().add(0, 3, 2, "Open meme page");
-        menu.setOnMenuItemClickListener(clicked -> {
-            if (clicked.getItemId() == 1) {
-                openMeme(item);
-                return true;
-            }
-            if (clicked.getItemId() == 2) {
-                Intent share = new Intent(Intent.ACTION_SEND);
-                share.setType("text/plain");
-                share.putExtra(Intent.EXTRA_TEXT, item.url);
-                share.putExtra(Intent.EXTRA_SUBJECT, item.title);
-                activity.startActivity(Intent.createChooser(share, "Share meme"));
-                return true;
-            }
-            if (clicked.getItemId() == 3) {
-                Intent web = new Intent(activity, WebFallbackActivity.class);
-                web.putExtra(WebFallbackActivity.EXTRA_URL, item.url);
-                activity.startActivity(web);
-                return true;
-            }
-            return false;
-        });
-        menu.show();
-    }
-
-    private void applyLayout(Page page) {
-        if (page == null || page.recycler == null || page.adapter == null) return;
-        page.adapter.setViewMode(page.viewMode);
+    private void applyFeedLayout(Page page) {
+        if (page == null || page.feedAdapter == null) return;
+        page.feedAdapter.setViewMode(page.viewMode);
         RecyclerView.LayoutManager old = page.recycler.getLayoutManager();
         int position = 0;
         if (old instanceof LinearLayoutManager) {
             position = Math.max(0, ((LinearLayoutManager) old).findFirstVisibleItemPosition());
         }
+
         if (page.viewMode == NativeFeedAdapter.VIEW_GRID) {
             GridLayoutManager grid = new GridLayoutManager(activity, 2);
             grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
                 @Override
                 public int getSpanSize(int adapterPosition) {
-                    return page.adapter.isSectionAt(adapterPosition) ? 2 : 1;
+                    return page.feedAdapter.isSectionAt(adapterPosition) ? 2 : 1;
                 }
             });
             page.recycler.setLayoutManager(grid);
         } else {
             page.recycler.setLayoutManager(new LinearLayoutManager(activity));
         }
-        if (page.adapter.getItemCount() > 0) {
-            page.recycler.scrollToPosition(Math.min(position, page.adapter.getItemCount() - 1));
+
+        if (page.feedAdapter.getItemCount() > 0) {
+            page.recycler.scrollToPosition(Math.min(position, page.feedAdapter.getItemCount() - 1));
         }
     }
 
     private void load(Page page, boolean append) {
         if (page == null || page.loading || page.endReached) return;
+        if (page.kind != PageKind.FEED) append = false;
         page.loading = true;
         final int generation = page.generation;
+        final boolean appendRequest = append;
         final int requestPage = append ? page.currentPage + 1 : 1;
-        if (!append && page.adapter.getItemCount() == 0) page.progress.setVisibility(View.VISIBLE);
+        if (!append && page.itemCount() == 0) page.progress.setVisibility(View.VISIBLE);
 
         io.execute(() -> {
             try {
-                List<NativeContentItem> result = page.meme
-                        ? memeRepository.fetch(activity, requestPage)
-                        : repository.fetchFeed(activity, page.baseUrl, requestPage);
+                List<NativeContentItem> result;
+                if (page.kind == PageKind.SERIES) {
+                    result = browseRepository.fetchSeries(activity);
+                } else if (page.kind == PageKind.CATEGORIES) {
+                    result = browseRepository.fetchCategories(activity);
+                } else {
+                    result = repository.fetchFeed(activity, page.baseUrl, requestPage);
+                }
+
                 activity.runOnUiThread(() -> {
                     if (generation != page.generation) return;
                     page.loading = false;
                     page.progress.setVisibility(View.GONE);
                     page.refresh.setRefreshing(false);
-                    if (append) page.adapter.append(result); else page.adapter.replace(result);
-                    if (!result.isEmpty()) page.currentPage = requestPage;
-                    if (result.isEmpty()) page.endReached = true;
                     page.empty.setVisibility(View.GONE);
-                    if (page.adapter.getItemCount() == 0) {
-                        page.empty.setText(page.meme
-                                ? "No memes could be loaded right now."
+
+                    if (page.kind == PageKind.FEED) {
+                        if (appendRequest) page.feedAdapter.append(result);
+                        else page.feedAdapter.replace(result);
+                        if (!result.isEmpty()) page.currentPage = requestPage;
+                        if (result.isEmpty()) page.endReached = true;
+                    } else {
+                        page.browseAdapter.replace(result);
+                        page.endReached = true;
+                    }
+
+                    if (page.itemCount() == 0) {
+                        page.empty.setText(page.kind == PageKind.SERIES
+                                ? "Couldn't load Series right now."
+                                : page.kind == PageKind.CATEGORIES
+                                ? "Couldn't load Categories right now."
                                 : "This feed couldn't be rendered right now.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
@@ -342,8 +349,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     page.loading = false;
                     page.progress.setVisibility(View.GONE);
                     page.refresh.setRefreshing(false);
-                    if (page.adapter.getItemCount() == 0) {
-                        page.empty.setText("Couldn't load this tab right now.");
+                    if (page.itemCount() == 0) {
+                        page.empty.setText(page.kind == PageKind.SERIES
+                                ? "Couldn't load Series right now."
+                                : page.kind == PageKind.CATEGORIES
+                                ? "Couldn't load Categories right now."
+                                : "Couldn't load this tab right now.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
                 });
@@ -371,27 +382,33 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private static final class Page {
         final int index;
+        final PageKind kind;
         final String preferenceKey;
         final String baseUrl;
-        final boolean meme;
 
         FrameLayout root;
         SwipeRefreshLayout refresh;
         RecyclerView recycler;
         ProgressBar progress;
         TextView empty;
-        NativeFeedAdapter adapter;
-        int viewMode;
+        NativeFeedAdapter feedAdapter;
+        NativeCategoryAdapter browseAdapter;
+        int viewMode = NativeFeedAdapter.VIEW_GRID;
         int currentPage;
         boolean loading;
         boolean endReached;
         int generation;
 
-        Page(int index, String preferenceKey, String baseUrl, boolean meme) {
+        Page(int index, PageKind kind, String preferenceKey, String baseUrl) {
             this.index = index;
+            this.kind = kind;
             this.preferenceKey = preferenceKey;
             this.baseUrl = baseUrl;
-            this.meme = meme;
+        }
+
+        int itemCount() {
+            if (feedAdapter != null) return feedAdapter.getItemCount();
+            return browseAdapter == null ? 0 : browseAdapter.getItemCount();
         }
     }
 }
