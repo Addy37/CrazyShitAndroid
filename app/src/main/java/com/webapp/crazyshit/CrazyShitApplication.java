@@ -33,11 +33,15 @@ public final class CrazyShitApplication extends Application {
                     LandscapeUiController.attach(nativeActivity);
                     LandscapeRailPolish.applySoon(nativeActivity);
                     LandscapeMoreDialog.attachSoon(nativeActivity);
+                    ChaosPortraitPolish.start(nativeActivity);
                 }
             }
 
             @Override
             public void onActivityPaused(Activity activity) {
+                if (activity instanceof NativeMainActivity) {
+                    ChaosPortraitPolish.stop((NativeMainActivity) activity);
+                }
             }
 
             @Override
@@ -51,7 +55,9 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityDestroyed(Activity activity) {
                 if (activity instanceof NativeMainActivity) {
-                    LandscapeUiController.detach((NativeMainActivity) activity);
+                    NativeMainActivity nativeActivity = (NativeMainActivity) activity;
+                    ChaosPortraitPolish.stop(nativeActivity);
+                    LandscapeUiController.detach(nativeActivity);
                     NativeMainActivity current = currentNativeActivity.get();
                     if (current == activity) currentNativeActivity.clear();
                 }
@@ -69,6 +75,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeUiController.apply(activity);
                     LandscapeRailPolish.applySoon(activity);
                     LandscapeMoreDialog.attachSoon(activity);
+                    ChaosPortraitPolish.start(activity);
                 },
                 80L
         );
