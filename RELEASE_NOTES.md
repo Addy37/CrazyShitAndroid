@@ -1,42 +1,34 @@
-# CrazyShit v2.0.1
+# CrazyShit v2.0.2
 
-CrazyShit 2.0 is a major rebuild of the Android client. The primary browsing experience is now native Android, with the live website retained as a compatibility fallback for flows that need it.
+CrazyShit 2.0.2 is a small stable update focused on the Chaos feed and app branding.
 
-## Stable release cleanup
+## What's new
 
-- Removed Jeremy Edition branding from the stable app, splash screen, documentation, updater text, and release naming
-- Removed the old Jeremy launcher artwork
-- Added a CrazyShit CS / chaos-bolt launcher and splash mark using the app's dark, white, and orange visual theme
-- Stable APK is published as `CrazyShit.apk`
+- Replaced the launcher and Android splash artwork with the new CrazyShit logo supplied for the stable app
+- Chaos now advances automatically to the next clip when the current video reaches the end
+- Manual up/down swiping in Chaos still works normally
+- Chaos keeps loading ahead near the end of the current pool so automatic playback can continue
+- Finished Chaos clips are recorded as completed in playback history
 
-## Highlights
+## Existing 2.0 features
 
 - Native Home and Trending feeds with pagination and retained tab state
-- Real-time horizontal swiping between Home, Trending, Chaos, and Memes
-- **Chaos**, a featured vertical random-video feed with autoplay, next/previous swiping, preloading, duplicate prevention, and recent-view avoidance
-- Chaos landscape mode with immersive fullscreen playback while keeping vertical next/previous swipes active
-- Native **Memes** feed and static image viewer
+- Horizontal swiping between Home, Trending, Chaos, and Memes
+- Randomized vertical Chaos feed with autoplay, preloading, duplicate prevention, and recent-view avoidance
+- Native Memes feed and static image viewer
 - Native Library with Continue Watching, History, Watch Later, thumbnails, progress, and swipeable Library tabs
 - Native video detail screen with Media3 playback, comments, related videos, sharing, and Watch Later
 - In-app mini-player, swipe-down minimize, resume position, PiP, speed controls, seek gestures, brightness/volume gestures, and Fit/Fill/Zoom modes
 - Native comments and reply composer using the current CrazyShit.com session
-- Dedicated sign-in flow and **My Profile** entry for the logged-in site account
-- Native Categories and Search with WebView fallback when the site cannot be represented reliably
-- Manual updater plus **Automatic updates**, enabled by default
-- Automatic update downloads are package-verified before Android opens the required installer confirmation
-- Material dark interface with Chaos emphasized as the center navigation tab
-
-## Native architecture
-
-The app reads the public CrazyShit.com HTML directly at runtime with Jsoup. It does not use a project-operated proxy or fabricated remote API. Media playback only uses stream URLs already exposed by the website to the current device/session.
-
-The compatibility WebView remains available for unsupported interactive pages, site changes, or account flows that need the full website.
+- Dedicated sign-in flow and My Profile entry for the logged-in site account
+- Native Categories and Search with WebView fallback for unsupported site flows
+- Manual updater plus automatic updates, enabled by default
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.1 can install over earlier signed stable releases such as v1.4.4 while retaining their app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.2 installs over earlier signed stable releases while retaining app data.
 
-Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit. Beta-only local data does not automatically transfer to the stable package.
+Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
 ## Project status
 

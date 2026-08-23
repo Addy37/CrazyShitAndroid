@@ -1,24 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-
-    <!-- CrazyShit stable mark: dark-site styling with a clean CS / chaos-bolt monogram. -->
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M70,29 C63,23 55,21 47,23 C34,26 26,38 26,53 C26,70 37,82 52,85 C60,87 67,84 72,79"
-        android:strokeColor="#F4F4F5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="10" />
-
-    <path
-        android:fillColor="#FF5A1F"
-        android:pathData="M79,21 L48,50 L67,47 L36,88 L81,53 L61,57 Z" />
-
-    <path
-        android:fillColor="#FF9B57"
-        android:pathData="M72,29 L56,45 L64,44 Z" />
-</vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <bitmap
+            android:src="@drawable/ic_launcher_art"
+            android:gravity="fill" />
+    </item>
+</layer-list>
