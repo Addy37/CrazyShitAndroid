@@ -1,29 +1,28 @@
-# CrazyShit v2.0.10
+# CrazyShit v2.0.11
 
-CrazyShit 2.0.10 is a hotfix for the portrait Chaos treatment and native video-player controls.
+CrazyShit 2.0.11 prioritizes reliable portrait Chaos controls and temporarily shelves the ambient blur experiment.
 
-## Fixes
+## Chaos portrait fix
 
-- Fixed the Chaos ambient effect so it fills the unused black area around portrait clips instead of being hidden underneath the PlayerView letterbox
-- Ambient video frames are still sampled from the existing player at low resolution, so no second decoder/player is created
-- Portrait-looking clips embedded inside wider streams can now be detected from the sampled frame and receive the ambient treatment too
-- Portrait Chaos title, metadata, Save, Comments, Share, More, and mute controls remain visible while playback continues
-- The thin scrubbable Chaos progress bar still fades away after inactivity
-- Fixed native video detail pages opened from Home, Trending, related videos, and Library so Media3 controls no longer pop up automatically when playback starts
-- Standard player controls remain available when the user deliberately taps the video
+- While CrazyShit itself is in portrait orientation, the Chaos title, metadata, Save, Comments, Share, More, and mute controls now stay visible continuously
+- The normal 2.2-second Chaos chrome-hide callback is actively canceled in portrait so the controls do not fade away unexpectedly
+- The thin scrubbable Chaos progress bar keeps its own independent inactivity fade behavior
+- Landscape Chaos keeps the existing auto-fading control behavior
+- The experimental ambient/blur background is disabled for now so it cannot interfere with the portrait control fix
 
-## Existing Chaos behavior
+## Existing behavior kept
 
 - Hold for 2x playback
-- Swipe up/down between clips
+- Swipe up/down between Chaos clips
 - Auto-advance when a clip ends
 - Remember mute state
 - Not interested filtering
 - Preloading and recent-view avoidance
+- Native video detail controls on Home, Trending, Library, and related videos remain hidden until the user taps the player
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.10 can install over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.11 can install over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
