@@ -354,12 +354,41 @@ final class LandscapeUiController {
 
     private static void useGrid(NativeMainActivity activity, RecyclerView recycler, int spanCount) {
         RecyclerView.LayoutManager manager = recycler.getLayoutManager();
-        if (manager instanceof GridLayoutManager && ((GridLayoutManager) manager).getSpanCount() == spanCount) return;
         int position = firstVisible(manager);
-        recycler.setLayoutManager(new GridLayoutManager(activity, spanCount));
-        if (recycler.getAdapter() != null && recycler.getAdapter().getItemCount() > 0) {
+        GridLayoutManager grid;
+        boolean replaced = false;
+
+        if (manager instanceof GridLayoutManager &&
+                ((GridLayoutManager) manager).getSpanCount() == spanCount) {
+            grid = (GridLayoutManager) manager;
+        } else {
+            grid = new GridLayoutManager(activity, spanCount);
+            recycler.setLayoutManager(grid);
+            replaced = true;
+        }
+
+        ensureFeedSectionSpans(recycler, grid, spanCount);
+
+        if (replaced && recycler.getAdapter() != null && recycler.getAdapter().getItemCount() > 0) {
             recycler.scrollToPosition(Math.min(position, recycler.getAdapter().getItemCount() - 1));
         }
+    }
+
+    private static void ensureFeedSectionSpans(
+            RecyclerView recycler,
+            GridLayoutManager grid,
+            int spanCount
+    ) {
+        RecyclerView.Adapter<?> rawAdapter = recycler.getAdapter();
+        if (!(rawAdapter instanceof NativeFeedAdapter)) return;
+
+        NativeFeedAdapter adapter = (NativeFeedAdapter) rawAdapter;
+        GridLayoutManager.SpanSizeLookup current = grid.getSpanSizeLookup();
+        if (current instanceof FeedSpanSizeLookup) {
+            FeedSpanSizeLookup existing = (FeedSpanSizeLookup) current;
+            if (existing.adapter == adapter && existing.spanCount == spanCount) return;
+        }
+        grid.setSpanSizeLookup(new FeedSpanSizeLookup(adapter, spanCount));
     }
 
     private static void useLinear(NativeMainActivity activity, RecyclerView recycler) {
@@ -489,6 +518,21 @@ final class LandscapeUiController {
 
     private static int dp(NativeMainActivity activity, int value) {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
+    }
+
+    private static final class FeedSpanSizeLookup extends GridLayoutManager.SpanSizeLookup {
+        final NativeFeedAdapter adapter;
+        final int spanCount;
+
+        FeedSpanSizeLookup(NativeFeedAdapter adapter, int spanCount) {
+            this.adapter = adapter;
+            this.spanCount = spanCount;
+        }
+
+        @Override
+        public int getSpanSize(int position) {
+            return adapter.isSectionAt(position) ? spanCount : 1;
+        }
     }
 
     private static final class State {
