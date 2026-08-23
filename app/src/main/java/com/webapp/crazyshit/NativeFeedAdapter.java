@@ -7,7 +7,10 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -38,12 +41,15 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     public static final int VIEW_LARGE = 0;
     public static final int VIEW_COMPACT = 1;
     public static final int VIEW_GRID = 2;
+    private static final int TYPE_SECTION = 100;
 
     private static final String SITE = "https://crazyshit.com/";
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long MIN_FEED_PROGRESS_MS = 5_000L;
+    private static final int SECTION_ACCENT = Color.rgb(244, 183, 28);
+    private static final int APP_BG = Color.rgb(13, 13, 15);
 
     public interface Listener {
         void onOpen(NativeContentItem item);
@@ -93,6 +99,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return viewMode;
     }
 
+    public boolean isSectionAt(int position) {
+        return position >= 0 && position < items.size() && items.get(position).isSection();
+    }
+
     public void replace(List<NativeContentItem> next) {
         items.clear();
         if (next != null) items.addAll(next);
@@ -104,7 +114,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     public void append(List<NativeContentItem> next) {
         if (next == null || next.isEmpty()) return;
         int start = items.size();
+        String lastSection = lastSectionTitle();
+
         for (NativeContentItem item : next) {
+            if (item == null) continue;
+            if (item.isSection() && item.title.equalsIgnoreCase(lastSection)) continue;
+
             boolean duplicate = false;
             for (NativeContentItem old : items) {
                 if (old.url.equals(item.url)) {
@@ -112,13 +127,25 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                     break;
                 }
             }
-            if (!duplicate) items.add(item);
+            if (duplicate) continue;
+
+            items.add(item);
+            if (item.isSection()) lastSection = item.title;
         }
+
         int added = items.size() - start;
         if (added > 0) {
             notifyItemRangeInserted(start, added);
             preloadRange(start, Math.min(items.size(), start + 10));
         }
+    }
+
+    private String lastSectionTitle() {
+        for (int i = items.size() - 1; i >= 0; i--) {
+            NativeContentItem item = items.get(i);
+            if (item != null && item.isSection()) return item.title;
+        }
+        return "";
     }
 
     public void preloadVisible(int first, int last) {
@@ -159,7 +186,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private void requestThumbnail(NativeContentItem item) {
-        if (item == null || item.url == null || item.url.isEmpty()) return;
+        if (item == null || item.isSection() || item.url == null || item.url.isEmpty()) return;
         if (item.isMeme() && item.imageUrl != null && !item.imageUrl.isEmpty()) return;
         if (resolvedThumbnails.containsKey(item.url)) return;
         if (!requestedThumbnails.add(item.url)) return;
@@ -174,15 +201,40 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     @Override
     public int getItemViewType(int position) {
-        return viewMode;
+        return items.get(position).isSection() ? TYPE_SECTION : viewMode;
     }
 
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        if (viewType == TYPE_SECTION) return createSectionHolder(parent);
         if (viewType == VIEW_COMPACT) return createCompactHolder(parent);
         if (viewType == VIEW_GRID) return createGridHolder(parent);
         return createLargeHolder(parent);
+    }
+
+    private Holder createSectionHolder(ViewGroup parent) {
+        MaterialCardView card = new MaterialCardView(parent.getContext());
+        card.setCardBackgroundColor(APP_BG);
+        card.setCardElevation(0f);
+        card.setRadius(0f);
+        card.setStrokeWidth(0);
+        card.setClickable(false);
+        card.setLongClickable(false);
+
+        RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, dp(card, 52));
+        params.setMargins(dp(card, 12), dp(card, 10), dp(card, 12), dp(card, 2));
+        card.setLayoutParams(params);
+
+        TextView header = new TextView(parent.getContext());
+        header.setTextSize(17f);
+        header.setTypeface(null, android.graphics.Typeface.BOLD);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setSingleLine(true);
+        header.setEllipsize(TextUtils.TruncateAt.END);
+        header.setPadding(dp(card, 4), 0, dp(card, 4), 0);
+        card.addView(header, new MaterialCardView.LayoutParams(-1, -1));
+        return new Holder(card, header);
     }
 
     private Holder createLargeHolder(ViewGroup parent) {
@@ -350,8 +402,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position, @NonNull List<Object> payloads) {
+        NativeContentItem item = items.get(position);
+        if (item.isSection()) {
+            bindSection(holder, item);
+            return;
+        }
         if (!payloads.isEmpty() && payloads.contains("thumbnail")) {
-            loadThumbnail(holder, items.get(position));
+            loadThumbnail(holder, item);
             return;
         }
         bind(holder, position);
@@ -359,8 +416,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void bind(Holder holder, int position) {
         NativeContentItem item = items.get(position);
-        boolean meme = item.isMeme();
+        if (item.isSection()) {
+            bindSection(holder, item);
+            return;
+        }
 
+        boolean meme = item.isMeme();
         holder.title.setText(item.title);
         holder.info.setText(buildInfo(item));
         holder.play.setVisibility(meme ? View.GONE : View.VISIBLE);
@@ -388,6 +449,37 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             listener.onLongPress(item, v);
             return true;
         });
+    }
+
+    private void bindSection(Holder holder, NativeContentItem item) {
+        if (holder.sectionTitle == null) return;
+        holder.sectionTitle.setText(styledSectionTitle(item.title));
+        holder.itemView.setOnClickListener(null);
+        holder.itemView.setOnLongClickListener(null);
+    }
+
+    private SpannableString styledSectionTitle(String rawTitle) {
+        String title = rawTitle == null ? "" : rawTitle.trim().toUpperCase(Locale.US);
+        SpannableString text = new SpannableString(title);
+        int split = title.indexOf(' ');
+        int accentEnd = split > 0 ? split : title.length();
+        if (accentEnd > 0) {
+            text.setSpan(
+                    new ForegroundColorSpan(SECTION_ACCENT),
+                    0,
+                    accentEnd,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+        if (accentEnd < title.length()) {
+            text.setSpan(
+                    new ForegroundColorSpan(Color.WHITE),
+                    accentEnd,
+                    title.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+        return text;
     }
 
     private void bindPlaybackState(Holder holder, NativeContentItem item) {
@@ -439,6 +531,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private void loadThumbnail(Holder holder, NativeContentItem item) {
+        if (holder.image == null || item == null || item.isSection()) return;
         String imageUrl = resolvedThumbnails.get(item.url);
         if (imageUrl == null || imageUrl.isEmpty()) imageUrl = item.imageUrl;
 
@@ -461,10 +554,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
-        Glide.with(holder.image).clear(holder.image);
-        holder.image.setAlpha(1f);
-        holder.watchBadge.setVisibility(View.GONE);
-        holder.progressTrack.setVisibility(View.GONE);
+        if (holder.image != null) {
+            Glide.with(holder.image).clear(holder.image);
+            holder.image.setAlpha(1f);
+        }
+        if (holder.watchBadge != null) holder.watchBadge.setVisibility(View.GONE);
+        if (holder.progressTrack != null) holder.progressTrack.setVisibility(View.GONE);
         super.onViewRecycled(holder);
     }
 
@@ -576,6 +671,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final TextView title;
         final TextView info;
         final TextView comments;
+        final TextView sectionTitle;
 
         Holder(MaterialCardView card, MediaViews media, CopyViews copy) {
             super(card);
@@ -588,6 +684,21 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.title = copy.title;
             this.info = copy.info;
             this.comments = copy.comments;
+            this.sectionTitle = null;
+        }
+
+        Holder(MaterialCardView card, TextView sectionTitle) {
+            super(card);
+            this.card = card;
+            this.image = null;
+            this.play = null;
+            this.watchBadge = null;
+            this.progressTrack = null;
+            this.progressFill = null;
+            this.title = null;
+            this.info = null;
+            this.comments = null;
+            this.sectionTitle = sectionTitle;
         }
     }
 }
