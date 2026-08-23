@@ -19,6 +19,9 @@ public final class CrazyShitApplication extends Application {
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
+                if (activity instanceof VideoDetailActivity) {
+                    VideoDetailTransitionPolish.apply(activity);
+                }
             }
 
             @Override
