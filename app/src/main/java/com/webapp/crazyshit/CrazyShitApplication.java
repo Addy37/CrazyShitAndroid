@@ -8,7 +8,7 @@ import android.os.Bundle;
 import java.lang.ref.WeakReference;
 
 /**
- * App-wide lifecycle hook used to apply responsive landscape chrome to the native UI.
+ * App-wide lifecycle hook used to apply responsive native UI polish.
  */
 public final class CrazyShitApplication extends Application {
     private WeakReference<NativeMainActivity> currentNativeActivity = new WeakReference<>(null);
@@ -33,6 +33,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeUiController.attach(nativeActivity);
                     LandscapeRailPolish.applySoon(nativeActivity);
                     LandscapeMoreDialog.attachSoon(nativeActivity);
+                    UiPolishController.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
                 }
                 if (activity instanceof VideoDetailActivity) {
@@ -60,6 +61,7 @@ public final class CrazyShitApplication extends Application {
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     ChaosPortraitPolish.stop(nativeActivity);
+                    UiPolishController.detach(nativeActivity);
                     LandscapeUiController.detach(nativeActivity);
                     NativeMainActivity current = currentNativeActivity.get();
                     if (current == activity) currentNativeActivity.clear();
@@ -78,6 +80,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeUiController.apply(activity);
                     LandscapeRailPolish.applySoon(activity);
                     LandscapeMoreDialog.attachSoon(activity);
+                    UiPolishController.attach(activity);
                     ChaosPortraitPolish.start(activity);
                 },
                 80L
