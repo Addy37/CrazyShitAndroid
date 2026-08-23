@@ -47,6 +47,10 @@ public final class CrazyShitApplication extends Application {
                     FlashUiController.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
                     UnifiedVideoController.onHostResumed(nativeActivity);
+                    nativeActivity.getWindow().getDecorView().postDelayed(
+                            () -> UnifiedVideoLayerGuard.raise(nativeActivity),
+                            260L
+                    );
                 }
                 if (activity instanceof VideoDetailActivity && !activity.isFinishing()) {
                     VideoDetailControllerPolish.applySoon(activity);
@@ -101,6 +105,10 @@ public final class CrazyShitApplication extends Application {
                     FlashUiController.attach(activity);
                     ChaosPortraitPolish.start(activity);
                     UnifiedVideoController.onHostConfigurationChanged(activity);
+                    activity.getWindow().getDecorView().postDelayed(
+                            () -> UnifiedVideoLayerGuard.raise(activity),
+                            260L
+                    );
                 },
                 80L
         );
