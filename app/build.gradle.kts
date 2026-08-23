@@ -11,12 +11,12 @@ android {
     }
 
     defaultConfig {
-        // Keep the existing release application ID so 2.3.0 upgrades the signed stable app.
+        // Keep the existing release application ID so 2.3.1 upgrades the signed stable app.
         applicationId = "com.addy37.crazyshitunofficial"
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 29
-        versionName = System.getenv("APP_VERSION_NAME") ?: "2.3.0"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 30
+        versionName = System.getenv("APP_VERSION_NAME") ?: "2.3.1"
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
