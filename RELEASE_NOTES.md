@@ -1,36 +1,32 @@
-# CrazyShit v2.4.1
+# CrazyShit v2.4.2
 
-CrazyShit 2.4.1 refines the watched and Continue treatment introduced in 2.4.0 without changing the underlying playback-history behavior.
+CrazyShit 2.4.2 brings the native Home feed closer to the structure of CrazyShit.com by adding the site's real date/group headers between video sections.
 
-## Watch-state visual polish
+## Native feed section headers
 
-- Continue badges are smaller and less dominant over thumbnails
-- Continue labels now use the cleaner **Continue · 0:50** format
-- The orange Continue background is darker and slightly more transparent
-- Watched badges are tightened to match the new badge proportions
-- Partially watched thumbnails use a softer center play overlay so the resume state reads first
-- The playback progress line keeps a faint dark track behind the orange fill for better readability at low progress
-- Newly attached feed cards receive the same treatment automatically while scrolling
+- Home now shows section labels such as **TODAY'S CRAZY SHIT**, **THURSDAY AUGUST 20**, and **WEDNESDAY AUGUST 19** in the same order exposed by the website
+- Only the useful section title is carried into the app; Daily Rant text and header comment counts are intentionally omitted
+- Headers use a compact native treatment with the first word highlighted in CrazyShit yellow and the rest in white
+- Section titles come from the live website structure instead of being generated from the phone's date
 
-## Resume feedback
+## View-style compatibility
 
-- Reopening an unfinished video with a saved position briefly shows **Resuming at 0:50**
-- The resume message only appears when remembered playback position is enabled
-- Completed videos and very short plays do not show the resume confirmation
+- Large cards keep their existing layout underneath each section header
+- Compact rows keep their existing layout underneath each section header
+- In 2-column Grid mode, each section header automatically spans both columns and starts the next group on a clean row
+- Section rows are not clickable and do not interfere with thumbnail loading, comments, watch-state badges, or card actions
 
 ## Existing behavior kept
 
-- Back returns normally to the existing feed and preserves the browsing position
-- Unfinished videos still resume close to where playback stopped
-- Completed videos continue to show **✓ Watched**
-- Home, Trending, Grid and Compact layouts keep their existing watch-state data
-- Picture-in-Picture remains separate from the retired in-app mini-player
-- Chaos playback and portrait controls remain untouched
-- The floating bottom dock remains unchanged
+- Continue and Watched indicators from 2.4/2.4.1 remain unchanged
+- Saved playback position and resume feedback remain unchanged
+- Home feed scrolling and pagination remain intact
+- Trending, Memes, Chaos, Library, the floating bottom dock, and video playback behavior are unchanged
+- Chaos portrait controls remain untouched
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.4.1 installs over earlier signed stable releases while retaining app data and watch history.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.4.2 installs over earlier signed stable releases while retaining app data and watch history.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
