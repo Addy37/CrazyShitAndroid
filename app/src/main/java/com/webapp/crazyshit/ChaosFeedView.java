@@ -639,6 +639,7 @@ public final class ChaosFeedView extends FrameLayout {
         float restoreSpeed = 1f;
 
         private final Runnable hideControlsRunnable = this::hideControlsNow;
+        private final Runnable hideSeekBarRunnable = this::hideSeekBarNow;
         private final Runnable progressRunnable = new Runnable() {
             @Override
             public void run() {
@@ -892,6 +893,8 @@ public final class ChaosFeedView extends FrameLayout {
             scrubbing = false;
             seekBar.setProgress(0);
             seekBar.setEnabled(false);
+            seekBar.setAlpha(1f);
+            seekBar.setVisibility(View.VISIBLE);
             lower.setAlpha(1f);
             lower.setVisibility(View.VISIBLE);
             mute.setAlpha(1f);
@@ -1109,13 +1112,18 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void showControls(boolean autoHide) {
             root.removeCallbacks(hideControlsRunnable);
+            root.removeCallbacks(hideSeekBarRunnable);
             lower.animate().cancel();
             mute.animate().cancel();
+            seekBar.animate().cancel();
             controlsVisible = true;
             lower.setVisibility(View.VISIBLE);
             mute.setVisibility(View.VISIBLE);
+            seekBar.setVisibility(View.VISIBLE);
             lower.setAlpha(1f);
             mute.setAlpha(1f);
+            seekBar.setAlpha(1f);
+            if (!scrubbing) root.postDelayed(hideSeekBarRunnable, 2200L);
             if (autoHide && !scrubbing) root.postDelayed(hideControlsRunnable, 2200L);
         }
 
@@ -1134,6 +1142,18 @@ public final class ChaosFeedView extends FrameLayout {
                     .setDuration(180L)
                     .withEndAction(() -> {
                         if (!controlsVisible) mute.setVisibility(View.INVISIBLE);
+                    })
+                    .start();
+        }
+
+        private void hideSeekBarNow() {
+            if (scrubbing) return;
+            seekBar.animate().cancel();
+            seekBar.animate()
+                    .alpha(0f)
+                    .setDuration(180L)
+                    .withEndAction(() -> {
+                        if (!scrubbing) seekBar.setVisibility(View.INVISIBLE);
                     })
                     .start();
         }
@@ -1186,6 +1206,7 @@ public final class ChaosFeedView extends FrameLayout {
 
         void releasePlayer() {
             root.removeCallbacks(hideControlsRunnable);
+            root.removeCallbacks(hideSeekBarRunnable);
             stopProgressUpdates();
             restorePlaybackSpeed();
             if (scrubbing) {
