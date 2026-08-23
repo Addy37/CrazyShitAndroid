@@ -1,38 +1,40 @@
-# CrazyShit v2.3.2
+# CrazyShit v2.4.0
 
-CrazyShit 2.3.2 simplifies the unified swipe-down mini-player polish after the on-device flicker seen in 2.3.1.
+CrazyShit 2.4.0 retires the in-app mini-player experiment and replaces it with a simpler, more useful watch-state experience directly in the feeds.
 
-## Event-driven minimize polish
+## Watched and Continue indicators
 
-- Removes the 16ms visual guard loop that could fight the normal minimize animation
-- The swipe container now exposes a secondary visual observer that receives the real drag and release events without replacing the unified player's own gesture listener
-- Detail text, buttons, comments and related content fade during actual drag progress instead of being forced every frame by a separate hierarchy scanner
-- Cancelled swipes restore the detail content smoothly
+- Partially watched videos show a compact **Continue** badge with the saved timestamp
+- A thin orange progress line across the thumbnail shows how far you watched
+- Videos that reach the completion threshold show a **✓ Watched** badge and a subtle thumbnail dim
+- Watch-state indicators appear in Large, Compact and Grid feed layouts
+- Feed cards refresh automatically when playback history changes
+- Very short accidental plays under the existing history threshold are not marked as Continue
 
-## Stable mini-player video layer
+## Simpler video return flow
 
-- The mini-player media placeholder remains transparent so it cannot cover the live video with a black rectangle
-- The live unified player is given a higher Z-order once and remains above the mini-player card
-- Z-order is prepared at gesture start/release rather than being repeatedly changed while the animation is running
-- The same PlayerView and ExoPlayer continue playing through full, minimize, mini and expand states
+- The experimental unified mini-player routing is no longer used for normal video pages
+- Swipe-down-to-minimize is disabled for existing and new installs
+- Back no longer minimizes a video into an in-app floating player
+- Returning from video playback reveals the existing feed where you left it instead of creating a mini-player
+- Saved playback position remains available so unfinished videos can resume close to where you stopped
 
-## Routing and lifecycle cleanup
+## Settings cleanup
 
-- The event-driven observer is attached immediately when the legacy detail launcher is intercepted into the unified session
-- A short resume/configuration retry remains only as a setup fallback, not as a continuous frame loop
-- Legacy VideoDetailActivity remains available as a compatibility fallback when unified routing is unavailable
+- Removes the retired **Minimize player on Back** setting
+- Removes the retired **Swipe down to minimize** setting
+- Keeps Picture-in-Picture as a separate Android playback option
+- Watch history can still be cleared from Settings, which also clears feed Watched/Continue state
 
 ## Existing behavior kept
 
-- Swipe thresholds and cancel-to-restore behavior remain unchanged
-- Mini-player title, expand, close and progress controls remain
-- Full video detail keeps Comments, Watch Later, Share, speed, Fit / Fill / Zoom, fullscreen, related videos, history and remembered position
-- The floating bottom dock remains unchanged
+- Native video detail still includes Comments, Watch Later, Share, playback speed, Fit / Fill / Zoom, fullscreen, related videos, history and remembered position
+- Home, Trending, Memes, Library, the floating bottom dock and visual polish remain unchanged
 - Chaos playback and portrait controls remain untouched
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.3.2 installs over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.4.0 installs over earlier signed stable releases while retaining app data and watch history.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
