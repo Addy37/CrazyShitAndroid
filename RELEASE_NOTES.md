@@ -1,27 +1,29 @@
-# CrazyShit v2.0.9
+# CrazyShit v2.0.10
 
-CrazyShit 2.0.9 focuses on portrait videos inside Chaos, giving vertical clips a richer background and keeping the useful social controls visible.
+CrazyShit 2.0.10 is a hotfix for the portrait Chaos treatment and native video-player controls.
 
-## What's new
+## Fixes
 
-- Portrait Chaos videos now use a live ambient background sampled from the playing video instead of plain black side space
-- The ambient layer is low resolution and GPU-blurred on supported Android versions, so the app does not need to run a second video decoder
-- A subtle dark overlay keeps the main portrait video, title, and controls readable over the ambient background
-- Portrait clips keep the title, metadata, Save, Comments, Share, More, and mute controls visible while the video is playing
-- Landscape/wide Chaos clips keep the existing auto-fading control behavior
-- The thin Chaos scrub bar still fades away after inactivity and reappears when touched
-- Existing Chaos gestures remain unchanged, including hold for 2x, vertical swiping, mute memory, Not interested, and auto-advance
+- Fixed the Chaos ambient effect so it fills the unused black area around portrait clips instead of being hidden underneath the PlayerView letterbox
+- Ambient video frames are still sampled from the existing player at low resolution, so no second decoder/player is created
+- Portrait-looking clips embedded inside wider streams can now be detected from the sampled frame and receive the ambient treatment too
+- Portrait Chaos title, metadata, Save, Comments, Share, More, and mute controls remain visible while playback continues
+- The thin scrubbable Chaos progress bar still fades away after inactivity
+- Fixed native video detail pages opened from Home, Trending, related videos, and Library so Media3 controls no longer pop up automatically when playback starts
+- Standard player controls remain available when the user deliberately taps the video
 
-## Existing landscape improvements
+## Existing Chaos behavior
 
-- Landscape uses a slim left-side navigation rail instead of the tall bottom navigation bar
-- Home, Trending, and Memes use denser landscape grids
-- The More section uses a compact scrollable landscape panel
-- Chaos remains immersive in landscape and hides the app rail/header while playing fullscreen
+- Hold for 2x playback
+- Swipe up/down between clips
+- Auto-advance when a clip ends
+- Remember mute state
+- Not interested filtering
+- Preloading and recent-view avoidance
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.9 can install over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.10 can install over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
