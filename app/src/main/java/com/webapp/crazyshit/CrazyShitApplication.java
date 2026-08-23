@@ -30,6 +30,7 @@ public final class CrazyShitApplication extends Application {
             public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
                 if (activity instanceof VideoDetailActivity) {
                     VideoDetailTransitionPolish.apply(activity);
+                    WatchStatePolish.showResumeToast((VideoDetailActivity) activity);
                 }
             }
 
@@ -47,6 +48,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeMoreDialog.attachSoon(nativeActivity);
                     UiPolishController.attach(nativeActivity);
                     FlashUiController.attach(nativeActivity);
+                    WatchStatePolish.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
                 }
                 if (activity instanceof VideoDetailActivity && !activity.isFinishing()) {
@@ -96,6 +98,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeMoreDialog.attachSoon(activity);
                     UiPolishController.attach(activity);
                     FlashUiController.attach(activity);
+                    WatchStatePolish.attach(activity);
                     ChaosPortraitPolish.start(activity);
                 },
                 80L
