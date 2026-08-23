@@ -2,11 +2,15 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -49,6 +53,7 @@ public final class NativeMiniPlayer {
     private MaterialCardView card;
     private PlayerView playerView;
     private ImageView handoffPoster;
+    private ImageView travelingPoster;
     private TextView titleView;
     private View progressFill;
     private ExoPlayer player;
@@ -63,6 +68,9 @@ public final class NativeMiniPlayer {
     private String handoffSnapshotPath;
     private boolean reopenDetail;
     private boolean resumeAfterPause;
+    private boolean playerReady;
+    private boolean travelActive;
+    private boolean travelFinished;
 
     private final Runnable progressTicker = new Runnable() {
         @Override
@@ -102,12 +110,25 @@ public final class NativeMiniPlayer {
         comments = data.getStringExtra(VideoDetailActivity.EXTRA_COMMENTS);
         boolean directHandoff = data.getBooleanExtra(MiniPlayerHandoffPolish.EXTRA_DIRECT_HANDOFF, false);
         handoffSnapshotPath = data.getStringExtra(MiniPlayerHandoffPolish.EXTRA_SNAPSHOT_PATH);
+        int sourceLeft = data.getIntExtra(MiniPlayerHandoffPolish.EXTRA_SOURCE_LEFT, -1);
+        int sourceTop = data.getIntExtra(MiniPlayerHandoffPolish.EXTRA_SOURCE_TOP, -1);
+        int sourceWidth = data.getIntExtra(MiniPlayerHandoffPolish.EXTRA_SOURCE_WIDTH, -1);
+        int sourceHeight = data.getIntExtra(MiniPlayerHandoffPolish.EXTRA_SOURCE_HEIGHT, -1);
         long start = data.getLongExtra(PlayerActivity.EXTRA_START_POSITION, 0L);
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) return;
 
         ensureUi();
         titleView.setText(title == null || title.trim().isEmpty() ? "Video" : title);
-        showHandoffPoster(handoffSnapshotPath);
+        playerReady = false;
+        travelActive = false;
+        travelFinished = false;
+
+        boolean canTravel = directHandoff &&
+                handoffSnapshotPath != null && !handoffSnapshotPath.trim().isEmpty() &&
+                sourceLeft >= 0 && sourceTop >= 0 && sourceWidth > 0 && sourceHeight > 0;
+
+        if (canTravel) prepareCardForTravel();
+        else showHandoffPoster(handoffSnapshotPath);
 
         try {
             DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory();
@@ -144,15 +165,31 @@ public final class NativeMiniPlayer {
             player.addListener(new Player.Listener() {
                 @Override
                 public void onPlaybackStateChanged(int playbackState) {
-                    if (playbackState == Player.STATE_READY && handoffPoster != null &&
-                            handoffPoster.getVisibility() == View.VISIBLE) {
-                        handoffPoster.postDelayed(NativeMiniPlayer.this::fadeHandoffPoster, 90L);
+                    if (playbackState == Player.STATE_READY) {
+                        playerReady = true;
+                        if (travelActive) {
+                            maybeFinishTravelPoster();
+                        } else if (handoffPoster != null && handoffPoster.getVisibility() == View.VISIBLE) {
+                            handoffPoster.postDelayed(NativeMiniPlayer.this::fadeHandoffPoster, 80L);
+                        }
                     }
                     if (playbackState == Player.STATE_ENDED) recordHistory(true);
                 }
             });
             resumeAfterPause = true;
-            if (directHandoff) showCardDirect(); else showCardAnimated();
+
+            if (canTravel) {
+                final int left = sourceLeft;
+                final int top = sourceTop;
+                final int width = sourceWidth;
+                final int height = sourceHeight;
+                overlayRoot.post(() -> startTravelHandoff(left, top, width, height, 0));
+            } else if (directHandoff) {
+                showCardDirect();
+            } else {
+                showCardAnimated();
+            }
+
             card.removeCallbacks(progressTicker);
             card.post(progressTicker);
         } catch (Exception e) {
@@ -181,6 +218,10 @@ public final class NativeMiniPlayer {
             player.release();
             player = null;
         }
+        playerReady = false;
+        travelActive = false;
+        travelFinished = false;
+        clearTravelPoster(true);
         hideCard();
         clearHandoffPoster(true);
         mediaUrl = null;
@@ -237,6 +278,10 @@ public final class NativeMiniPlayer {
             player.release();
             player = null;
         }
+        playerReady = false;
+        travelActive = false;
+        travelFinished = false;
+        clearTravelPoster(true);
         hideCard();
         clearHandoffPoster(true);
         mediaUrl = null;
@@ -248,6 +293,150 @@ public final class NativeMiniPlayer {
         uploader = null;
         comments = null;
         reopenDetail = false;
+    }
+
+    private void prepareCardForTravel() {
+        if (card == null) return;
+        card.animate().cancel();
+        card.setVisibility(View.VISIBLE);
+        card.setAlpha(0f);
+        card.setTranslationX(0f);
+        card.setTranslationY(0f);
+        card.setScaleX(1f);
+        card.setScaleY(1f);
+        if (handoffPoster != null) {
+            handoffPoster.animate().cancel();
+            handoffPoster.setImageDrawable(null);
+            handoffPoster.setVisibility(View.GONE);
+            handoffPoster.setAlpha(1f);
+        }
+    }
+
+    private void startTravelHandoff(
+            int sourceLeft,
+            int sourceTop,
+            int sourceWidth,
+            int sourceHeight,
+            int attempt
+    ) {
+        if (card == null || playerView == null || overlayRoot == null) {
+            fallbackDirectHandoff();
+            return;
+        }
+        if (playerView.getWidth() <= 0 || playerView.getHeight() <= 0 ||
+                overlayRoot.getWidth() <= 0 || overlayRoot.getHeight() <= 0) {
+            if (attempt < 4) {
+                overlayRoot.postDelayed(
+                        () -> startTravelHandoff(sourceLeft, sourceTop, sourceWidth, sourceHeight, attempt + 1),
+                        16L
+                );
+            } else {
+                fallbackDirectHandoff();
+            }
+            return;
+        }
+
+        Bitmap bitmap;
+        try {
+            bitmap = BitmapFactory.decodeFile(handoffSnapshotPath);
+        } catch (Exception ignored) {
+            bitmap = null;
+        }
+        if (bitmap == null) {
+            fallbackDirectHandoff();
+            return;
+        }
+
+        int[] rootLocation = new int[2];
+        int[] targetLocation = new int[2];
+        overlayRoot.getLocationOnScreen(rootLocation);
+        playerView.getLocationOnScreen(targetLocation);
+
+        float startX = sourceLeft - rootLocation[0];
+        float startY = sourceTop - rootLocation[1];
+        float targetX = targetLocation[0] - rootLocation[0];
+        float targetY = targetLocation[1] - rootLocation[1];
+
+        travelingPoster = new ImageView(activity);
+        travelingPoster.setImageBitmap(bitmap);
+        travelingPoster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        travelingPoster.setBackground(roundedBackground(Color.BLACK, dp(14)));
+        travelingPoster.setClipToOutline(true);
+        travelingPoster.setElevation(dp(28));
+        travelingPoster.setPivotX(0f);
+        travelingPoster.setPivotY(0f);
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(sourceWidth, sourceHeight);
+        params.gravity = Gravity.TOP | Gravity.START;
+        params.leftMargin = Math.round(startX);
+        params.topMargin = Math.round(startY);
+        overlayRoot.addView(travelingPoster, params);
+
+        travelActive = true;
+        travelFinished = false;
+
+        card.animate().cancel();
+        card.setVisibility(View.VISIBLE);
+        card.setAlpha(0f);
+        card.animate()
+                .alpha(1f)
+                .setStartDelay(72L)
+                .setDuration(172L)
+                .setInterpolator(new DecelerateInterpolator(1.25f))
+                .start();
+
+        float targetScaleX = playerView.getWidth() / (float) sourceWidth;
+        float targetScaleY = playerView.getHeight() / (float) sourceHeight;
+        travelingPoster.animate().cancel();
+        travelingPoster.animate()
+                .x(targetX)
+                .y(targetY)
+                .scaleX(targetScaleX)
+                .scaleY(targetScaleY)
+                .setDuration(268L)
+                .setInterpolator(new PathInterpolator(0.20f, 0.86f, 0.28f, 1f))
+                .withEndAction(() -> {
+                    travelFinished = true;
+                    maybeFinishTravelPoster();
+                })
+                .start();
+    }
+
+    private void fallbackDirectHandoff() {
+        travelActive = false;
+        travelFinished = false;
+        clearTravelPoster(false);
+        showHandoffPoster(handoffSnapshotPath);
+        showCardDirect();
+        if (playerReady && handoffPoster != null && handoffPoster.getVisibility() == View.VISIBLE) {
+            handoffPoster.postDelayed(this::fadeHandoffPoster, 80L);
+        }
+    }
+
+    private void maybeFinishTravelPoster() {
+        if (!travelActive || !travelFinished || !playerReady || travelingPoster == null) return;
+        travelActive = false;
+        travelingPoster.animate().cancel();
+        travelingPoster.animate()
+                .alpha(0f)
+                .setDuration(105L)
+                .withEndAction(() -> clearTravelPoster(true))
+                .start();
+    }
+
+    private void clearTravelPoster(boolean deleteFile) {
+        if (travelingPoster != null) {
+            travelingPoster.animate().cancel();
+            travelingPoster.setImageDrawable(null);
+            try {
+                if (travelingPoster.getParent() instanceof FrameLayout) {
+                    ((FrameLayout) travelingPoster.getParent()).removeView(travelingPoster);
+                }
+            } catch (Exception ignored) {
+            }
+            travelingPoster = null;
+        }
+        if (deleteFile) deleteHandoffSnapshot();
     }
 
     private void showCardAnimated() {
@@ -300,7 +489,7 @@ public final class NativeMiniPlayer {
             return;
         }
         try {
-            android.graphics.Bitmap bitmap = BitmapFactory.decodeFile(path);
+            Bitmap bitmap = BitmapFactory.decodeFile(path);
             if (bitmap == null) {
                 handoffPoster.setVisibility(View.GONE);
                 return;
@@ -320,7 +509,7 @@ public final class NativeMiniPlayer {
         handoffPoster.animate().cancel();
         handoffPoster.animate()
                 .alpha(0f)
-                .setDuration(130L)
+                .setDuration(115L)
                 .withEndAction(() -> clearHandoffPoster(true))
                 .start();
     }
@@ -332,14 +521,17 @@ public final class NativeMiniPlayer {
             handoffPoster.setAlpha(1f);
             handoffPoster.setVisibility(View.GONE);
         }
-        if (deleteFile && handoffSnapshotPath != null && !handoffSnapshotPath.isEmpty()) {
-            try {
-                File file = new File(handoffSnapshotPath);
-                if (file.getParentFile() != null && file.getParentFile().equals(activity.getCacheDir())) {
-                    file.delete();
-                }
-            } catch (Exception ignored) {
+        if (deleteFile) deleteHandoffSnapshot();
+    }
+
+    private void deleteHandoffSnapshot() {
+        if (handoffSnapshotPath == null || handoffSnapshotPath.isEmpty()) return;
+        try {
+            File file = new File(handoffSnapshotPath);
+            if (file.getParentFile() != null && file.getParentFile().equals(activity.getCacheDir())) {
+                file.delete();
             }
+        } catch (Exception ignored) {
         }
         handoffSnapshotPath = null;
     }
@@ -416,6 +608,13 @@ public final class NativeMiniPlayer {
         params.gravity = Gravity.BOTTOM;
         params.setMargins(dp(CARD_SIDE_MARGIN_DP), 0, dp(CARD_SIDE_MARGIN_DP), dp(CARD_BOTTOM_MARGIN_DP));
         overlayRoot.addView(card, params);
+    }
+
+    private GradientDrawable roundedBackground(int color, int radius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(radius);
+        return drawable;
     }
 
     private TextView button(String text, String description) {
