@@ -1,30 +1,42 @@
-# CrazyShit v2.0.12
+# CrazyShit v2.1.0
 
-CrazyShit 2.0.12 fixes an invisible touch-blocking area in the lower part of Chaos videos.
+CrazyShit 2.1.0 is a visual polish release focused on making the native app feel smoother, cleaner and more consistent without changing the core Chaos behavior.
 
-## Chaos touch fix
+## More redesign
 
-- The full-width transparent lower Chaos chrome container no longer acts as a long-press or click target
-- Empty space around the title and action stack now passes touches through to the video underneath
-- Tap-to-play/pause and hold-for-2x work across much more of the lower half of the Chaos screen
-- Actual controls remain interactive, including title/meta, Save, Comments, Share, More, mute, and the scrubbable progress bar
-- Portrait Chaos title and action controls still stay visible continuously
-- The thin scrub bar still uses its own inactivity fade behavior
-- Landscape Chaos keeps the existing auto-fading control behavior
+- Rebuilt More into compact grouped sections instead of a stack of oversized equal-weight cards
+- Added Your Stuff, Browse and App groups so account, library, categories and settings are easier to scan
+- Added compact accent icon bubbles, subtitles and chevrons for each action
+- More now shows the installed app version directly in the panel
+- Opening More temporarily changes the app header to More / Settings, library and account, then restores the previous tab header when dismissed
+- Portrait More opens as a rounded bottom panel and landscape More opens as a matching right-side panel
+- Added a short slide/fade entrance animation and subtle press-scale feedback on More rows
 
-## Existing behavior kept
+## Motion and visual polish
 
-- Swipe up/down between Chaos clips
+- Added a subtle fade/scale transition while horizontally swiping between Home, Trending, Chaos and Memes
+- Added soft press feedback to native feed cards without changing their existing click or long-press actions
+- Added lightweight RecyclerView item animations for non-Chaos content
+- Standardized selected navigation, progress indicators and touch ripples around the CrazyShit orange accent
+- Slightly softened oversized feed-card corner radii for a more consistent native look
+- Matched the Android navigation-bar background to the app shell so the bottom system area blends into the UI more cleanly
+
+## Chaos behavior kept
+
+- Portrait Chaos title and action controls remain visible continuously
+- Empty space in the lower Chaos overlay continues to pass taps and long presses through to the video
+- Hold for 2x playback
+- Swipe up/down between clips
 - Auto-advance when a clip ends
 - Remember mute state
 - Not interested filtering
+- Scrubbable progress bar with inactivity fade
 - Preloading and recent-view avoidance
-- Native video detail controls on Home, Trending, Library, and related videos remain hidden until the user taps the player
 - The ambient/blur experiment remains disabled for now
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.12 can install over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.1.0 can install over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
