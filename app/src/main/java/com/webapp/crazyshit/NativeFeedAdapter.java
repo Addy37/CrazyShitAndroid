@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -130,7 +131,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void requestThumbnail(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
-        // Meme cards already carry their real static image URL from /memes.
         if (item.isMeme() && item.imageUrl != null && !item.imageUrl.isEmpty()) return;
         if (resolvedThumbnails.containsKey(item.url)) return;
         if (!requestedThumbnails.add(item.url)) return;
@@ -175,7 +175,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         card.addView(row, new MaterialCardView.LayoutParams(-1, -2));
 
         MediaViews media = addMedia(parent, row, 104, 148);
-        CopyViews copy = addCopy(parent, row, 16, 12, 13, 13);
+        CopyViews copy = addCopy(parent, row, 15, 12, 13, 11);
         return new Holder(card, media.image, media.play, copy.title, copy.info, copy.comments);
     }
 
@@ -313,7 +313,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         if (!meme && item.comments != null && !item.comments.isEmpty()) {
             holder.comments.setVisibility(View.VISIBLE);
-            holder.comments.setText(viewMode == VIEW_GRID ? "💬 " + item.comments : item.comments + " comments");
+            if (viewMode == VIEW_COMPACT || viewMode == VIEW_GRID) {
+                holder.comments.setText("💬 " + compactCount(item.comments));
+            } else {
+                holder.comments.setText(item.comments + " comments");
+            }
             holder.comments.setOnClickListener(v -> listener.onComments(item));
         } else {
             holder.comments.setVisibility(View.GONE);
@@ -385,10 +389,42 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private String buildInfo(NativeContentItem item) {
         ArrayList<String> parts = new ArrayList<>();
-        if (!item.isMeme() && item.views != null && !item.views.isEmpty()) parts.add(item.views + " views");
-        if (viewMode != VIEW_GRID && item.uploader != null && !item.uploader.isEmpty()) parts.add(item.uploader);
+        if (!item.isMeme() && item.views != null && !item.views.isEmpty()) {
+            String views = (viewMode == VIEW_COMPACT || viewMode == VIEW_GRID)
+                    ? compactCount(item.views)
+                    : item.views;
+            parts.add(views + " views");
+        }
+        if (viewMode == VIEW_LARGE && item.uploader != null && !item.uploader.isEmpty()) {
+            parts.add(item.uploader);
+        }
         if (item.isMeme() && parts.isEmpty()) parts.add("Image");
         return TextUtils.join("  •  ", parts);
+    }
+
+    private String compactCount(String raw) {
+        if (raw == null) return "";
+        String text = raw.trim();
+        if (text.isEmpty()) return text;
+        String upper = text.toUpperCase(Locale.US);
+        if (upper.endsWith("K") || upper.endsWith("M") || upper.endsWith("B")) return upper;
+        String numeric = text.replaceAll("[^0-9.]", "");
+        if (numeric.isEmpty()) return text;
+        try {
+            double value = Double.parseDouble(numeric);
+            if (value >= 1_000_000_000d) return compactDecimal(value / 1_000_000_000d) + "B";
+            if (value >= 1_000_000d) return compactDecimal(value / 1_000_000d) + "M";
+            if (value >= 1_000d) return compactDecimal(value / 1_000d) + "K";
+            return String.format(Locale.US, "%.0f", value);
+        } catch (Exception ignored) {
+            return text;
+        }
+    }
+
+    private String compactDecimal(double value) {
+        if (value >= 100d) return String.format(Locale.US, "%.0f", value);
+        if (value >= 10d) return String.format(Locale.US, "%.1f", value).replace(".0", "");
+        return String.format(Locale.US, "%.1f", value).replace(".0", "");
     }
 
     private static int dp(View view, int value) {
