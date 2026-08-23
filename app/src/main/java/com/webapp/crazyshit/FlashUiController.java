@@ -4,6 +4,7 @@ import android.animation.ValueAnimator;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.OvershootInterpolator;
@@ -25,8 +26,11 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * v2.2 visual layer. Adds floating navigation, collapsing header motion, animated feed depth and
- * content-shaped loading skeletons without changing Chaos playback behavior.
+ * Native-shell visual polish for v2.2.x.
+ *
+ * v2.2.2 deliberately simplifies the portrait dock: normal tabs use a small moving underline and
+ * Chaos gets one true floating circular button. Feed loading, header motion and card depth remain
+ * here, while Chaos playback itself is left untouched.
  */
 final class FlashUiController {
     private static final int NAV_CHAOS = 4;
@@ -54,7 +58,9 @@ final class FlashUiController {
         private final WeakReference<NativeMainActivity> ref;
         private BottomNavigationView nav;
         private FrameLayout overlayRoot;
-        private View activePill;
+        private View activeIndicator;
+        private ImageView chaosFab;
+        private ImageView hiddenChaosIcon;
         private View topBar;
         private TextView headerTitle;
         private TextView headerSubtitle;
@@ -98,10 +104,11 @@ final class FlashUiController {
                 if (skeleton != null) skeleton.stop();
             }
             skeletons.clear();
-            if (activePill != null && activePill.getParent() instanceof ViewGroup) {
-                ((ViewGroup) activePill.getParent()).removeView(activePill);
-            }
-            activePill = null;
+            removeOverlay(activeIndicator);
+            removeOverlay(chaosFab);
+            activeIndicator = null;
+            chaosFab = null;
+            hiddenChaosIcon = null;
         }
 
         @Override
@@ -114,17 +121,23 @@ final class FlashUiController {
             if (topBar == null) topBar = findTopBar(activity);
 
             if (nav != null && !isLandscape(activity)) {
+                hideBuiltInChaosIcon();
+                ensureActiveIndicator(activity);
+                ensureChaosFab(activity);
                 int selected = nav.getSelectedItemId();
                 if (selected != lastSelectedId) {
                     lastSelectedId = selected;
                     animateSelected(nav, selected);
-                    positionActivePill(activity, selected, true);
+                    positionActiveIndicator(activity, selected, true);
+                    positionChaosFab(activity, selected, true);
                     expand(activity);
                 } else {
-                    positionActivePill(activity, selected, false);
+                    positionActiveIndicator(activity, selected, false);
+                    positionChaosFab(activity, selected, false);
                 }
-            } else if (activePill != null) {
-                activePill.setVisibility(View.GONE);
+            } else {
+                if (activeIndicator != null) activeIndicator.setVisibility(View.GONE);
+                if (chaosFab != null) chaosFab.setVisibility(View.GONE);
             }
 
             View root = activity.findViewById(android.R.id.content);
@@ -136,11 +149,14 @@ final class FlashUiController {
         private void polishFloatingNav(NativeMainActivity activity) {
             if (nav == null || isLandscape(activity)) return;
             nav.setBackground(navBackground(activity));
-            nav.setElevation(dp(activity, 16));
+            nav.setElevation(dp(activity, 14));
             nav.setClipToOutline(false);
             nav.setClipChildren(false);
             nav.setClipToPadding(false);
-            nav.setPadding(dp(activity, 3), 0, dp(activity, 3), 0);
+            nav.setPadding(dp(activity, 4), 0, dp(activity, 4), 0);
+            nav.setItemIconSize(dp(activity, 21));
+            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(32, 255, 90, 31)));
+
             if (nav.getParent() instanceof ViewGroup) {
                 ((ViewGroup) nav.getParent()).setClipChildren(false);
                 ((ViewGroup) nav.getParent()).setClipToPadding(false);
@@ -148,53 +164,53 @@ final class FlashUiController {
 
             if (nav.getLayoutParams() instanceof LinearLayout.LayoutParams) {
                 LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) nav.getLayoutParams();
-                lp.height = dp(activity, 60);
-                lp.setMargins(dp(activity, 16), dp(activity, 3), dp(activity, 16), dp(activity, 8));
+                lp.height = dp(activity, 56);
+                lp.setMargins(dp(activity, 18), dp(activity, 5), dp(activity, 18), dp(activity, 12));
                 nav.setLayoutParams(lp);
             }
 
-            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(38, 255, 90, 31)));
             styleLabels(nav);
-            styleChaosButton(activity);
-            ensureActivePill(activity);
+            hideBuiltInChaosIcon();
+            ensureActiveIndicator(activity);
+            ensureChaosFab(activity);
             lastSelectedId = nav.getSelectedItemId();
             animateSelected(nav, lastSelectedId);
-            positionActivePill(activity, lastSelectedId, false);
+            positionActiveIndicator(activity, lastSelectedId, false);
+            positionChaosFab(activity, lastSelectedId, false);
             nav.setOnItemReselectedListener(item -> {
-                pulse(nav.findViewById(item.getItemId()), item.getItemId() == NAV_CHAOS);
-                positionActivePill(activity, item.getItemId(), true);
+                if (item.getItemId() == NAV_CHAOS) pulseChaosFab();
+                else pulse(nav.findViewById(item.getItemId()));
+                positionActiveIndicator(activity, item.getItemId(), true);
             });
         }
 
-        private void ensureActivePill(NativeMainActivity activity) {
-            if (overlayRoot == null || activePill != null) return;
-            View pill = new View(activity);
+        private void ensureActiveIndicator(NativeMainActivity activity) {
+            if (overlayRoot == null || activeIndicator != null) return;
+            View indicator = new View(activity);
             GradientDrawable bg = new GradientDrawable();
             bg.setShape(GradientDrawable.RECTANGLE);
-            bg.setCornerRadius(dp(activity, 18));
-            bg.setColor(Color.argb(78, 255, 90, 31));
-            bg.setStroke(dp(activity, 1), Color.argb(120, 255, 112, 60));
-            pill.setBackground(bg);
-            pill.setClickable(false);
-            pill.setFocusable(false);
-            pill.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            pill.setAlpha(1f);
-            pill.setElevation(dp(activity, 17));
-            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(activity, 68), dp(activity, 34));
-            overlayRoot.addView(pill, lp);
-            activePill = pill;
+            bg.setCornerRadius(dp(activity, 2));
+            bg.setColor(Color.rgb(255, 90, 31));
+            indicator.setBackground(bg);
+            indicator.setClickable(false);
+            indicator.setFocusable(false);
+            indicator.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            indicator.setElevation(dp(activity, 18));
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(activity, 24), dp(activity, 3));
+            overlayRoot.addView(indicator, lp);
+            activeIndicator = indicator;
         }
 
-        private void positionActivePill(NativeMainActivity activity, int selectedId, boolean animate) {
-            if (nav == null || overlayRoot == null || activePill == null || isLandscape(activity)) return;
+        private void positionActiveIndicator(NativeMainActivity activity, int selectedId, boolean animate) {
+            if (nav == null || overlayRoot == null || activeIndicator == null || isLandscape(activity)) return;
             if (selectedId == NAV_CHAOS) {
-                activePill.animate().cancel();
-                activePill.setVisibility(View.INVISIBLE);
+                activeIndicator.animate().cancel();
+                activeIndicator.setVisibility(View.INVISIBLE);
                 return;
             }
             View selected = nav.findViewById(selectedId);
             if (selected == null || nav.getVisibility() != View.VISIBLE) {
-                activePill.setVisibility(View.INVISIBLE);
+                activeIndicator.setVisibility(View.INVISIBLE);
                 return;
             }
 
@@ -204,70 +220,112 @@ final class FlashUiController {
             overlayRoot.getLocationOnScreen(rootLoc);
             selected.getLocationOnScreen(itemLoc);
             nav.getLocationOnScreen(navLoc);
-            float targetX = itemLoc[0] - rootLoc[0] + (selected.getWidth() - dp(activity, 68)) / 2f;
-            float targetY = navLoc[1] - rootLoc[1] + dp(activity, 5);
+            float targetX = itemLoc[0] - rootLoc[0] + (selected.getWidth() - dp(activity, 24)) / 2f;
+            float targetY = navLoc[1] - rootLoc[1] + dp(activity, 31);
 
-            activePill.setVisibility(View.VISIBLE);
-            if (!animate || activePill.getWidth() == 0) {
-                activePill.setX(targetX);
-                activePill.setY(targetY);
+            activeIndicator.setVisibility(View.VISIBLE);
+            activeIndicator.setY(targetY);
+            if (!animate || activeIndicator.getWidth() == 0) {
+                activeIndicator.setX(targetX);
                 return;
             }
-            activePill.animate().cancel();
-            activePill.animate()
+            activeIndicator.animate().cancel();
+            activeIndicator.animate()
                     .x(targetX)
-                    .y(targetY)
-                    .setDuration(220L)
-                    .setInterpolator(new OvershootInterpolator(0.45f))
+                    .setDuration(185L)
                     .start();
+        }
+
+        private void ensureChaosFab(NativeMainActivity activity) {
+            if (overlayRoot == null || chaosFab != null) return;
+            ImageView fab = new ImageView(activity);
+            fab.setImageResource(R.drawable.ic_nav_chaos);
+            fab.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+            fab.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            fab.setPadding(dp(activity, 14), dp(activity, 14), dp(activity, 14), dp(activity, 14));
+            fab.setBackground(chaosFabBackground(activity, false));
+            fab.setElevation(dp(activity, 22));
+            fab.setClickable(true);
+            fab.setFocusable(true);
+            fab.setContentDescription("Chaos");
+            fab.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                if (nav != null) nav.setSelectedItemId(NAV_CHAOS);
+                pulseChaosFab();
+            });
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(activity, 54), dp(activity, 54));
+            overlayRoot.addView(fab, lp);
+            chaosFab = fab;
+        }
+
+        private void positionChaosFab(NativeMainActivity activity, int selectedId, boolean animate) {
+            if (nav == null || overlayRoot == null || chaosFab == null || isLandscape(activity)) return;
+            View chaosItem = nav.findViewById(NAV_CHAOS);
+            if (chaosItem == null || nav.getVisibility() != View.VISIBLE) {
+                chaosFab.setVisibility(View.INVISIBLE);
+                return;
+            }
+
+            int[] rootLoc = new int[2];
+            int[] itemLoc = new int[2];
+            int[] navLoc = new int[2];
+            overlayRoot.getLocationOnScreen(rootLoc);
+            chaosItem.getLocationOnScreen(itemLoc);
+            nav.getLocationOnScreen(navLoc);
+            float targetX = itemLoc[0] - rootLoc[0] + (chaosItem.getWidth() - dp(activity, 54)) / 2f;
+            float targetY = navLoc[1] - rootLoc[1] - dp(activity, 14);
+
+            chaosFab.setVisibility(View.VISIBLE);
+            chaosFab.setX(targetX);
+            chaosFab.setY(targetY);
+            boolean selected = selectedId == NAV_CHAOS;
+            chaosFab.setBackground(chaosFabBackground(activity, selected));
+            chaosFab.animate().cancel();
+            if (animate) {
+                chaosFab.setScaleX(selected ? 0.96f : 1.04f);
+                chaosFab.setScaleY(selected ? 0.96f : 1.04f);
+            }
+            chaosFab.animate()
+                    .scaleX(selected ? 1.08f : 1f)
+                    .scaleY(selected ? 1.08f : 1f)
+                    .setDuration(selected ? 210L : 160L)
+                    .setInterpolator(new OvershootInterpolator(selected ? 0.45f : 0.15f))
+                    .start();
+        }
+
+        private void hideBuiltInChaosIcon() {
+            if (nav == null) return;
+            if (hiddenChaosIcon == null) hiddenChaosIcon = findFirstImage(nav.findViewById(NAV_CHAOS));
+            if (hiddenChaosIcon == null) return;
+            hiddenChaosIcon.animate().cancel();
+            hiddenChaosIcon.setAlpha(0f);
+            hiddenChaosIcon.setBackground(null);
+            hiddenChaosIcon.setScaleX(1f);
+            hiddenChaosIcon.setScaleY(1f);
+            hiddenChaosIcon.setTranslationY(0f);
+            hiddenChaosIcon.setElevation(0f);
         }
 
         private void animateSelected(BottomNavigationView nav, int selectedId) {
             if (nav == null) return;
             styleLabels(nav);
-            NativeMainActivity activity = ref.get();
-            if (activity != null) styleChaosButton(activity);
+            hideBuiltInChaosIcon();
             for (int id = 1; id <= 5; id++) {
                 View child = nav.findViewById(id);
                 if (child == null) continue;
                 boolean selected = id == selectedId;
                 child.animate().cancel();
-                float scale = selected && id != NAV_CHAOS ? 1.035f : 1f;
+                float scale = selected && id != NAV_CHAOS ? 1.025f : 1f;
                 child.animate()
                         .scaleX(scale)
                         .scaleY(scale)
                         .translationY(0f)
-                        .setDuration(180L)
+                        .setDuration(155L)
                         .start();
-                setTextAlpha(child, selected ? 1f : 0.78f);
+                setTextAlpha(child, selected ? 1f : 0.70f);
             }
-            ImageView chaosIcon = findFirstImage(nav.findViewById(NAV_CHAOS));
-            if (chaosIcon != null) {
-                boolean selected = selectedId == NAV_CHAOS;
-                chaosIcon.animate().cancel();
-                chaosIcon.animate()
-                        .scaleX(selected ? 1.86f : 1.70f)
-                        .scaleY(selected ? 1.86f : 1.70f)
-                        .translationY(selected ? -dp(nav, 5) : -dp(nav, 4))
-                        .setDuration(190L)
-                        .setInterpolator(new OvershootInterpolator(0.35f))
-                        .start();
-            }
-        }
-
-        private void styleChaosButton(NativeMainActivity activity) {
-            if (nav == null) return;
-            View chaosItem = nav.findViewById(NAV_CHAOS);
-            ImageView icon = findFirstImage(chaosItem);
-            if (icon == null) return;
-            GradientDrawable circle = new GradientDrawable();
-            circle.setShape(GradientDrawable.OVAL);
-            circle.setColor(Color.rgb(255, 90, 31));
-            circle.setStroke(dp(activity, 1), Color.rgb(255, 132, 86));
-            icon.setBackground(circle);
-            icon.setImageTintList(ColorStateList.valueOf(Color.WHITE));
-            icon.setPadding(dp(activity, 2), dp(activity, 2), dp(activity, 2), dp(activity, 2));
-            icon.setElevation(dp(activity, 5));
+            NativeMainActivity activity = ref.get();
+            if (activity != null) positionChaosFab(activity, selectedId, true);
         }
 
         private void styleLabels(BottomNavigationView nav) {
@@ -277,7 +335,7 @@ final class FlashUiController {
                 List<TextView> labels = new ArrayList<>();
                 collectTextViews(item, labels);
                 for (TextView label : labels) {
-                    label.setTextSize(11.5f);
+                    label.setTextSize(id == NAV_CHAOS ? 10.5f : 10.25f);
                 }
             }
         }
@@ -288,12 +346,26 @@ final class FlashUiController {
             for (TextView label : labels) label.setAlpha(alpha);
         }
 
-        private void pulse(View view, boolean stronger) {
+        private void pulse(View view) {
             if (view == null) return;
-            float up = stronger ? 1.08f : 1.09f;
             view.animate().cancel();
-            view.animate().scaleX(up).scaleY(up).setDuration(85L).withEndAction(() -> {
-                view.animate().scaleX(1f).scaleY(1f).setDuration(125L).start();
+            view.animate().scaleX(1.08f).scaleY(1.08f).setDuration(80L).withEndAction(() -> {
+                view.animate().scaleX(1f).scaleY(1f).setDuration(120L).start();
+            }).start();
+        }
+
+        private void pulseChaosFab() {
+            if (chaosFab == null) return;
+            boolean selected = nav != null && nav.getSelectedItemId() == NAV_CHAOS;
+            float base = selected ? 1.08f : 1f;
+            chaosFab.animate().cancel();
+            chaosFab.animate().scaleX(base + 0.08f).scaleY(base + 0.08f).setDuration(85L).withEndAction(() -> {
+                chaosFab.animate()
+                        .scaleX(base)
+                        .scaleY(base)
+                        .setDuration(135L)
+                        .setInterpolator(new OvershootInterpolator(0.25f))
+                        .start();
             }).start();
         }
 
@@ -448,6 +520,12 @@ final class FlashUiController {
         }
     }
 
+    private static void removeOverlay(View view) {
+        if (view != null && view.getParent() instanceof ViewGroup) {
+            ((ViewGroup) view.getParent()).removeView(view);
+        }
+    }
+
     private static View findTopBar(NativeMainActivity activity) {
         View title = field(activity, "headerTitle", View.class);
         if (title == null || !(title.getParent() instanceof View)) return null;
@@ -489,9 +567,17 @@ final class FlashUiController {
     private static GradientDrawable navBackground(NativeMainActivity activity) {
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.RECTANGLE);
-        bg.setCornerRadius(dp(activity, 22));
-        bg.setColor(Color.argb(246, 23, 23, 27));
-        bg.setStroke(dp(activity, 1), Color.rgb(49, 49, 56));
+        bg.setCornerRadius(dp(activity, 20));
+        bg.setColor(Color.argb(248, 22, 22, 26));
+        bg.setStroke(dp(activity, 1), Color.rgb(42, 42, 48));
+        return bg;
+    }
+
+    private static GradientDrawable chaosFabBackground(NativeMainActivity activity, boolean selected) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(selected ? Color.rgb(255, 90, 31) : Color.rgb(232, 77, 24));
+        bg.setStroke(dp(activity, 1), selected ? Color.rgb(255, 154, 112) : Color.rgb(255, 112, 60));
         return bg;
     }
 
