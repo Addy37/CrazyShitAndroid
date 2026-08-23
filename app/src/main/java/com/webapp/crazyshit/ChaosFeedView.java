@@ -58,7 +58,7 @@ import java.util.concurrent.Executors;
 
 /**
  * Full-height random video feed used by the Chaos tab.
- * Swipe up for the next video and down to return to the previous video.
+ * Swipe manually at any time, or let a finished clip advance to the next video automatically.
  */
 @UnstableApi
 public final class ChaosFeedView extends FrameLayout {
@@ -94,6 +94,8 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean active;
     private boolean hostResumed = true;
     private boolean poolLoading;
+    private boolean autoAdvancePending;
+    private int autoAdvanceFrom = -1;
     private int sourcePage = 1;
     private int selectedPosition;
 
@@ -132,6 +134,10 @@ public final class ChaosFeedView extends FrameLayout {
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
+                if (autoAdvancePending && position != autoAdvanceFrom) {
+                    autoAdvancePending = false;
+                    autoAdvanceFrom = -1;
+                }
                 selectedPosition = position;
                 markSeen(position);
                 pauseNonSelected(position);
@@ -166,6 +172,8 @@ public final class ChaosFeedView extends FrameLayout {
         pauseAll();
         sourcePage = 1;
         poolLoading = false;
+        autoAdvancePending = false;
+        autoAdvanceFrom = -1;
         streamCache.clear();
         resolving.clear();
         unplayable.clear();
@@ -235,6 +243,7 @@ public final class ChaosFeedView extends FrameLayout {
                     empty.setVisibility(View.GONE);
                     resolveAhead(selectedPosition);
                     if (active && hostResumed) playSelected();
+                    tryPendingAutoAdvance();
                 }
 
                 if (items.size() < 10 && requestPage < MAX_SOURCE_PAGE) {
@@ -243,6 +252,10 @@ public final class ChaosFeedView extends FrameLayout {
                     initialProgress.setVisibility(View.GONE);
                     empty.setText("Chaos couldn't find a playable pool right now.\nPull away and come back to retry.");
                     empty.setVisibility(View.VISIBLE);
+                } else if (autoAdvancePending && requestPage >= MAX_SOURCE_PAGE
+                        && autoAdvanceFrom + 1 >= items.size()) {
+                    autoAdvancePending = false;
+                    autoAdvanceFrom = -1;
                 }
             });
         });
@@ -255,6 +268,37 @@ public final class ChaosFeedView extends FrameLayout {
             if (!sessionUrls.add(item.url)) continue;
             items.add(item);
         }
+    }
+
+    private void requestAutoAdvance(int fromPosition) {
+        if (!active || !hostResumed || fromPosition != selectedPosition) return;
+
+        if (fromPosition + 1 < items.size()) {
+            autoAdvancePending = false;
+            autoAdvanceFrom = -1;
+            if (items.size() - fromPosition <= LOAD_AHEAD_AT) loadMorePool();
+            pager.post(() -> {
+                if (!active || !hostResumed || selectedPosition != fromPosition) return;
+                if (fromPosition + 1 >= items.size()) return;
+                pager.setCurrentItem(fromPosition + 1, true);
+            });
+            return;
+        }
+
+        autoAdvancePending = true;
+        autoAdvanceFrom = fromPosition;
+        loadMorePool();
+    }
+
+    private void tryPendingAutoAdvance() {
+        if (!autoAdvancePending) return;
+        int fromPosition = autoAdvanceFrom;
+        if (!active || !hostResumed || selectedPosition != fromPosition) {
+            autoAdvancePending = false;
+            autoAdvanceFrom = -1;
+            return;
+        }
+        if (fromPosition + 1 < items.size()) requestAutoAdvance(fromPosition);
     }
 
     private void resolveAhead(int position) {
@@ -697,7 +741,7 @@ public final class ChaosFeedView extends FrameLayout {
             player = new ExoPlayer.Builder(activity)
                     .setMediaSourceFactory(sourceFactory)
                     .build();
-            player.setRepeatMode(Player.REPEAT_MODE_ONE);
+            player.setRepeatMode(Player.REPEAT_MODE_OFF);
             playerView.setPlayer(player);
 
             MediaItem.Builder media = new MediaItem.Builder().setUri(nextStream.mediaUrl);
@@ -712,6 +756,23 @@ public final class ChaosFeedView extends FrameLayout {
                     if (state == Player.STATE_READY) {
                         loading.setVisibility(View.GONE);
                         poster.setVisibility(View.GONE);
+                    } else if (state == Player.STATE_ENDED) {
+                        loading.setVisibility(View.GONE);
+                        if (item != null && player != null) {
+                            try {
+                                long duration = Math.max(0L, player.getDuration());
+                                PlaybackHistoryStore.record(
+                                        activity,
+                                        item.title,
+                                        item.url,
+                                        duration,
+                                        duration,
+                                        true
+                                );
+                            } catch (Exception ignored) {
+                            }
+                        }
+                        requestAutoAdvance(boundPosition);
                     }
                 }
 
