@@ -6,6 +6,10 @@ android {
     namespace = "com.webapp.crazyshit"
     compileSdk = 35
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         // Keep the existing release application ID so 2.1.0 upgrades the signed stable app.
         applicationId = "com.addy37.crazyshitunofficial"
