@@ -16,18 +16,19 @@ public final class CrazyShitApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+
+        // v2.4 retires the in-app mini-player/minimize experiment. Existing installs may still
+        // have these old preferences enabled, so explicitly switch them off during migration.
+        getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .edit()
+                .putBoolean("minimize_on_back", false)
+                .putBoolean("swipe_down_minimize", false)
+                .apply();
+
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
                 if (activity instanceof VideoDetailActivity) {
-                    NativeMainActivity host = currentNativeActivity.get();
-                    if (host != null && UnifiedVideoController.routeLegacyDetail(
-                            host,
-                            (VideoDetailActivity) activity
-                    )) {
-                        UnifiedVideoLayerGuard.raise(host);
-                        return;
-                    }
                     VideoDetailTransitionPolish.apply(activity);
                 }
             }
@@ -47,24 +48,16 @@ public final class CrazyShitApplication extends Application {
                     UiPolishController.attach(nativeActivity);
                     FlashUiController.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
-                    UnifiedVideoController.onHostResumed(nativeActivity);
-                    nativeActivity.getWindow().getDecorView().postDelayed(
-                            () -> UnifiedVideoLayerGuard.raise(nativeActivity),
-                            180L
-                    );
                 }
                 if (activity instanceof VideoDetailActivity && !activity.isFinishing()) {
                     VideoDetailControllerPolish.applySoon(activity);
-                    MiniPlayerHandoffPolish.applySoon(activity);
                 }
             }
 
             @Override
             public void onActivityPaused(Activity activity) {
                 if (activity instanceof NativeMainActivity) {
-                    NativeMainActivity nativeActivity = (NativeMainActivity) activity;
-                    UnifiedVideoController.onHostPaused(nativeActivity);
-                    ChaosPortraitPolish.stop(nativeActivity);
+                    ChaosPortraitPolish.stop((NativeMainActivity) activity);
                 }
             }
 
@@ -81,7 +74,6 @@ public final class CrazyShitApplication extends Application {
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     ChaosPortraitPolish.stop(nativeActivity);
-                    UnifiedVideoController.onHostDestroyed(nativeActivity);
                     FlashUiController.detach(nativeActivity);
                     UiPolishController.detach(nativeActivity);
                     LandscapeUiController.detach(nativeActivity);
@@ -105,11 +97,6 @@ public final class CrazyShitApplication extends Application {
                     UiPolishController.attach(activity);
                     FlashUiController.attach(activity);
                     ChaosPortraitPolish.start(activity);
-                    UnifiedVideoController.onHostConfigurationChanged(activity);
-                    activity.getWindow().getDecorView().postDelayed(
-                            () -> UnifiedVideoLayerGuard.raise(activity),
-                            180L
-                    );
                 },
                 80L
         );

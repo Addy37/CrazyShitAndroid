@@ -77,18 +77,8 @@ public class SettingsActivity extends Activity {
                 true);
         addSwitch(root,
                 "Remember playback position",
-                "Resume videos close to where you stopped.",
+                "Resume unfinished videos close to where you stopped.",
                 "remember_video_position",
-                true);
-        addSwitch(root,
-                "Minimize player on Back",
-                "Back returns to browsing with the video in the in-app mini-player.",
-                "minimize_on_back",
-                true);
-        addSwitch(root,
-                "Swipe down to minimize",
-                "Drag down from the upper part of a playing video to shrink it into the in-app mini-player.",
-                "swipe_down_minimize",
                 true);
 
         addSection(root, "Browsing & privacy");
@@ -106,7 +96,7 @@ public class SettingsActivity extends Activity {
         addSection(root, "Library");
         addAction(root, "Library", "Continue Watching, History and Watch Later.", () ->
                 startActivity(new Intent(this, FavoritesActivity.class)));
-        addAction(root, "Clear watch history", "Remove History and Continue Watching from this device.", () -> {
+        addAction(root, "Clear watch history", "Remove watched and Continue Watching state from this device.", () -> {
             PlaybackHistoryStore.clear(this);
             Toast.makeText(this, "Watch history cleared.", Toast.LENGTH_SHORT).show();
         });
