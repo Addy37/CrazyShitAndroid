@@ -1,50 +1,47 @@
-# CrazyShit v2.2.0
+# CrazyShit v2.2.1
 
-CrazyShit 2.2.0 is a flashier visual-polish release that makes the native app feel more animated and premium while leaving the working Chaos playback behavior alone.
+CrazyShit 2.2.1 refines the flashy 2.2 UI after real-device testing, focusing on a cleaner navigation bar, a stronger Chaos centerpiece, tighter compact cards and a more useful collapsing header.
 
-## Flashier navigation and motion
+## Navigation refinement
 
-- Portrait bottom navigation now floats above the app shell with rounded corners, stronger elevation and a subtle orange outline
-- Selected tabs animate with a short scale response; Chaos stays visually emphasized in the center
-- Reselecting a tab gives it a quick pulse instead of feeling static
-- Home, Trending and Memes keep the existing horizontal page motion and now gain extra depth while scrolling
-- Feed cards subtly scale and fade based on distance from the center of the screen for a light parallax-style effect
+- Slimmed the floating portrait bottom navigation so it takes up less vertical space
+- Removed the heavy warm outer outline and replaced it with a quieter dark border
+- Added a moving orange-tinted active pill that glides between normal selected tabs
+- Reduced inactive-label prominence so the selected destination reads more clearly
+- Tightened navigation label sizing for a lighter, less crowded look
+- Kept the floating rounded shape and app-wide orange accent
 
-## Collapsing header
+## Raised Chaos centerpiece
 
-- The main header now smoothly collapses from 70dp to 48dp while scrolling down through normal feeds
-- The header expands again when scrolling upward or returning to the top
-- The collapse changes the actual layout height, so the feed gains usable screen space instead of leaving an empty gap
-- Landscape behavior and Chaos playback are excluded from this effect
+- Chaos now uses a raised circular orange icon treatment in the center of the nav
+- The Chaos icon stays white against the orange button for stronger contrast
+- Selecting Chaos gives the center button a small spring-style lift without changing Chaos playback behavior
+- The normal moving active pill hides on Chaos so the center button itself becomes the selected indicator
 
-## Animated loading
+## Compact feed cleanup
 
-- Home, Trending, Memes and legacy native feeds now use animated content-shaped skeleton cards while the first page is loading
-- Skeletons mirror the shape of the real thumbnail, title and metadata layout instead of showing only a spinner
-- The skeleton layer fades away as soon as real content is available
-- Chaos is intentionally excluded
+- Reduced compact-card title size slightly while retaining a two-line maximum
+- Shortened large view counts into forms such as 65.6K views and 1.2M views
+- Compact and grid comments now use the tighter 💬 15 style instead of longer comments text
+- Removed uploader text from compact metadata so titles and counts have more breathing room
+- Reduced the previous depth effect slightly so compact cards remain crisp while scrolling
 
-## Mini-player upgrade
+## Better collapsing header
 
-- The native mini-player now slides and fades into place when created
-- Added a thin orange live progress line across the bottom of the mini-player
-- Increased mini-player elevation and added a subtle warm accent stroke so it stands out from the feed without becoming distracting
-- Existing reopen, continue-watching and close behavior remains unchanged
+- The feed header now collapses to 52dp instead of simply dimming as a block
+- Subtitle fades away first during collapse
+- Logo and search control scale down slightly while the title remains readable
+- Switching tabs expands the header again so every destination starts with clear context
+- Landscape and Chaos playback remain excluded from scroll-driven header changes
 
-## Video and startup transitions
+## v2.2 polish kept
 
-- Native video-detail screens now use a short fade and upward slide transition rather than an abrupt screen replacement
-- The CrazyShit splash artwork now performs a quick scale/fade entrance before flowing into the app
-- Splash duration remains short so startup still feels fast
-
-## v2.1 polish kept
-
-- Grouped More screen with Your Stuff, Browse and App sections
-- Installed version displayed inside More
-- Compact More rows with accent icons, subtitles and chevrons
-- Smooth More panel entry animation
-- Orange navigation, loading and ripple accents
-- Softer native feed-card corners
+- Animated skeleton loading on normal feeds
+- Smooth horizontal paging motion
+- Mini-player entrance and live orange progress line
+- Video-detail fade/slide transition
+- Animated splash artwork
+- Grouped More screen from v2.1
 
 ## Chaos behavior kept
 
@@ -61,7 +58,7 @@ CrazyShit 2.2.0 is a flashier visual-polish release that makes the native app fe
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.2.0 can install over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.2.1 can install over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
