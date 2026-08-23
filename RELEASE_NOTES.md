@@ -1,29 +1,27 @@
-# CrazyShit v2.0.8
+# CrazyShit v2.0.9
 
-CrazyShit 2.0.8 fixes the More section in landscape and makes it match the rest of the adaptive landscape UI.
+CrazyShit 2.0.9 focuses on portrait videos inside Chaos, giving vertical clips a richer background and keeping the useful social controls visible.
 
 ## What's new
 
-- Landscape More no longer opens the oversized portrait-style bottom sheet
-- Added a compact right-side More panel designed specifically for landscape
-- The landscape More panel is scrollable, so every action stays reachable on short screens
-- More actions are arranged in a 2-column layout to use landscape width better
-- Added a dedicated close button and background dimming for a cleaner modal feel
-- View style, Settings, Login / account, Library, Categories, My profile, Open full website, and Check for updates remain available
-- Portrait keeps the existing More bottom sheet unchanged
+- Portrait Chaos videos now use a live ambient background sampled from the playing video instead of plain black side space
+- The ambient layer is low resolution and GPU-blurred on supported Android versions, so the app does not need to run a second video decoder
+- A subtle dark overlay keeps the main portrait video, title, and controls readable over the ambient background
+- Portrait clips keep the title, metadata, Save, Comments, Share, More, and mute controls visible while the video is playing
+- Landscape/wide Chaos clips keep the existing auto-fading control behavior
+- The thin Chaos scrub bar still fades away after inactivity and reappears when touched
+- Existing Chaos gestures remain unchanged, including hold for 2x, vertical swiping, mute memory, Not interested, and auto-advance
 
 ## Existing landscape improvements
 
 - Landscape uses a slim left-side navigation rail instead of the tall bottom navigation bar
-- The top bar is shorter and hides the redundant subtitle
-- Home, Trending, and Memes automatically use a denser 2-column grid on normal landscape phones
-- Compact-height landscape phones use tighter rail spacing so the selected Home item is not clipped
-- Chaos keeps its immersive landscape behavior and hides the rail and header while playing fullscreen
-- Rotating back to portrait restores the normal portrait layout and feed style
+- Home, Trending, and Memes use denser landscape grids
+- The More section uses a compact scrollable landscape panel
+- Chaos remains immersive in landscape and hides the app rail/header while playing fullscreen
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.8 can install over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.9 can install over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
