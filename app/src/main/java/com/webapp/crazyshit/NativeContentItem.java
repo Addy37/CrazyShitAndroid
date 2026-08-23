@@ -4,6 +4,7 @@ public final class NativeContentItem {
     public static final String KIND_MEDIA = "media";
     public static final String KIND_MEME = "meme";
     public static final String KIND_CATEGORY = "category";
+    public static final String KIND_SECTION = "section";
 
     public final String kind;
     public final String title;
@@ -37,6 +38,10 @@ public final class NativeContentItem {
 
     public boolean isMeme() {
         return KIND_MEME.equals(kind);
+    }
+
+    public boolean isSection() {
+        return KIND_SECTION.equals(kind);
     }
 
     public NativeContentItem merge(NativeContentItem other) {
