@@ -31,6 +31,7 @@ public final class CrazyShitApplication extends Application {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     currentNativeActivity = new WeakReference<>(nativeActivity);
                     LandscapeUiController.attach(nativeActivity);
+                    LandscapeRailPolish.applySoon(nativeActivity);
                 }
             }
 
@@ -63,7 +64,10 @@ public final class CrazyShitApplication extends Application {
         NativeMainActivity activity = currentNativeActivity.get();
         if (activity == null) return;
         activity.getWindow().getDecorView().postDelayed(
-                () -> LandscapeUiController.apply(activity),
+                () -> {
+                    LandscapeUiController.apply(activity);
+                    LandscapeRailPolish.applySoon(activity);
+                },
                 80L
         );
     }
