@@ -1,14 +1,17 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -17,6 +20,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -48,6 +52,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -69,7 +74,10 @@ public final class ChaosFeedView extends FrameLayout {
 
     private static final String PREFS = "chaos_feed";
     private static final String KEY_RECENT = "recent_urls";
+    private static final String KEY_HIDDEN = "hidden_urls";
+    private static final String KEY_MUTED = "muted";
     private static final int MAX_RECENT = 180;
+    private static final int MAX_HIDDEN = 600;
     private static final int MAX_SOURCE_PAGE = 8;
     private static final int LOAD_AHEAD_AT = 5;
     private static final String SITE = "https://crazyshit.com/";
@@ -82,6 +90,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Set<String> sessionUrls = new HashSet<>();
     private final Deque<String> recentUrls = new ArrayDeque<>();
     private final Set<String> recentSet = new HashSet<>();
+    private final LinkedHashSet<String> hiddenUrls = new LinkedHashSet<>();
     private final Map<String, CrazyShitRepository.StreamInfo> streamCache = new HashMap<>();
     private final Set<String> resolving = new HashSet<>();
     private final Set<String> unplayable = new HashSet<>();
@@ -95,6 +104,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean hostResumed = true;
     private boolean poolLoading;
     private boolean autoAdvancePending;
+    private boolean chaosMuted;
     private int autoAdvanceFrom = -1;
     private int sourcePage = 1;
     private int selectedPosition;
@@ -105,6 +115,9 @@ public final class ChaosFeedView extends FrameLayout {
         this.host = host;
         setBackgroundColor(Color.BLACK);
         loadRecent();
+        loadHidden();
+        chaosMuted = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_MUTED, false);
         buildUi();
         loadMorePool();
     }
@@ -112,10 +125,13 @@ public final class ChaosFeedView extends FrameLayout {
     private void buildUi() {
         pager = new ViewPager2(activity);
         pager.setOrientation(ViewPager2.ORIENTATION_VERTICAL);
-        pager.setOffscreenPageLimit(1);
+        pager.setOffscreenPageLimit(2);
         adapter = new ChaosAdapter();
         pager.setAdapter(adapter);
         addView(pager, new FrameLayout.LayoutParams(-1, -1));
+
+        RecyclerView rv = pagerRecycler();
+        if (rv != null) rv.setItemViewCacheSize(5);
 
         initialProgress = new ProgressBar(activity);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48));
@@ -143,6 +159,8 @@ public final class ChaosFeedView extends FrameLayout {
                 pauseNonSelected(position);
                 resolveAhead(position);
                 playSelected();
+                ChaosHolder holder = holderAt(position);
+                if (holder != null) holder.showControlsTemporarily();
                 if (items.size() - position <= LOAD_AHEAD_AT) loadMorePool();
             }
         });
@@ -217,7 +235,7 @@ public final class ChaosFeedView extends FrameLayout {
             ArrayList<NativeContentItem> fresh = new ArrayList<>();
             ArrayList<NativeContentItem> recentFallback = new ArrayList<>();
             for (NativeContentItem item : combined.values()) {
-                if (item == null || item.url.isEmpty()) continue;
+                if (item == null || item.url.isEmpty() || hiddenUrls.contains(item.url)) continue;
                 if (recentSet.contains(item.url)) recentFallback.add(item);
                 else fresh.add(item);
             }
@@ -229,8 +247,6 @@ public final class ChaosFeedView extends FrameLayout {
                 int before = items.size();
                 appendUnique(fresh);
 
-                // Prefer unseen videos strongly. Only recycle older recent videos after
-                // several source pages have been exhausted and the feed would otherwise stall.
                 if (items.size() - before < 6 && requestPage >= MAX_SOURCE_PAGE) {
                     Collections.reverse(recentFallback);
                     appendUnique(recentFallback);
@@ -265,6 +281,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (candidates == null) return;
         for (NativeContentItem item : candidates) {
             if (item == null || item.url == null || item.url.isEmpty()) continue;
+            if (hiddenUrls.contains(item.url)) continue;
             if (!sessionUrls.add(item.url)) continue;
             items.add(item);
         }
@@ -302,7 +319,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void resolveAhead(int position) {
-        for (int offset = 0; offset <= 2; offset++) {
+        for (int offset = 0; offset <= 3; offset++) {
             resolveAt(position + offset);
         }
         if (position > 0) resolveAt(position - 1);
@@ -439,6 +456,78 @@ public final class ChaosFeedView extends FrameLayout {
                 .apply();
     }
 
+    private void loadHidden() {
+        String raw = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_HIDDEN, "[]");
+        try {
+            JSONArray array = new JSONArray(raw == null ? "[]" : raw);
+            for (int i = 0; i < array.length() && hiddenUrls.size() < MAX_HIDDEN; i++) {
+                String url = array.optString(i, "").trim();
+                if (!url.isEmpty()) hiddenUrls.add(url);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void saveHidden() {
+        JSONArray array = new JSONArray();
+        for (String url : hiddenUrls) array.put(url);
+        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_HIDDEN, array.toString())
+                .apply();
+    }
+
+    private void hideFromChaos(NativeContentItem item) {
+        if (item == null || item.url == null || item.url.isEmpty()) return;
+        hiddenUrls.remove(item.url);
+        hiddenUrls.add(item.url);
+        while (hiddenUrls.size() > MAX_HIDDEN) {
+            String oldest = hiddenUrls.iterator().next();
+            hiddenUrls.remove(oldest);
+        }
+        saveHidden();
+
+        int index = items.indexOf(item);
+        if (index < 0) return;
+        ChaosHolder holder = holderAt(index);
+        if (holder != null) holder.releasePlayer();
+        streamCache.remove(item.url);
+        unplayable.remove(item.url);
+        resolving.remove(item.url);
+        items.remove(index);
+        adapter.notifyDataSetChanged();
+        Toast.makeText(activity, "Won't show this clip again.", Toast.LENGTH_SHORT).show();
+
+        if (items.isEmpty()) {
+            selectedPosition = 0;
+            initialProgress.setVisibility(View.VISIBLE);
+            loadMorePool();
+            return;
+        }
+
+        int target = Math.min(index, items.size() - 1);
+        selectedPosition = target;
+        pager.setCurrentItem(target, false);
+        markSeen(target);
+        resolveAhead(target);
+        playSelected();
+    }
+
+    private void setChaosMuted(boolean muted) {
+        chaosMuted = muted;
+        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_MUTED, muted)
+                .apply();
+        RecyclerView rv = pagerRecycler();
+        if (rv == null) return;
+        for (int i = 0; i < rv.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
+            if (raw instanceof ChaosHolder) ((ChaosHolder) raw).applyMuteState();
+        }
+    }
+
     private void share(NativeContentItem item) {
         if (item == null || item.url.isEmpty()) return;
         Intent share = new Intent(Intent.ACTION_SEND);
@@ -532,13 +621,31 @@ public final class ChaosFeedView extends FrameLayout {
         final ImageView poster;
         final ProgressBar loading;
         final TextView failure;
+        final LinearLayout lower;
         final TextView title;
         final TextView meta;
         final TextView save;
+        final TextView mute;
+        final TextView speedBadge;
+        final SeekBar seekBar;
         ExoPlayer player;
         NativeContentItem item;
         CrazyShitRepository.StreamInfo stream;
         int boundPosition = -1;
+        boolean controlsVisible = true;
+        boolean speedBoosting;
+        boolean scrubbing;
+        boolean everStarted;
+        float restoreSpeed = 1f;
+
+        private final Runnable hideControlsRunnable = this::hideControlsNow;
+        private final Runnable progressRunnable = new Runnable() {
+            @Override
+            public void run() {
+                updateProgress();
+                if (player != null && player.isPlaying()) root.postDelayed(this, 250L);
+            }
+        };
 
         ChaosHolder(ViewGroup parent) {
             super(new FrameLayout(parent.getContext()));
@@ -551,7 +658,6 @@ public final class ChaosFeedView extends FrameLayout {
             poster.setBackgroundColor(Color.BLACK);
             root.addView(poster, new FrameLayout.LayoutParams(-1, -1));
 
-            // BETA19_CHAOS_OVERLAY_CLEANUP
             playerView = (PlayerView) LayoutInflater.from(activity)
                     .inflate(R.layout.view_video_player_texture, root, false);
             playerView.setUseController(false);
@@ -576,10 +682,10 @@ public final class ChaosFeedView extends FrameLayout {
             failure.setVisibility(View.GONE);
             root.addView(failure, new FrameLayout.LayoutParams(-1, -1));
 
-            LinearLayout lower = new LinearLayout(activity);
+            lower = new LinearLayout(activity);
             lower.setOrientation(LinearLayout.HORIZONTAL);
             lower.setGravity(Gravity.BOTTOM);
-            lower.setPadding(dp(16), dp(18), dp(10), dp(18));
+            lower.setPadding(dp(16), dp(18), dp(10), dp(30));
             lower.setBackgroundColor(Color.TRANSPARENT);
             FrameLayout.LayoutParams lowerParams = new FrameLayout.LayoutParams(-1, -2);
             lowerParams.gravity = Gravity.BOTTOM;
@@ -619,18 +725,99 @@ public final class ChaosFeedView extends FrameLayout {
             TextView share = actionButton("↗\nShare");
             actions.addView(share, actionParams());
 
-            TextView details = actionButton("⋯\nDetails");
-            actions.addView(details, actionParams());
+            TextView more = actionButton("⋯\nMore");
+            actions.addView(more, actionParams());
+
+            mute = actionButton(chaosMuted ? "🔇" : "🔊");
+            mute.setTextSize(20);
+            FrameLayout.LayoutParams muteParams = new FrameLayout.LayoutParams(dp(52), dp(52));
+            muteParams.gravity = Gravity.TOP | Gravity.END;
+            muteParams.setMargins(0, dp(14), dp(12), 0);
+            root.addView(mute, muteParams);
+
+            speedBadge = new TextView(activity);
+            speedBadge.setText("2×");
+            speedBadge.setTextColor(Color.WHITE);
+            speedBadge.setTextSize(16);
+            speedBadge.setGravity(Gravity.CENTER);
+            speedBadge.setBackgroundColor(Color.argb(175, 0, 0, 0));
+            speedBadge.setPadding(dp(10), dp(5), dp(10), dp(5));
+            speedBadge.setVisibility(View.GONE);
+            FrameLayout.LayoutParams speedParams = new FrameLayout.LayoutParams(-2, -2);
+            speedParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            speedParams.setMargins(0, dp(18), 0, 0);
+            root.addView(speedBadge, speedParams);
+
+            seekBar = new SeekBar(activity);
+            seekBar.setMax(1000);
+            seekBar.setProgress(0);
+            seekBar.setPadding(0, 0, 0, 0);
+            seekBar.setProgressTintList(ColorStateList.valueOf(Color.rgb(255, 90, 31)));
+            seekBar.setProgressBackgroundTintList(ColorStateList.valueOf(Color.argb(150, 210, 210, 215)));
+            seekBar.setThumbTintList(ColorStateList.valueOf(Color.rgb(255, 90, 31)));
+            FrameLayout.LayoutParams seekParams = new FrameLayout.LayoutParams(-1, dp(30));
+            seekParams.gravity = Gravity.BOTTOM;
+            seekParams.setMargins(dp(8), 0, dp(8), dp(1));
+            root.addView(seekBar, seekParams);
 
             playerView.setOnClickListener(v -> {
                 haptic(v);
-                if (player == null) return;
-                if (player.isPlaying()) player.pause();
-                else player.play();
+                if (!controlsVisible) {
+                    showControlsTemporarily();
+                    return;
+                }
+                if (player == null) {
+                    showControlsTemporarily();
+                    return;
+                }
+                if (player.isPlaying()) {
+                    player.pause();
+                    showControlsPersistent();
+                } else {
+                    everStarted = true;
+                    player.play();
+                    showControlsTemporarily();
+                }
+            });
+
+            playerView.setLongClickable(true);
+            playerView.setOnLongClickListener(v -> {
+                if (player == null) return false;
+                haptic(v);
+                restoreSpeed = player.getPlaybackParameters().speed;
+                if (restoreSpeed <= 0f) restoreSpeed = 1f;
+                speedBoosting = true;
+                player.setPlaybackSpeed(2f);
+                speedBadge.setVisibility(View.VISIBLE);
+                return true;
+            });
+            playerView.setOnTouchListener((v, event) -> {
+                int action = event.getActionMasked();
+                if ((action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) && speedBoosting) {
+                    restorePlaybackSpeed();
+                    return true;
+                }
+                return false;
+            });
+
+            View.OnLongClickListener menuLongPress = v -> {
+                haptic(v);
+                showMoreMenu();
+                return true;
+            };
+            lower.setOnLongClickListener(menuLongPress);
+            title.setOnLongClickListener(menuLongPress);
+            meta.setOnLongClickListener(menuLongPress);
+
+            mute.setOnClickListener(v -> {
+                haptic(v);
+                setChaosMuted(!chaosMuted);
+                showControlsTemporarily();
             });
             save.setOnClickListener(v -> {
                 haptic(v);
                 toggleSaved(item, save);
+                showControlsTemporarily();
             });
             comments.setOnClickListener(v -> {
                 haptic(v);
@@ -639,11 +826,37 @@ public final class ChaosFeedView extends FrameLayout {
             share.setOnClickListener(v -> {
                 haptic(v);
                 share(item);
+                showControlsTemporarily();
             });
-            details.setOnClickListener(v -> {
+            more.setOnClickListener(v -> {
                 haptic(v);
-                pauseAndRecord();
-                if (item != null) host.openDetails(item);
+                showMoreMenu();
+            });
+
+            seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                    if (!fromUser || player == null) return;
+                    long duration = player.getDuration();
+                    if (duration <= 0L) return;
+                    player.seekTo((duration * progress) / 1000L);
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar bar) {
+                    scrubbing = true;
+                    pager.setUserInputEnabled(false);
+                    showControlsPersistent();
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar bar) {
+                    scrubbing = false;
+                    pager.setUserInputEnabled(true);
+                    updateProgress();
+                    if (player != null && player.isPlaying()) showControlsTemporarily();
+                    else showControlsPersistent();
+                }
             });
         }
 
@@ -673,6 +886,18 @@ public final class ChaosFeedView extends FrameLayout {
             item = next;
             stream = null;
             boundPosition = position;
+            everStarted = false;
+            controlsVisible = true;
+            speedBoosting = false;
+            scrubbing = false;
+            seekBar.setProgress(0);
+            seekBar.setEnabled(false);
+            lower.setAlpha(1f);
+            lower.setVisibility(View.VISIBLE);
+            mute.setAlpha(1f);
+            mute.setVisibility(View.VISIBLE);
+            speedBadge.setVisibility(View.GONE);
+            applyMuteState();
             title.setText(next.title == null || next.title.isEmpty() ? "Random video" : next.title);
             StringBuilder info = new StringBuilder();
             if (next.uploader != null && !next.uploader.isEmpty()) info.append(next.uploader);
@@ -704,7 +929,15 @@ public final class ChaosFeedView extends FrameLayout {
             if (item == null || nextStream == null || nextStream.mediaUrl == null || nextStream.mediaUrl.isEmpty()) return;
             if (stream != null && stream.mediaUrl.equals(nextStream.mediaUrl) && player != null) {
                 loading.setVisibility(View.GONE);
-                if (autoplay) player.play(); else player.pause();
+                applyMuteState();
+                if (autoplay) {
+                    everStarted = true;
+                    player.play();
+                    startProgressUpdates();
+                } else {
+                    player.pause();
+                    stopProgressUpdates();
+                }
                 return;
             }
 
@@ -742,22 +975,28 @@ public final class ChaosFeedView extends FrameLayout {
                     .setMediaSourceFactory(sourceFactory)
                     .build();
             player.setRepeatMode(Player.REPEAT_MODE_OFF);
+            player.setVolume(chaosMuted ? 0f : 1f);
             playerView.setPlayer(player);
 
             MediaItem.Builder media = new MediaItem.Builder().setUri(nextStream.mediaUrl);
-            String lower = nextStream.mediaUrl.toLowerCase(Locale.US);
-            if (lower.contains(".m3u8")) media.setMimeType(MimeTypes.APPLICATION_M3U8);
-            else if (lower.contains(".mpd")) media.setMimeType(MimeTypes.APPLICATION_MPD);
+            String lowerUrl = nextStream.mediaUrl.toLowerCase(Locale.US);
+            if (lowerUrl.contains(".m3u8")) media.setMimeType(MimeTypes.APPLICATION_M3U8);
+            else if (lowerUrl.contains(".mpd")) media.setMimeType(MimeTypes.APPLICATION_MPD);
             player.setMediaItem(media.build());
             player.setPlayWhenReady(autoplay);
+            if (autoplay) everStarted = true;
             player.addListener(new Player.Listener() {
                 @Override
                 public void onPlaybackStateChanged(int state) {
                     if (state == Player.STATE_READY) {
                         loading.setVisibility(View.GONE);
                         poster.setVisibility(View.GONE);
+                        updateProgress();
+                        if (player != null && player.isPlaying()) startProgressUpdates();
                     } else if (state == Player.STATE_ENDED) {
                         loading.setVisibility(View.GONE);
+                        stopProgressUpdates();
+                        seekBar.setProgress(1000);
                         if (item != null && player != null) {
                             try {
                                 long duration = Math.max(0L, player.getDuration());
@@ -777,32 +1016,182 @@ public final class ChaosFeedView extends FrameLayout {
                 }
 
                 @Override
+                public void onIsPlayingChanged(boolean isPlaying) {
+                    if (isPlaying) {
+                        everStarted = true;
+                        startProgressUpdates();
+                        showControlsTemporarily();
+                    } else {
+                        stopProgressUpdates();
+                        updateProgress();
+                        if (!scrubbing) showControlsPersistent();
+                    }
+                }
+
+                @Override
                 public void onPlayerError(PlaybackException error) {
                     loading.setVisibility(View.GONE);
+                    stopProgressUpdates();
                     showPlaybackFailure();
                 }
             });
             player.prepare();
         }
 
+        private void showMoreMenu() {
+            if (item == null) return;
+            String savedLabel = FavoriteStore.contains(activity, item.url)
+                    ? "Remove from Watch Later"
+                    : "Save to Watch Later";
+            String[] options = new String[] {
+                    "Not interested",
+                    "Replay",
+                    savedLabel,
+                    "Comments",
+                    "Share",
+                    "Open details"
+            };
+            new AlertDialog.Builder(activity)
+                    .setTitle("Chaos")
+                    .setItems(options, (dialog, which) -> {
+                        if (item == null) return;
+                        switch (which) {
+                            case 0:
+                                hideFromChaos(item);
+                                break;
+                            case 1:
+                                if (player != null) {
+                                    player.seekTo(0L);
+                                    everStarted = true;
+                                    player.play();
+                                    showControlsTemporarily();
+                                }
+                                break;
+                            case 2:
+                                toggleSaved(item, save);
+                                break;
+                            case 3:
+                                host.openComments(item);
+                                break;
+                            case 4:
+                                share(item);
+                                break;
+                            case 5:
+                                pauseAndRecord();
+                                host.openDetails(item);
+                                break;
+                            default:
+                                break;
+                        }
+                    })
+                    .show();
+        }
+
+        void applyMuteState() {
+            mute.setText(chaosMuted ? "🔇" : "🔊");
+            if (player != null) player.setVolume(chaosMuted ? 0f : 1f);
+        }
+
+        private void restorePlaybackSpeed() {
+            if (!speedBoosting) return;
+            speedBoosting = false;
+            speedBadge.setVisibility(View.GONE);
+            if (player != null) player.setPlaybackSpeed(restoreSpeed <= 0f ? 1f : restoreSpeed);
+        }
+
+        void showControlsTemporarily() {
+            showControls(true);
+        }
+
+        private void showControlsPersistent() {
+            showControls(false);
+        }
+
+        private void showControls(boolean autoHide) {
+            root.removeCallbacks(hideControlsRunnable);
+            lower.animate().cancel();
+            mute.animate().cancel();
+            controlsVisible = true;
+            lower.setVisibility(View.VISIBLE);
+            mute.setVisibility(View.VISIBLE);
+            lower.setAlpha(1f);
+            mute.setAlpha(1f);
+            if (autoHide && !scrubbing) root.postDelayed(hideControlsRunnable, 2200L);
+        }
+
+        private void hideControlsNow() {
+            if (scrubbing || player == null || !player.isPlaying()) return;
+            controlsVisible = false;
+            lower.animate()
+                    .alpha(0f)
+                    .setDuration(180L)
+                    .withEndAction(() -> {
+                        if (!controlsVisible) lower.setVisibility(View.INVISIBLE);
+                    })
+                    .start();
+            mute.animate()
+                    .alpha(0f)
+                    .setDuration(180L)
+                    .withEndAction(() -> {
+                        if (!controlsVisible) mute.setVisibility(View.INVISIBLE);
+                    })
+                    .start();
+        }
+
+        private void startProgressUpdates() {
+            root.removeCallbacks(progressRunnable);
+            updateProgress();
+            root.postDelayed(progressRunnable, 250L);
+        }
+
+        private void stopProgressUpdates() {
+            root.removeCallbacks(progressRunnable);
+        }
+
+        private void updateProgress() {
+            if (player == null || scrubbing) return;
+            long duration = player.getDuration();
+            long position = Math.max(0L, player.getCurrentPosition());
+            if (duration <= 0L) {
+                seekBar.setEnabled(false);
+                seekBar.setProgress(0);
+                return;
+            }
+            seekBar.setEnabled(true);
+            int progress = (int) Math.max(0L, Math.min(1000L, (position * 1000L) / duration));
+            seekBar.setProgress(progress);
+        }
+
         void showPlaybackFailure() {
             loading.setVisibility(View.GONE);
             failure.setVisibility(View.VISIBLE);
             poster.setVisibility(View.VISIBLE);
+            showControlsPersistent();
         }
 
         void pauseAndRecord() {
             if (player == null || item == null) return;
+            restorePlaybackSpeed();
+            stopProgressUpdates();
             try {
                 long position = Math.max(0L, player.getCurrentPosition());
                 long duration = Math.max(0L, player.getDuration());
-                PlaybackHistoryStore.record(activity, item.title, item.url, position, duration, false);
+                if (everStarted || position > 1000L) {
+                    PlaybackHistoryStore.record(activity, item.title, item.url, position, duration, false);
+                }
                 player.pause();
             } catch (Exception ignored) {
             }
         }
 
         void releasePlayer() {
+            root.removeCallbacks(hideControlsRunnable);
+            stopProgressUpdates();
+            restorePlaybackSpeed();
+            if (scrubbing) {
+                scrubbing = false;
+                pager.setUserInputEnabled(true);
+            }
             if (player != null) {
                 try {
                     playerView.setPlayer(null);

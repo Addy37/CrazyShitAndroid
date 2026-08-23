@@ -1,19 +1,24 @@
-# CrazyShit v2.0.3
+# CrazyShit v2.0.4
 
-CrazyShit 2.0.3 is a small stable visual update for the app icon and startup experience.
+CrazyShit 2.0.4 is a Chaos-focused quality-of-life update built around faster browsing and cleaner playback controls.
 
 ## What's new
 
-- Replaced the launcher artwork with the new circular CrazyShit badge
-- Added a dedicated branded splash screen using the matching vertical artwork
-- Kept Android 12+ system splash behavior tied to the updated launcher art for a consistent startup transition
-- Retained the Chaos auto-advance and playback-history improvements from 2.0.2
+- Press and hold the video to temporarily play at 2x speed, then release to return to the prior speed
+- Chaos remembers your mute state between clips and app sessions
+- Added a More menu with Not interested, Replay, Watch Later, Comments, Share, and Open details actions
+- Not interested permanently hides that clip from Chaos on the current device
+- Chaos playback controls now fade away automatically while a clip is playing and return with a tap
+- Increased Chaos look-ahead and kept more nearby pages prepared for faster next/previous swipes
+- Added a thin orange playback progress bar that stays visible at the bottom
+- The progress bar is fully scrubbable, so you can drag it left or right to seek through supported videos
+- Preloaded clips no longer get written to playback history unless they were actually started
 
 ## Existing 2.0 features
 
 - Native Home and Trending feeds with pagination and retained tab state
 - Horizontal swiping between Home, Trending, Chaos, and Memes
-- Randomized vertical Chaos feed with autoplay, preloading, duplicate prevention, and recent-view avoidance
+- Randomized vertical Chaos feed with autoplay, automatic next-clip advance, duplicate prevention, and recent-view avoidance
 - Native Memes feed and static image viewer
 - Native Library with Continue Watching, History, Watch Later, thumbnails, progress, and swipeable Library tabs
 - Native video detail screen with Media3 playback, comments, related videos, sharing, and Watch Later
@@ -25,7 +30,7 @@ CrazyShit 2.0.3 is a small stable visual update for the app icon and startup exp
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.3 installs over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.4 installs over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
