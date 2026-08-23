@@ -19,6 +19,9 @@ public final class CrazyShitApplication extends Application {
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
+                if (activity instanceof VideoDetailActivity) {
+                    VideoDetailTransitionPolish.apply(activity);
+                }
             }
 
             @Override
@@ -34,6 +37,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeRailPolish.applySoon(nativeActivity);
                     LandscapeMoreDialog.attachSoon(nativeActivity);
                     UiPolishController.attach(nativeActivity);
+                    FlashUiController.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
                 }
                 if (activity instanceof VideoDetailActivity) {
@@ -61,6 +65,7 @@ public final class CrazyShitApplication extends Application {
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     ChaosPortraitPolish.stop(nativeActivity);
+                    FlashUiController.detach(nativeActivity);
                     UiPolishController.detach(nativeActivity);
                     LandscapeUiController.detach(nativeActivity);
                     NativeMainActivity current = currentNativeActivity.get();
@@ -81,6 +86,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeRailPolish.applySoon(activity);
                     LandscapeMoreDialog.attachSoon(activity);
                     UiPolishController.attach(activity);
+                    FlashUiController.attach(activity);
                     ChaosPortraitPolish.start(activity);
                 },
                 80L

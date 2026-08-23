@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
 
 public final class SplashActivity extends Activity {
     private static final long SPLASH_DURATION_MS = 650L;
@@ -19,14 +20,31 @@ public final class SplashActivity extends Activity {
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         setContentView(R.layout.activity_splash);
+
+        View art = findViewById(R.id.splashArt);
+        if (art != null) {
+            art.setAlpha(0f);
+            art.setScaleX(0.94f);
+            art.setScaleY(0.94f);
+            art.animate()
+                    .alpha(1f)
+                    .scaleX(1.015f)
+                    .scaleY(1.015f)
+                    .setDuration(390L)
+                    .withEndAction(() -> art.animate()
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(150L)
+                            .start())
+                    .start();
+        }
         handler.postDelayed(launchAppRunnable, SPLASH_DURATION_MS);
     }
 
     private void launchApp() {
         Intent intent = new Intent(this, NativeMainActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
         startActivity(intent);
-        overridePendingTransition(0, 0);
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
         finish();
     }
 

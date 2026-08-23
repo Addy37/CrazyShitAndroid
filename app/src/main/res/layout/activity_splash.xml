@@ -5,6 +5,7 @@
     android:background="#000000">
 
     <ImageView
+        android:id="@+id/splashArt"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:contentDescription="@null"
