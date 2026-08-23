@@ -32,6 +32,7 @@ public final class CrazyShitApplication extends Application {
                     currentNativeActivity = new WeakReference<>(nativeActivity);
                     LandscapeUiController.attach(nativeActivity);
                     LandscapeRailPolish.applySoon(nativeActivity);
+                    LandscapeMoreDialog.attachSoon(nativeActivity);
                 }
             }
 
@@ -67,6 +68,7 @@ public final class CrazyShitApplication extends Application {
                 () -> {
                     LandscapeUiController.apply(activity);
                     LandscapeRailPolish.applySoon(activity);
+                    LandscapeMoreDialog.attachSoon(activity);
                 },
                 80L
         );
