@@ -7,12 +7,12 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        // Keep the existing release application ID so 2.0.12 upgrades the signed stable app.
+        // Keep the existing release application ID so 2.1.0 upgrades the signed stable app.
         applicationId = "com.addy37.crazyshitunofficial"
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 22
-        versionName = System.getenv("APP_VERSION_NAME") ?: "2.0.12"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 23
+        versionName = System.getenv("APP_VERSION_NAME") ?: "2.1.0"
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
