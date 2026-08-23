@@ -152,8 +152,20 @@ final class LandscapeMoreDialog {
                 content,
                 "BROWSE",
                 actions(
-                        new Action("▦", "Categories", "Browse every CrazyShit category",
-                                () -> invokeNoArgs(activity, "showCategories")),
+                        new Action("⚡", "Trending", "Browse the classic Trending feed",
+                                () -> activity.startActivity(NativeFeedBrowserActivity.create(
+                                        activity,
+                                        "Trending",
+                                        CrazyShitRepository.TRENDING,
+                                        false
+                                ))),
+                        new Action("▧", "Memes", "Browse the classic Memes feed",
+                                () -> activity.startActivity(NativeFeedBrowserActivity.create(
+                                        activity,
+                                        "Memes",
+                                        MemeRepository.MEMES,
+                                        true
+                                ))),
                         new Action("↗", "Open full website", "Use the compatibility browser",
                                 () -> {
                                     Intent intent = new Intent(activity, WebFallbackActivity.class);
