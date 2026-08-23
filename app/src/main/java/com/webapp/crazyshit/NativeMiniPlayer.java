@@ -38,6 +38,7 @@ public final class NativeMiniPlayer {
     private MaterialCardView card;
     private PlayerView playerView;
     private TextView titleView;
+    private View progressFill;
     private ExoPlayer player;
     private String mediaUrl;
     private String pageUrl;
@@ -49,6 +50,19 @@ public final class NativeMiniPlayer {
     private String comments;
     private boolean reopenDetail;
     private boolean resumeAfterPause;
+
+    private final Runnable progressTicker = new Runnable() {
+        @Override
+        public void run() {
+            if (player == null || progressFill == null || card == null || card.getVisibility() != View.VISIBLE) return;
+            long duration = Math.max(0L, player.getDuration());
+            long position = Math.max(0L, player.getCurrentPosition());
+            float progress = duration > 0L ? Math.min(1f, position / (float) duration) : 0f;
+            progressFill.setScaleX(progress);
+            progressFill.setPivotX(0f);
+            card.postDelayed(this, 350L);
+        }
+    };
 
     public NativeMiniPlayer(Activity activity, FrameLayout overlayRoot, Host host) {
         this.activity = activity;
@@ -118,7 +132,9 @@ public final class NativeMiniPlayer {
                 }
             });
             resumeAfterPause = true;
-            card.setVisibility(View.VISIBLE);
+            showCardAnimated();
+            card.removeCallbacks(progressTicker);
+            card.post(progressTicker);
         } catch (Exception e) {
             stop();
             Toast.makeText(activity, "Couldn't start the mini-player.", Toast.LENGTH_SHORT).show();
@@ -139,12 +155,13 @@ public final class NativeMiniPlayer {
     public void stop() {
         resumeAfterPause = false;
         recordHistory(false);
+        if (card != null) card.removeCallbacks(progressTicker);
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
             player.release();
             player = null;
         }
-        if (card != null) card.setVisibility(View.GONE);
+        hideCard();
         mediaUrl = null;
         pageUrl = null;
         title = null;
@@ -193,12 +210,13 @@ public final class NativeMiniPlayer {
 
     private void stopWithoutRecording() {
         resumeAfterPause = false;
+        if (card != null) card.removeCallbacks(progressTicker);
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
             player.release();
             player = null;
         }
-        if (card != null) card.setVisibility(View.GONE);
+        hideCard();
         mediaUrl = null;
         pageUrl = null;
         title = null;
@@ -210,21 +228,52 @@ public final class NativeMiniPlayer {
         reopenDetail = false;
     }
 
+    private void showCardAnimated() {
+        if (card == null) return;
+        card.animate().cancel();
+        card.setVisibility(View.VISIBLE);
+        card.setAlpha(0f);
+        card.setTranslationY(dp(18));
+        card.setScaleX(0.98f);
+        card.setScaleY(0.98f);
+        card.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(210L)
+                .start();
+    }
+
+    private void hideCard() {
+        if (card == null) return;
+        card.animate().cancel();
+        card.setVisibility(View.GONE);
+        card.setAlpha(1f);
+        card.setTranslationY(0f);
+        card.setScaleX(1f);
+        card.setScaleY(1f);
+        if (progressFill != null) progressFill.setScaleX(0f);
+    }
+
     private void ensureUi() {
         if (card != null) return;
 
         card = new MaterialCardView(activity);
         card.setCardBackgroundColor(Color.rgb(24, 24, 28));
         card.setRadius(dp(20));
-        card.setCardElevation(dp(12));
-        card.setStrokeColor(Color.rgb(60, 60, 68));
+        card.setCardElevation(dp(14));
+        card.setStrokeColor(Color.rgb(104, 57, 40));
         card.setStrokeWidth(dp(1));
         card.setVisibility(View.GONE);
+
+        FrameLayout content = new FrameLayout(activity);
 
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(6), dp(6), dp(6), dp(6));
+        row.setPadding(dp(6), dp(6), dp(6), dp(8));
+        content.addView(row, new FrameLayout.LayoutParams(-1, -1));
 
         playerView = new PlayerView(activity);
         playerView.setUseController(false);
@@ -250,10 +299,24 @@ public final class NativeMiniPlayer {
         close.setOnClickListener(v -> stop());
         row.addView(close, new LinearLayout.LayoutParams(dp(42), dp(54)));
 
-        card.addView(row);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, dp(84));
+        View track = new View(activity);
+        track.setBackgroundColor(Color.rgb(50, 50, 56));
+        FrameLayout.LayoutParams trackParams = new FrameLayout.LayoutParams(-1, dp(3));
+        trackParams.gravity = Gravity.BOTTOM;
+        content.addView(track, trackParams);
+
+        progressFill = new View(activity);
+        progressFill.setBackgroundColor(Color.rgb(255, 90, 31));
+        progressFill.setScaleX(0f);
+        progressFill.setPivotX(0f);
+        FrameLayout.LayoutParams fillParams = new FrameLayout.LayoutParams(-1, dp(3));
+        fillParams.gravity = Gravity.BOTTOM;
+        content.addView(progressFill, fillParams);
+
+        card.addView(content);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, dp(86));
         params.gravity = Gravity.BOTTOM;
-        params.setMargins(dp(10), 0, dp(10), dp(88));
+        params.setMargins(dp(10), 0, dp(10), dp(92));
         overlayRoot.addView(card, params);
     }
 
