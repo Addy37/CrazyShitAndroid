@@ -8,143 +8,138 @@ import android.widget.ScrollView;
 
 import com.google.android.material.card.MaterialCardView;
 
-import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
-import java.util.WeakHashMap;
 
 /**
- * Keeps the unified video session visually above shell-only polish and smooths the
- * full-to-mini transition without changing the player/session architecture.
+ * Event-driven visual polish for the unified video session.
+ *
+ * v2.3.2 intentionally does not run a frame loop. It configures the unified layers once and then
+ * reacts only to real swipe progress/release callbacks from SwipeMinimizeFrameLayout.
  */
 final class UnifiedVideoLayerGuard {
-    private static final long FRAME_MS = 16L;
-    private static final WeakHashMap<NativeMainActivity, GuardLoop> LOOPS = new WeakHashMap<>();
-
     private UnifiedVideoLayerGuard() {
     }
 
     static void raise(NativeMainActivity activity) {
+        attach(activity, 0);
+    }
+
+    private static void attach(NativeMainActivity activity, int attempt) {
         if (activity == null || activity.isFinishing()) return;
-        GuardLoop loop;
-        synchronized (LOOPS) {
-            loop = LOOPS.get(activity);
-            if (loop == null) {
-                loop = new GuardLoop(activity);
-                LOOPS.put(activity, loop);
-            }
-        }
-        loop.start();
-    }
+        FrameLayout root = root(activity);
+        if (root == null) return;
 
-    private static final class GuardLoop implements Runnable {
-        private final WeakReference<NativeMainActivity> ref;
-        private boolean running;
-        private int idleFrames;
+        View detail = null;
+        ScrollView details = null;
+        MaterialCardView mini = null;
+        SwipeMinimizeFrameLayout player = null;
 
-        GuardLoop(NativeMainActivity activity) {
-            ref = new WeakReference<>(activity);
-        }
-
-        void start() {
-            NativeMainActivity activity = ref.get();
-            if (activity == null || activity.isFinishing()) return;
-            if (running) return;
-            running = true;
-            idleFrames = 0;
-            activity.getWindow().getDecorView().removeCallbacks(this);
-            activity.getWindow().getDecorView().post(this);
-        }
-
-        @Override
-        public void run() {
-            NativeMainActivity activity = ref.get();
-            if (!running || activity == null || activity.isFinishing()) {
-                running = false;
-                return;
-            }
-
-            FrameLayout root = root(activity);
-            if (root == null) {
-                running = false;
-                return;
-            }
-
-            View detail = null;
-            MaterialCardView mini = null;
-            SwipeMinimizeFrameLayout player = null;
-            ScrollView details = null;
-
-            for (int i = 0; i < root.getChildCount(); i++) {
-                View child = root.getChildAt(i);
-                if (child instanceof SwipeMinimizeFrameLayout) {
-                    player = (SwipeMinimizeFrameLayout) child;
-                } else if (child instanceof MaterialCardView) {
-                    mini = (MaterialCardView) child;
-                } else if (child instanceof FrameLayout) {
-                    ScrollView found = findScrollView((ViewGroup) child);
-                    if (found != null) {
-                        detail = child;
-                        details = found;
-                    }
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            if (child instanceof SwipeMinimizeFrameLayout) {
+                player = (SwipeMinimizeFrameLayout) child;
+            } else if (child instanceof MaterialCardView) {
+                mini = (MaterialCardView) child;
+            } else if (child instanceof FrameLayout) {
+                ScrollView found = findScrollView((ViewGroup) child);
+                if (found != null) {
+                    detail = child;
+                    details = found;
                 }
             }
+        }
 
-            boolean active = player != null && player.getVisibility() == View.VISIBLE;
-            if (!active) {
-                idleFrames++;
-                if (idleFrames > 18) {
-                    running = false;
-                    return;
-                }
-            } else {
-                idleFrames = 0;
-                polish(activity, root, detail, details, mini, player);
+        if (player == null) {
+            if (attempt < 3) {
+                activity.getWindow().getDecorView().postDelayed(
+                        () -> attach(activity, attempt + 1),
+                        120L + (attempt * 80L)
+                );
             }
-
-            activity.getWindow().getDecorView().postDelayed(this, FRAME_MS);
+            return;
         }
-    }
 
-    private static void polish(
-            NativeMainActivity activity,
-            FrameLayout root,
-            View detail,
-            ScrollView details,
-            MaterialCardView mini,
-            SwipeMinimizeFrameLayout player
-    ) {
-        if (detail != null && detail.getVisibility() == View.VISIBLE) {
-            root.bringChildToFront(detail);
-        }
-        if (mini != null && mini.getVisibility() == View.VISIBLE) {
-            root.bringChildToFront(mini);
-            mini.setCardElevation(dp(activity, 9));
-            mini.setTranslationZ(dp(activity, 9));
-            FrameLayout slot = findEmptyFrame(mini);
+        final View detailView = detail;
+        final ScrollView detailsView = details;
+        final MaterialCardView miniCard = mini;
+        final SwipeMinimizeFrameLayout livePlayer = player;
+
+        // Permanent stacking for this unified session. The live TextureView must sit above the
+        // mini-card placeholder, but we never reorder these views every frame.
+        if (miniCard != null) {
+            miniCard.setCardElevation(dp(activity, 9));
+            miniCard.setTranslationZ(0f);
+            FrameLayout slot = findEmptyFrame(miniCard);
             if (slot != null) {
                 slot.setBackgroundColor(Color.TRANSPARENT);
                 slot.setElevation(0f);
                 slot.setTranslationZ(0f);
             }
         }
+        livePlayer.setElevation(dp(activity, 28));
+        livePlayer.setTranslationZ(0f);
+        if (livePlayer.getVisibility() == View.VISIBLE) root.bringChildToFront(livePlayer);
 
-        // The live player must always win the Z-order over the mini-card's placeholder slot.
-        root.bringChildToFront(player);
-        player.setElevation(dp(activity, 28));
-        player.setTranslationZ(dp(activity, 28));
+        livePlayer.setVisualObserver(new SwipeMinimizeFrameLayout.Listener() {
+            private boolean prepared;
 
-        if (details != null) {
-            boolean miniVisible = mini != null && mini.getVisibility() == View.VISIBLE;
-            if (!miniVisible) {
-                details.setAlpha(1f);
-            } else {
-                // Hide text/cards very early in a minimize, and bring them back only near the end
-                // of an expand. The dark detail backdrop can still fade normally underneath.
-                float scale = Math.max(player.getScaleX(), player.getScaleY());
-                float contentAlpha = clamp((scale - 0.88f) / 0.12f);
-                details.setAlpha(contentAlpha);
+            @Override
+            public void onDrag(float distancePx, float progress) {
+                if (!prepared) {
+                    prepareStack(root, miniCard, livePlayer);
+                    prepared = true;
+                }
+                if (detailsView != null) {
+                    detailsView.animate().cancel();
+                    // Text/cards disappear during the first part of the gesture. The controller's
+                    // dark detail backdrop still fades normally underneath the live video.
+                    float alpha = 1f - clamp(progress * 4.2f);
+                    detailsView.setAlpha(alpha);
+                }
             }
+
+            @Override
+            public void onRelease(boolean minimize, float distancePx) {
+                if (minimize) {
+                    prepareStack(root, miniCard, livePlayer);
+                    if (detailsView != null) {
+                        detailsView.animate().cancel();
+                        detailsView.animate()
+                                .alpha(0f)
+                                .setDuration(75L)
+                                .start();
+                    }
+                } else if (detailsView != null) {
+                    detailsView.animate().cancel();
+                    detailsView.animate()
+                            .alpha(1f)
+                            .setDuration(160L)
+                            .start();
+                }
+                prepared = false;
+            }
+        });
+
+        // Full mode should start with normal detail content. Expand/showFull in the unified
+        // controller also resets this to 1, so mini -> full remains deterministic.
+        if (detailView != null && detailView.getVisibility() == View.VISIBLE &&
+                (miniCard == null || miniCard.getVisibility() != View.VISIBLE)) {
+            if (detailsView != null) detailsView.setAlpha(1f);
         }
+    }
+
+    private static void prepareStack(
+            FrameLayout root,
+            MaterialCardView mini,
+            SwipeMinimizeFrameLayout player
+    ) {
+        if (mini != null) {
+            mini.setCardElevation(dp(player, 9));
+            FrameLayout slot = findEmptyFrame(mini);
+            if (slot != null) slot.setBackgroundColor(Color.TRANSPARENT);
+        }
+        player.setElevation(dp(player, 28));
+        root.bringChildToFront(player);
     }
 
     private static ScrollView findScrollView(ViewGroup group) {
@@ -195,5 +190,9 @@ final class UnifiedVideoLayerGuard {
 
     private static int dp(NativeMainActivity activity, int value) {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
+    }
+
+    private static int dp(View view, int value) {
+        return Math.round(value * view.getResources().getDisplayMetrics().density);
     }
 }
