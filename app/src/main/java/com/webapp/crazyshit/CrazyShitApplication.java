@@ -46,6 +46,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeUiController.attach(nativeActivity);
                     LandscapeRailPolish.applySoon(nativeActivity);
                     LandscapeMoreDialog.attachSoon(nativeActivity);
+                    SeriesCategoriesNavController.attachSoon(nativeActivity);
                     UiPolishController.attach(nativeActivity);
                     FlashUiController.attach(nativeActivity);
                     WatchStatePolish.attach(nativeActivity);
@@ -76,6 +77,7 @@ public final class CrazyShitApplication extends Application {
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     ChaosPortraitPolish.stop(nativeActivity);
+                    SeriesCategoriesNavController.detach(nativeActivity);
                     FlashUiController.detach(nativeActivity);
                     UiPolishController.detach(nativeActivity);
                     LandscapeUiController.detach(nativeActivity);
@@ -96,6 +98,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeUiController.apply(activity);
                     LandscapeRailPolish.applySoon(activity);
                     LandscapeMoreDialog.attachSoon(activity);
+                    SeriesCategoriesNavController.attachSoon(activity);
                     UiPolishController.attach(activity);
                     FlashUiController.attach(activity);
                     WatchStatePolish.attach(activity);
