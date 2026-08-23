@@ -1,14 +1,13 @@
-# CrazyShit v2.0.2
+# CrazyShit v2.0.3
 
-CrazyShit 2.0.2 is a small stable update focused on the Chaos feed and app branding.
+CrazyShit 2.0.3 is a small stable visual update for the app icon and startup experience.
 
 ## What's new
 
-- Replaced the launcher and Android splash artwork with the new CrazyShit logo supplied for the stable app
-- Chaos now advances automatically to the next clip when the current video reaches the end
-- Manual up/down swiping in Chaos still works normally
-- Chaos keeps loading ahead near the end of the current pool so automatic playback can continue
-- Finished Chaos clips are recorded as completed in playback history
+- Replaced the launcher artwork with the new circular CrazyShit badge
+- Added a dedicated branded splash screen using the matching vertical artwork
+- Kept Android 12+ system splash behavior tied to the updated launcher art for a consistent startup transition
+- Retained the Chaos auto-advance and playback-history improvements from 2.0.2
 
 ## Existing 2.0 features
 
@@ -26,7 +25,7 @@ CrazyShit 2.0.2 is a small stable update focused on the Chaos feed and app brand
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.2 installs over earlier signed stable releases while retaining app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.3 installs over earlier signed stable releases while retaining app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
