@@ -22,6 +22,7 @@ import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /** Visual browser cards used by Categories and Series. */
 public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCategoryAdapter.Holder> {
@@ -46,6 +47,34 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         items.clear();
         if (next != null) items.addAll(next);
         notifyDataSetChanged();
+    }
+
+    public boolean hasMissingArtwork() {
+        for (NativeContentItem item : items) {
+            if (item != null && (item.imageUrl == null || item.imageUrl.trim().isEmpty())) return true;
+        }
+        return false;
+    }
+
+    /** Fill only missing browse artwork so direct/static image URLs keep priority. */
+    public void applyArtwork(Map<String, String> artwork) {
+        if (artwork == null || artwork.isEmpty()) return;
+        for (int i = 0; i < items.size(); i++) {
+            NativeContentItem item = items.get(i);
+            if (item == null || (item.imageUrl != null && !item.imageUrl.trim().isEmpty())) continue;
+            String image = artwork.get(BrowseArtworkResolver.normalizeKey(item.url));
+            if (image == null || image.trim().isEmpty()) continue;
+            items.set(i, new NativeContentItem(
+                    item.kind,
+                    item.title,
+                    item.url,
+                    image.trim(),
+                    item.views,
+                    item.uploader,
+                    item.comments
+            ));
+            notifyItemChanged(i);
+        }
     }
 
     @Override
