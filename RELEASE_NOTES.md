@@ -1,6 +1,13 @@
-# CrazyShit v2.0.0
+# CrazyShit v2.0.1
 
 CrazyShit 2.0 is a major rebuild of the Android client. The primary browsing experience is now native Android, with the live website retained as a compatibility fallback for flows that need it.
+
+## Stable release cleanup
+
+- Removed Jeremy Edition branding from the stable app, splash screen, documentation, updater text, and release naming
+- Removed the old Jeremy launcher artwork
+- Added a CrazyShit CS / chaos-bolt launcher and splash mark using the app's dark, white, and orange visual theme
+- Stable APK is published as `CrazyShit.apk`
 
 ## Highlights
 
@@ -27,7 +34,7 @@ The compatibility WebView remains available for unsupported interactive pages, s
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.0 can install over earlier signed stable releases such as v1.4.4 while retaining their app data.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.0.1 can install over earlier signed stable releases such as v1.4.4 while retaining their app data.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit. Beta-only local data does not automatically transfer to the stable package.
 
