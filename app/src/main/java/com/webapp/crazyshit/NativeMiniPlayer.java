@@ -2,11 +2,13 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -22,11 +24,20 @@ import androidx.media3.ui.PlayerView;
 
 import com.google.android.material.card.MaterialCardView;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
 @UnstableApi
 public final class NativeMiniPlayer {
+    static final int CARD_HEIGHT_DP = 82;
+    static final int CARD_SIDE_MARGIN_DP = 12;
+    static final int CARD_BOTTOM_MARGIN_DP = 78;
+    static final int ROW_PAD_X_DP = 4;
+    static final int ROW_PAD_TOP_DP = 4;
+    static final int VIDEO_WIDTH_DP = 132;
+    static final int VIDEO_HEIGHT_DP = 74;
+
     public interface Host {
         void reopenMiniPlayer(Intent intent);
     }
@@ -37,6 +48,7 @@ public final class NativeMiniPlayer {
 
     private MaterialCardView card;
     private PlayerView playerView;
+    private ImageView handoffPoster;
     private TextView titleView;
     private View progressFill;
     private ExoPlayer player;
@@ -48,6 +60,7 @@ public final class NativeMiniPlayer {
     private String views;
     private String uploader;
     private String comments;
+    private String handoffSnapshotPath;
     private boolean reopenDetail;
     private boolean resumeAfterPause;
 
@@ -87,11 +100,14 @@ public final class NativeMiniPlayer {
         views = data.getStringExtra(VideoDetailActivity.EXTRA_VIEWS);
         uploader = data.getStringExtra(VideoDetailActivity.EXTRA_UPLOADER);
         comments = data.getStringExtra(VideoDetailActivity.EXTRA_COMMENTS);
+        boolean directHandoff = data.getBooleanExtra(MiniPlayerHandoffPolish.EXTRA_DIRECT_HANDOFF, false);
+        handoffSnapshotPath = data.getStringExtra(MiniPlayerHandoffPolish.EXTRA_SNAPSHOT_PATH);
         long start = data.getLongExtra(PlayerActivity.EXTRA_START_POSITION, 0L);
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) return;
 
         ensureUi();
         titleView.setText(title == null || title.trim().isEmpty() ? "Video" : title);
+        showHandoffPoster(handoffSnapshotPath);
 
         try {
             DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory();
@@ -128,11 +144,15 @@ public final class NativeMiniPlayer {
             player.addListener(new Player.Listener() {
                 @Override
                 public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_READY && handoffPoster != null &&
+                            handoffPoster.getVisibility() == View.VISIBLE) {
+                        handoffPoster.postDelayed(NativeMiniPlayer.this::fadeHandoffPoster, 90L);
+                    }
                     if (playbackState == Player.STATE_ENDED) recordHistory(true);
                 }
             });
             resumeAfterPause = true;
-            showCardAnimated();
+            if (directHandoff) showCardDirect(); else showCardAnimated();
             card.removeCallbacks(progressTicker);
             card.post(progressTicker);
         } catch (Exception e) {
@@ -162,6 +182,7 @@ public final class NativeMiniPlayer {
             player = null;
         }
         hideCard();
+        clearHandoffPoster(true);
         mediaUrl = null;
         pageUrl = null;
         title = null;
@@ -217,6 +238,7 @@ public final class NativeMiniPlayer {
             player = null;
         }
         hideCard();
+        clearHandoffPoster(true);
         mediaUrl = null;
         pageUrl = null;
         title = null;
@@ -233,16 +255,27 @@ public final class NativeMiniPlayer {
         card.animate().cancel();
         card.setVisibility(View.VISIBLE);
         card.setAlpha(0f);
-        card.setTranslationY(dp(18));
-        card.setScaleX(0.98f);
-        card.setScaleY(0.98f);
+        card.setTranslationY(dp(14));
+        card.setScaleX(0.985f);
+        card.setScaleY(0.985f);
         card.animate()
                 .alpha(1f)
                 .translationY(0f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .setDuration(210L)
+                .setDuration(190L)
                 .start();
+    }
+
+    private void showCardDirect() {
+        if (card == null) return;
+        card.animate().cancel();
+        card.setVisibility(View.VISIBLE);
+        card.setAlpha(1f);
+        card.setTranslationX(0f);
+        card.setTranslationY(0f);
+        card.setScaleX(1f);
+        card.setScaleY(1f);
     }
 
     private void hideCard() {
@@ -250,10 +283,65 @@ public final class NativeMiniPlayer {
         card.animate().cancel();
         card.setVisibility(View.GONE);
         card.setAlpha(1f);
+        card.setTranslationX(0f);
         card.setTranslationY(0f);
         card.setScaleX(1f);
         card.setScaleY(1f);
         if (progressFill != null) progressFill.setScaleX(0f);
+    }
+
+    private void showHandoffPoster(String path) {
+        if (handoffPoster == null) return;
+        handoffPoster.animate().cancel();
+        handoffPoster.setAlpha(1f);
+        handoffPoster.setImageDrawable(null);
+        if (path == null || path.trim().isEmpty()) {
+            handoffPoster.setVisibility(View.GONE);
+            return;
+        }
+        try {
+            android.graphics.Bitmap bitmap = BitmapFactory.decodeFile(path);
+            if (bitmap == null) {
+                handoffPoster.setVisibility(View.GONE);
+                return;
+            }
+            handoffPoster.setImageBitmap(bitmap);
+            handoffPoster.setVisibility(View.VISIBLE);
+        } catch (Exception ignored) {
+            handoffPoster.setVisibility(View.GONE);
+        }
+    }
+
+    private void fadeHandoffPoster() {
+        if (handoffPoster == null || handoffPoster.getVisibility() != View.VISIBLE) {
+            clearHandoffPoster(true);
+            return;
+        }
+        handoffPoster.animate().cancel();
+        handoffPoster.animate()
+                .alpha(0f)
+                .setDuration(130L)
+                .withEndAction(() -> clearHandoffPoster(true))
+                .start();
+    }
+
+    private void clearHandoffPoster(boolean deleteFile) {
+        if (handoffPoster != null) {
+            handoffPoster.animate().cancel();
+            handoffPoster.setImageDrawable(null);
+            handoffPoster.setAlpha(1f);
+            handoffPoster.setVisibility(View.GONE);
+        }
+        if (deleteFile && handoffSnapshotPath != null && !handoffSnapshotPath.isEmpty()) {
+            try {
+                File file = new File(handoffSnapshotPath);
+                if (file.getParentFile() != null && file.getParentFile().equals(activity.getCacheDir())) {
+                    file.delete();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        handoffSnapshotPath = null;
     }
 
     private void ensureUi() {
@@ -261,9 +349,9 @@ public final class NativeMiniPlayer {
 
         card = new MaterialCardView(activity);
         card.setCardBackgroundColor(Color.rgb(24, 24, 28));
-        card.setRadius(dp(20));
-        card.setCardElevation(dp(14));
-        card.setStrokeColor(Color.rgb(104, 57, 40));
+        card.setRadius(dp(18));
+        card.setCardElevation(dp(15));
+        card.setStrokeColor(Color.rgb(82, 52, 43));
         card.setStrokeWidth(dp(1));
         card.setVisibility(View.GONE);
 
@@ -272,32 +360,42 @@ public final class NativeMiniPlayer {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(6), dp(6), dp(6), dp(8));
+        row.setPadding(dp(ROW_PAD_X_DP), dp(ROW_PAD_TOP_DP), dp(4), dp(5));
         content.addView(row, new FrameLayout.LayoutParams(-1, -1));
+
+        FrameLayout mediaFrame = new FrameLayout(activity);
+        row.addView(mediaFrame, new LinearLayout.LayoutParams(dp(VIDEO_WIDTH_DP), dp(VIDEO_HEIGHT_DP)));
 
         playerView = new PlayerView(activity);
         playerView.setUseController(false);
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setOnClickListener(v -> reopen());
-        row.addView(playerView, new LinearLayout.LayoutParams(dp(124), dp(72)));
+        mediaFrame.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
+
+        handoffPoster = new ImageView(activity);
+        handoffPoster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        handoffPoster.setBackgroundColor(Color.BLACK);
+        handoffPoster.setVisibility(View.GONE);
+        handoffPoster.setOnClickListener(v -> reopen());
+        mediaFrame.addView(handoffPoster, new FrameLayout.LayoutParams(-1, -1));
 
         titleView = new TextView(activity);
         titleView.setTextColor(Color.WHITE);
-        titleView.setTextSize(14);
+        titleView.setTextSize(13.5f);
         titleView.setTypeface(null, android.graphics.Typeface.BOLD);
         titleView.setMaxLines(2);
         titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        titleView.setPadding(dp(12), 0, dp(8), 0);
+        titleView.setPadding(dp(10), 0, dp(5), 0);
         titleView.setOnClickListener(v -> reopen());
         row.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1f));
 
         TextView expand = button("↗", "Open video details");
         expand.setOnClickListener(v -> reopen());
-        row.addView(expand, new LinearLayout.LayoutParams(dp(42), dp(54)));
+        row.addView(expand, new LinearLayout.LayoutParams(dp(38), dp(50)));
 
         TextView close = button("×", "Close mini-player");
         close.setOnClickListener(v -> stop());
-        row.addView(close, new LinearLayout.LayoutParams(dp(42), dp(54)));
+        row.addView(close, new LinearLayout.LayoutParams(dp(38), dp(50)));
 
         View track = new View(activity);
         track.setBackgroundColor(Color.rgb(50, 50, 56));
@@ -314,17 +412,17 @@ public final class NativeMiniPlayer {
         content.addView(progressFill, fillParams);
 
         card.addView(content);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, dp(86));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, dp(CARD_HEIGHT_DP));
         params.gravity = Gravity.BOTTOM;
-        params.setMargins(dp(10), 0, dp(10), dp(92));
+        params.setMargins(dp(CARD_SIDE_MARGIN_DP), 0, dp(CARD_SIDE_MARGIN_DP), dp(CARD_BOTTOM_MARGIN_DP));
         overlayRoot.addView(card, params);
     }
 
     private TextView button(String text, String description) {
         TextView view = new TextView(activity);
         view.setText(text);
-        view.setTextColor(Color.WHITE);
-        view.setTextSize(22);
+        view.setTextColor(Color.rgb(235, 235, 240));
+        view.setTextSize(21);
         view.setGravity(Gravity.CENTER);
         view.setContentDescription(description);
         view.setClickable(true);

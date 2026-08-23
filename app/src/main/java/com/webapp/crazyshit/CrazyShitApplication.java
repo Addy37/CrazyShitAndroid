@@ -42,6 +42,7 @@ public final class CrazyShitApplication extends Application {
                 }
                 if (activity instanceof VideoDetailActivity) {
                     VideoDetailControllerPolish.applySoon(activity);
+                    MiniPlayerHandoffPolish.applySoon(activity);
                 }
             }
 
