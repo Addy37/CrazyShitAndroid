@@ -1,40 +1,36 @@
-# CrazyShit v2.4.0
+# CrazyShit v2.4.1
 
-CrazyShit 2.4.0 retires the in-app mini-player experiment and replaces it with a simpler, more useful watch-state experience directly in the feeds.
+CrazyShit 2.4.1 refines the watched and Continue treatment introduced in 2.4.0 without changing the underlying playback-history behavior.
 
-## Watched and Continue indicators
+## Watch-state visual polish
 
-- Partially watched videos show a compact **Continue** badge with the saved timestamp
-- A thin orange progress line across the thumbnail shows how far you watched
-- Videos that reach the completion threshold show a **✓ Watched** badge and a subtle thumbnail dim
-- Watch-state indicators appear in Large, Compact and Grid feed layouts
-- Feed cards refresh automatically when playback history changes
-- Very short accidental plays under the existing history threshold are not marked as Continue
+- Continue badges are smaller and less dominant over thumbnails
+- Continue labels now use the cleaner **Continue · 0:50** format
+- The orange Continue background is darker and slightly more transparent
+- Watched badges are tightened to match the new badge proportions
+- Partially watched thumbnails use a softer center play overlay so the resume state reads first
+- The playback progress line keeps a faint dark track behind the orange fill for better readability at low progress
+- Newly attached feed cards receive the same treatment automatically while scrolling
 
-## Simpler video return flow
+## Resume feedback
 
-- The experimental unified mini-player routing is no longer used for normal video pages
-- Swipe-down-to-minimize is disabled for existing and new installs
-- Back no longer minimizes a video into an in-app floating player
-- Returning from video playback reveals the existing feed where you left it instead of creating a mini-player
-- Saved playback position remains available so unfinished videos can resume close to where you stopped
-
-## Settings cleanup
-
-- Removes the retired **Minimize player on Back** setting
-- Removes the retired **Swipe down to minimize** setting
-- Keeps Picture-in-Picture as a separate Android playback option
-- Watch history can still be cleared from Settings, which also clears feed Watched/Continue state
+- Reopening an unfinished video with a saved position briefly shows **Resuming at 0:50**
+- The resume message only appears when remembered playback position is enabled
+- Completed videos and very short plays do not show the resume confirmation
 
 ## Existing behavior kept
 
-- Native video detail still includes Comments, Watch Later, Share, playback speed, Fit / Fill / Zoom, fullscreen, related videos, history and remembered position
-- Home, Trending, Memes, Library, the floating bottom dock and visual polish remain unchanged
+- Back returns normally to the existing feed and preserves the browsing position
+- Unfinished videos still resume close to where playback stopped
+- Completed videos continue to show **✓ Watched**
+- Home, Trending, Grid and Compact layouts keep their existing watch-state data
+- Picture-in-Picture remains separate from the retired in-app mini-player
 - Chaos playback and portrait controls remain untouched
+- The floating bottom dock remains unchanged
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.4.0 installs over earlier signed stable releases while retaining app data and watch history.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.4.1 installs over earlier signed stable releases while retaining app data and watch history.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
