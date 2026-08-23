@@ -49,7 +49,6 @@ public final class CrazyShitApplication extends Application {
                     UiPolishController.attach(nativeActivity);
                     FlashUiController.attach(nativeActivity);
                     WatchStatePolish.attach(nativeActivity);
-                    FeedSectionHeaderPolish.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
                 }
                 if (activity instanceof VideoDetailActivity && !activity.isFinishing()) {
@@ -100,7 +99,6 @@ public final class CrazyShitApplication extends Application {
                     UiPolishController.attach(activity);
                     FlashUiController.attach(activity);
                     WatchStatePolish.attach(activity);
-                    FeedSectionHeaderPolish.attach(activity);
                     ChaosPortraitPolish.start(activity);
                 },
                 80L
