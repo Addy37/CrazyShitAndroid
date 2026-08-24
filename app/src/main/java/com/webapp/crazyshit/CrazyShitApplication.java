@@ -18,7 +18,10 @@ public final class CrazyShitApplication extends Application {
         SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         SharedPreferences.Editor migration = appPrefs.edit()
                 .putBoolean("minimize_on_back", false)
-                .putBoolean("swipe_down_minimize", false);
+                .putBoolean("swipe_down_minimize", false)
+                // 2.8 permanently uses a static feed header. Remove the retired preference so an
+                // older install cannot carry stale collapse state forward.
+                .remove("collapse_header_enabled");
 
         // List remains the starting feed style while preserving a user's explicit choice.
         if (!appPrefs.contains("native_view_home")) {
