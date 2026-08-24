@@ -20,9 +20,9 @@ import java.util.Map;
 /**
  * Resolves the artwork used by CrazyShit's rendered Series/Categories listing cards.
  *
- * The site currently applies some browse artwork through rendered/lazy CSS rather than exposing
- * a directly usable image URL in the raw HTML. This resolver loads only the listing page, reads
- * each collection link after rendering, and returns a URL -> artwork map to the native adapter.
+ * The site applies some browse artwork through rendered/lazy CSS rather than exposing a directly
+ * usable image URL in the raw HTML. This resolver loads only the listing page, reads each
+ * collection card after rendering, and returns a URL -> artwork map to the native adapter.
  */
 final class BrowseArtworkResolver {
     interface Callback {
@@ -93,9 +93,9 @@ final class BrowseArtworkResolver {
             webView.setWebViewClient(new WebViewClient() {
                 @Override
                 public void onPageFinished(WebView view, String url) {
-                    if (closed || current == null) return;
+                    if (closed || current == null || url == null || "about:blank".equals(url)) return;
                     attempt = 0;
-                    main.postDelayed(BrowseArtworkResolver.this::probe, 300L);
+                    main.postDelayed(BrowseArtworkResolver.this::probe, 350L);
                 }
             });
             startNext();
@@ -120,14 +120,16 @@ final class BrowseArtworkResolver {
         final Request request = current;
         try {
             webView.evaluateJavascript(buildScript(request.pathMarker), raw -> {
+                if (closed || current != request) return;
                 Map<String, String> result = decodeMap(raw);
                 if (!result.isEmpty()) {
                     finish(result);
                     return;
                 }
                 attempt++;
-                if (attempt < 3) {
-                    main.postDelayed(this::probe, attempt == 1 ? 450L : 800L);
+                if (attempt < 4) {
+                    long delay = attempt == 1 ? 500L : attempt == 2 ? 900L : 1400L;
+                    main.postDelayed(this::probe, delay);
                 } else {
                     finish(Collections.emptyMap());
                 }
@@ -142,16 +144,23 @@ final class BrowseArtworkResolver {
         return "((marker)=>{" +
                 "const abs=u=>{try{return u?new URL(u,document.baseURI).href:''}catch(e){return ''}};" +
                 "const good=u=>{u=abs(u);if(!/^https?:\\/\\//i.test(u))return '';" +
-                "const l=u.toLowerCase();return /(?:logo|sprite|avatar|blank\\.gif|spacer)/.test(l)?'':u};" +
+                "const l=u.toLowerCase();return /(?:logo|sprite|avatar|blank\\.gif|spacer|placeholder)/.test(l)?'':u};" +
+                "const cssUrl=s=>{if(!s||s==='none')return '';" +
+                "let re=/url\\([\\\"']?([^\\\"')]+)[\\\"']?\\)/ig,m;while((m=re.exec(s))){let x=good(m[1]);if(x)return x;}return ''};" +
+                "const fromStyle=(n,pseudo)=>{try{let s=getComputedStyle(n,pseudo||null);if(!s)return '';" +
+                "for(const k of ['backgroundImage','content','maskImage','webkitMaskImage','borderImageSource','listStyleImage']){" +
+                "let x=cssUrl(s[k]||'');if(x)return x;}" +
+                "for(let i=0;i<s.length;i++){let v=s.getPropertyValue(s[i]);if(v&&v.includes('url(')){let x=cssUrl(v);if(x)return x;}}" +
+                "}catch(e){}return ''};" +
                 "const fromNode=n=>{if(!n)return '';" +
                 "for(const k of ['data-src','data-original','data-lazy-src','data-image','data-poster','data-thumb','data-thumbnail','data-bg','data-background','data-background-image','poster','src']){" +
                 "let x=good(n.getAttribute&&n.getAttribute(k));if(x)return x;}" +
                 "for(const k of ['data-srcset','srcset']){let s=n.getAttribute&&n.getAttribute(k);if(s){let a=s.split(',');for(let i=a.length-1;i>=0;i--){let x=good(a[i].trim().split(/\\s+/)[0]);if(x)return x;}}}" +
                 "let x=good(n.currentSrc||n.src);if(x)return x;" +
-                "try{let bg=getComputedStyle(n).backgroundImage||'';let m=bg.match(/url\\([\\\"']?([^\\\"')]+)[\\\"']?\\)/i);if(m){x=good(m[1]);if(x)return x;}}catch(e){}return ''};" +
-                "const pick=a=>{let n=a;for(let d=0;d<6&&n;d++,n=n.parentElement){" +
+                "x=fromStyle(n,null);if(x)return x;x=fromStyle(n,'::before');if(x)return x;x=fromStyle(n,'::after');if(x)return x;return ''};" +
+                "const pick=a=>{let n=a;for(let d=0;d<8&&n;d++,n=n.parentElement){" +
                 "let x=fromNode(n);if(x)return x;" +
-                "let nodes=n.querySelectorAll?Array.from(n.querySelectorAll('img,source,video,[data-src],[data-original],[data-lazy-src],[data-image],[data-bg],[data-background],[data-thumb],[data-thumbnail]')):[];" +
+                "let nodes=n.querySelectorAll?Array.from(n.querySelectorAll('*')).slice(0,180):[];" +
                 "for(const q of nodes){x=fromNode(q);if(x)return x;}}return ''};" +
                 "let out={};for(const a of document.querySelectorAll('a[href]')){" +
                 "let href=abs(a.getAttribute('href')||a.href);if(!href||!href.includes(marker))continue;" +
@@ -190,7 +199,7 @@ final class BrowseArtworkResolver {
             } catch (Exception ignored) {
             }
         }
-        main.post(this::startNext);
+        main.postDelayed(this::startNext, 40L);
     }
 
     static String normalizeKey(String value) {
