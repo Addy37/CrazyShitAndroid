@@ -1,0 +1,70 @@
+name: Refresh Embedded Browse Artwork
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Capture current Series and Categories artwork
+        run: |
+          python3 -m pip install --quiet selenium pillow requests
+          python3 tools/capture_browse_art.py
+
+      - name: Build compact embedded artwork asset
+        run: |
+          mkdir -p app/src/main/assets
+          python3 - <<'PY'
+          import base64, io, json
+          from PIL import Image, ImageOps
+
+          with open('browse-art-bundle.json', 'r', encoding='utf-8') as f:
+              bundle = json.load(f)
+
+          mapping = {}
+          for item in bundle.get('items', []):
+              key = (item.get('key') or '').strip().lower()
+              data = item.get('jpeg_base64') or ''
+              if not key or not data:
+                  continue
+              raw = base64.b64decode(data)
+              image = Image.open(io.BytesIO(raw)).convert('RGB')
+              image = ImageOps.fit(
+                  image,
+                  (320, 180),
+                  method=Image.Resampling.LANCZOS,
+                  centering=(0.5, 0.45),
+              )
+              out = io.BytesIO()
+              image.save(out, 'JPEG', quality=68, optimize=True, progressive=True)
+              mapping[key] = base64.b64encode(out.getvalue()).decode('ascii')
+
+          if len(mapping) < 75:
+              raise SystemExit(f'Expected at least 75 embedded images, got {len(mapping)}')
+
+          with open('app/src/main/assets/browse_artwork.json', 'w', encoding='utf-8') as f:
+              json.dump(mapping, f, separators=(',', ':'))
+          print(f'Prepared {len(mapping)} embedded browse images')
+          PY
+
+      - name: Commit refreshed artwork
+        run: |
+          if git diff --quiet -- app/src/main/assets/browse_artwork.json; then
+            echo "Embedded artwork is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/assets/browse_artwork.json
+          git commit -m "Refresh embedded Series and Categories artwork"
+          git push origin "HEAD:${{ github.ref_name }}"
