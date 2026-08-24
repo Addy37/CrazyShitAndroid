@@ -26,11 +26,8 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Native-shell visual polish for v2.2.x.
- *
- * v2.2.2 deliberately simplifies the portrait dock: normal tabs use a small moving underline and
- * Chaos gets one true floating circular button. Feed loading, header motion and card depth remain
- * here, while Chaos playback itself is left untouched.
+ * Native-shell visual polish. The 2.8 feed header is static; this controller no longer compacts
+ * or expands the top bar in response to scrolling.
  */
 final class FlashUiController {
     private static final int NAV_CHAOS = 4;
@@ -452,15 +449,11 @@ final class FlashUiController {
         }
 
         private void collapse(NativeMainActivity activity) {
-            if (collapsed || topBar == null || topBar.getVisibility() != View.VISIBLE || isLandscape(activity)) return;
-            collapsed = true;
-            animateHeader(activity, dp(activity, 52), 175L, true);
+            // Static header in 2.8: deliberately no-op.
         }
 
         private void expand(NativeMainActivity activity) {
-            if (!collapsed || topBar == null) return;
-            collapsed = false;
-            animateHeader(activity, dp(activity, 70), 195L, false);
+            // Static header in 2.8: deliberately no-op.
         }
 
         private void animateHeader(NativeMainActivity activity, int targetHeight, long duration, boolean compact) {
