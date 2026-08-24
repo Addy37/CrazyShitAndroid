@@ -68,9 +68,7 @@ final class ResponsiveFitmentController {
         }
 
         if (activity instanceof NativeMainActivity) {
-            NativeMainActivity main = (NativeMainActivity) activity;
-            LandscapeUiController.apply(main);
-            SeriesCategoriesNavController.apply(main);
+            LandscapeUiController.apply((NativeMainActivity) activity);
         }
     }
 
