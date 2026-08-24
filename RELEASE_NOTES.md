@@ -1,38 +1,34 @@
-# CrazyShit v2.7.2
+# CrazyShit v2.8.0
 
-CrazyShit 2.7.2 is the responsive fitment and stability release. It keeps the OLED Immersive UI from 2.7 while tightening behavior across portrait, horizontal orientation, wide screens and secondary native screens.
+CrazyShit 2.8 is the Foundation Cleanup release. The goal is to keep the 2.7.2 look and behavior while simplifying the code underneath it so future features do not stack more runtime patches on top of the native UI.
 
-## Responsive fitment
+## Foundation cleanup
 
-- Main feed geometry is reapplied after theme and motion polish so rotation sizing stays consistent
-- Home and collection feed cards use better horizontal sizing
-- Grid and Posters now use responsive media and card heights instead of fixed phone-only dimensions
-- Series and Categories artwork cards scale with available column width
-- Settings and Library use centered maximum widths on wider displays instead of stretching edge to edge
-- Search uses tighter header and result spacing in horizontal orientation
-- Additional safe-area and display-cutout handling was added to older native screens
+- Native UI lifecycle ordering is now owned by a single coordinator instead of being spread through the Application class
+- Responsive geometry remains the final owner after theme and motion polish, preserving the smoother 2.7.2 rotation behavior
+- The new coordinator gives 2.8 one place to progressively fold navigation, theme, motion, Chaos and video-detail behavior into fewer owners
+- Existing controller detach/cleanup paths are centralized so lifecycle changes are easier to audit
 
-## Feed and browsing polish
+## Automated quality checks
 
-- Posters is fully supported throughout the pager and collection view-mode plumbing
-- List remains the default and fallback feed style
-- Changing view styles preserves the visible item and scroll offset more accurately
-- Search and normal feed thumbnail failures can retry instead of remaining blocked for the session
+- Pull request builds now run Android lint before producing the debug APK
+- The normal debug build still runs after lint so every beta must pass both static Android checks and compilation
 
-## Resource and lifecycle cleanup
+## Version plan
 
-- Rendered thumbnail resolvers now explicitly destroy their WebViews, clear pending work and shut down executors
-- Feed and Search adapters release thumbnail resources and playback listeners when screens close
-- Settings and Library now participate in Android predictive back on supported devices
+- 2.8 starts the architectural cleanup without changing the stable package or user data
+- Old navigation compatibility plumbing, reflection-heavy Chaos fixes and video-detail polish are scheduled to be folded into their owning classes during the 2.8 beta cycle
+- The 3.0 Kotlin modernization remains a later migration after the Java architecture is simplified
 
 ## Existing behavior retained
 
 - OLED Black remains the default visual theme
-- Ambient Glow, Motion Effects and Collapsing Header remain individually configurable
-- Chaos keeps the media-only filtering fix from 2.7.1
-- Continue Watching, History, Watch Later, global Search and context-aware Related videos remain intact
-- Series and Categories continue using embedded artwork
-- Stable application ID and signing identity are unchanged, so 2.7.2 installs over earlier stable 2.7 builds while retaining app data
+- List remains the default feed view
+- Cards, Grid and Posters remain available
+- Series and Categories keep their embedded artwork
+- Chaos keeps the media-only filtering fix
+- Global Search, Continue Watching, History, Watch Later and context-aware Related videos remain intact
+- Portrait, horizontal orientation and wide-screen fitment from 2.7.2 remain the baseline
 
 ## Project status
 
