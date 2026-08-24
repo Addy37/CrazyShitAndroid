@@ -53,6 +53,12 @@
             android:exported="false" />
 
         <activity
+            android:name=".SearchActivity"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:screenOrientation="unspecified" />
+
+        <activity
             android:name=".MemeViewerActivity"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
