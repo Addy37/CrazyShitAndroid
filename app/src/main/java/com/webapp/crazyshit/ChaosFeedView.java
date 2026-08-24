@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
@@ -171,6 +172,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (active && hostResumed) {
             resolveAhead(selectedPosition);
             playSelected();
+            syncVisibleChrome();
         } else {
             pauseAll();
         }
@@ -178,12 +180,19 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostResume() {
         hostResumed = true;
-        if (active) playSelected();
+        if (active) {
+            playSelected();
+            syncVisibleChrome();
+        }
     }
 
     public void onHostPause() {
         hostResumed = false;
         pauseAll();
+    }
+
+    public void onConfigurationChanged() {
+        syncVisibleChrome();
     }
 
     public void refresh() {
@@ -221,13 +230,13 @@ public final class ChaosFeedView extends FrameLayout {
             LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
             try {
                 for (NativeContentItem item : repository.fetchFeed(activity, CrazyShitRepository.HOME, requestPage)) {
-                    if (item != null && !item.url.isEmpty()) combined.put(item.url, item);
+                    if (isMedia(item)) combined.put(item.url, item);
                 }
             } catch (Exception ignored) {
             }
             try {
                 for (NativeContentItem item : repository.fetchFeed(activity, CrazyShitRepository.TRENDING, requestPage)) {
-                    if (item != null && !item.url.isEmpty()) combined.putIfAbsent(item.url, item);
+                    if (isMedia(item)) combined.putIfAbsent(item.url, item);
                 }
             } catch (Exception ignored) {
             }
@@ -235,7 +244,7 @@ public final class ChaosFeedView extends FrameLayout {
             ArrayList<NativeContentItem> fresh = new ArrayList<>();
             ArrayList<NativeContentItem> recentFallback = new ArrayList<>();
             for (NativeContentItem item : combined.values()) {
-                if (item == null || item.url.isEmpty() || hiddenUrls.contains(item.url)) continue;
+                if (!isMedia(item) || hiddenUrls.contains(item.url)) continue;
                 if (recentSet.contains(item.url)) recentFallback.add(item);
                 else fresh.add(item);
             }
@@ -277,10 +286,17 @@ public final class ChaosFeedView extends FrameLayout {
         });
     }
 
+    private static boolean isMedia(NativeContentItem item) {
+        return item != null
+                && NativeContentItem.KIND_MEDIA.equals(item.kind)
+                && item.url != null
+                && !item.url.isEmpty();
+    }
+
     private void appendUnique(List<NativeContentItem> candidates) {
         if (candidates == null) return;
         for (NativeContentItem item : candidates) {
-            if (item == null || item.url == null || item.url.isEmpty()) continue;
+            if (!isMedia(item)) continue;
             if (hiddenUrls.contains(item.url)) continue;
             if (!sessionUrls.add(item.url)) continue;
             items.add(item);
@@ -402,6 +418,15 @@ public final class ChaosFeedView extends FrameLayout {
         for (int i = 0; i < rv.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
             if (raw instanceof ChaosHolder) ((ChaosHolder) raw).releasePlayer();
+        }
+    }
+
+    private void syncVisibleChrome() {
+        RecyclerView rv = pagerRecycler();
+        if (rv == null) return;
+        for (int i = 0; i < rv.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
+            if (raw instanceof ChaosHolder) ((ChaosHolder) raw).syncOrientationChrome();
         }
     }
 
@@ -688,6 +713,9 @@ public final class ChaosFeedView extends FrameLayout {
             lower.setGravity(Gravity.BOTTOM);
             lower.setPadding(dp(16), dp(18), dp(10), dp(30));
             lower.setBackgroundColor(Color.TRANSPARENT);
+            lower.setClickable(false);
+            lower.setLongClickable(false);
+            lower.setFocusable(false);
             FrameLayout.LayoutParams lowerParams = new FrameLayout.LayoutParams(-1, -2);
             lowerParams.gravity = Gravity.BOTTOM;
             root.addView(lower, lowerParams);
@@ -806,7 +834,6 @@ public final class ChaosFeedView extends FrameLayout {
                 showMoreMenu();
                 return true;
             };
-            lower.setOnLongClickListener(menuLongPress);
             title.setOnLongClickListener(menuLongPress);
             meta.setOnLongClickListener(menuLongPress);
 
@@ -926,6 +953,7 @@ public final class ChaosFeedView extends FrameLayout {
                         .error(new ColorDrawable(Color.rgb(20, 20, 22)))
                         .into(poster);
             }
+            syncOrientationChrome();
         }
 
         void prepare(CrazyShitRepository.StreamInfo nextStream, boolean autoplay) {
@@ -1110,6 +1138,35 @@ public final class ChaosFeedView extends FrameLayout {
             showControls(false);
         }
 
+        private boolean portrait() {
+            return activity.getResources().getConfiguration().orientation
+                    != Configuration.ORIENTATION_LANDSCAPE;
+        }
+
+        void syncOrientationChrome() {
+            root.removeCallbacks(hideControlsRunnable);
+            root.removeCallbacks(hideSeekBarRunnable);
+            lower.animate().cancel();
+            mute.animate().cancel();
+            seekBar.animate().cancel();
+
+            controlsVisible = true;
+            lower.setVisibility(View.VISIBLE);
+            mute.setVisibility(View.VISIBLE);
+            lower.setAlpha(1f);
+            mute.setAlpha(1f);
+
+            if (seekBar.getVisibility() != View.VISIBLE) {
+                seekBar.setVisibility(View.VISIBLE);
+                seekBar.setAlpha(1f);
+            }
+            if (!scrubbing) root.postDelayed(hideSeekBarRunnable, 2200L);
+
+            if (!portrait() && player != null && player.isPlaying() && !scrubbing) {
+                root.postDelayed(hideControlsRunnable, 2200L);
+            }
+        }
+
         private void showControls(boolean autoHide) {
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(hideSeekBarRunnable);
@@ -1124,10 +1181,20 @@ public final class ChaosFeedView extends FrameLayout {
             mute.setAlpha(1f);
             seekBar.setAlpha(1f);
             if (!scrubbing) root.postDelayed(hideSeekBarRunnable, 2200L);
-            if (autoHide && !scrubbing) root.postDelayed(hideControlsRunnable, 2200L);
+            if (autoHide && !scrubbing && !portrait()) {
+                root.postDelayed(hideControlsRunnable, 2200L);
+            }
         }
 
         private void hideControlsNow() {
+            if (portrait()) {
+                controlsVisible = true;
+                lower.setVisibility(View.VISIBLE);
+                mute.setVisibility(View.VISIBLE);
+                lower.setAlpha(1f);
+                mute.setAlpha(1f);
+                return;
+            }
             if (scrubbing || player == null || !player.isPlaying()) return;
             controlsVisible = false;
             lower.animate()
