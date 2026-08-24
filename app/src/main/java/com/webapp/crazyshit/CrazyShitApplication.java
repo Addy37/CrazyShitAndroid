@@ -54,7 +54,9 @@ public final class CrazyShitApplication extends Application {
                     ChaosPortraitPolish.start(nativeActivity);
                 }
                 if (activity instanceof VideoDetailActivity && !activity.isFinishing()) {
-                    VideoDetailControllerPolish.applySoon(activity);
+                    VideoDetailActivity detail = (VideoDetailActivity) activity;
+                    VideoDetailControllerPolish.applySoon(detail);
+                    RelatedVideosPolish.attach(detail);
                 }
             }
 
@@ -84,6 +86,9 @@ public final class CrazyShitApplication extends Application {
                     LandscapeUiController.detach(nativeActivity);
                     NativeMainActivity current = currentNativeActivity.get();
                     if (current == activity) currentNativeActivity.clear();
+                }
+                if (activity instanceof VideoDetailActivity) {
+                    RelatedVideosPolish.detach((VideoDetailActivity) activity);
                 }
             }
         });
