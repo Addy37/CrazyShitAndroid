@@ -246,8 +246,10 @@ public class VideoDetailActivity extends Activity {
         mp.setMargins(0, dp(8), dp(8), 0);
         playerContainer.addView(menuButton, mp);
 
-        playerView.setControllerVisibilityListener(visibility ->
-                setOverlayChromeVisible(visibility == View.VISIBLE, true));
+        playerView.setControllerVisibilityListener(
+                (PlayerView.ControllerVisibilityListener) visibility ->
+                        setOverlayChromeVisible(visibility == View.VISIBLE, true)
+        );
         setOverlayChromeVisible(false, false);
         playerView.hideController();
 
