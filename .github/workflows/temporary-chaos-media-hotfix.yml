@@ -1,0 +1,87 @@
+name: Temporary Chaos Media Hotfix
+
+on:
+  push:
+    branches:
+      - v2.7.1-chaos-media-only
+    paths:
+      - .github/workflows/temporary-chaos-media-hotfix.yml
+      - app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out hotfix branch
+        uses: actions/checkout@v6
+        with:
+          ref: v2.7.1-chaos-media-only
+
+      - name: Filter Chaos to real media only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  '                    if (item != null && !item.url.isEmpty()) combined.put(item.url, item);',
+                  '                    if (isChaosMedia(item)) combined.put(item.url, item);'
+              ),
+              (
+                  '                    if (item != null && !item.url.isEmpty()) combined.putIfAbsent(item.url, item);',
+                  '                    if (isChaosMedia(item)) combined.putIfAbsent(item.url, item);'
+              ),
+              (
+                  '                if (item == null || item.url.isEmpty() || hiddenUrls.contains(item.url)) continue;',
+                  '                if (!isChaosMedia(item) || hiddenUrls.contains(item.url)) continue;'
+              ),
+              (
+                  '            if (item == null || item.url == null || item.url.isEmpty()) continue;',
+                  '            if (!isChaosMedia(item)) continue;'
+              ),
+          ]
+
+          changed = False
+          for old, new in replacements:
+              if old in text:
+                  text = text.replace(old, new, 1)
+                  changed = True
+              elif new not in text:
+                  raise SystemExit(f'Expected ChaosFeedView snippet was not found: {old}')
+
+          helper = '''    private boolean isChaosMedia(NativeContentItem item) {
+              return item != null
+                      && NativeContentItem.KIND_MEDIA.equals(item.kind)
+                      && item.url != null
+                      && !item.url.isEmpty();
+          }
+
+'''
+          marker = '    private void appendUnique(List<NativeContentItem> candidates) {'
+          if 'private boolean isChaosMedia(NativeContentItem item)' not in text:
+              if marker not in text:
+                  raise SystemExit('appendUnique marker was not found')
+              text = text.replace(marker, helper + marker, 1)
+              changed = True
+
+          if changed:
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit hotfix if needed
+        run: |
+          if git diff --quiet -- app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java; then
+            echo "Chaos media filter is already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java
+          git commit -m "Keep section headers out of Chaos"
+          git push origin HEAD:v2.7.1-chaos-media-only
