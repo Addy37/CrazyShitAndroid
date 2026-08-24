@@ -441,7 +441,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         Page(int index, PageKind kind, String preferenceKey, String baseUrl) {
             this.index = index;
             this.kind = kind;
-            this.preferenceKey = prefKey;
+            this.preferenceKey = preferenceKey;
             this.baseUrl = baseUrl;
         }
 
