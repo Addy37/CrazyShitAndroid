@@ -1,8 +1,11 @@
 package com.webapp.crazyshit;
 
+import android.app.Activity;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -20,9 +23,10 @@ import java.util.Map;
 /**
  * Resolves the artwork used by CrazyShit's rendered Series/Categories listing cards.
  *
- * The site applies some browse artwork through rendered/lazy CSS rather than exposing a directly
- * usable image URL in the raw HTML. This resolver loads only the listing page, reads each
- * collection card after rendering, and returns a URL -> artwork map to the native adapter.
+ * The site lazily paints browse artwork only after cards participate in a real rendered viewport.
+ * An unattached background WebView can receive onPageFinished without ever satisfying the site's
+ * lazy-loader, so this resolver keeps a nearly transparent WebView attached behind the activity's
+ * content, sweeps the page to trigger lazy cards, then reads the final image URLs.
  */
 final class BrowseArtworkResolver {
     interface Callback {
@@ -33,16 +37,37 @@ final class BrowseArtworkResolver {
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
+    private static final String PRIME_JS =
+            "(()=>{" +
+            "try{for(const i of document.querySelectorAll('img')){i.loading='eager';try{i.decoding='sync'}catch(e){}}}catch(e){};" +
+            "const attrs=['data-src','data-original','data-lazy-src','data-url','data-image','data-img','data-poster','data-thumb','data-thumbnail','data-bg','data-background','data-background-image','data-srcset'];" +
+            "for(const n of document.querySelectorAll('img,source')){" +
+            "for(const a of attrs){let v=n.getAttribute&&n.getAttribute(a);if(!v)continue;" +
+            "if(a.includes('srcset')||n.tagName==='SOURCE'){if(!n.getAttribute('srcset'))n.setAttribute('srcset',v);}" +
+            "else{let s=n.getAttribute('src')||'';if(!s||/^data:|^about:blank$|^#$/i.test(s))n.setAttribute('src',v);}}}" +
+            "for(const n of document.querySelectorAll('[data-bg],[data-background],[data-background-image],[data-image],[data-img],[data-thumb],[data-thumbnail]')){" +
+            "let v=n.getAttribute('data-bg')||n.getAttribute('data-background')||n.getAttribute('data-background-image')||n.getAttribute('data-image')||n.getAttribute('data-img')||n.getAttribute('data-thumb')||n.getAttribute('data-thumbnail')||'';" +
+            "if(v&&!/^data:/i.test(v)){try{n.style.backgroundImage='url(\\\"'+v.replace(/\\\"/g,'')+'\\\")'}catch(e){}}}" +
+            "let y=0,step=Math.max(420,Math.floor((window.innerHeight||800)*0.72));" +
+            "let max=Math.max(document.body?document.body.scrollHeight:0,document.documentElement?document.documentElement.scrollHeight:0);" +
+            "if(window.__csBrowseSweep)clearInterval(window.__csBrowseSweep);" +
+            "window.__csBrowseSweep=setInterval(()=>{try{window.scrollTo(0,y);window.dispatchEvent(new Event('scroll'));window.dispatchEvent(new Event('resize'));}catch(e){}" +
+            "y+=step;if(y>max+step){clearInterval(window.__csBrowseSweep);window.__csBrowseSweep=null;setTimeout(()=>{try{window.scrollTo(0,0)}catch(e){}},120);}},110);" +
+            "return true;})()";
+
     private final Context context;
+    private final Activity activity;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ArrayDeque<Request> queue = new ArrayDeque<>();
 
     private WebView webView;
+    private ViewGroup webViewHost;
     private Request current;
     private int attempt;
     private boolean closed;
 
     BrowseArtworkResolver(Context context) {
+        this.activity = context instanceof Activity ? (Activity) context : null;
         this.context = context.getApplicationContext();
         createWebView();
     }
@@ -66,10 +91,14 @@ final class BrowseArtworkResolver {
                 try {
                     webView.stopLoading();
                     webView.loadUrl("about:blank");
+                    if (webViewHost != null && webView.getParent() == webViewHost) {
+                        webViewHost.removeView(webView);
+                    }
                     webView.destroy();
                 } catch (Exception ignored) {
                 }
                 webView = null;
+                webViewHost = null;
             }
         });
     }
@@ -77,7 +106,8 @@ final class BrowseArtworkResolver {
     private void createWebView() {
         main.post(() -> {
             if (closed || webView != null) return;
-            webView = new WebView(context);
+            Context webContext = activity != null ? activity : context;
+            webView = new WebView(webContext);
             WebSettings settings = webView.getSettings();
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
@@ -90,16 +120,49 @@ final class BrowseArtworkResolver {
                 CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false);
             } catch (Exception ignored) {
             }
+
+            attachRendererToActivity();
+
             webView.setWebViewClient(new WebViewClient() {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     if (closed || current == null || url == null || "about:blank".equals(url)) return;
                     attempt = 0;
-                    main.postDelayed(BrowseArtworkResolver.this::probe, 350L);
+                    primePage();
+                    main.postDelayed(BrowseArtworkResolver.this::probe, 2200L);
                 }
             });
             startNext();
         });
+    }
+
+    private void attachRendererToActivity() {
+        if (activity == null || webView == null) return;
+        try {
+            View content = activity.findViewById(android.R.id.content);
+            if (!(content instanceof ViewGroup)) return;
+            webViewHost = (ViewGroup) content;
+            webView.setAlpha(0.01f);
+            webView.setFocusable(false);
+            webView.setFocusableInTouchMode(false);
+            webView.setClickable(false);
+            webView.setLongClickable(false);
+            ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+            );
+            webViewHost.addView(webView, 0, params);
+        } catch (Exception ignored) {
+            webViewHost = null;
+        }
+    }
+
+    private void primePage() {
+        if (closed || webView == null || current == null) return;
+        try {
+            webView.evaluateJavascript(PRIME_JS, null);
+        } catch (Exception ignored) {
+        }
     }
 
     private void startNext() {
@@ -128,7 +191,8 @@ final class BrowseArtworkResolver {
                 }
                 attempt++;
                 if (attempt < 4) {
-                    long delay = attempt == 1 ? 500L : attempt == 2 ? 900L : 1400L;
+                    primePage();
+                    long delay = attempt == 1 ? 900L : attempt == 2 ? 1400L : 1900L;
                     main.postDelayed(this::probe, delay);
                 } else {
                     finish(Collections.emptyMap());
@@ -153,14 +217,16 @@ final class BrowseArtworkResolver {
                 "for(let i=0;i<s.length;i++){let v=s.getPropertyValue(s[i]);if(v&&v.includes('url(')){let x=cssUrl(v);if(x)return x;}}" +
                 "}catch(e){}return ''};" +
                 "const fromNode=n=>{if(!n)return '';" +
-                "for(const k of ['data-src','data-original','data-lazy-src','data-image','data-poster','data-thumb','data-thumbnail','data-bg','data-background','data-background-image','poster','src']){" +
+                "for(const k of ['data-src','data-original','data-lazy-src','data-url','data-image','data-img','data-poster','data-thumb','data-thumbnail','data-bg','data-background','data-background-image','poster','src']){" +
                 "let x=good(n.getAttribute&&n.getAttribute(k));if(x)return x;}" +
                 "for(const k of ['data-srcset','srcset']){let s=n.getAttribute&&n.getAttribute(k);if(s){let a=s.split(',');for(let i=a.length-1;i>=0;i--){let x=good(a[i].trim().split(/\\s+/)[0]);if(x)return x;}}}" +
                 "let x=good(n.currentSrc||n.src);if(x)return x;" +
+                "if(n.attributes){for(const a of n.attributes){if(!/(?:src|image|img|thumb|poster|background|bg)/i.test(a.name||''))continue;" +
+                "x=good(a.value||'');if(x)return x;x=cssUrl(a.value||'');if(x)return x;}}" +
                 "x=fromStyle(n,null);if(x)return x;x=fromStyle(n,'::before');if(x)return x;x=fromStyle(n,'::after');if(x)return x;return ''};" +
                 "const pick=a=>{let n=a;for(let d=0;d<8&&n;d++,n=n.parentElement){" +
                 "let x=fromNode(n);if(x)return x;" +
-                "let nodes=n.querySelectorAll?Array.from(n.querySelectorAll('*')).slice(0,180):[];" +
+                "let nodes=n.querySelectorAll?Array.from(n.querySelectorAll('*')).slice(0,240):[];" +
                 "for(const q of nodes){x=fromNode(q);if(x)return x;}}return ''};" +
                 "let out={};for(const a of document.querySelectorAll('a[href]')){" +
                 "let href=abs(a.getAttribute('href')||a.href);if(!href||!href.includes(marker))continue;" +
@@ -199,7 +265,7 @@ final class BrowseArtworkResolver {
             } catch (Exception ignored) {
             }
         }
-        main.postDelayed(this::startNext, 40L);
+        main.postDelayed(this::startNext, 80L);
     }
 
     static String normalizeKey(String value) {
