@@ -183,8 +183,8 @@ final class LandscapeMoreDialog {
                 actions(
                         new Action("⚙︎", "Settings", "Playback, privacy, haptics and app options",
                                 () -> activity.startActivity(new Intent(activity, SettingsActivity.class))),
-                        new Action("≡", "View style", "Change how posts are displayed",
-                                () -> invokeNoArgs(activity, "showViewStyleDialog")),
+                        new Action("≡", "View style", "Cards, List, Grid or Posters",
+                                () -> FeedViewStyleController.showMain(activity)),
                         new Action("↻", "Check for updates", "Download and install updates inside the app",
                                 () -> invokeBoolean(activity, "checkForUpdates", true))
                 )
@@ -399,20 +399,12 @@ final class LandscapeMoreDialog {
         TextView headerSubtitle = fieldValue(activity, "headerSubtitle", TextView.class);
         if (headerTitle != null && title != null) headerTitle.setText(title);
         if (headerSubtitle != null && subtitle != null) headerSubtitle.setText(subtitle);
+        FeedViewStyleController.attachMain(activity);
     }
 
     private static CharSequence textValue(NativeMainActivity activity, String fieldName) {
         TextView view = fieldValue(activity, fieldName, TextView.class);
         return view == null ? null : view.getText();
-    }
-
-    private static void invokeNoArgs(NativeMainActivity activity, String name) {
-        try {
-            Method method = NativeMainActivity.class.getDeclaredMethod(name);
-            method.setAccessible(true);
-            method.invoke(activity);
-        } catch (Exception ignored) {
-        }
     }
 
     private static void invokeBoolean(NativeMainActivity activity, String name, boolean value) {
