@@ -20,14 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * Resolves the artwork used by CrazyShit's rendered Series/Categories listing cards.
- *
- * The site lazily paints browse artwork only after cards participate in a real rendered viewport.
- * An unattached background WebView can receive onPageFinished without ever satisfying the site's
- * lazy-loader, so this resolver keeps a nearly transparent WebView attached behind the activity's
- * content, sweeps the page to trigger lazy cards, then reads the final image URLs.
- */
+/** Resolves rendered Series/Categories artwork from CrazyShit's browser UI. */
 final class BrowseArtworkResolver {
     interface Callback {
         void onResolved(String pageUrl, Map<String, String> artwork);
@@ -129,7 +122,7 @@ final class BrowseArtworkResolver {
                     if (closed || current == null || url == null || "about:blank".equals(url)) return;
                     attempt = 0;
                     primePage();
-                    main.postDelayed(BrowseArtworkResolver.this::probe, 2200L);
+                    main.postDelayed(BrowseArtworkResolver.this::probe, 2600L);
                 }
             });
             startNext();
@@ -142,7 +135,9 @@ final class BrowseArtworkResolver {
             View content = activity.findViewById(android.R.id.content);
             if (!(content instanceof ViewGroup)) return;
             webViewHost = (ViewGroup) content;
-            webView.setAlpha(0.01f);
+            // Keep the WebView fully rendered. It sits behind the opaque native app UI.
+            webView.setAlpha(1f);
+            webView.setVisibility(View.VISIBLE);
             webView.setFocusable(false);
             webView.setFocusableInTouchMode(false);
             webView.setClickable(false);
@@ -192,7 +187,7 @@ final class BrowseArtworkResolver {
                 attempt++;
                 if (attempt < 4) {
                     primePage();
-                    long delay = attempt == 1 ? 900L : attempt == 2 ? 1400L : 1900L;
+                    long delay = attempt == 1 ? 1200L : attempt == 2 ? 1800L : 2400L;
                     main.postDelayed(this::probe, delay);
                 } else {
                     finish(Collections.emptyMap());
@@ -207,31 +202,37 @@ final class BrowseArtworkResolver {
         String marker = JSONObject.quote(pathMarker);
         return "((marker)=>{" +
                 "const abs=u=>{try{return u?new URL(u,document.baseURI).href:''}catch(e){return ''}};" +
-                "const good=u=>{u=abs(u);if(!/^https?:\\/\\//i.test(u))return '';" +
-                "const l=u.toLowerCase();return /(?:logo|sprite|avatar|blank\\.gif|spacer|placeholder)/.test(l)?'':u};" +
-                "const cssUrl=s=>{if(!s||s==='none')return '';" +
-                "let re=/url\\([\\\"']?([^\\\"')]+)[\\\"']?\\)/ig,m;while((m=re.exec(s))){let x=good(m[1]);if(x)return x;}return ''};" +
-                "const fromStyle=(n,pseudo)=>{try{let s=getComputedStyle(n,pseudo||null);if(!s)return '';" +
-                "for(const k of ['backgroundImage','content','maskImage','webkitMaskImage','borderImageSource','listStyleImage']){" +
-                "let x=cssUrl(s[k]||'');if(x)return x;}" +
-                "for(let i=0;i<s.length;i++){let v=s.getPropertyValue(s[i]);if(v&&v.includes('url(')){let x=cssUrl(v);if(x)return x;}}" +
-                "}catch(e){}return ''};" +
+                "const thumb=u=>{u=abs(u);return /^https?:\\/\\/media\\.crazyshit\\.com\\/thumbs\\//i.test(u)?u:''};" +
+                "const cssThumb=s=>{if(!s||s==='none')return '';let re=/url\\([\\\"']?([^\\\"')]+)[\\\"']?\\)/ig,m;" +
+                "while((m=re.exec(s))){let x=thumb(m[1]);if(x)return x;}return ''};" +
                 "const fromNode=n=>{if(!n)return '';" +
                 "for(const k of ['data-src','data-original','data-lazy-src','data-url','data-image','data-img','data-poster','data-thumb','data-thumbnail','data-bg','data-background','data-background-image','poster','src']){" +
-                "let x=good(n.getAttribute&&n.getAttribute(k));if(x)return x;}" +
-                "for(const k of ['data-srcset','srcset']){let s=n.getAttribute&&n.getAttribute(k);if(s){let a=s.split(',');for(let i=a.length-1;i>=0;i--){let x=good(a[i].trim().split(/\\s+/)[0]);if(x)return x;}}}" +
-                "let x=good(n.currentSrc||n.src);if(x)return x;" +
+                "let x=thumb(n.getAttribute&&n.getAttribute(k));if(x)return x;}" +
+                "for(const k of ['data-srcset','srcset']){let s=n.getAttribute&&n.getAttribute(k);if(!s)continue;for(const p of s.split(',')){let x=thumb(p.trim().split(/\\s+/)[0]);if(x)return x;}}" +
+                "let x=thumb(n.currentSrc||n.src);if(x)return x;" +
                 "if(n.attributes){for(const a of n.attributes){if(!/(?:src|image|img|thumb|poster|background|bg)/i.test(a.name||''))continue;" +
-                "x=good(a.value||'');if(x)return x;x=cssUrl(a.value||'');if(x)return x;}}" +
-                "x=fromStyle(n,null);if(x)return x;x=fromStyle(n,'::before');if(x)return x;x=fromStyle(n,'::after');if(x)return x;return ''};" +
-                "const pick=a=>{let n=a;for(let d=0;d<8&&n;d++,n=n.parentElement){" +
-                "let x=fromNode(n);if(x)return x;" +
-                "let nodes=n.querySelectorAll?Array.from(n.querySelectorAll('*')).slice(0,240):[];" +
-                "for(const q of nodes){x=fromNode(q);if(x)return x;}}return ''};" +
-                "let out={};for(const a of document.querySelectorAll('a[href]')){" +
-                "let href=abs(a.getAttribute('href')||a.href);if(!href||!href.includes(marker))continue;" +
-                "let x=pick(a);if(x&&!out[href])out[href]=x;}return JSON.stringify(out);" +
-                "})(" + marker + ")";
+                "x=thumb(a.value||'');if(x)return x;x=cssThumb(a.value||'');if(x)return x;}}" +
+                "try{let s=getComputedStyle(n);x=cssThumb(s.backgroundImage||'');if(x)return x;" +
+                "for(let i=0;i<s.length;i++){let v=s.getPropertyValue(s[i]);if(v&&v.includes('url(')){x=cssThumb(v);if(x)return x;}}}catch(e){}" +
+                "return ''};" +
+                "const rect=n=>{try{let r=n.getBoundingClientRect();return {l:r.left,t:r.top,w:r.width,h:r.height,cx:r.left+r.width/2,cy:r.top+r.height/2}}catch(e){return null}};" +
+                "const links=[];for(const a of document.querySelectorAll('a[href]')){" +
+                "let href=abs(a.getAttribute('href')||a.href);if(!href||!href.includes(marker))continue;let r=rect(a);if(!r)continue;links.push({n:a,href:href,r:r});}" +
+                "let out={},scores={};" +
+                "const assign=(href,url,score)=>{if(!href||!url)return;if(scores[href]===undefined||score<scores[href]){scores[href]=score;out[href]=url;}};" +
+                "for(const l of links){let n=l.n;for(let d=0;d<10&&n;d++,n=n.parentElement){let x=fromNode(n);if(x){assign(l.href,x,d);break;}" +
+                "if(n.querySelectorAll){for(const q of Array.from(n.querySelectorAll('*')).slice(0,320)){x=fromNode(q);if(x){assign(l.href,x,d+0.2);break;}}if(out[l.href])break;}}}" +
+                "const visuals=[];const seen=new Set();" +
+                "for(const n of document.querySelectorAll('img,[style],[data-src],[data-original],[data-lazy-src],[data-image],[data-img],[data-thumb],[data-thumbnail],[data-bg],[data-background],[data-background-image]')){" +
+                "let x=fromNode(n);if(!x||seen.has(x))continue;let r=rect(n);if(!r||r.w<20||r.h<20)continue;seen.add(x);visuals.push({n:n,url:x,r:r});}" +
+                "for(const v of visuals){let best=null,bestScore=1e18;for(const l of links){" +
+                "let dx=v.r.cx-l.r.cx,dy=v.r.cy-l.r.cy;let score=dx*dx+dy*dy;" +
+                "try{let p=l.n;for(let d=0;d<8&&p;d++,p=p.parentElement){if(p===v.n||p.contains(v.n)){score*=0.01;break;}}}catch(e){}" +
+                "if(score<bestScore){bestScore=score;best=l;}}if(best)assign(best.href,v.url,bestScore+20);}" +
+                "if(Object.keys(out).length===0){try{let resources=[];for(const e of performance.getEntriesByType('resource')){let x=thumb(e.name);if(x&&!resources.includes(x))resources.push(x);}" +
+                "let ordered=links.slice().sort((a,b)=>a.r.t===b.r.t?a.r.l-b.r.l:a.r.t-b.r.t);let used=new Set();let clean=[];for(const l of ordered){if(used.has(l.href))continue;used.add(l.href);clean.push(l);}" +
+                "for(let i=0;i<Math.min(clean.length,resources.length);i++)assign(clean[i].href,resources[i],1e15+i);}catch(e){}}" +
+                "return JSON.stringify(out);})(" + marker + ")";
     }
 
     private Map<String, String> decodeMap(String raw) {
