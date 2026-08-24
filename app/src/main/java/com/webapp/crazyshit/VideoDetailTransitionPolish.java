@@ -6,8 +6,8 @@ import android.transition.Fade;
 import android.view.Window;
 
 /**
- * v2.7 keeps the window transition quiet so VideoDetailImmersivePolish can make the player
- * itself feel like it expands into place instead of sliding an entire screen over the feed.
+ * Keeps the window transition quiet so VideoDetailActivity can own the player entrance motion
+ * instead of sliding an entire screen over the feed.
  */
 final class VideoDetailTransitionPolish {
     private VideoDetailTransitionPolish() {
