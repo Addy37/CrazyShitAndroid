@@ -99,11 +99,6 @@ public class SettingsActivity extends Activity {
                 "Use light focus and thumbnail movement while scrolling.",
                 "immersive_motion_enabled",
                 true);
-        addSwitch(root,
-                "Collapsing header",
-                "Gently compact the top bar while scrolling down.",
-                "collapse_header_enabled",
-                true);
 
         addSection(root, "Browsing & privacy");
         addSwitch(root,
