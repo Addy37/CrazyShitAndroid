@@ -48,10 +48,14 @@ public final class CrazyShitApplication extends Application {
                     LandscapeMoreDialog.attachSoon(nativeActivity);
                     SeriesCategoriesNavController.attachSoon(nativeActivity);
                     GlobalSearchUiController.attachSoon(nativeActivity);
+                    FeedViewStyleController.attachMain(nativeActivity);
                     UiPolishController.attach(nativeActivity);
                     FlashUiController.attach(nativeActivity);
                     WatchStatePolish.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
+                }
+                if (activity instanceof NativeFeedBrowserActivity) {
+                    FeedViewStyleController.attachBrowser((NativeFeedBrowserActivity) activity);
                 }
                 if (activity instanceof VideoDetailActivity && !activity.isFinishing()) {
                     VideoDetailActivity detail = (VideoDetailActivity) activity;
@@ -80,12 +84,16 @@ public final class CrazyShitApplication extends Application {
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     ChaosPortraitPolish.stop(nativeActivity);
+                    FeedViewStyleController.detachMain(nativeActivity);
                     SeriesCategoriesNavController.detach(nativeActivity);
                     FlashUiController.detach(nativeActivity);
                     UiPolishController.detach(nativeActivity);
                     LandscapeUiController.detach(nativeActivity);
                     NativeMainActivity current = currentNativeActivity.get();
                     if (current == activity) currentNativeActivity.clear();
+                }
+                if (activity instanceof NativeFeedBrowserActivity) {
+                    FeedViewStyleController.detachBrowser((NativeFeedBrowserActivity) activity);
                 }
                 if (activity instanceof VideoDetailActivity) {
                     RelatedVideosPolish.detach((VideoDetailActivity) activity);
@@ -106,6 +114,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeMoreDialog.attachSoon(activity);
                     SeriesCategoriesNavController.attachSoon(activity);
                     GlobalSearchUiController.attachSoon(activity);
+                    FeedViewStyleController.attachMain(activity);
                     UiPolishController.attach(activity);
                     FlashUiController.attach(activity);
                     WatchStatePolish.attach(activity);
