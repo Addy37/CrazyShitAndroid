@@ -6,7 +6,6 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -22,7 +21,6 @@ import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /** Mixed native search results for videos, Series, Categories and the local Library. */
 final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
@@ -160,11 +158,12 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         ResultHolder result = (ResultHolder) holder;
         NativeContentItem item = entry.item;
         if (item == null) return;
+        result.boundUrl = item.url == null ? "" : item.url;
         result.title.setText(item.title);
         result.meta.setText(metaText(item, entry.source));
         result.card.setContentDescription(item.title);
         result.card.setOnClickListener(v -> listener.onOpen(item));
-        loadImage(result.image, item);
+        loadImage(result, item);
     }
 
     private String metaText(NativeContentItem item, int source) {
@@ -177,36 +176,57 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         return meta.toString();
     }
 
-    private void loadImage(ImageView image, NativeContentItem item) {
-        Glide.with(image).clear(image);
+    private void loadImage(ResultHolder holder, NativeContentItem item) {
+        Glide.with(holder.image).clear(holder.image);
+        holder.image.setImageDrawable(new ColorDrawable(Color.rgb(31, 31, 36)));
+
         byte[] embedded = null;
         if (item.isSeries() || item.isCategory()) {
-            embedded = EmbeddedBrowseArtwork.get(image.getContext(), item.url);
+            embedded = EmbeddedBrowseArtwork.get(holder.image.getContext(), item.url);
         }
-        Object source = null;
         if (embedded != null && embedded.length > 512) {
-            source = embedded;
-        } else if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
-            String url = item.imageUrl.trim();
-            if (url.startsWith("http://") || url.startsWith("https://")) {
-                LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                        .addHeader("User-Agent", USER_AGENT)
-                        .addHeader("Referer", item.url == null || item.url.isEmpty() ? SITE : item.url)
-                        .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
-                try {
-                    String cookies = CookieManager.getInstance().getCookie(url);
-                    if (cookies != null && !cookies.trim().isEmpty()) headers.addHeader("Cookie", cookies);
-                } catch (Exception ignored) {
-                }
-                source = new GlideUrl(url, headers.build());
-            } else {
-                source = url;
-            }
+            Glide.with(holder.image)
+                    .load(embedded)
+                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .skipMemoryCache(false)
+                    .dontAnimate()
+                    .centerCrop()
+                    .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
+                    .error(new ColorDrawable(Color.rgb(31, 31, 36)))
+                    .into(holder.image);
+            return;
         }
 
-        if (source == null) {
-            image.setImageDrawable(new ColorDrawable(Color.rgb(31, 31, 36)));
+        if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
+            loadRemote(holder.image, item, item.imageUrl.trim());
             return;
+        }
+
+        // Search and Library media cards frequently do not expose their thumbnail on the search
+        // listing itself. Resolve only visible cards from the individual media page, then cache it.
+        if (!item.isSeries() && !item.isCategory() && item.url != null && !item.url.trim().isEmpty()) {
+            final String requestedPage = item.url;
+            SearchThumbnailResolver.resolve(holder.image.getContext(), requestedPage, (pageUrl, thumbnailUrl) -> {
+                if (!requestedPage.equals(holder.boundUrl)) return;
+                if (thumbnailUrl == null || thumbnailUrl.trim().isEmpty()) return;
+                loadRemote(holder.image, item, thumbnailUrl.trim());
+            });
+        }
+    }
+
+    private void loadRemote(ImageView image, NativeContentItem item, String url) {
+        Object source = url;
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            LazyHeaders.Builder headers = new LazyHeaders.Builder()
+                    .addHeader("User-Agent", USER_AGENT)
+                    .addHeader("Referer", item.url == null || item.url.isEmpty() ? SITE : item.url)
+                    .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
+            try {
+                String cookies = CookieManager.getInstance().getCookie(url);
+                if (cookies != null && !cookies.trim().isEmpty()) headers.addHeader("Cookie", cookies);
+            } catch (Exception ignored) {
+            }
+            source = new GlideUrl(url, headers.build());
         }
 
         Glide.with(image)
@@ -223,6 +243,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
         if (holder instanceof ResultHolder) {
             ResultHolder result = (ResultHolder) holder;
+            result.boundUrl = "";
             Glide.with(result.image).clear(result.image);
             result.card.setOnClickListener(null);
         }
@@ -251,6 +272,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         final ImageView image;
         final TextView title;
         final TextView meta;
+        String boundUrl = "";
 
         ResultHolder(MaterialCardView card, ImageView image, TextView title, TextView meta) {
             super(card);
