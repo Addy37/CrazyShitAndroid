@@ -61,13 +61,17 @@ public final class CrazyShitApplication extends Application {
                     WatchStatePolish.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
                     PredictiveBackPolish.attach(nativeActivity);
+                    ImmersiveUiController.attachMain(nativeActivity);
                 }
                 if (activity instanceof NativeFeedBrowserActivity) {
-                    FeedViewStyleController.attachBrowser((NativeFeedBrowserActivity) activity);
+                    NativeFeedBrowserActivity browser = (NativeFeedBrowserActivity) activity;
+                    FeedViewStyleController.attachBrowser(browser);
+                    ImmersiveUiController.attachBrowser(browser);
                 }
                 if (activity instanceof VideoDetailActivity && !activity.isFinishing()) {
                     VideoDetailActivity detail = (VideoDetailActivity) activity;
                     VideoDetailControllerPolish.applySoon(detail);
+                    VideoDetailImmersivePolish.applySoon(detail);
                     RelatedVideosPolish.attach(detail);
                     PredictiveBackPolish.attach(detail);
                 }
@@ -91,6 +95,7 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityDestroyed(Activity activity) {
                 PredictiveBackPolish.detach(activity);
+                ImmersiveUiController.detach(activity);
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     ChaosPortraitPolish.stop(nativeActivity);
@@ -107,6 +112,7 @@ public final class CrazyShitApplication extends Application {
                 }
                 if (activity instanceof VideoDetailActivity) {
                     RelatedVideosPolish.detach((VideoDetailActivity) activity);
+                    VideoDetailImmersivePolish.detach((VideoDetailActivity) activity);
                 }
             }
         });
@@ -130,6 +136,7 @@ public final class CrazyShitApplication extends Application {
                     WatchStatePolish.attach(activity);
                     ChaosPortraitPolish.start(activity);
                     PredictiveBackPolish.attach(activity);
+                    ImmersiveUiController.attachMain(activity);
                 },
                 80L
         );
