@@ -38,9 +38,12 @@ import java.util.Map;
 import java.util.Set;
 
 public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdapter.Holder> {
-    public static final int VIEW_LARGE = 0;
-    public static final int VIEW_COMPACT = 1;
+    public static final int VIEW_CARDS = 0;
+    public static final int VIEW_LARGE = VIEW_CARDS;
+    public static final int VIEW_LIST = 1;
+    public static final int VIEW_COMPACT = VIEW_LIST;
     public static final int VIEW_GRID = 2;
+    public static final int VIEW_POSTERS = 3;
     private static final int TYPE_SECTION = 100;
 
     private static final String SITE = "https://crazyshit.com/";
@@ -68,7 +71,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private final SharedPreferences.OnSharedPreferenceChangeListener playbackListener;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private int resolverCursor;
-    private int viewMode = VIEW_LARGE;
+    private int viewMode = VIEW_CARDS;
 
     public NativeFeedAdapter(Context context, Listener listener) {
         this.context = context.getApplicationContext();
@@ -89,7 +92,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     public void setViewMode(int mode) {
         int next = mode;
-        if (next < VIEW_LARGE || next > VIEW_GRID) next = VIEW_LARGE;
+        if (next < VIEW_CARDS || next > VIEW_POSTERS) next = VIEW_CARDS;
         if (viewMode == next) return;
         viewMode = next;
         notifyDataSetChanged();
@@ -208,9 +211,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         if (viewType == TYPE_SECTION) return createSectionHolder(parent);
-        if (viewType == VIEW_COMPACT) return createCompactHolder(parent);
+        if (viewType == VIEW_LIST) return createListHolder(parent);
         if (viewType == VIEW_GRID) return createGridHolder(parent);
-        return createLargeHolder(parent);
+        if (viewType == VIEW_POSTERS) return createPosterHolder(parent);
+        return createCardsHolder(parent);
     }
 
     private Holder createSectionHolder(ViewGroup parent) {
@@ -222,8 +226,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         card.setClickable(false);
         card.setLongClickable(false);
 
-        RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, dp(card, 52));
-        params.setMargins(dp(card, 12), dp(card, 10), dp(card, 12), dp(card, 2));
+        RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, dp(card, 50));
+        params.setMargins(dp(card, 12), dp(card, 10), dp(card, 12), 0);
         card.setLayoutParams(params);
 
         TextView header = new TextView(parent.getContext());
@@ -237,48 +241,98 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return new Holder(card, header);
     }
 
-    private Holder createLargeHolder(ViewGroup parent) {
-        MaterialCardView card = baseCard(parent, 12, 7, 20);
+    private Holder createCardsHolder(ViewGroup parent) {
+        MaterialCardView card = baseCard(parent, 12, 6, 18, -1);
         LinearLayout column = new LinearLayout(parent.getContext());
         column.setOrientation(LinearLayout.VERTICAL);
         card.addView(column, new MaterialCardView.LayoutParams(-1, -2));
 
-        MediaViews media = addMedia(parent, column, 218, -1);
-        CopyViews copy = addCopy(parent, column, 17, 13, 15, 15);
+        MediaViews media = addMedia(parent, column, 194, -1);
+        CopyViews copy = addCopy(parent, column, 16, 12, 14, 12, false);
         return new Holder(card, media, copy);
     }
 
-    private Holder createCompactHolder(ViewGroup parent) {
-        MaterialCardView card = baseCard(parent, 12, 5, 16);
+    private Holder createListHolder(ViewGroup parent) {
+        MaterialCardView card = baseCard(parent, 12, 4, 15, 96);
         LinearLayout row = new LinearLayout(parent.getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        card.addView(row, new MaterialCardView.LayoutParams(-1, -2));
+        card.addView(row, new MaterialCardView.LayoutParams(-1, -1));
 
-        MediaViews media = addMedia(parent, row, 104, 148);
-        CopyViews copy = addCopy(parent, row, 15, 12, 13, 11);
+        MediaViews media = addMedia(parent, row, 96, 136);
+        CopyViews copy = addCopy(parent, row, 15, 11, 12, 9, false);
         return new Holder(card, media, copy);
     }
 
     private Holder createGridHolder(ViewGroup parent) {
-        MaterialCardView card = baseCard(parent, 6, 6, 15);
+        MaterialCardView card = baseCard(parent, 6, 5, 14, 240);
         LinearLayout column = new LinearLayout(parent.getContext());
         column.setOrientation(LinearLayout.VERTICAL);
-        card.addView(column, new MaterialCardView.LayoutParams(-1, -2));
+        card.addView(column, new MaterialCardView.LayoutParams(-1, -1));
 
         MediaViews media = addMedia(parent, column, 128, -1);
-        CopyViews copy = addCopy(parent, column, 14, 11, 10, 11);
+        CopyViews copy = addCopy(parent, column, 14, 10, 10, 9, true);
         return new Holder(card, media, copy);
     }
 
-    private MaterialCardView baseCard(ViewGroup parent, int horizontalMargin, int verticalMargin, int radius) {
+    private Holder createPosterHolder(ViewGroup parent) {
+        MaterialCardView card = baseCard(parent, 6, 5, 14, 214);
+        LinearLayout column = new LinearLayout(parent.getContext());
+        column.setOrientation(LinearLayout.VERTICAL);
+        card.addView(column, new MaterialCardView.LayoutParams(-1, -1));
+
+        MediaViews media = addMedia(parent, column, 214, -1);
+
+        LinearLayout overlay = new LinearLayout(parent.getContext());
+        overlay.setOrientation(LinearLayout.VERTICAL);
+        overlay.setGravity(Gravity.BOTTOM);
+        overlay.setPadding(dp(parent, 10), dp(parent, 18), dp(parent, 10), dp(parent, 9));
+        GradientDrawable overlayBg = new GradientDrawable();
+        overlayBg.setColor(Color.argb(218, 13, 13, 16));
+        overlay.setBackground(overlayBg);
+        FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(-1, dp(parent, 72));
+        overlayParams.gravity = Gravity.BOTTOM;
+        media.frame.addView(overlay, overlayParams);
+
+        TextView title = new TextView(parent.getContext());
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(13.5f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setMaxLines(2);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        overlay.addView(title, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView info = new TextView(parent.getContext());
+        info.setTextColor(Color.rgb(190, 190, 199));
+        info.setTextSize(10.5f);
+        info.setSingleLine(true);
+        info.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams infoParams = new LinearLayout.LayoutParams(-1, -2);
+        infoParams.topMargin = dp(parent, 4);
+        overlay.addView(info, infoParams);
+
+        TextView unusedComments = new TextView(parent.getContext());
+        CopyViews copy = new CopyViews(title, info, unusedComments);
+        return new Holder(card, media, copy);
+    }
+
+    private MaterialCardView baseCard(
+            ViewGroup parent,
+            int horizontalMargin,
+            int verticalMargin,
+            int radius,
+            int fixedHeightDp
+    ) {
         MaterialCardView card = new MaterialCardView(parent.getContext());
         card.setCardBackgroundColor(Color.rgb(25, 25, 28));
         card.setRadius(dp(parent, radius));
         card.setCardElevation(dp(parent, 1));
         card.setStrokeColor(Color.rgb(50, 50, 57));
         card.setStrokeWidth(dp(parent, 1));
-        RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, -2);
+        RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
+                -1,
+                fixedHeightDp > 0 ? dp(parent, fixedHeightDp) : -2
+        );
         params.setMargins(
                 dp(parent, horizontalMargin),
                 dp(parent, verticalMargin),
@@ -305,29 +359,48 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         TextView play = new TextView(parent.getContext());
         play.setText("▶");
         play.setTextColor(Color.WHITE);
-        play.setTextSize(viewMode == VIEW_GRID ? 20 : 25);
+        boolean dense = viewMode == VIEW_GRID || viewMode == VIEW_POSTERS;
+        play.setTextSize(dense ? 19 : 23);
         play.setGravity(Gravity.CENTER);
-        play.setBackground(new ColorDrawable(Color.argb(135, 0, 0, 0)));
-        int size = viewMode == VIEW_GRID ? 42 : 50;
+        play.setBackground(new ColorDrawable(Color.argb(130, 0, 0, 0)));
+        int size = dense ? 40 : 46;
         FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(dp(parent, size), dp(parent, size));
         playParams.gravity = Gravity.CENTER;
         mediaFrame.addView(play, playParams);
 
         TextView watchBadge = new TextView(parent.getContext());
         watchBadge.setTextColor(Color.WHITE);
-        watchBadge.setTextSize(viewMode == VIEW_GRID ? 9.5f : 10.5f);
+        watchBadge.setTextSize(dense ? 9f : 10f);
         watchBadge.setTypeface(null, android.graphics.Typeface.BOLD);
         watchBadge.setGravity(Gravity.CENTER);
-        watchBadge.setPadding(dp(parent, 8), dp(parent, 4), dp(parent, 8), dp(parent, 4));
+        watchBadge.setPadding(dp(parent, 7), dp(parent, 4), dp(parent, 7), dp(parent, 4));
         watchBadge.setVisibility(View.GONE);
+        watchBadge.setElevation(dp(parent, 6));
         FrameLayout.LayoutParams badgeParams = new FrameLayout.LayoutParams(-2, -2);
         badgeParams.gravity = Gravity.TOP | Gravity.START;
         badgeParams.setMargins(dp(parent, 7), dp(parent, 7), dp(parent, 7), 0);
         mediaFrame.addView(watchBadge, badgeParams);
 
+        TextView overlayComments = new TextView(parent.getContext());
+        overlayComments.setTextColor(Color.WHITE);
+        overlayComments.setTextSize(dense ? 10f : 11f);
+        overlayComments.setTypeface(null, android.graphics.Typeface.BOLD);
+        overlayComments.setGravity(Gravity.CENTER);
+        overlayComments.setPadding(dp(parent, 8), dp(parent, 5), dp(parent, 8), dp(parent, 5));
+        overlayComments.setBackground(rounded(Color.argb(210, 20, 20, 24), dp(parent, 12)));
+        overlayComments.setVisibility(View.GONE);
+        overlayComments.setElevation(dp(parent, 6));
+        FrameLayout.LayoutParams commentsParams = new FrameLayout.LayoutParams(-2, -2);
+        commentsParams.gravity = viewMode == VIEW_POSTERS
+                ? Gravity.TOP | Gravity.END
+                : Gravity.BOTTOM | Gravity.END;
+        commentsParams.setMargins(dp(parent, 7), dp(parent, 7), dp(parent, 7), dp(parent, 8));
+        mediaFrame.addView(overlayComments, commentsParams);
+
         FrameLayout progressTrack = new FrameLayout(parent.getContext());
-        progressTrack.setBackgroundColor(Color.argb(175, 17, 17, 20));
+        progressTrack.setBackgroundColor(Color.argb(185, 17, 17, 20));
         progressTrack.setVisibility(View.GONE);
+        progressTrack.setElevation(dp(parent, 7));
         FrameLayout.LayoutParams trackParams = new FrameLayout.LayoutParams(-1, dp(parent, 3));
         trackParams.gravity = Gravity.BOTTOM;
         mediaFrame.addView(progressTrack, trackParams);
@@ -338,7 +411,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         progressFill.setScaleX(0f);
         progressTrack.addView(progressFill, new FrameLayout.LayoutParams(-1, -1));
 
-        return new MediaViews(image, play, watchBadge, progressTrack, progressFill);
+        return new MediaViews(mediaFrame, image, play, watchBadge, overlayComments, progressTrack, progressFill);
     }
 
     private CopyViews addCopy(
@@ -347,7 +420,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             int titleSize,
             int infoSize,
             int horizontalPadding,
-            int verticalPadding
+            int verticalPadding,
+            boolean fillRemaining
     ) {
         LinearLayout copy = new LinearLayout(parent.getContext());
         copy.setOrientation(LinearLayout.VERTICAL);
@@ -357,11 +431,16 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 dp(parent, horizontalPadding),
                 dp(parent, verticalPadding)
         );
-        LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(
-                viewMode == VIEW_COMPACT ? 0 : -1,
-                -2,
-                viewMode == VIEW_COMPACT ? 1f : 0f
-        );
+        LinearLayout.LayoutParams copyParams;
+        if (fillRemaining) {
+            copyParams = new LinearLayout.LayoutParams(-1, 0, 1f);
+        } else {
+            copyParams = new LinearLayout.LayoutParams(
+                    viewMode == VIEW_LIST ? 0 : -1,
+                    viewMode == VIEW_LIST ? -1 : -2,
+                    viewMode == VIEW_LIST ? 1f : 0f
+            );
+        }
         host.addView(copy, copyParams);
 
         TextView title = new TextView(parent.getContext());
@@ -372,10 +451,15 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         title.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
+        if (fillRemaining) {
+            View spacer = new View(parent.getContext());
+            copy.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
+        }
+
         LinearLayout metaRow = new LinearLayout(parent.getContext());
         metaRow.setOrientation(LinearLayout.HORIZONTAL);
         metaRow.setGravity(Gravity.CENTER_VERTICAL);
-        metaRow.setPadding(0, dp(parent, 6), 0, 0);
+        metaRow.setPadding(0, dp(parent, fillRemaining ? 4 : 6), 0, 0);
         copy.addView(metaRow, new LinearLayout.LayoutParams(-1, -2));
 
         TextView info = new TextView(parent.getContext());
@@ -389,7 +473,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         comments.setTextColor(Color.rgb(255, 112, 60));
         comments.setTextSize(infoSize);
         comments.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        comments.setPadding(dp(parent, 8), dp(parent, 4), 0, dp(parent, 4));
+        comments.setPadding(dp(parent, 7), dp(parent, 3), 0, dp(parent, 3));
         metaRow.addView(comments, new LinearLayout.LayoutParams(-2, -2));
 
         return new CopyViews(title, info, comments);
@@ -428,17 +512,24 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         holder.image.setScaleType(meme ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
         bindPlaybackState(holder, item);
 
+        holder.comments.setVisibility(View.GONE);
+        holder.comments.setOnClickListener(null);
+        holder.overlayComments.setVisibility(View.GONE);
+        holder.overlayComments.setOnClickListener(null);
+
         if (!meme && item.comments != null && !item.comments.isEmpty()) {
-            holder.comments.setVisibility(View.VISIBLE);
-            if (viewMode == VIEW_COMPACT || viewMode == VIEW_GRID) {
-                holder.comments.setText("💬 " + compactCount(item.comments));
+            String compact = compactCount(item.comments);
+            if (viewMode == VIEW_CARDS || viewMode == VIEW_POSTERS) {
+                holder.overlayComments.setVisibility(View.VISIBLE);
+                holder.overlayComments.setText(viewMode == VIEW_CARDS
+                        ? compact + " comments"
+                        : "💬 " + compact);
+                holder.overlayComments.setOnClickListener(v -> listener.onComments(item));
             } else {
-                holder.comments.setText(item.comments + " comments");
+                holder.comments.setVisibility(View.VISIBLE);
+                holder.comments.setText("💬 " + compact);
+                holder.comments.setOnClickListener(v -> listener.onComments(item));
             }
-            holder.comments.setOnClickListener(v -> listener.onComments(item));
-        } else {
-            holder.comments.setVisibility(View.GONE);
-            holder.comments.setOnClickListener(null);
         }
 
         loadThumbnail(holder, item);
@@ -523,7 +614,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return String.format(Locale.US, "%d:%02d", minutes, seconds);
     }
 
-    private GradientDrawable rounded(int color, int radiusPx) {
+    private static GradientDrawable rounded(int color, int radiusPx) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
         drawable.setCornerRadius(radiusPx);
@@ -559,6 +650,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             holder.image.setAlpha(1f);
         }
         if (holder.watchBadge != null) holder.watchBadge.setVisibility(View.GONE);
+        if (holder.overlayComments != null) holder.overlayComments.setVisibility(View.GONE);
         if (holder.progressTrack != null) holder.progressTrack.setVisibility(View.GONE);
         super.onViewRecycled(holder);
     }
@@ -592,12 +684,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private String buildInfo(NativeContentItem item) {
         ArrayList<String> parts = new ArrayList<>();
         if (!item.isMeme() && item.views != null && !item.views.isEmpty()) {
-            String views = (viewMode == VIEW_COMPACT || viewMode == VIEW_GRID)
-                    ? compactCount(item.views)
-                    : item.views;
+            String views = viewMode == VIEW_CARDS ? item.views : compactCount(item.views);
             parts.add(views + " views");
         }
-        if (viewMode == VIEW_LARGE && item.uploader != null && !item.uploader.isEmpty()) {
+        if (viewMode == VIEW_CARDS && item.uploader != null && !item.uploader.isEmpty()) {
             parts.add(item.uploader);
         }
         if (item.isMeme() && parts.isEmpty()) parts.add("Image");
@@ -634,16 +724,28 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private static final class MediaViews {
+        final FrameLayout frame;
         final ImageView image;
         final TextView play;
         final TextView watchBadge;
+        final TextView overlayComments;
         final View progressTrack;
         final View progressFill;
 
-        MediaViews(ImageView image, TextView play, TextView watchBadge, View progressTrack, View progressFill) {
+        MediaViews(
+                FrameLayout frame,
+                ImageView image,
+                TextView play,
+                TextView watchBadge,
+                TextView overlayComments,
+                View progressTrack,
+                View progressFill
+        ) {
+            this.frame = frame;
             this.image = image;
             this.play = play;
             this.watchBadge = watchBadge;
+            this.overlayComments = overlayComments;
             this.progressTrack = progressTrack;
             this.progressFill = progressFill;
         }
@@ -666,6 +768,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final ImageView image;
         final TextView play;
         final TextView watchBadge;
+        final TextView overlayComments;
         final View progressTrack;
         final View progressFill;
         final TextView title;
@@ -679,6 +782,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.image = media.image;
             this.play = media.play;
             this.watchBadge = media.watchBadge;
+            this.overlayComments = media.overlayComments;
             this.progressTrack = media.progressTrack;
             this.progressFill = media.progressFill;
             this.title = copy.title;
@@ -693,6 +797,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.image = null;
             this.play = null;
             this.watchBadge = null;
+            this.overlayComments = null;
             this.progressTrack = null;
             this.progressFill = null;
             this.title = null;
