@@ -1,15 +1,17 @@
-# CrazyShit v2.5.1
+# CrazyShit v2.5.2
 
-CrazyShit 2.5.1 fixes the missing artwork on the new Series and Categories tabs introduced in 2.5.0.
+CrazyShit 2.5.2 fixes the remaining blank artwork on Series and Categories by widening the rendered card scan to match how the website actually paints browse thumbnails.
 
-## Series and Categories artwork fix
+## Browse thumbnail fix
 
-- Keeps the new **Home | Series | Chaos | Categories | More** navigation unchanged
-- Keeps the native 2-column Series and Categories grids unchanged
-- Adds a rendered browse-artwork resolver for cases where the website applies card images through lazy JavaScript or computed CSS instead of exposing a usable image URL in the raw HTML
-- The resolver loads the Series/Categories listing page once and maps each collection URL to the artwork shown by the rendered website
-- Direct image URLs found by the existing parser still take priority
-- Series can also read artwork from the Home Popular Series block when the dedicated Series listing does not expose every image
+- Keeps **Home | Series | Chaos | Categories | More** unchanged
+- Keeps the native Series and Categories grids unchanged
+- Scans every rendered element inside each Series/Category card instead of only obvious image and lazy-load nodes
+- Reads normal CSS backgrounds plus `::before` and `::after` artwork layers
+- Also checks mask, border-image, list-style image and CSS properties containing `url(...)`
+- Waits through additional lazy-render passes before giving up
+- Ignores the resolver's internal `about:blank` cleanup page so Series and Categories cannot interfere with each other's artwork pass
+- Existing direct image URLs still keep priority
 - Glide keeps the site's User-Agent, Referer and cookies when loading resolved artwork
 
 ## Existing behavior kept
@@ -23,7 +25,7 @@ CrazyShit 2.5.1 fixes the missing artwork on the new Series and Categories tabs 
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.5.1 installs over v2.5.0 and earlier signed stable releases while retaining app data and watch history.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.5.2 installs over v2.5.1 and earlier signed stable releases while retaining app data and watch history.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
