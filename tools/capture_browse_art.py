@@ -38,7 +38,7 @@ def crop_jpeg(png_bytes: bytes) -> bytes:
     img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
     img = ImageOps.fit(img, (TARGET_W, TARGET_H), method=Image.Resampling.LANCZOS, centering=(0.5, 0.45))
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=78, optimize=True, progressive=True)
+    img.save(out, format="JPEG", quality=76, optimize=True, progressive=True)
     return out.getvalue()
 
 
@@ -79,25 +79,27 @@ return a;
 def collect(driver, kind, page_url, marker):
     print(f"Loading {kind}: {page_url}", flush=True)
     driver.get(page_url)
-    time.sleep(3.0)
+    time.sleep(2.5)
 
-    # Walk the full document once so viewport/intersection lazy loaders get a chance to populate.
+    # Bounded viewport sweep so lazy images load without getting trapped by any infinite/ad content.
     height = driver.execute_script("return Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)") or 0
     step = 700
     y = 0
-    while y <= height + step:
+    for _ in range(40):
         driver.execute_script("window.scrollTo(0, arguments[0]);", y)
-        time.sleep(0.12)
+        time.sleep(0.10)
         new_h = driver.execute_script("return Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)") or height
         height = max(height, new_h)
         y += step
+        if y > height + step:
+            break
     driver.execute_script("window.scrollTo(0,0)")
-    time.sleep(0.5)
+    time.sleep(0.35)
 
     anchors = driver.find_elements(By.CSS_SELECTOR, f'a[href*="{marker}"]')
     seen = set()
     out = []
-    for idx, a in enumerate(anchors):
+    for idx, a in enumerate(anchors[:140]):
         try:
             href = a.get_attribute("href") or ""
             key = norm(href)
@@ -109,13 +111,13 @@ def collect(driver, kind, page_url, marker):
             seen.add(key)
 
             driver.execute_script("arguments[0].scrollIntoView({block:'center',inline:'center'});", a)
-            time.sleep(0.18)
+            time.sleep(0.08)
             visual = find_visual(driver, a)
             try:
                 driver.execute_script("arguments[0].scrollIntoView({block:'center',inline:'center'});", visual)
             except Exception:
                 pass
-            time.sleep(0.12)
+            time.sleep(0.06)
             png = visual.screenshot_as_png
             if not png or len(png) < 1000:
                 png = a.screenshot_as_png
@@ -144,7 +146,7 @@ def main():
     options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Safari/537.36")
 
     driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(35)
+    driver.set_page_load_timeout(30)
     all_items = []
     try:
         for kind, page, marker in PAGES:
