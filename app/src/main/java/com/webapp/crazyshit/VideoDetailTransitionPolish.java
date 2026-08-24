@@ -3,12 +3,12 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.os.Build;
 import android.transition.Fade;
-import android.transition.Slide;
-import android.transition.TransitionSet;
-import android.view.Gravity;
 import android.view.Window;
 
-/** Short premium-feeling window motion for native video detail screens. */
+/**
+ * v2.7 keeps the window transition quiet so VideoDetailImmersivePolish can make the player
+ * itself feel like it expands into place instead of sliding an entire screen over the feed.
+ */
 final class VideoDetailTransitionPolish {
     private VideoDetailTransitionPolish() {
     }
@@ -18,21 +18,11 @@ final class VideoDetailTransitionPolish {
         Window window = activity.getWindow();
         if (window == null) return;
 
-        TransitionSet enter = new TransitionSet();
-        enter.setOrdering(TransitionSet.ORDERING_TOGETHER);
-        enter.addTransition(new Fade(Fade.IN));
-        enter.addTransition(new Slide(Gravity.BOTTOM));
-        enter.setDuration(220L);
-
-        TransitionSet exit = new TransitionSet();
-        exit.setOrdering(TransitionSet.ORDERING_TOGETHER);
-        exit.addTransition(new Fade(Fade.OUT));
-        exit.addTransition(new Slide(Gravity.BOTTOM));
-        exit.setDuration(180L);
-
-        window.setEnterTransition(enter);
-        window.setReturnTransition(exit);
-        window.setExitTransition(new Fade(Fade.OUT).setDuration(150L));
-        window.setReenterTransition(new Fade(Fade.IN).setDuration(180L));
+        window.setAllowEnterTransitionOverlap(true);
+        window.setAllowReturnTransitionOverlap(true);
+        window.setEnterTransition(new Fade(Fade.IN).setDuration(120L));
+        window.setReturnTransition(new Fade(Fade.OUT).setDuration(130L));
+        window.setExitTransition(new Fade(Fade.OUT).setDuration(110L));
+        window.setReenterTransition(new Fade(Fade.IN).setDuration(150L));
     }
 }
