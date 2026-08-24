@@ -23,6 +23,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Capture current Series and Categories artwork
+        run: |
+          python3 -m pip install --quiet selenium pillow
+          python3 tools/capture_browse_art.py
+
+      - name: Upload browse artwork bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrazyShit-browse-art
+          path: browse-art-bundle.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
