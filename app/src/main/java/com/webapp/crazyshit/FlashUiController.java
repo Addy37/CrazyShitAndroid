@@ -1,6 +1,5 @@
 package com.webapp.crazyshit;
 
-import android.animation.ValueAnimator;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -59,11 +58,6 @@ final class FlashUiController {
         private ImageView chaosFab;
         private ImageView hiddenChaosIcon;
         private View topBar;
-        private TextView headerTitle;
-        private TextView headerSubtitle;
-        private ImageView headerLogo;
-        private ImageView headerSearch;
-        private boolean collapsed;
         private boolean running;
         private int lastSelectedId = -1;
         private final Map<RecyclerView, RecyclerView.OnScrollListener> listeners = new WeakHashMap<>();
@@ -79,9 +73,6 @@ final class FlashUiController {
             nav = field(activity, "bottomNavigation", BottomNavigationView.class);
             overlayRoot = field(activity, "overlayRoot", FrameLayout.class);
             topBar = findTopBar(activity);
-            headerTitle = field(activity, "headerTitle", TextView.class);
-            headerSubtitle = field(activity, "headerSubtitle", TextView.class);
-            resolveHeaderIcons();
             polishFloatingNav(activity);
             running = true;
             activity.getWindow().getDecorView().removeCallbacks(this);
@@ -127,7 +118,6 @@ final class FlashUiController {
                     animateSelected(nav, selected);
                     positionActiveIndicator(activity, selected, true);
                     positionChaosFab(activity, selected, true);
-                    expand(activity);
                 } else {
                     positionActiveIndicator(activity, selected, false);
                     positionChaosFab(activity, selected, false);
@@ -380,8 +370,6 @@ final class FlashUiController {
                         @Override
                         public void onScrolled(RecyclerView rv, int dx, int dy) {
                             if (Math.abs(dy) < dp(activity, 2)) return;
-                            if (dy > 0) collapse(activity);
-                            else if (!rv.canScrollVertically(-1) || dy < -dp(activity, 2)) expand(activity);
                             applyCardDepth(rv);
                         }
                     };
@@ -447,70 +435,6 @@ final class FlashUiController {
                 child.setAlpha(1f - (distance * 0.06f));
             }
         }
-
-        private void collapse(NativeMainActivity activity) {
-            // Static header in 2.8: deliberately no-op.
-        }
-
-        private void expand(NativeMainActivity activity) {
-            // Static header in 2.8: deliberately no-op.
-        }
-
-        private void animateHeader(NativeMainActivity activity, int targetHeight, long duration, boolean compact) {
-            if (!(topBar.getLayoutParams() instanceof LinearLayout.LayoutParams)) return;
-            int startHeight = topBar.getHeight() > 0 ? topBar.getHeight() : topBar.getLayoutParams().height;
-            if (startHeight <= 0) startHeight = dp(activity, 70);
-            ValueAnimator height = ValueAnimator.ofInt(startHeight, targetHeight);
-            height.setDuration(duration);
-            height.addUpdateListener(animator -> {
-                ViewGroup.LayoutParams lp = topBar.getLayoutParams();
-                lp.height = (int) animator.getAnimatedValue();
-                topBar.setLayoutParams(lp);
-            });
-            height.start();
-
-            if (headerSubtitle != null) {
-                headerSubtitle.animate().cancel();
-                headerSubtitle.animate()
-                        .alpha(compact ? 0f : 1f)
-                        .translationY(compact ? -dp(activity, 4) : 0f)
-                        .setDuration(compact ? 130L : duration)
-                        .start();
-            }
-            if (headerLogo != null) {
-                headerLogo.animate().cancel();
-                headerLogo.animate()
-                        .scaleX(compact ? 0.80f : 1f)
-                        .scaleY(compact ? 0.80f : 1f)
-                        .alpha(compact ? 0.88f : 1f)
-                        .setDuration(duration)
-                        .start();
-            }
-            if (headerTitle != null) {
-                headerTitle.animate().cancel();
-                headerTitle.animate()
-                        .scaleX(compact ? 0.95f : 1f)
-                        .scaleY(compact ? 0.95f : 1f)
-                        .setDuration(duration)
-                        .start();
-            }
-            if (headerSearch != null) {
-                headerSearch.animate().cancel();
-                headerSearch.animate()
-                        .scaleX(compact ? 0.92f : 1f)
-                        .scaleY(compact ? 0.92f : 1f)
-                        .setDuration(duration)
-                        .start();
-            }
-        }
-
-        private void resolveHeaderIcons() {
-            if (!(topBar instanceof ViewGroup)) return;
-            List<ImageView> images = new ArrayList<>();
-            collectImages(topBar, images);
-            if (!images.isEmpty()) headerLogo = images.get(0);
-            if (images.size() > 1) headerSearch = images.get(images.size() - 1);
-        }
     }
 
     private static void removeOverlay(View view) {
@@ -535,16 +459,6 @@ final class FlashUiController {
             if (found != null) return found;
         }
         return null;
-    }
-
-    private static void collectImages(View view, List<ImageView> out) {
-        if (view instanceof ImageView) {
-            out.add((ImageView) view);
-            return;
-        }
-        if (!(view instanceof ViewGroup)) return;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) collectImages(group.getChildAt(i), out);
     }
 
     private static void collectTextViews(View view, List<TextView> out) {
