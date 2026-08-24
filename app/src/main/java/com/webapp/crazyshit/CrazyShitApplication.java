@@ -23,12 +23,16 @@ public final class CrazyShitApplication extends Application {
                 .putBoolean("minimize_on_back", false)
                 .putBoolean("swipe_down_minimize", false);
 
-        // 2.6 makes List the starting feed style, while preserving a user's explicit choice.
+        // List remains the starting feed style while preserving a user's explicit choice.
         if (!appPrefs.contains("native_view_home")) {
             migration.putInt("native_view_home", NativeFeedAdapter.VIEW_LIST);
         }
         if (!appPrefs.contains("native_view_collection")) {
             migration.putInt("native_view_collection", NativeFeedAdapter.VIEW_LIST);
+        }
+        // 2.7 OLED is opt-out, so existing installs receive the new black theme automatically.
+        if (!appPrefs.contains("oled_black_enabled")) {
+            migration.putBoolean("oled_black_enabled", true);
         }
         migration.apply();
 
@@ -47,6 +51,8 @@ public final class CrazyShitApplication extends Application {
 
             @Override
             public void onActivityResumed(Activity activity) {
+                OledThemeController.applySoon(activity);
+
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     currentNativeActivity = new WeakReference<>(nativeActivity);
@@ -61,12 +67,12 @@ public final class CrazyShitApplication extends Application {
                     WatchStatePolish.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
                     PredictiveBackPolish.attach(nativeActivity);
-                    ImmersiveUiController.attachMain(nativeActivity);
+                    OledImmersiveUiController.attachMain(nativeActivity);
                 }
                 if (activity instanceof NativeFeedBrowserActivity) {
                     NativeFeedBrowserActivity browser = (NativeFeedBrowserActivity) activity;
                     FeedViewStyleController.attachBrowser(browser);
-                    ImmersiveUiController.attachBrowser(browser);
+                    OledImmersiveUiController.attachBrowser(browser);
                 }
                 if (activity instanceof VideoDetailActivity && !activity.isFinishing()) {
                     VideoDetailActivity detail = (VideoDetailActivity) activity;
@@ -95,7 +101,7 @@ public final class CrazyShitApplication extends Application {
             @Override
             public void onActivityDestroyed(Activity activity) {
                 PredictiveBackPolish.detach(activity);
-                ImmersiveUiController.detach(activity);
+                OledImmersiveUiController.detach(activity);
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     ChaosPortraitPolish.stop(nativeActivity);
@@ -125,6 +131,7 @@ public final class CrazyShitApplication extends Application {
         if (activity == null) return;
         activity.getWindow().getDecorView().postDelayed(
                 () -> {
+                    OledThemeController.applySoon(activity);
                     LandscapeUiController.apply(activity);
                     LandscapeRailPolish.applySoon(activity);
                     LandscapeMoreDialog.attachSoon(activity);
@@ -136,7 +143,7 @@ public final class CrazyShitApplication extends Application {
                     WatchStatePolish.attach(activity);
                     ChaosPortraitPolish.start(activity);
                     PredictiveBackPolish.attach(activity);
-                    ImmersiveUiController.attachMain(activity);
+                    OledImmersiveUiController.attachMain(activity);
                 },
                 80L
         );
