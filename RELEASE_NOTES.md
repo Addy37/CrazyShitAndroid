@@ -1,47 +1,43 @@
 # CrazyShit v2.7.0
 
-CrazyShit 2.7 is the Immersive UI release. It keeps the navigation and features from 2.6 while giving the native app a much more dynamic visual presentation.
+CrazyShit 2.7 is the Immersive OLED UI release. It keeps the navigation and features from 2.6 while moving the native app to a calmer true-black visual system.
 
-## Immersive feed presentation
+## OLED immersive presentation
 
-- Adds an ambient background glow sampled from the artwork closest to the center of the feed
-- Smoothly transitions the ambient color as you browse instead of switching abruptly
-- Makes feed containers transparent so the artwork-driven background can actually show through
-- Adds subtle scroll depth to media cards with small scale, opacity and elevation changes
-- Adds a tiny thumbnail parallax effect while scrolling
-- Gives media cards a softer translucent surface, larger radius and cleaner outline
-
-## Collapsing chrome
-
-- Home, Series, Categories and native collection feeds shrink the header while you scroll down
-- The header expands again when you return toward the top
-- The app icon and subtitle reduce naturally with the header instead of simply disappearing
-- The effect stays out of the way of the existing rotated/full-screen UI
+- True black OLED backgrounds are now the default across native screens
+- Media cards use near-black surfaces with softer borders instead of stacked gray layers
+- The top header and bottom navigation blend into the black background more naturally
+- Orange remains the primary accent color
+- Artwork-driven ambient color is now a very faint glow instead of a full-screen tint
+- Ambient transitions are slower and less reactive while scrolling
+- Scroll depth, scaling and thumbnail parallax are substantially reduced for smoother browsing
+- The collapsing header is slower and less dramatic
 
 ## Floating navigation
 
-- Restyles the bottom navigation as a rounded floating surface
-- Adds a subtle active-tab indicator and softer ripple treatment
+- Keeps the rounded floating bottom navigation
+- Uses a black OLED surface with a much softer outline and shadow
 - Keeps the featured Chaos button and all existing tab behavior
 
 ## Video detail refresh
 
-- Replaces the heavy action row with smaller pill actions for Comments, Later and Share
-- Removes the duplicate large comments card from the video details page
-- Gives the details area a subtle warm gradient instead of a flat black surface
-- Gives the player a short expansion animation when opening a video
+- Keeps compact Comments, Later and Share pill actions
+- Removes the duplicate large comments card
+- Uses true black details surfaces with only a tiny optional warm glow near the player
+- Uses near-black Related video cards and action pills
+- Reduces the player/detail entrance movement for a smoother transition
 - Keeps player controls, predictive back and auto-hiding overlay buttons intact
-- Refines Related video cards to match the new 2.7 surface treatment
 
 ## Appearance controls
 
-Settings now includes independent switches for:
+Settings includes independent switches for:
 
+- OLED black
 - Ambient feed glow
-- Scroll depth motion
+- Motion effects
 - Collapsing header
 
-All three default to on and can be disabled separately.
+OLED black defaults to on. Each visual effect can still be disabled independently.
 
 ## Existing behavior kept
 
