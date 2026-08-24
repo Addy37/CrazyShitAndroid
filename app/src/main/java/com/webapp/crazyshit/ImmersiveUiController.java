@@ -62,9 +62,7 @@ final class ImmersiveUiController {
         if (activity == null) return;
         State state = STATES.remove(activity);
         if (state == null) return;
-        if (state.recycler != null && state.scrollListener != null) {
-            state.recycler.removeOnScrollListener(state.scrollListener);
-        }
+        unbindRecycler(state);
         if (activity instanceof NativeMainActivity && state.pager != null && state.pageCallback != null) {
             try {
                 state.pager.unregisterOnPageChangeCallback(state.pageCallback);
@@ -76,11 +74,12 @@ final class ImmersiveUiController {
 
     private static void applyMain(NativeMainActivity activity) {
         if (activity == null || activity.isFinishing()) return;
-        State state = STATES.get(activity);
-        if (state == null) {
-            state = new State(activity);
-            STATES.put(activity, state);
+        State existing = STATES.get(activity);
+        if (existing == null) {
+            existing = new State(activity);
+            STATES.put(activity, existing);
         }
+        final State state = existing;
 
         FrameLayout overlay = field(activity, "overlayRoot", FrameLayout.class);
         LinearLayout shell = field(activity, "shell", LinearLayout.class);
@@ -131,11 +130,12 @@ final class ImmersiveUiController {
 
     private static void applyBrowser(NativeFeedBrowserActivity activity) {
         if (activity == null || activity.isFinishing()) return;
-        State state = STATES.get(activity);
-        if (state == null) {
-            state = new State(activity);
-            STATES.put(activity, state);
+        State existing = STATES.get(activity);
+        if (existing == null) {
+            existing = new State(activity);
+            STATES.put(activity, existing);
         }
+        final State state = existing;
         RecyclerView recycler = field(activity, "recycler", RecyclerView.class);
         if (recycler == null) return;
 
@@ -184,7 +184,7 @@ final class ImmersiveUiController {
 
     private static void bindRecycler(Activity activity, State state, RecyclerView recycler) {
         if (recycler == null) return;
-        if (state.recycler == recycler && state.scrollListener != null) {
+        if (state.recycler == recycler && state.scrollListener != null && state.childAttachListener != null) {
             applyDepth(activity, recycler);
             scheduleAmbient(activity, state, recycler, 30L);
             return;
@@ -209,8 +209,7 @@ final class ImmersiveUiController {
                 }
             }
         };
-        recycler.addOnScrollListener(state.scrollListener);
-        recycler.addOnChildAttachStateChangeListener(new RecyclerView.OnChildAttachStateChangeListener() {
+        state.childAttachListener = new RecyclerView.OnChildAttachStateChangeListener() {
             @Override
             public void onChildViewAttachedToWindow(@NonNull View view) {
                 styleMediaCard(activity, view);
@@ -224,8 +223,12 @@ final class ImmersiveUiController {
                 view.setScaleY(1f);
                 view.setAlpha(1f);
                 view.setTranslationZ(0f);
+                ImageView image = largestImage(view);
+                if (image != null) image.setTranslationY(0f);
             }
-        });
+        };
+        recycler.addOnScrollListener(state.scrollListener);
+        recycler.addOnChildAttachStateChangeListener(state.childAttachListener);
         recycler.setClipToPadding(false);
         applyDepth(activity, recycler);
         scheduleAmbient(activity, state, recycler, 30L);
@@ -233,10 +236,20 @@ final class ImmersiveUiController {
 
     private static void unbindRecycler(State state) {
         if (state.recycler != null && state.scrollListener != null) {
-            state.recycler.removeOnScrollListener(state.scrollListener);
+            try {
+                state.recycler.removeOnScrollListener(state.scrollListener);
+            } catch (Exception ignored) {
+            }
+        }
+        if (state.recycler != null && state.childAttachListener != null) {
+            try {
+                state.recycler.removeOnChildAttachStateChangeListener(state.childAttachListener);
+            } catch (Exception ignored) {
+            }
         }
         state.recycler = null;
         state.scrollListener = null;
+        state.childAttachListener = null;
     }
 
     private static void stylePagerTransparency(ViewPager2 pager) {
@@ -335,7 +348,7 @@ final class ImmersiveUiController {
         ViewGroup.LayoutParams raw = top.getLayoutParams();
         if (raw != null) {
             int expanded = activity instanceof NativeFeedBrowserActivity ? 64 : 70;
-            int collapsed = activity instanceof NativeFeedBrowserActivity ? 50 : 50;
+            int collapsed = 50;
             raw.height = dp(activity, Math.round(expanded + (collapsed - expanded) * progress));
             top.setLayoutParams(raw);
         }
@@ -371,6 +384,8 @@ final class ImmersiveUiController {
                 child.setScaleY(1f);
                 child.setAlpha(1f);
                 child.setTranslationZ(0f);
+                ImageView image = largestImage(child);
+                if (image != null) image.setTranslationY(0f);
                 continue;
             }
             float childCenter = (child.getTop() + child.getBottom()) * 0.5f;
@@ -405,6 +420,7 @@ final class ImmersiveUiController {
         state.ambientPosted = true;
         recycler.postDelayed(() -> {
             state.ambientPosted = false;
+            if (state.recycler != recycler || activity.isFinishing()) return;
             updateAmbient(activity, state, recycler);
         }, delay);
     }
@@ -648,6 +664,7 @@ final class ImmersiveUiController {
         BottomNavigationView bottomNav;
         RecyclerView recycler;
         RecyclerView.OnScrollListener scrollListener;
+        RecyclerView.OnChildAttachStateChangeListener childAttachListener;
         ViewPager2 pager;
         ViewPager2.OnPageChangeCallback pageCallback;
         ValueAnimator ambientAnimator;
