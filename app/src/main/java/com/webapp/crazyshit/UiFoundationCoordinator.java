@@ -38,6 +38,7 @@ final class UiFoundationCoordinator {
             NativeFeedBrowserActivity browser = (NativeFeedBrowserActivity) activity;
             FeedViewStyleController.attachBrowser(browser);
             OledImmersiveUiController.attachBrowser(browser);
+            FeedMotionController.attach(browser);
         } else if (activity instanceof VideoDetailActivity) {
             VideoDetailActivity detail = (VideoDetailActivity) activity;
             RelatedVideosPolish.attach(detail);
@@ -55,6 +56,7 @@ final class UiFoundationCoordinator {
 
         ResponsiveFitmentController.release(activity);
         PredictiveBackPolish.detach(activity);
+        FeedMotionController.detach(activity);
         OledImmersiveUiController.detach(activity);
 
         if (activity instanceof NativeMainActivity) {
@@ -93,6 +95,10 @@ final class UiFoundationCoordinator {
         WatchStatePolish.attach(main);
         PredictiveBackPolish.attach(main);
         OledImmersiveUiController.attachMain(main);
+
+        // Feed motion owns the final card transform state while RecyclerViews are moving.
+        // Theme and chrome layers may still style cards, but cannot visually fight the scroll.
+        FeedMotionController.attach(main);
 
         // Responsive geometry owns the final pass after theme and motion systems.
         if (configurationChange) {
