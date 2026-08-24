@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.Application;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.os.Bundle;
 
@@ -17,13 +18,19 @@ public final class CrazyShitApplication extends Application {
     public void onCreate() {
         super.onCreate();
 
-        // v2.4 retires the in-app mini-player/minimize experiment. Existing installs may still
-        // have these old preferences enabled, so explicitly switch them off during migration.
-        getSharedPreferences("app_prefs", MODE_PRIVATE)
-                .edit()
+        SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
+        SharedPreferences.Editor migration = appPrefs.edit()
                 .putBoolean("minimize_on_back", false)
-                .putBoolean("swipe_down_minimize", false)
-                .apply();
+                .putBoolean("swipe_down_minimize", false);
+
+        // 2.6 makes List the starting feed style, while preserving a user's explicit choice.
+        if (!appPrefs.contains("native_view_home")) {
+            migration.putInt("native_view_home", NativeFeedAdapter.VIEW_LIST);
+        }
+        if (!appPrefs.contains("native_view_collection")) {
+            migration.putInt("native_view_collection", NativeFeedAdapter.VIEW_LIST);
+        }
+        migration.apply();
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
@@ -53,6 +60,7 @@ public final class CrazyShitApplication extends Application {
                     FlashUiController.attach(nativeActivity);
                     WatchStatePolish.attach(nativeActivity);
                     ChaosPortraitPolish.start(nativeActivity);
+                    PredictiveBackPolish.attach(nativeActivity);
                 }
                 if (activity instanceof NativeFeedBrowserActivity) {
                     FeedViewStyleController.attachBrowser((NativeFeedBrowserActivity) activity);
@@ -61,6 +69,7 @@ public final class CrazyShitApplication extends Application {
                     VideoDetailActivity detail = (VideoDetailActivity) activity;
                     VideoDetailControllerPolish.applySoon(detail);
                     RelatedVideosPolish.attach(detail);
+                    PredictiveBackPolish.attach(detail);
                 }
             }
 
@@ -81,6 +90,7 @@ public final class CrazyShitApplication extends Application {
 
             @Override
             public void onActivityDestroyed(Activity activity) {
+                PredictiveBackPolish.detach(activity);
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     ChaosPortraitPolish.stop(nativeActivity);
@@ -119,6 +129,7 @@ public final class CrazyShitApplication extends Application {
                     FlashUiController.attach(activity);
                     WatchStatePolish.attach(activity);
                     ChaosPortraitPolish.start(activity);
+                    PredictiveBackPolish.attach(activity);
                 },
                 80L
         );
