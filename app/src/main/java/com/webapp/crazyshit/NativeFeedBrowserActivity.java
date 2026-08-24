@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -323,7 +324,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void showViewStyleDialog() {
-        String[] choices = {"Large cards", "Compact list", "2-column grid"};
+        String[] choices = {"Cards", "List", "Grid", "Posters"};
         int selected = viewMode();
         new AlertDialog.Builder(this)
                 .setTitle("View style")
@@ -340,24 +341,48 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private int viewMode() {
-        return getSharedPreferences("app_prefs", MODE_PRIVATE)
-                .getInt("native_view_collection", NativeFeedAdapter.VIEW_COMPACT);
+        int mode = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getInt("native_view_collection", NativeFeedAdapter.VIEW_LIST);
+        if (mode < NativeFeedAdapter.VIEW_CARDS || mode > NativeFeedAdapter.VIEW_POSTERS) {
+            return NativeFeedAdapter.VIEW_LIST;
+        }
+        return mode;
     }
 
     private void applyLayout() {
+        if (recycler == null || adapter == null) return;
+        RecyclerView.LayoutManager old = recycler.getLayoutManager();
+        int position = 0;
+        int offset = 0;
+        if (old instanceof LinearLayoutManager) {
+            LinearLayoutManager lm = (LinearLayoutManager) old;
+            position = Math.max(0, lm.findFirstVisibleItemPosition());
+            View anchor = lm.findViewByPosition(position);
+            if (anchor != null) offset = anchor.getTop() - recycler.getPaddingTop();
+        }
+
         int mode = viewMode();
         adapter.setViewMode(mode);
-        if (mode == NativeFeedAdapter.VIEW_GRID) {
-            GridLayoutManager grid = new GridLayoutManager(this, 2);
+        LinearLayoutManager next;
+        if (mode == NativeFeedAdapter.VIEW_GRID || mode == NativeFeedAdapter.VIEW_POSTERS) {
+            Configuration config = getResources().getConfiguration();
+            boolean landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE;
+            int columns = landscape && config.screenWidthDp >= 900 ? 3 : 2;
+            GridLayoutManager grid = new GridLayoutManager(this, columns);
             grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
                 @Override
-                public int getSpanSize(int position) {
-                    return adapter.isSectionAt(position) ? 2 : 1;
+                public int getSpanSize(int adapterPosition) {
+                    return adapter.isSectionAt(adapterPosition) ? columns : 1;
                 }
             });
-            recycler.setLayoutManager(grid);
+            next = grid;
         } else {
-            recycler.setLayoutManager(new LinearLayoutManager(this));
+            next = new LinearLayoutManager(this);
+        }
+        recycler.setLayoutManager(next);
+        if (adapter.getItemCount() > 0) {
+            int safe = Math.min(position, adapter.getItemCount() - 1);
+            next.scrollToPositionWithOffset(safe, offset);
         }
     }
 
@@ -371,10 +396,12 @@ public final class NativeFeedBrowserActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (adapter != null) adapter.refreshPlaybackState();
+        applyLayout();
     }
 
     @Override
     protected void onDestroy() {
+        if (adapter != null) adapter.close();
         io.shutdownNow();
         super.onDestroy();
     }
