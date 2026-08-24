@@ -15,8 +15,8 @@ android {
         applicationId = "com.addy37.crazyshitunofficial"
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 46
-        versionName = System.getenv("APP_VERSION_NAME") ?: "2.7.2"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 47
+        versionName = System.getenv("APP_VERSION_NAME") ?: "2.8.0"
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
