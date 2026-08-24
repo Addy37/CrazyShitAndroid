@@ -44,30 +44,21 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         void onOpen(NativeContentItem item);
     }
 
-    private final Context context;
     private final List<NativeContentItem> items = new ArrayList<>();
     private final Listener listener;
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final ExecutorService collectionIo = Executors.newFixedThreadPool(3);
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final SharedPreferences fallbackCache;
     private final Set<String> fallbackPending = new HashSet<>();
     private final Map<String, List<String>> collectionsByMedia = new HashMap<>();
-    private final RenderedThumbnailResolver[] mediaResolvers;
-    private int resolverCursor;
-    private boolean closed;
 
-    public NativeCategoryAdapter(Context context, Listener listener) {
-        this.context = context.getApplicationContext();
+    private Context context;
+    private SharedPreferences fallbackCache;
+    private RenderedThumbnailResolver[] mediaResolvers;
+    private int resolverCursor;
+
+    public NativeCategoryAdapter(Listener listener) {
         this.listener = listener;
-        this.fallbackCache = this.context.getSharedPreferences(
-                "browse_card_artwork_cache",
-                Context.MODE_PRIVATE
-        );
-        this.mediaResolvers = new RenderedThumbnailResolver[] {
-                new RenderedThumbnailResolver(this.context, this::onMediaArtworkResolved),
-                new RenderedThumbnailResolver(this.context, this::onMediaArtworkResolved)
-        };
         setHasStableIds(true);
     }
 
@@ -107,6 +98,8 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        initFallbackRuntime(parent.getContext());
+
         MaterialCardView card = new MaterialCardView(parent.getContext());
         card.setCardBackgroundColor(Color.rgb(25, 25, 28));
         card.setRadius(dp(parent, 16));
@@ -149,12 +142,23 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        initFallbackRuntime(holder.itemView.getContext());
         NativeContentItem item = items.get(position);
         holder.title.setText(item.title);
         holder.card.setContentDescription(item.title);
         holder.card.setOnClickListener(v -> listener.onOpen(item));
         loadImage(holder, item);
         if (!usableImage(item.imageUrl)) requestFallbackArtwork(item);
+    }
+
+    private synchronized void initFallbackRuntime(Context source) {
+        if (context != null || source == null) return;
+        context = source.getApplicationContext();
+        fallbackCache = context.getSharedPreferences("browse_card_artwork_cache", Context.MODE_PRIVATE);
+        mediaResolvers = new RenderedThumbnailResolver[] {
+                new RenderedThumbnailResolver(context, this::onMediaArtworkResolved),
+                new RenderedThumbnailResolver(context, this::onMediaArtworkResolved)
+        };
     }
 
     private void loadImage(Holder holder, NativeContentItem item) {
@@ -185,7 +189,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
      * powers native video feeds. Only cards that are actually bound on screen trigger this work.
      */
     private void requestFallbackArtwork(NativeContentItem item) {
-        if (closed || item == null || usableImage(item.imageUrl)) return;
+        if (context == null || mediaResolvers == null || item == null || usableImage(item.imageUrl)) return;
         String collectionUrl = cleanUrl(item.url);
         if (collectionUrl.isEmpty()) return;
 
@@ -220,10 +224,6 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
             final String artwork = directArtwork;
             final String mediaUrl = firstMediaUrl;
             main.post(() -> {
-                if (closed) {
-                    clearPending(collectionUrl);
-                    return;
-                }
                 if (usableImage(artwork)) {
                     finishFallback(collectionUrl, artwork);
                     return;
@@ -262,16 +262,18 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
     private void finishFallback(String collectionUrl, String artwork) {
         clearPending(collectionUrl);
-        if (closed || !usableImage(artwork)) return;
-        try {
-            fallbackCache.edit().putString(collectionUrl, artwork.trim()).apply();
-        } catch (Exception ignored) {
+        if (!usableImage(artwork)) return;
+        if (fallbackCache != null) {
+            try {
+                fallbackCache.edit().putString(collectionUrl, artwork.trim()).apply();
+            } catch (Exception ignored) {
+            }
         }
         applyFallbackArtwork(collectionUrl, artwork);
     }
 
     private void applyFallbackArtwork(String collectionUrl, String artwork) {
-        if (closed || !usableImage(artwork)) return;
+        if (!usableImage(artwork)) return;
         String key = BrowseArtworkResolver.normalizeKey(collectionUrl);
         for (int i = 0; i < items.size(); i++) {
             NativeContentItem current = items.get(i);
@@ -290,7 +292,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     }
 
     private String cachedArtwork(String collectionUrl) {
-        if (collectionUrl == null || collectionUrl.isEmpty()) return "";
+        if (fallbackCache == null || collectionUrl == null || collectionUrl.isEmpty()) return "";
         try {
             return fallbackCache.getString(collectionUrl, "");
         } catch (Exception ignored) {
@@ -313,17 +315,6 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     private void clearPending(String collectionUrl) {
         synchronized (fallbackPending) {
             fallbackPending.remove(collectionUrl);
-        }
-    }
-
-    public void close() {
-        closed = true;
-        collectionIo.shutdownNow();
-        synchronized (fallbackPending) {
-            fallbackPending.clear();
-        }
-        synchronized (collectionsByMedia) {
-            collectionsByMedia.clear();
         }
     }
 
