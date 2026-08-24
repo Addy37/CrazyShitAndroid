@@ -32,13 +32,15 @@ public class SettingsActivity extends Activity {
     }
 
     private void buildUi() {
+        boolean oled = prefs.getBoolean("oled_black_enabled", true);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Color.rgb(13, 13, 15));
+        scroll.setBackgroundColor(oled ? Color.BLACK : Color.rgb(13, 13, 15));
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(18), dp(18), dp(36));
+        root.setBackgroundColor(oled ? Color.BLACK : Color.rgb(13, 13, 15));
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
         LinearLayout header = new LinearLayout(this);
@@ -83,18 +85,23 @@ public class SettingsActivity extends Activity {
 
         addSection(root, "Appearance");
         addSwitch(root,
+                "OLED black",
+                "Use true black backgrounds and near-black cards throughout the native app.",
+                "oled_black_enabled",
+                true);
+        addSwitch(root,
                 "Ambient feed glow",
-                "Tint the feed background from the artwork closest to the middle of the screen.",
+                "Add a very faint artwork glow without tinting the whole screen.",
                 "ambient_feed_glow",
                 true);
         addSwitch(root,
-                "Scroll depth motion",
-                "Use subtle focus, scale and depth movement while browsing media cards.",
+                "Motion effects",
+                "Use light focus and thumbnail movement while scrolling.",
                 "immersive_motion_enabled",
                 true);
         addSwitch(root,
                 "Collapsing header",
-                "Shrink the top bar while scrolling down and expand it again when you return.",
+                "Gently compact the top bar while scrolling down.",
                 "collapse_header_enabled",
                 true);
 
@@ -139,7 +146,7 @@ public class SettingsActivity extends Activity {
 
         TextView footer = new TextView(this);
         footer.setText("CrazyShit\nCommunity Android client\nNot affiliated with or endorsed by CrazyShit.com");
-        footer.setTextColor(Color.rgb(150, 150, 158));
+        footer.setTextColor(Color.rgb(145, 145, 153));
         footer.setTextSize(12);
         footer.setGravity(Gravity.CENTER);
         footer.setPadding(dp(8), dp(28), dp(8), 0);
@@ -151,7 +158,7 @@ public class SettingsActivity extends Activity {
     private void addSection(LinearLayout root, String text) {
         TextView label = new TextView(this);
         label.setText(text.toUpperCase());
-        label.setTextColor(Color.rgb(175, 175, 185));
+        label.setTextColor(Color.rgb(170, 170, 180));
         label.setTextSize(12);
         label.setTypeface(null, android.graphics.Typeface.BOLD);
         label.setPadding(dp(8), dp(24), dp(8), dp(8));
@@ -174,7 +181,7 @@ public class SettingsActivity extends Activity {
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         TextView titleView = text(title, 16, Color.WHITE);
-        TextView subView = text(subtitle, 13, Color.rgb(180, 180, 188));
+        TextView subView = text(subtitle, 13, Color.rgb(174, 174, 182));
         subView.setPadding(0, dp(3), 0, 0);
         copy.addView(titleView);
         copy.addView(subView);
@@ -185,6 +192,9 @@ public class SettingsActivity extends Activity {
         toggle.setOnCheckedChangeListener((button, checked) -> {
             prefs.edit().putBoolean(key, checked).apply();
             haptic(button);
+            if ("oled_black_enabled".equals(key)) {
+                button.postDelayed(this::recreate, 90L);
+            }
         });
         row.addView(toggle);
         card.addView(row);
@@ -207,24 +217,25 @@ public class SettingsActivity extends Activity {
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.addView(text(title, 16, Color.WHITE));
-        TextView sub = text(subtitle, 13, Color.rgb(180, 180, 188));
+        TextView sub = text(subtitle, 13, Color.rgb(174, 174, 182));
         sub.setPadding(0, dp(3), 0, 0);
         copy.addView(sub);
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView chevron = text("›", 28, Color.rgb(190, 190, 198));
+        TextView chevron = text("›", 28, Color.rgb(184, 184, 192));
         row.addView(chevron);
         card.addView(row);
         root.addView(card, cardParams());
     }
 
     private MaterialCardView card() {
+        boolean oled = prefs.getBoolean("oled_black_enabled", true);
         MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(Color.rgb(24, 24, 28));
+        card.setCardBackgroundColor(oled ? Color.rgb(9, 9, 11) : Color.rgb(24, 24, 28));
         card.setRadius(dp(20));
         card.setCardElevation(0f);
         card.setStrokeWidth(1);
-        card.setStrokeColor(Color.rgb(45, 45, 52));
+        card.setStrokeColor(oled ? Color.rgb(29, 29, 33) : Color.rgb(45, 45, 52));
         return card;
     }
 
@@ -250,6 +261,7 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        OledThemeController.applySoon(this);
         if (appUpdater != null) appUpdater.onHostResume();
     }
 
