@@ -63,6 +63,7 @@ final class RenderedThumbnailResolver {
     private WebView webView;
     private String currentPage;
     private boolean busy;
+    private boolean closed;
     private int attempt;
 
     RenderedThumbnailResolver(Context context, Callback callback) {
@@ -73,22 +74,49 @@ final class RenderedThumbnailResolver {
     }
 
     void request(String pageUrl) {
-        if (pageUrl == null || pageUrl.isEmpty()) return;
+        if (closed || pageUrl == null || pageUrl.isEmpty()) return;
 
         String cached = cachedResult(pageUrl);
         if (isUsable(cached)) {
-            if (callback != null) main.post(() -> callback.onResolved(pageUrl, cached));
+            if (callback != null) main.post(() -> {
+                if (!closed) callback.onResolved(pageUrl, cached);
+            });
             return;
         }
 
         synchronized (pending) {
-            if (Boolean.TRUE.equals(pending.get(pageUrl))) return;
+            if (closed || Boolean.TRUE.equals(pending.get(pageUrl))) return;
             pending.put(pageUrl, Boolean.TRUE);
         }
         main.post(() -> {
+            if (closed) return;
             queue.offer(pageUrl);
             startNext();
         });
+    }
+
+    void close() {
+        if (closed) return;
+        closed = true;
+        busy = false;
+        currentPage = null;
+        queue.clear();
+        synchronized (pending) {
+            pending.clear();
+        }
+        main.removeCallbacksAndMessages(null);
+        io.shutdownNow();
+        WebView old = webView;
+        webView = null;
+        if (old != null) {
+            try {
+                old.stopLoading();
+                old.setWebViewClient(null);
+                old.loadUrl("about:blank");
+                old.destroy();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private String cachedResult(String pageUrl) {
@@ -106,7 +134,7 @@ final class RenderedThumbnailResolver {
 
     private void createWebView() {
         main.post(() -> {
-            if (webView != null) return;
+            if (closed || webView != null) return;
             webView = new WebView(context);
             WebSettings settings = webView.getSettings();
             settings.setJavaScriptEnabled(true);
@@ -123,7 +151,7 @@ final class RenderedThumbnailResolver {
             webView.setWebViewClient(new WebViewClient() {
                 @Override
                 public void onPageFinished(WebView view, String url) {
-                    if (!busy || currentPage == null) return;
+                    if (closed || !busy || currentPage == null) return;
                     attempt = 0;
                     main.postDelayed(RenderedThumbnailResolver.this::probeRenderedPage, 250L);
                 }
@@ -132,7 +160,7 @@ final class RenderedThumbnailResolver {
     }
 
     private void startNext() {
-        if (busy || webView == null) return;
+        if (closed || busy || webView == null) return;
         currentPage = queue.poll();
         if (currentPage == null) return;
         busy = true;
@@ -140,6 +168,7 @@ final class RenderedThumbnailResolver {
 
         final String page = currentPage;
         io.execute(() -> {
+            if (closed) return;
             String staticThumbnail = "";
             try {
                 staticThumbnail = ThumbnailResolver.resolve(context, page);
@@ -147,7 +176,7 @@ final class RenderedThumbnailResolver {
             }
             final String resolved = staticThumbnail;
             main.post(() -> {
-                if (!busy || currentPage == null || !page.equals(currentPage)) return;
+                if (closed || !busy || currentPage == null || !page.equals(currentPage)) return;
                 if (isUsable(resolved)) {
                     finish(page, resolved);
                 } else {
@@ -158,7 +187,7 @@ final class RenderedThumbnailResolver {
     }
 
     private void loadRenderedPage(String page) {
-        if (!busy || webView == null || page == null || !page.equals(currentPage)) return;
+        if (closed || !busy || webView == null || page == null || !page.equals(currentPage)) return;
         try {
             webView.stopLoading();
             webView.loadUrl(page);
@@ -168,10 +197,11 @@ final class RenderedThumbnailResolver {
     }
 
     private void probeRenderedPage() {
-        if (!busy || webView == null || currentPage == null) return;
+        if (closed || !busy || webView == null || currentPage == null) return;
         final String page = currentPage;
         try {
             webView.evaluateJavascript(THUMB_JS, raw -> {
+                if (closed) return;
                 String resolved = decodeJsString(raw);
                 if (isUsable(resolved)) {
                     finish(page, resolved);
@@ -190,11 +220,13 @@ final class RenderedThumbnailResolver {
     }
 
     private void fallbackToVideo(String page) {
+        if (closed) return;
         if (page == null) {
             finish(null, "");
             return;
         }
         io.execute(() -> {
+            if (closed) return;
             String result = "";
             try {
                 CrazyShitRepository.StreamInfo stream = repository.resolvePlayable(context, page);
@@ -204,7 +236,9 @@ final class RenderedThumbnailResolver {
             } catch (Exception ignored) {
             }
             final String resolved = result;
-            main.post(() -> finish(page, resolved));
+            main.post(() -> {
+                if (!closed) finish(page, resolved);
+            });
         });
     }
 
@@ -247,6 +281,7 @@ final class RenderedThumbnailResolver {
     }
 
     private void finish(String page, String result) {
+        if (closed) return;
         if (page != null && isUsable(result)) {
             if (result.startsWith("http://") || result.startsWith("https://")) {
                 try {
