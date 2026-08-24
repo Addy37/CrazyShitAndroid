@@ -56,9 +56,8 @@ public final class CrazyShitApplication extends Application {
                 if (activity instanceof NativeMainActivity) {
                     NativeMainActivity nativeActivity = (NativeMainActivity) activity;
                     currentNativeActivity = new WeakReference<>(nativeActivity);
-                    LandscapeUiController.attach(nativeActivity);
-                    LandscapeRailPolish.applySoon(nativeActivity);
-                    LandscapeMoreDialog.attachSoon(nativeActivity);
+
+                    // Content and interaction polish first.
                     SeriesCategoriesNavController.attachSoon(nativeActivity);
                     GlobalSearchUiController.attachSoon(nativeActivity);
                     FeedViewStyleController.attachMain(nativeActivity);
@@ -68,6 +67,13 @@ public final class CrazyShitApplication extends Application {
                     ChaosPortraitPolish.start(nativeActivity);
                     PredictiveBackPolish.attach(nativeActivity);
                     OledImmersiveUiController.attachMain(nativeActivity);
+
+                    // Geometry owns the final word so rotation cannot be overwritten by delayed
+                    // theme/motion passes. The label remap is repeated after the rail exists.
+                    LandscapeUiController.attach(nativeActivity);
+                    LandscapeRailPolish.applySoon(nativeActivity);
+                    LandscapeMoreDialog.attachSoon(nativeActivity);
+                    SeriesCategoriesNavController.apply(nativeActivity);
                 }
                 if (activity instanceof NativeFeedBrowserActivity) {
                     NativeFeedBrowserActivity browser = (NativeFeedBrowserActivity) activity;
@@ -81,6 +87,8 @@ public final class CrazyShitApplication extends Application {
                     RelatedVideosPolish.attach(detail);
                     PredictiveBackPolish.attach(detail);
                 }
+
+                ResponsiveFitmentController.applySoon(activity);
             }
 
             @Override
@@ -100,6 +108,7 @@ public final class CrazyShitApplication extends Application {
 
             @Override
             public void onActivityDestroyed(Activity activity) {
+                ResponsiveFitmentController.release(activity);
                 PredictiveBackPolish.detach(activity);
                 OledImmersiveUiController.detach(activity);
                 if (activity instanceof NativeMainActivity) {
@@ -132,9 +141,6 @@ public final class CrazyShitApplication extends Application {
         activity.getWindow().getDecorView().postDelayed(
                 () -> {
                     OledThemeController.applySoon(activity);
-                    LandscapeUiController.apply(activity);
-                    LandscapeRailPolish.applySoon(activity);
-                    LandscapeMoreDialog.attachSoon(activity);
                     SeriesCategoriesNavController.attachSoon(activity);
                     GlobalSearchUiController.attachSoon(activity);
                     FeedViewStyleController.attachMain(activity);
@@ -144,6 +150,12 @@ public final class CrazyShitApplication extends Application {
                     ChaosPortraitPolish.start(activity);
                     PredictiveBackPolish.attach(activity);
                     OledImmersiveUiController.attachMain(activity);
+
+                    LandscapeUiController.apply(activity);
+                    LandscapeRailPolish.applySoon(activity);
+                    LandscapeMoreDialog.attachSoon(activity);
+                    SeriesCategoriesNavController.apply(activity);
+                    ResponsiveFitmentController.applySoon(activity);
                 },
                 80L
         );
