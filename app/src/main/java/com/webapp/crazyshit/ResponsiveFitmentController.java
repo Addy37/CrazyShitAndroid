@@ -2,12 +2,13 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -15,6 +16,7 @@ import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * One-shot responsive fitment pass for the native screens that are mostly built in Java.
@@ -24,6 +26,8 @@ import java.util.Set;
  * avoids another permanent view-tree polling loop.
  */
 final class ResponsiveFitmentController {
+    private static final WeakHashMap<Activity, View> INSET_TARGETS = new WeakHashMap<>();
+
     private ResponsiveFitmentController() {
     }
 
@@ -44,8 +48,10 @@ final class ResponsiveFitmentController {
         if (activity instanceof SearchActivity) {
             fitSearch(activity, landscape, widthDp);
         } else if (activity instanceof SettingsActivity) {
+            installSafeInsets(activity);
             fitSingleColumn(activity, widthDp, 720);
         } else if (activity instanceof FavoritesActivity) {
+            installSafeInsets(activity);
             fitSingleColumn(activity, widthDp, 920);
         } else if (activity instanceof CommentsActivity) {
             fitSecondaryShell(activity, landscape, widthDp, 920, 56);
@@ -54,8 +60,10 @@ final class ResponsiveFitmentController {
         } else if (activity instanceof WebFallbackActivity) {
             fitSecondaryShell(activity, landscape, widthDp, 1100, 54);
         } else if (activity instanceof MemeViewerActivity) {
+            installSafeInsets(activity);
             fitSecondaryShell(activity, landscape, widthDp, 1100, 56);
         } else if (activity instanceof NativeFeedBrowserActivity) {
+            installSafeInsets(activity);
             fitSecondaryShell(activity, landscape, widthDp, 1100, 54);
         }
 
@@ -69,6 +77,7 @@ final class ResponsiveFitmentController {
 
     static void release(Activity activity) {
         if (activity == null) return;
+        INSET_TARGETS.remove(activity);
         Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
 
         if (activity instanceof SearchActivity) {
@@ -149,6 +158,47 @@ final class ResponsiveFitmentController {
         }
     }
 
+    private static void installSafeInsets(Activity activity) {
+        if (INSET_TARGETS.containsKey(activity)) return;
+        View content = activity.findViewById(android.R.id.content);
+        View target = firstChild(content);
+        if (target == null) return;
+
+        final int baseLeft = target.getPaddingLeft();
+        final int baseTop = target.getPaddingTop();
+        final int baseRight = target.getPaddingRight();
+        final int baseBottom = target.getPaddingBottom();
+        target.setOnApplyWindowInsetsListener((view, insets) -> {
+            int left;
+            int top;
+            int right;
+            int bottom;
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets safe = insets.getInsets(
+                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
+                );
+                left = safe.left;
+                top = safe.top;
+                right = safe.right;
+                bottom = safe.bottom;
+            } else {
+                left = insets.getSystemWindowInsetLeft();
+                top = insets.getSystemWindowInsetTop();
+                right = insets.getSystemWindowInsetRight();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            view.setPadding(
+                    baseLeft + left,
+                    baseTop + top,
+                    baseRight + right,
+                    baseBottom + bottom
+            );
+            return insets;
+        });
+        INSET_TARGETS.put(activity, target);
+        target.requestApplyInsets();
+    }
+
     private static void setCenteredWidth(Activity activity, View view, int widthDp, int maxWidthDp) {
         if (view == null) return;
         ViewGroup.LayoutParams raw = view.getLayoutParams();
@@ -162,10 +212,10 @@ final class ResponsiveFitmentController {
         view.setLayoutParams(raw);
     }
 
-    private static void setHeight(Activity activity, View view, int dp) {
+    private static void setHeight(Activity activity, View view, int valueDp) {
         if (view == null || view.getLayoutParams() == null) return;
         ViewGroup.LayoutParams params = view.getLayoutParams();
-        int px = dp(activity, dp);
+        int px = dp(activity, valueDp);
         if (params.height == px) return;
         params.height = px;
         view.setLayoutParams(params);
