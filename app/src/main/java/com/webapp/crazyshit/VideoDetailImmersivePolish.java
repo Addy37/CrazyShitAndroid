@@ -17,7 +17,7 @@ import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** v2.7 cleanup for the native video details page. */
+/** v2.7 OLED cleanup for the native video details page. */
 final class VideoDetailImmersivePolish {
     private static final Map<VideoDetailActivity, Boolean> ENTERED = new WeakHashMap<>();
 
@@ -47,6 +47,9 @@ final class VideoDetailImmersivePolish {
         TextView title = field(activity, "titleView", TextView.class);
         if (details == null) return;
 
+        boolean oled = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .getBoolean("oled_black_enabled", true);
+        details.setBackgroundColor(Color.TRANSPARENT);
         details.setPadding(dp(activity, 16), dp(activity, 15), dp(activity, 16), dp(activity, 30));
         if (title != null) {
             title.setTextSize(21f);
@@ -56,14 +59,14 @@ final class VideoDetailImmersivePolish {
             meta.setPadding(0, dp(activity, 6), 0, dp(activity, 9));
         }
 
-        styleActionRow(activity, details, meta);
+        styleActionRow(activity, details, meta, oled);
         removeDuplicateCommentsCard(details, commentsTitle);
-        styleRelated(activity, related);
-        styleDetailsBackground(activity, scroll);
+        styleRelated(activity, related, oled);
+        styleDetailsBackground(activity, scroll, oled);
         playEntranceOnce(activity, player, scroll);
     }
 
-    private static void styleActionRow(Activity activity, LinearLayout details, TextView meta) {
+    private static void styleActionRow(Activity activity, LinearLayout details, TextView meta, boolean oled) {
         int start = meta == null ? 0 : details.indexOfChild(meta) + 1;
         LinearLayout actions = null;
         for (int i = Math.max(0, start); i < Math.min(details.getChildCount(), start + 3); i++) {
@@ -93,7 +96,7 @@ final class VideoDetailImmersivePolish {
             button.setTextSize(13f);
             button.setGravity(Gravity.CENTER);
             button.setTextColor(Color.rgb(238, 238, 242));
-            button.setBackground(pill(activity));
+            button.setBackground(pill(activity, oled));
             LinearLayout.LayoutParams lp;
             if (button.getLayoutParams() instanceof LinearLayout.LayoutParams) {
                 lp = (LinearLayout.LayoutParams) button.getLayoutParams();
@@ -107,11 +110,11 @@ final class VideoDetailImmersivePolish {
         }
     }
 
-    private static GradientDrawable pill(Activity activity) {
+    private static GradientDrawable pill(Activity activity, boolean oled) {
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.rgb(27, 27, 32));
+        bg.setColor(oled ? Color.rgb(8, 8, 10) : Color.rgb(27, 27, 32));
         bg.setCornerRadius(dp(activity, 20));
-        bg.setStroke(dp(activity, 1), Color.rgb(55, 55, 63));
+        bg.setStroke(dp(activity, 1), oled ? Color.rgb(30, 30, 34) : Color.rgb(55, 55, 63));
         return bg;
     }
 
@@ -126,29 +129,42 @@ final class VideoDetailImmersivePolish {
         }
     }
 
-    private static void styleRelated(Activity activity, LinearLayout related) {
+    private static void styleRelated(Activity activity, LinearLayout related, boolean oled) {
         if (related == null) return;
         for (int i = 0; i < related.getChildCount(); i++) {
             View child = related.getChildAt(i);
             MaterialCardView card = child instanceof MaterialCardView
                     ? (MaterialCardView) child : findCard(child);
             if (card == null) continue;
-            card.setCardBackgroundColor(Color.rgb(23, 23, 27));
+            card.setCardBackgroundColor(oled ? Color.rgb(9, 9, 11) : Color.rgb(23, 23, 27));
             card.setRadius(dp(activity, 18));
             card.setCardElevation(0f);
             card.setStrokeWidth(dp(activity, 1));
-            card.setStrokeColor(Color.rgb(49, 49, 57));
+            card.setStrokeColor(oled ? Color.rgb(29, 29, 33) : Color.rgb(49, 49, 57));
         }
     }
 
-    private static void styleDetailsBackground(Activity activity, ScrollView scroll) {
+    private static void styleDetailsBackground(Activity activity, ScrollView scroll, boolean oled) {
         if (scroll == null) return;
-        int orangeGlow = Color.rgb(36, 20, 15);
-        GradientDrawable bg = new GradientDrawable(
+        boolean glow = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .getBoolean("ambient_feed_glow", true);
+        if (!oled) {
+            GradientDrawable classic = new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[] {Color.rgb(31, 18, 14), Color.rgb(16, 16, 19), Color.rgb(13, 13, 15)}
+            );
+            scroll.setBackground(classic);
+            return;
+        }
+        if (!glow) {
+            scroll.setBackgroundColor(Color.BLACK);
+            return;
+        }
+        GradientDrawable subtle = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[] {orangeGlow, Color.rgb(16, 16, 19), Color.rgb(13, 13, 15)}
+                new int[] {Color.rgb(8, 3, 1), Color.rgb(2, 1, 0), Color.BLACK, Color.BLACK}
         );
-        scroll.setBackground(bg);
+        scroll.setBackground(subtle);
     }
 
     private static void playEntranceOnce(VideoDetailActivity activity, View player, ScrollView scroll) {
@@ -158,26 +174,26 @@ final class VideoDetailImmersivePolish {
             player.animate().cancel();
             player.setPivotX(player.getWidth() * 0.5f);
             player.setPivotY(0f);
-            player.setScaleX(0.94f);
-            player.setScaleY(0.94f);
-            player.setAlpha(0.25f);
+            player.setScaleX(0.98f);
+            player.setScaleY(0.98f);
+            player.setAlpha(0.72f);
             player.animate()
                     .scaleX(1f)
                     .scaleY(1f)
                     .alpha(1f)
-                    .setDuration(260L)
+                    .setDuration(180L)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
         }
         if (scroll != null) {
             scroll.animate().cancel();
-            scroll.setAlpha(0f);
-            scroll.setTranslationY(dp(activity, 18));
+            scroll.setAlpha(0.35f);
+            scroll.setTranslationY(dp(activity, 6));
             scroll.animate()
                     .alpha(1f)
                     .translationY(0f)
-                    .setStartDelay(70L)
-                    .setDuration(280L)
+                    .setStartDelay(25L)
+                    .setDuration(190L)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
         }
