@@ -69,7 +69,6 @@ final class ResponsiveFitmentController {
 
         if (activity instanceof NativeMainActivity) {
             NativeMainActivity main = (NativeMainActivity) activity;
-            // The responsive shell gets final ownership of geometry after theme/motion passes.
             LandscapeUiController.apply(main);
             SeriesCategoriesNavController.apply(main);
         }
@@ -146,16 +145,29 @@ final class ResponsiveFitmentController {
         setCenteredWidth(activity, shell, widthDp, maxWidthDp);
 
         if (landscape && shell instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) shell;
-            if (group.getChildCount() > 0) {
-                View top = group.getChildAt(0);
+            View top = findTopBar(shell, activity);
+            if (top != null && top.getLayoutParams() != null) {
                 ViewGroup.LayoutParams params = top.getLayoutParams();
-                if (params != null && params.height > 0 && params.height <= dp(activity, 80)) {
-                    params.height = dp(activity, landscapeTopDp);
-                    top.setLayoutParams(params);
-                }
+                params.height = dp(activity, landscapeTopDp);
+                top.setLayoutParams(params);
             }
         }
+    }
+
+    private static View findTopBar(View view, Activity activity) {
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            ViewGroup.LayoutParams params = child.getLayoutParams();
+            if (params != null && params.height > 0 && params.height <= dp(activity, 80) &&
+                    child instanceof ViewGroup) {
+                return child;
+            }
+            View nested = findTopBar(child, activity);
+            if (nested != null) return nested;
+        }
+        return null;
     }
 
     private static void installSafeInsets(Activity activity) {
@@ -242,6 +254,14 @@ final class ResponsiveFitmentController {
         if (owner == null || visited.contains(owner)) return;
         visited.add(owner);
 
+        if (owner instanceof NativeFeedAdapter) {
+            ((NativeFeedAdapter) owner).close();
+            return;
+        }
+        if (owner instanceof GlobalSearchAdapter) {
+            ((GlobalSearchAdapter) owner).close();
+            return;
+        }
         if (owner instanceof RenderedThumbnailResolver) {
             ((RenderedThumbnailResolver) owner).close();
             return;
