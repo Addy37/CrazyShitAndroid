@@ -1,5 +1,6 @@
 package com.webapp.crazyshit;
 
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.view.Gravity;
@@ -20,7 +21,11 @@ import com.bumptech.glide.load.model.LazyHeaders;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /** Mixed native search results for videos, Series, Categories and the local Library. */
 final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
@@ -62,6 +67,10 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     private final List<Entry> entries = new ArrayList<>();
     private final Listener listener;
+    private final Map<String, String> resolvedThumbnails = new HashMap<>();
+    private final Set<String> requestedThumbnails = new HashSet<>();
+    private RenderedThumbnailResolver[] thumbnailResolvers;
+    private int resolverCursor;
 
     GlobalSearchAdapter(Listener listener) {
         this.listener = listener;
@@ -149,6 +158,30 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+        bind(holder, position);
+    }
+
+    @Override
+    public void onBindViewHolder(
+            @NonNull RecyclerView.ViewHolder holder,
+            int position,
+            @NonNull List<Object> payloads
+    ) {
+        Entry entry = entries.get(position);
+        if (entry.section || !(holder instanceof ResultHolder) || entry.item == null) {
+            bind(holder, position);
+            return;
+        }
+        if (!payloads.isEmpty() && payloads.contains("thumbnail")) {
+            ResultHolder result = (ResultHolder) holder;
+            result.boundUrl = entry.item.url == null ? "" : entry.item.url;
+            loadImage(result.image, entry.item);
+            return;
+        }
+        bind(holder, position);
+    }
+
+    private void bind(RecyclerView.ViewHolder holder, int position) {
         Entry entry = entries.get(position);
         if (holder instanceof SectionHolder) {
             ((SectionHolder) holder).title.setText(entry.sectionTitle);
@@ -158,12 +191,14 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         ResultHolder result = (ResultHolder) holder;
         NativeContentItem item = entry.item;
         if (item == null) return;
+        ensureResolvers(result.image.getContext());
         result.boundUrl = item.url == null ? "" : item.url;
         result.title.setText(item.title);
         result.meta.setText(metaText(item, entry.source));
         result.card.setContentDescription(item.title);
         result.card.setOnClickListener(v -> listener.onOpen(item));
-        loadImage(result, item);
+        loadImage(result.image, item);
+        requestThumbnail(item);
     }
 
     private String metaText(NativeContentItem item, int source) {
@@ -171,21 +206,62 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (item.isSeries()) return "Series";
         if (item.isCategory()) return "Category";
         StringBuilder meta = new StringBuilder("Video");
-        if (item.views != null && !item.views.trim().isEmpty()) meta.append("  •  ").append(item.views.trim()).append(" views");
-        if (item.uploader != null && !item.uploader.trim().isEmpty()) meta.append("  •  ").append(item.uploader.trim());
+        if (item.views != null && !item.views.trim().isEmpty()) {
+            meta.append("  •  ").append(item.views.trim()).append(" views");
+        }
+        if (item.uploader != null && !item.uploader.trim().isEmpty()) {
+            meta.append("  •  ").append(item.uploader.trim());
+        }
         return meta.toString();
     }
 
-    private void loadImage(ResultHolder holder, NativeContentItem item) {
-        Glide.with(holder.image).clear(holder.image);
-        holder.image.setImageDrawable(new ColorDrawable(Color.rgb(31, 31, 36)));
+    /**
+     * Search intentionally shares the exact media-thumbnail resolver used by NativeFeedAdapter.
+     * This keeps Home and Search on one proven thumbnail path instead of maintaining a second
+     * site-specific implementation.
+     */
+    private void ensureResolvers(Context context) {
+        if (thumbnailResolvers != null || context == null) return;
+        Context app = context.getApplicationContext();
+        thumbnailResolvers = new RenderedThumbnailResolver[] {
+                new RenderedThumbnailResolver(app, this::setResolvedThumbnail),
+                new RenderedThumbnailResolver(app, this::setResolvedThumbnail)
+        };
+    }
+
+    private void requestThumbnail(NativeContentItem item) {
+        if (item == null || item.isSection() || item.isSeries() || item.isCategory()) return;
+        if (item.url == null || item.url.isEmpty()) return;
+        if (resolvedThumbnails.containsKey(item.url)) return;
+        if (!requestedThumbnails.add(item.url)) return;
+        if (thumbnailResolvers == null || thumbnailResolvers.length == 0) return;
+        RenderedThumbnailResolver resolver =
+                thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
+        resolver.request(item.url);
+    }
+
+    private void setResolvedThumbnail(String pageUrl, String thumbnailUrl) {
+        if (pageUrl == null || pageUrl.isEmpty() || thumbnailUrl == null || thumbnailUrl.isEmpty()) return;
+        resolvedThumbnails.put(pageUrl, thumbnailUrl);
+        for (int i = 0; i < entries.size(); i++) {
+            Entry entry = entries.get(i);
+            if (entry.section || entry.item == null) continue;
+            if (pageUrl.equals(entry.item.url)) {
+                notifyItemChanged(i, "thumbnail");
+            }
+        }
+    }
+
+    private void loadImage(ImageView image, NativeContentItem item) {
+        Glide.with(image).clear(image);
+        image.setImageDrawable(new ColorDrawable(Color.rgb(31, 31, 36)));
 
         byte[] embedded = null;
         if (item.isSeries() || item.isCategory()) {
-            embedded = EmbeddedBrowseArtwork.get(holder.image.getContext(), item.url);
+            embedded = EmbeddedBrowseArtwork.get(image.getContext(), item.url);
         }
         if (embedded != null && embedded.length > 512) {
-            Glide.with(holder.image)
+            Glide.with(image)
                     .load(embedded)
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .skipMemoryCache(false)
@@ -193,42 +269,17 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                     .centerCrop()
                     .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                     .error(new ColorDrawable(Color.rgb(31, 31, 36)))
-                    .into(holder.image);
+                    .into(image);
             return;
         }
 
-        if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
-            loadRemote(holder.image, item, item.imageUrl.trim());
-            return;
-        }
+        String imageUrl = resolvedThumbnails.get(item.url);
+        if (imageUrl == null || imageUrl.isEmpty()) imageUrl = item.imageUrl;
+        if (imageUrl == null || imageUrl.isEmpty()) return;
 
-        // Search and Library media cards frequently do not expose their thumbnail on the search
-        // listing itself. Resolve only visible cards from the individual media page, then cache it.
-        if (!item.isSeries() && !item.isCategory() && item.url != null && !item.url.trim().isEmpty()) {
-            final String requestedPage = item.url;
-            SearchThumbnailResolver.resolve(holder.image.getContext(), requestedPage, (pageUrl, thumbnailUrl) -> {
-                if (!requestedPage.equals(holder.boundUrl)) return;
-                if (thumbnailUrl == null || thumbnailUrl.trim().isEmpty()) return;
-                loadRemote(holder.image, item, thumbnailUrl.trim());
-            });
-        }
-    }
-
-    private void loadRemote(ImageView image, NativeContentItem item, String url) {
-        Object source = url;
-        if (url.startsWith("http://") || url.startsWith("https://")) {
-            LazyHeaders.Builder headers = new LazyHeaders.Builder()
-                    .addHeader("User-Agent", USER_AGENT)
-                    .addHeader("Referer", item.url == null || item.url.isEmpty() ? SITE : item.url)
-                    .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
-            try {
-                String cookies = CookieManager.getInstance().getCookie(url);
-                if (cookies != null && !cookies.trim().isEmpty()) headers.addHeader("Cookie", cookies);
-            } catch (Exception ignored) {
-            }
-            source = new GlideUrl(url, headers.build());
-        }
-
+        Object source = imageUrl.startsWith("file://")
+                ? imageUrl
+                : withSiteHeaders(imageUrl, item.url);
         Glide.with(image)
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
@@ -237,6 +288,27 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 36)))
                 .into(image);
+    }
+
+    private GlideUrl withSiteHeaders(String imageUrl, String pageUrl) {
+        LazyHeaders.Builder headers = new LazyHeaders.Builder()
+                .addHeader("User-Agent", USER_AGENT)
+                .addHeader("Referer", pageUrl == null || pageUrl.isEmpty() ? SITE : pageUrl)
+                .addHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+
+        try {
+            String cookies = CookieManager.getInstance().getCookie(imageUrl);
+            if (cookies == null || cookies.trim().isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie(pageUrl == null ? SITE : pageUrl);
+            }
+            if (cookies == null || cookies.trim().isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie(SITE);
+            }
+            if (cookies != null && !cookies.trim().isEmpty()) headers.addHeader("Cookie", cookies);
+        } catch (Exception ignored) {
+        }
+
+        return new GlideUrl(imageUrl, headers.build());
     }
 
     @Override
@@ -261,6 +333,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     static final class SectionHolder extends RecyclerView.ViewHolder {
         final TextView title;
+
         SectionHolder(TextView title) {
             super(title);
             this.title = title;
