@@ -11,102 +11,181 @@ import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Keeps the useful Chaos chrome visible while the app is in portrait orientation and keeps
- * transparent chrome containers from stealing touches meant for the video.
+ * Keeps useful Chaos chrome visible in portrait and transparent chrome containers from stealing
+ * touches meant for the video.
  *
- * The ambient/blur experiment is intentionally disabled for now. The title/actions/mute remain
- * visible in portrait, the scrub bar keeps its independent inactivity timer, and empty space in
- * the full-width lower chrome container is non-interactive so taps/holds can reach PlayerView.
- *
- * This layer also guards Chaos against non-video feed rows. Home now has section header items for
- * normal browsing, but Chaos is a video-only pager and must never try to resolve those rows as
- * playable media.
+ * 2.8 removes the old 180 ms polling loop. Chaos is now refreshed from pager selection and child
+ * attach events, with a few finite startup passes to bind views after configuration changes.
  */
 final class ChaosPortraitPolish {
-    private static final long TICK_MS = 180L;
-
-    private static final Map<NativeMainActivity, Loop> LOOPS = new WeakHashMap<>();
+    private static final Map<NativeMainActivity, State> STATES = new WeakHashMap<>();
 
     private ChaosPortraitPolish() {
     }
 
     static void start(NativeMainActivity activity) {
         if (activity == null || activity.isFinishing()) return;
-        Loop loop = LOOPS.get(activity);
-        if (loop == null) {
-            loop = new Loop(activity);
-            LOOPS.put(activity, loop);
-        }
-        loop.start();
+        State old = STATES.remove(activity);
+        if (old != null) old.detach();
+
+        State state = new State(activity);
+        STATES.put(activity, state);
+        state.start();
     }
 
     static void stop(NativeMainActivity activity) {
-        Loop loop = LOOPS.get(activity);
-        if (loop != null) loop.stop();
+        State state = STATES.remove(activity);
+        if (state != null) state.detach();
     }
 
-    private static final class Loop implements Runnable {
+    private static final class State {
         private final WeakReference<NativeMainActivity> activityRef;
-        private boolean running;
+        private final List<FeedBinding> bindings = new ArrayList<>();
         private boolean wasPortrait;
 
-        Loop(NativeMainActivity activity) {
+        State(NativeMainActivity activity) {
             activityRef = new WeakReference<>(activity);
+            wasPortrait = isPortrait(activity);
         }
 
         void start() {
             NativeMainActivity activity = activityRef.get();
             if (activity == null || activity.isFinishing()) return;
-            running = true;
             View decor = activity.getWindow().getDecorView();
-            decor.removeCallbacks(this);
-            decor.post(this);
+            decor.post(this::bindAndRefresh);
+            decor.postDelayed(this::bindAndRefresh, 120L);
+            decor.postDelayed(this::bindAndRefresh, 360L);
         }
 
-        void stop() {
-            running = false;
+        void bindAndRefresh() {
             NativeMainActivity activity = activityRef.get();
-            if (activity != null) activity.getWindow().getDecorView().removeCallbacks(this);
-        }
-
-        @Override
-        public void run() {
-            NativeMainActivity activity = activityRef.get();
-            if (!running || activity == null || activity.isFinishing()) return;
-
-            boolean portrait = activity.getResources().getConfiguration().orientation
-                    != Configuration.ORIENTATION_LANDSCAPE;
+            if (activity == null || activity.isFinishing()) return;
 
             View content = activity.findViewById(android.R.id.content);
-            if (content != null) {
-                List<ChaosFeedView> feeds = new ArrayList<>();
-                collectChaosFeeds(content, feeds);
-                for (ChaosFeedView feed : feeds) purgeNonMediaRows(feed);
+            if (content == null) return;
 
-                List<PlayerView> views = new ArrayList<>();
-                collectChaosPlayers(content, false, views);
-                for (PlayerView playerView : views) {
-                    makeEmptyChromePassThrough(playerView);
-                }
-                if (portrait) {
-                    for (PlayerView playerView : views) keepChromeVisible(playerView);
-                } else if (wasPortrait) {
-                    for (PlayerView playerView : views) restoreLandscapeAutoHide(playerView);
+            List<ChaosFeedView> feeds = new ArrayList<>();
+            collectChaosFeeds(content, feeds);
+            for (ChaosFeedView feed : feeds) ensureBinding(feed);
+
+            boolean portrait = isPortrait(activity);
+            for (FeedBinding binding : new ArrayList<>(bindings)) {
+                binding.refresh(portrait, wasPortrait);
+            }
+            wasPortrait = portrait;
+        }
+
+        private void ensureBinding(ChaosFeedView feed) {
+            if (feed == null) return;
+            for (FeedBinding binding : bindings) {
+                if (binding.feed == feed) return;
+            }
+            FeedBinding binding = new FeedBinding(this, feed);
+            bindings.add(binding);
+            binding.attach();
+        }
+
+        void detach() {
+            NativeMainActivity activity = activityRef.get();
+            if (activity != null) {
+                View decor = activity.getWindow().getDecorView();
+                decor.removeCallbacks(this::bindAndRefresh);
+            }
+            for (FeedBinding binding : new ArrayList<>(bindings)) binding.detach();
+            bindings.clear();
+        }
+    }
+
+    private static final class FeedBinding {
+        private final State owner;
+        private final ChaosFeedView feed;
+        private ViewPager2 pager;
+        private RecyclerView pagerRecycler;
+        private ViewPager2.OnPageChangeCallback pageCallback;
+        private RecyclerView.OnChildAttachStateChangeListener childAttachListener;
+
+        FeedBinding(State owner, ChaosFeedView feed) {
+            this.owner = owner;
+            this.feed = feed;
+        }
+
+        void attach() {
+            pager = fieldValue(feed, "pager", ViewPager2.class);
+            if (pager != null) {
+                pageCallback = new ViewPager2.OnPageChangeCallback() {
+                    @Override
+                    public void onPageSelected(int position) {
+                        feed.post(owner::bindAndRefresh);
+                    }
+
+                    @Override
+                    public void onPageScrollStateChanged(int state) {
+                        if (state == ViewPager2.SCROLL_STATE_IDLE) {
+                            feed.post(owner::bindAndRefresh);
+                        }
+                    }
+                };
+                pager.registerOnPageChangeCallback(pageCallback);
+
+                if (pager.getChildCount() > 0 && pager.getChildAt(0) instanceof RecyclerView) {
+                    pagerRecycler = (RecyclerView) pager.getChildAt(0);
+                    childAttachListener = new RecyclerView.OnChildAttachStateChangeListener() {
+                        @Override
+                        public void onChildViewAttachedToWindow(View view) {
+                            feed.post(owner::bindAndRefresh);
+                        }
+
+                        @Override
+                        public void onChildViewDetachedFromWindow(View view) {
+                        }
+                    };
+                    pagerRecycler.addOnChildAttachStateChangeListener(childAttachListener);
                 }
             }
-
-            wasPortrait = portrait;
-            activity.getWindow().getDecorView().postDelayed(this, TICK_MS);
+            feed.post(owner::bindAndRefresh);
         }
+
+        void refresh(boolean portrait, boolean previouslyPortrait) {
+            purgeNonMediaRows(feed);
+
+            List<PlayerView> views = new ArrayList<>();
+            collectChaosPlayers(feed, true, views);
+            for (PlayerView playerView : views) {
+                makeEmptyChromePassThrough(playerView);
+            }
+            if (portrait) {
+                for (PlayerView playerView : views) keepChromeVisible(playerView);
+            } else if (previouslyPortrait) {
+                for (PlayerView playerView : views) restoreLandscapeAutoHide(playerView);
+            }
+        }
+
+        void detach() {
+            if (pager != null && pageCallback != null) {
+                pager.unregisterOnPageChangeCallback(pageCallback);
+            }
+            if (pagerRecycler != null && childAttachListener != null) {
+                pagerRecycler.removeOnChildAttachStateChangeListener(childAttachListener);
+            }
+            pager = null;
+            pagerRecycler = null;
+            pageCallback = null;
+            childAttachListener = null;
+        }
+    }
+
+    private static boolean isPortrait(NativeMainActivity activity) {
+        return activity.getResources().getConfiguration().orientation
+                != Configuration.ORIENTATION_LANDSCAPE;
     }
 
     private static void collectChaosFeeds(View view, List<ChaosFeedView> out) {
@@ -131,7 +210,10 @@ final class ChaosPortraitPolish {
         if (pager != null && pager.getChildCount() > 0 && pager.getChildAt(0) instanceof RecyclerView) {
             rv = (RecyclerView) pager.getChildAt(0);
         }
-        if (rv != null && rv.isComputingLayout()) return;
+        if (rv != null && rv.isComputingLayout()) {
+            feed.post(() -> purgeNonMediaRows(feed));
+            return;
+        }
 
         int current = pager == null ? 0 : pager.getCurrentItem();
         int removedBeforeCurrent = 0;
@@ -189,9 +271,6 @@ final class ChaosPortraitPolish {
         }
         if (lower == null) return;
 
-        // The container itself used to own a long-press listener, making its entire transparent
-        // rectangle a touch target. Children such as title, comments, share, save and More remain
-        // interactive, but blank space now returns false so the PlayerView underneath can handle it.
         lower.setOnTouchListener(null);
         lower.setOnClickListener(null);
         lower.setOnLongClickListener(null);
@@ -219,7 +298,6 @@ final class ChaosPortraitPolish {
             return;
         }
 
-        // Fallback for a holder implementation change: only touch the obvious Chaos chrome.
         LinearLayout lower = null;
         TextView mute = null;
         for (int i = 0; i < root.getChildCount(); i++) {
