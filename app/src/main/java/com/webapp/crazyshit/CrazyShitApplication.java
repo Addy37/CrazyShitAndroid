@@ -47,6 +47,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeRailPolish.applySoon(nativeActivity);
                     LandscapeMoreDialog.attachSoon(nativeActivity);
                     SeriesCategoriesNavController.attachSoon(nativeActivity);
+                    GlobalSearchUiController.attachSoon(nativeActivity);
                     UiPolishController.attach(nativeActivity);
                     FlashUiController.attach(nativeActivity);
                     WatchStatePolish.attach(nativeActivity);
@@ -99,6 +100,7 @@ public final class CrazyShitApplication extends Application {
                     LandscapeRailPolish.applySoon(activity);
                     LandscapeMoreDialog.attachSoon(activity);
                     SeriesCategoriesNavController.attachSoon(activity);
+                    GlobalSearchUiController.attachSoon(activity);
                     UiPolishController.attach(activity);
                     FlashUiController.attach(activity);
                     WatchStatePolish.attach(activity);
