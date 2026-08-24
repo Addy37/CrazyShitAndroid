@@ -40,8 +40,6 @@ final class UiFoundationCoordinator {
             OledImmersiveUiController.attachBrowser(browser);
         } else if (activity instanceof VideoDetailActivity) {
             VideoDetailActivity detail = (VideoDetailActivity) activity;
-            VideoDetailControllerPolish.applySoon(detail);
-            VideoDetailImmersivePolish.applySoon(detail);
             RelatedVideosPolish.attach(detail);
             PredictiveBackPolish.attach(detail);
         }
@@ -72,7 +70,6 @@ final class UiFoundationCoordinator {
             FeedViewStyleController.detachBrowser((NativeFeedBrowserActivity) activity);
         } else if (activity instanceof VideoDetailActivity) {
             RelatedVideosPolish.detach((VideoDetailActivity) activity);
-            VideoDetailImmersivePolish.detach((VideoDetailActivity) activity);
         }
     }
 
