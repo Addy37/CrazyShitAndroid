@@ -51,35 +51,15 @@ jobs:
           text = text.replace(
               old,
               '    private int autoAdvanceFrom = -1;\n'
-              '    private int poolRound;\n'
               '    private int consecutiveDryLoads;\n'
               '    private int selectedPosition;\n',
               1,
           )
 
-          old = '''    public void refresh() {
+          refresh_start = text.index('    public void refresh() {')
+          refresh_end = text.index('    public void close()', refresh_start)
+          new_refresh = '''    public void refresh() {
               pauseAll();
-              sourcePage = 1;
-              poolLoading = false;
-              autoAdvancePending = false;
-              autoAdvanceFrom = -1;
-              streamCache.clear();
-              resolving.clear();
-              unplayable.clear();
-              sessionUrls.clear();
-              items.clear();
-              adapter.notifyDataSetChanged();
-              initialProgress.setVisibility(View.VISIBLE);
-              empty.setVisibility(View.GONE);
-              selectedPosition = 0;
-              pager.setCurrentItem(0, false);
-              loadMorePool();
-          }
-          '''
-          assert old in text, 'refresh block changed'
-          text = text.replace(old, '''    public void refresh() {
-              pauseAll();
-              poolRound = 0;
               consecutiveDryLoads = 0;
               sourceMixer.resetDeck();
               poolLoading = false;
@@ -97,14 +77,15 @@ jobs:
               pager.setCurrentItem(0, false);
               loadMorePool();
           }
-          ''', 1)
+
+          '''
+          text = text[:refresh_start] + new_refresh + text[refresh_end:]
 
           start = text.index('    private void loadMorePool() {')
           end = text.index('    private static boolean isMedia', start)
           new_method = '''    private void loadMorePool() {
               if (poolLoading) return;
               poolLoading = true;
-              poolRound++;
 
               io.execute(() -> {
                   List<NativeContentItem> mixed;
