@@ -1,0 +1,54 @@
+name: Apply Shit Show direct playback
+
+on:
+  push:
+    branches:
+      - v2.8.0-foundation-cleanup
+    paths:
+      - .github/shitshow-direct.apply
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Add direct-media playback path
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/com/webapp/crazyshit/CrazyShitRepository.java')
+          text = path.read_text(encoding='utf-8')
+          marker = '    public StreamInfo resolvePlayable(Context context, String pageUrl) throws IOException {\n'
+          assert marker in text, 'resolvePlayable marker changed'
+          direct = (
+              marker
+              + '        // Shit Show is harvested from its rendered swipe player and already gives us the\\n'
+              + '        // direct media URL. Avoid trying to parse an MP4/HLS manifest as an HTML page.\\n'
+              + '        String normalizedPageUrl = normalizeUrl(pageUrl);\\n'
+              + '        if (isDirectMedia(normalizedPageUrl)) {\\n'
+              + '            return new StreamInfo(normalizedPageUrl, BASE + "shitshow/", "Shit Show");\\n'
+              + '        }\\n\\n'
+          )
+          if 'String normalizedPageUrl = normalizeUrl(pageUrl);' not in text:
+              text = text.replace(marker, direct, 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit direct-media support
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/webapp/crazyshit/CrazyShitRepository.java
+          if git diff --cached --quiet; then
+            echo "Direct-media support already applied."
+            exit 0
+          fi
+          git commit -m "Support direct Shit Show streams in Chaos"
+          git push origin HEAD:v2.8.0-foundation-cleanup
