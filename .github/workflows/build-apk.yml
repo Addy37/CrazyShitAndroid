@@ -93,6 +93,9 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run Android lint
+        run: gradle --no-daemon :app:lintDebug
+
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
 
