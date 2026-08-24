@@ -1,0 +1,182 @@
+name: Apply Chaos randomness wiring
+
+on:
+  push:
+    branches:
+      - v2.8.0-foundation-cleanup
+    paths:
+      - .github/chaos-randomness.apply
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Wire randomized Chaos source mixer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java')
+          text = path.read_text(encoding='utf-8')
+
+          old = '    private static final int MAX_RECENT = 180;\n'
+          assert old in text, 'MAX_RECENT marker changed'
+          text = text.replace(old, '    private static final int MAX_RECENT = 500;\n', 1)
+
+          old = '    private static final int MAX_SOURCE_PAGE = 8;\n'
+          assert old in text, 'MAX_SOURCE_PAGE marker changed'
+          text = text.replace(old, '', 1)
+
+          old = '    private final Random random = new Random();\n'
+          assert old in text, 'Random field marker changed'
+          text = text.replace(
+              old,
+              old + '    private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);\n',
+              1,
+          )
+
+          old = '    private int autoAdvanceFrom = -1;\n    private int sourcePage = 1;\n    private int selectedPosition;\n'
+          assert old in text, 'sourcePage field marker changed'
+          text = text.replace(
+              old,
+              '    private int autoAdvanceFrom = -1;\n'
+              '    private int poolRound;\n'
+              '    private int consecutiveDryLoads;\n'
+              '    private int selectedPosition;\n',
+              1,
+          )
+
+          old = '''    public void refresh() {
+              pauseAll();
+              sourcePage = 1;
+              poolLoading = false;
+              autoAdvancePending = false;
+              autoAdvanceFrom = -1;
+              streamCache.clear();
+              resolving.clear();
+              unplayable.clear();
+              sessionUrls.clear();
+              items.clear();
+              adapter.notifyDataSetChanged();
+              initialProgress.setVisibility(View.VISIBLE);
+              empty.setVisibility(View.GONE);
+              selectedPosition = 0;
+              pager.setCurrentItem(0, false);
+              loadMorePool();
+          }
+          '''
+          assert old in text, 'refresh block changed'
+          new = '''    public void refresh() {
+              pauseAll();
+              poolRound = 0;
+              consecutiveDryLoads = 0;
+              sourceMixer.resetDeck();
+              poolLoading = false;
+              autoAdvancePending = false;
+              autoAdvanceFrom = -1;
+              streamCache.clear();
+              resolving.clear();
+              unplayable.clear();
+              // Keep sessionUrls so Refresh cannot immediately deal the same clips back again.
+              items.clear();
+              adapter.notifyDataSetChanged();
+              initialProgress.setVisibility(View.VISIBLE);
+              empty.setVisibility(View.GONE);
+              selectedPosition = 0;
+              pager.setCurrentItem(0, false);
+              loadMorePool();
+          }
+          '''
+          text = text.replace(old, new, 1)
+
+          start = text.index('    private void loadMorePool() {')
+          end = text.index('    private static boolean isMedia', start)
+          new_method = '''    private void loadMorePool() {
+              if (poolLoading) return;
+              poolLoading = true;
+              poolRound++;
+
+              io.execute(() -> {
+                  List<NativeContentItem> mixed;
+                  try {
+                      mixed = sourceMixer.loadRandomBatch(activity);
+                  } catch (Exception ignored) {
+                      mixed = Collections.emptyList();
+                  }
+
+                  ArrayList<NativeContentItem> fresh = new ArrayList<>();
+                  ArrayList<NativeContentItem> recentFallback = new ArrayList<>();
+                  for (NativeContentItem item : mixed) {
+                      if (!isMedia(item) || hiddenUrls.contains(item.url)) continue;
+                      if (recentSet.contains(item.url)) recentFallback.add(item);
+                      else fresh.add(item);
+                  }
+                  Collections.shuffle(fresh, random);
+                  Collections.shuffle(recentFallback, random);
+
+                  activity.runOnUiThread(() -> {
+                      poolLoading = false;
+                      int before = items.size();
+                      appendUnique(fresh);
+
+                      int freshAdded = items.size() - before;
+                      if (freshAdded == 0) consecutiveDryLoads++;
+                      else consecutiveDryLoads = 0;
+
+                      // Previously watched clips stay out of the normal draw. Only recycle them if
+                      // several broad random batches in a row genuinely cannot produce fresh media.
+                      if (freshAdded < 4 && consecutiveDryLoads >= 3) {
+                          appendUnique(recentFallback);
+                      }
+
+                      int added = items.size() - before;
+                      if (added > 0 && freshAdded == 0) consecutiveDryLoads = 0;
+
+                      if (added > 0) {
+                          adapter.notifyItemRangeInserted(before, added);
+                          initialProgress.setVisibility(View.GONE);
+                          empty.setVisibility(View.GONE);
+                          resolveAhead(selectedPosition);
+                          if (active && hostResumed) playSelected();
+                          tryPendingAutoAdvance();
+                      }
+
+                      boolean needsMore = items.size() < 14
+                              || (autoAdvancePending && autoAdvanceFrom + 1 >= items.size());
+                      if (needsMore && consecutiveDryLoads < 4) {
+                          loadMorePool();
+                      } else if (items.isEmpty()) {
+                          initialProgress.setVisibility(View.GONE);
+                          empty.setText("Chaos couldn't find a playable pool right now.\\nPull away and come back to retry.");
+                          empty.setVisibility(View.VISIBLE);
+                      } else if (autoAdvancePending && autoAdvanceFrom + 1 >= items.size()) {
+                          autoAdvancePending = false;
+                          autoAdvanceFrom = -1;
+                      }
+                  });
+              });
+          }
+
+          '''
+          text = text[:start] + new_method + text[end:]
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit Chaos wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java
+          if git diff --cached --quiet; then
+            echo "No Chaos wiring changes to commit."
+            exit 0
+          fi
+          git commit -m "Make Chaos broadly random across site sources"
+          git push origin HEAD:v2.8.0-foundation-cleanup
