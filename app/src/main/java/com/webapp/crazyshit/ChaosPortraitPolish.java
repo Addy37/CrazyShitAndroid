@@ -51,6 +51,7 @@ final class ChaosPortraitPolish {
         private final WeakReference<NativeMainActivity> activityRef;
         private final List<FeedBinding> bindings = new ArrayList<>();
         private boolean wasPortrait;
+        private boolean active = true;
 
         State(NativeMainActivity activity) {
             activityRef = new WeakReference<>(activity);
@@ -59,7 +60,7 @@ final class ChaosPortraitPolish {
 
         void start() {
             NativeMainActivity activity = activityRef.get();
-            if (activity == null || activity.isFinishing()) return;
+            if (!active || activity == null || activity.isFinishing()) return;
             View decor = activity.getWindow().getDecorView();
             decor.post(this::bindAndRefresh);
             decor.postDelayed(this::bindAndRefresh, 120L);
@@ -68,7 +69,7 @@ final class ChaosPortraitPolish {
 
         void bindAndRefresh() {
             NativeMainActivity activity = activityRef.get();
-            if (activity == null || activity.isFinishing()) return;
+            if (!active || activity == null || activity.isFinishing()) return;
 
             View content = activity.findViewById(android.R.id.content);
             if (content == null) return;
@@ -85,7 +86,7 @@ final class ChaosPortraitPolish {
         }
 
         private void ensureBinding(ChaosFeedView feed) {
-            if (feed == null) return;
+            if (!active || feed == null) return;
             for (FeedBinding binding : bindings) {
                 if (binding.feed == feed) return;
             }
@@ -95,11 +96,7 @@ final class ChaosPortraitPolish {
         }
 
         void detach() {
-            NativeMainActivity activity = activityRef.get();
-            if (activity != null) {
-                View decor = activity.getWindow().getDecorView();
-                decor.removeCallbacks(this::bindAndRefresh);
-            }
+            active = false;
             for (FeedBinding binding : new ArrayList<>(bindings)) binding.detach();
             bindings.clear();
         }
