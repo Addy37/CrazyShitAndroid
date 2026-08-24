@@ -206,7 +206,14 @@ public final class CrazyShitRepository {
     }
 
     public StreamInfo resolvePlayable(Context context, String pageUrl) throws IOException {
-        // Shit Show is harvested from its rendered swipe player and already gives us the\n        // direct media URL. Avoid trying to parse an MP4/HLS manifest as an HTML page.\n        String normalizedPageUrl = normalizeUrl(pageUrl);\n        if (isDirectMedia(normalizedPageUrl)) {\n            return new StreamInfo(normalizedPageUrl, BASE + "shitshow/", "Shit Show");\n        }\n\n        Document doc = fetchDocument(context, pageUrl);
+        // Shit Show is harvested from its rendered swipe player and already gives us the
+        // direct media URL. Avoid trying to parse an MP4/HLS manifest as an HTML page.
+        String normalizedPageUrl = normalizeUrl(pageUrl);
+        if (isDirectMedia(normalizedPageUrl)) {
+            return new StreamInfo(normalizedPageUrl, BASE + "shitshow/", "Shit Show");
+        }
+
+        Document doc = fetchDocument(context, pageUrl);
         String title = clean(doc.title());
 
         String[] selectors = {
