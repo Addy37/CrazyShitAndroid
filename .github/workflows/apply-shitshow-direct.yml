@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Add direct-media playback path
+      - name: Repair direct-media playback path
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -27,18 +27,29 @@ jobs:
           text = path.read_text(encoding='utf-8')
           marker = '    public StreamInfo resolvePlayable(Context context, String pageUrl) throws IOException {\n'
           assert marker in text, 'resolvePlayable marker changed'
-          direct = (
-              marker
-              + '        // Shit Show is harvested from its rendered swipe player and already gives us the\\n'
-              + '        // direct media URL. Avoid trying to parse an MP4/HLS manifest as an HTML page.\\n'
-              + '        String normalizedPageUrl = normalizeUrl(pageUrl);\\n'
-              + '        if (isDirectMedia(normalizedPageUrl)) {\\n'
-              + '            return new StreamInfo(normalizedPageUrl, BASE + "shitshow/", "Shit Show");\\n'
-              + '        }\\n\\n'
+
+          bad = (
+              '        // Shit Show is harvested from its rendered swipe player and already gives us the\\n'
+              '        // direct media URL. Avoid trying to parse an MP4/HLS manifest as an HTML page.\\n'
+              '        String normalizedPageUrl = normalizeUrl(pageUrl);\\n'
+              '        if (isDirectMedia(normalizedPageUrl)) {\\n'
+              '            return new StreamInfo(normalizedPageUrl, BASE + "shitshow/", "Shit Show");\\n'
+              '        }\\n\\n'
           )
-          if 'String normalizedPageUrl = normalizeUrl(pageUrl);' not in text:
-              text = text.replace(marker, direct, 1)
-              path.write_text(text, encoding='utf-8')
+          good = (
+              '        // Shit Show is harvested from its rendered swipe player and already gives us the\n'
+              '        // direct media URL. Avoid trying to parse an MP4/HLS manifest as an HTML page.\n'
+              '        String normalizedPageUrl = normalizeUrl(pageUrl);\n'
+              '        if (isDirectMedia(normalizedPageUrl)) {\n'
+              '            return new StreamInfo(normalizedPageUrl, BASE + "shitshow/", "Shit Show");\n'
+              '        }\n\n'
+          )
+
+          if bad in text:
+              text = text.replace(bad, good, 1)
+          elif 'String normalizedPageUrl = normalizeUrl(pageUrl);' not in text:
+              text = text.replace(marker, marker + good, 1)
+          path.write_text(text, encoding='utf-8')
           PY
 
       - name: Commit direct-media support
@@ -47,8 +58,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/src/main/java/com/webapp/crazyshit/CrazyShitRepository.java
           if git diff --cached --quiet; then
-            echo "Direct-media support already applied."
+            echo "Direct-media support already clean."
             exit 0
           fi
-          git commit -m "Support direct Shit Show streams in Chaos"
+          git commit -m "Fix direct Shit Show stream handling"
           git push origin HEAD:v2.8.0-foundation-cleanup
