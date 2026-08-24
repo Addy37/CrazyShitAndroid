@@ -15,19 +15,19 @@ import java.util.Set;
 /**
  * Builds randomized Chaos batches from the site's broad video catalog.
  *
- * Shit Show gets one dedicated randomized source request per batch so it cannot disappear inside
- * a large category deck. The rest of each batch still rotates through Home, Trending, Videos,
- * User Uploads and every category currently exposed by the site.
+ * Normal site feeds are parsed with the repository. Shit Show is intentionally separate because
+ * it is a JavaScript-driven swipe player, not a normal /cnt/medias/ listing.
  */
 final class ChaosSourceMixer {
     private static final int MAX_SOURCE_PAGE = 8;
     private static final int SOURCES_PER_BATCH = 6;
+    private static final int SHIT_SHOW_PER_BATCH = 8;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
-    private static final String SHIT_SHOW = CrazyShitRepository.BASE + "shitshow/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
 
     private final CrazyShitRepository repository;
     private final Random random;
+    private final ShitShowWebSource shitShow = new ShitShowWebSource();
     private final ArrayList<String> catalog = new ArrayList<>();
     private final ArrayDeque<String> sourceDeck = new ArrayDeque<>();
     private final Set<String> usedSourcePages = new HashSet<>();
@@ -42,9 +42,12 @@ final class ChaosSourceMixer {
         ensureCatalog(context);
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
 
-        // Always sample Shit Show once per batch. It used to be just one entry in a large source
-        // deck, which made it possible to swipe for a long time without ever seeing it.
-        addRequest(context, combined, nextRequestFor(SHIT_SHOW));
+        // Shit Show is harvested asynchronously from its rendered swipe player. The first regular
+        // batch warms that source; subsequent loads mix the harvested direct clips into Chaos.
+        for (NativeContentItem item : shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)) {
+            if (item == null || item.url == null || item.url.isEmpty()) continue;
+            combined.putIfAbsent(item.url, item);
+        }
 
         int sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
         for (int i = 0; i < sourceCount; i++) {
@@ -59,6 +62,7 @@ final class ChaosSourceMixer {
     void resetDeck() {
         sourceDeck.clear();
         usedSourcePages.clear();
+        shitShow.resetDeck();
     }
 
     private void ensureCatalog(Context context) {
@@ -99,24 +103,6 @@ final class ChaosSourceMixer {
             // A randomly selected page may not exist for a smaller category. Other sources in the
             // batch still contribute and the next draw will choose a different source/page pair.
         }
-    }
-
-    private SourceRequest nextRequestFor(String url) {
-        if (url == null || url.isEmpty()) return null;
-        for (int i = 0; i < MAX_SOURCE_PAGE * 2; i++) {
-            int page = 1 + random.nextInt(MAX_SOURCE_PAGE);
-            String key = url + "#" + page;
-            if (usedSourcePages.add(key)) return new SourceRequest(url, page);
-        }
-
-        // All recent pages for this dedicated source were already sampled. Allow a new randomized
-        // cycle without clearing the unrelated source history.
-        for (int page = 1; page <= MAX_SOURCE_PAGE; page++) {
-            usedSourcePages.remove(url + "#" + page);
-        }
-        int page = 1 + random.nextInt(MAX_SOURCE_PAGE);
-        usedSourcePages.add(url + "#" + page);
-        return new SourceRequest(url, page);
     }
 
     private SourceRequest nextRequest() {
