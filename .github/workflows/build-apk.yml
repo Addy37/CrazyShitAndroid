@@ -31,7 +31,7 @@ jobs:
           python3 tools/capture_browse_art.py
           mkdir -p app/src/main/assets
           python3 - <<'PY'
-          import base64, io, json, os
+          import base64, io, json
           from PIL import Image, ImageOps
 
           with open('browse-art-bundle.json', 'r', encoding='utf-8') as f:
@@ -61,11 +61,16 @@ jobs:
       - name: Save embedded artwork to branch
         if: ${{ steps.capture_art.outputs.captured == 'true' && github.event_name == 'pull_request' }}
         run: |
+          cp app/src/main/assets/browse_artwork.json /tmp/browse_artwork.json
+          git fetch origin "${{ github.head_ref }}"
+          git checkout -B "${{ github.head_ref }}" "origin/${{ github.head_ref }}"
+          mkdir -p app/src/main/assets
+          cp /tmp/browse_artwork.json app/src/main/assets/browse_artwork.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/src/main/assets/browse_artwork.json
           git commit -m "Embed Series and Categories artwork [skip ci]"
-          git push origin HEAD:${{ github.head_ref }}
+          git push origin "${{ github.head_ref }}"
 
       - name: Upload browse artwork bundle
         if: ${{ steps.capture_art.outputs.captured == 'true' }}
