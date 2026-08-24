@@ -81,6 +81,23 @@ public class SettingsActivity extends Activity {
                 "remember_video_position",
                 true);
 
+        addSection(root, "Appearance");
+        addSwitch(root,
+                "Ambient feed glow",
+                "Tint the feed background from the artwork closest to the middle of the screen.",
+                "ambient_feed_glow",
+                true);
+        addSwitch(root,
+                "Scroll depth motion",
+                "Use subtle focus, scale and depth movement while browsing media cards.",
+                "immersive_motion_enabled",
+                true);
+        addSwitch(root,
+                "Collapsing header",
+                "Shrink the top bar while scrolling down and expand it again when you return.",
+                "collapse_header_enabled",
+                true);
+
         addSection(root, "Browsing & privacy");
         addSwitch(root,
                 "Block ads & pop-ups",
