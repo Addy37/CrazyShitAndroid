@@ -1,18 +1,17 @@
-# CrazyShit v2.5.2
+# CrazyShit v2.5.3
 
-CrazyShit 2.5.2 fixes the remaining blank artwork on Series and Categories by widening the rendered card scan to match how the website actually paints browse thumbnails.
+CrazyShit 2.5.3 adds a second, independent artwork fallback for Series and Categories when the website listing pages do not expose their lazy-loaded card images.
 
-## Browse thumbnail fix
+## Series and Categories thumbnail fallback
 
-- Keeps **Home | Series | Chaos | Categories | More** unchanged
-- Keeps the native Series and Categories grids unchanged
-- Scans every rendered element inside each Series/Category card instead of only obvious image and lazy-load nodes
-- Reads normal CSS backgrounds plus `::before` and `::after` artwork layers
-- Also checks mask, border-image, list-style image and CSS properties containing `url(...)`
-- Waits through additional lazy-render passes before giving up
-- Ignores the resolver's internal `about:blank` cleanup page so Series and Categories cannot interfere with each other's artwork pass
-- Existing direct image URLs still keep priority
-- Glide keeps the site's User-Agent, Referer and cookies when loading resolved artwork
+- Keeps the existing rendered listing-page artwork resolver as the first choice
+- Blank Series and Category cards now read the first page of their own collection and reuse the first usable video thumbnail
+- If that collection thumbnail is also lazy-rendered, the app reuses the normal video thumbnail resolver already used by native feeds
+- Only Series and Category cards currently being bound on screen trigger the fallback work
+- Fallback collection requests are limited to three worker threads
+- Resolved collection artwork is cached locally so later visits load it immediately
+- Direct and listing-page artwork still keep priority and are never replaced by the fallback
+- Local frame thumbnails are supported if the normal media resolver has to extract a video frame
 
 ## Existing behavior kept
 
@@ -21,11 +20,11 @@ CrazyShit 2.5.2 fixes the remaining blank artwork on Series and Categories by wi
 - Saved positions, History and Watch Later remain intact
 - Chaos playback and portrait controls remain unchanged
 - Trending and Memes remain available under **More → Browse**
-- Portrait and landscape navigation layouts remain unchanged
+- Portrait and rotated navigation layouts remain unchanged
 
 ## Compatibility
 
-The stable application ID and signing identity remain unchanged, so CrazyShit v2.5.2 installs over v2.5.1 and earlier signed stable releases while retaining app data and watch history.
+The stable application ID and signing identity remain unchanged, so CrazyShit v2.5.3 installs over v2.5.2 and earlier signed stable releases while retaining app data and watch history.
 
 Beta builds use a separate `.dev` package and can remain installed beside stable CrazyShit.
 
