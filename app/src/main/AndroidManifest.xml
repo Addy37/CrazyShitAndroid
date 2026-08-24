@@ -46,10 +46,12 @@
 
         <activity
             android:name=".SettingsActivity"
+            android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
             android:name=".FavoritesActivity"
+            android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
