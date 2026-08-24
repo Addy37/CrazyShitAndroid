@@ -1,60 +1,38 @@
-# CrazyShit v2.7.0
+# CrazyShit v2.7.2
 
-CrazyShit 2.7 is the Immersive OLED UI release. It keeps the navigation and features from 2.6 while moving the native app to a calmer true-black visual system.
+CrazyShit 2.7.2 is the responsive fitment and stability release. It keeps the OLED Immersive UI from 2.7 while tightening behavior across portrait, horizontal orientation, wide screens and secondary native screens.
 
-## OLED immersive presentation
+## Responsive fitment
 
-- True black OLED backgrounds are now the default across native screens
-- Media cards use near-black surfaces with softer borders instead of stacked gray layers
-- The top header and bottom navigation blend into the black background more naturally
-- Orange remains the primary accent color
-- Artwork-driven ambient color is now a very faint glow instead of a full-screen tint
-- Ambient transitions are slower and less reactive while scrolling
-- Scroll depth, scaling and thumbnail parallax are substantially reduced for smoother browsing
-- The collapsing header is slower and less dramatic
+- Main feed geometry is reapplied after theme and motion polish so rotation sizing stays consistent
+- Home and collection feed cards use better horizontal sizing
+- Grid and Posters now use responsive media and card heights instead of fixed phone-only dimensions
+- Series and Categories artwork cards scale with available column width
+- Settings and Library use centered maximum widths on wider displays instead of stretching edge to edge
+- Search uses tighter header and result spacing in horizontal orientation
+- Additional safe-area and display-cutout handling was added to older native screens
 
-## Floating navigation
+## Feed and browsing polish
 
-- Keeps the rounded floating bottom navigation
-- Uses a black OLED surface with a much softer outline and shadow
-- Keeps the featured Chaos button and all existing tab behavior
+- Posters is fully supported throughout the pager and collection view-mode plumbing
+- List remains the default and fallback feed style
+- Changing view styles preserves the visible item and scroll offset more accurately
+- Search and normal feed thumbnail failures can retry instead of remaining blocked for the session
 
-## Video detail refresh
+## Resource and lifecycle cleanup
 
-- Keeps compact Comments, Later and Share pill actions
-- Removes the duplicate large comments card
-- Uses true black details surfaces with only a tiny optional warm glow near the player
-- Uses near-black Related video cards and action pills
-- Reduces the player/detail entrance movement for a smoother transition
-- Keeps player controls, predictive back and auto-hiding overlay buttons intact
+- Rendered thumbnail resolvers now explicitly destroy their WebViews, clear pending work and shut down executors
+- Feed and Search adapters release thumbnail resources and playback listeners when screens close
+- Settings and Library now participate in Android predictive back on supported devices
 
-## Appearance controls
+## Existing behavior retained
 
-Settings includes independent switches for:
-
-- OLED black
-- Ambient feed glow
-- Motion effects
-- Collapsing header
-
-OLED black defaults to on. Each visual effect can still be disabled independently.
-
-## Existing behavior kept
-
-- List remains the default feed view
-- Cards, Grid and Posters remain available
-- Global native Search and Search thumbnails remain unchanged
-- Context-aware Related videos remain unchanged
-- Series and Categories keep their embedded artwork
-- Continue Watching, History and Watch Later remain intact
-- Chaos playback and rotated full-screen behavior remain intact
-- Predictive back remains enabled on supported Android versions
-
-## Compatibility
-
-The stable application ID and signing identity remain unchanged, so the eventual stable CrazyShit v2.7.0 release will install over v2.6.0 while retaining app data and watch history.
-
-Beta builds use the separate `.dev` package and can remain installed beside stable CrazyShit.
+- OLED Black remains the default visual theme
+- Ambient Glow, Motion Effects and Collapsing Header remain individually configurable
+- Chaos keeps the media-only filtering fix from 2.7.1
+- Continue Watching, History, Watch Later, global Search and context-aware Related videos remain intact
+- Series and Categories continue using embedded artwork
+- Stable application ID and signing identity are unchanged, so 2.7.2 installs over earlier stable 2.7 builds while retaining app data
 
 ## Project status
 
