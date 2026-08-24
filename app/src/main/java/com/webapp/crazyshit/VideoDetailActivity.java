@@ -66,6 +66,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_REOPEN_DETAIL = "reopen_detail";
 
     private static final String SITE = "https://crazyshit.com/";
+    private static final int CONTROL_TIMEOUT_MS = 2600;
     private static final String THUMB_UA =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -83,8 +84,8 @@ public class VideoDetailActivity extends Activity {
     private LinearLayout relatedContainer;
     private TextView titleView;
     private TextView metaView;
-    private TextView commentsTitle;
-    private TextView commentsSubtitle;
+    private TextView backButton;
+    private TextView menuButton;
     private ProgressBar loading;
     private ExoPlayer player;
     private RenderedThumbnailResolver thumbnailResolver;
@@ -102,6 +103,7 @@ public class VideoDetailActivity extends Activity {
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
     private boolean failureShown;
     private boolean minimizing;
+    private boolean entrancePlayed;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -138,6 +140,7 @@ public class VideoDetailActivity extends Activity {
         configureBackHandling();
         applyOrientation(getResources().getConfiguration().orientation);
         loadRelated();
+        root.post(this::playEntranceOnce);
     }
 
     private void buildUi() {
@@ -146,7 +149,7 @@ public class VideoDetailActivity extends Activity {
 
         shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.rgb(13, 13, 15));
+        shell.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
         shell.setOnApplyWindowInsetsListener((view, insets) -> {
             if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 view.setPadding(0, 0, 0, 0);
@@ -214,66 +217,71 @@ public class VideoDetailActivity extends Activity {
         );
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setUseController(true);
-        playerView.setControllerAutoShow(true);
+        playerView.setControllerAutoShow(false);
         playerView.setControllerHideOnTouch(true);
+        playerView.setControllerShowTimeoutMs(CONTROL_TIMEOUT_MS);
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        TextView back = overlayButton("‹", 34);
-        back.setContentDescription("Back");
-        back.setOnClickListener(v -> {
+        backButton = overlayButton("‹", 34);
+        backButton.setContentDescription("Back");
+        backButton.setOnClickListener(v -> {
             haptic(v);
             handleBack();
         });
         FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(dp(46), dp(46));
         bp.gravity = Gravity.TOP | Gravity.START;
         bp.setMargins(dp(8), dp(8), 0, 0);
-        playerContainer.addView(back, bp);
+        playerContainer.addView(backButton, bp);
 
-        TextView menu = overlayButton("⋮", 26);
-        menu.setContentDescription("Video menu");
-        menu.setOnClickListener(v -> {
+        menuButton = overlayButton("⋮", 26);
+        menuButton.setContentDescription("Video menu");
+        menuButton.setOnClickListener(v -> {
             haptic(v);
-            showPlayerMenu(menu);
+            showPlayerMenu(menuButton);
         });
         FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(dp(46), dp(46));
         mp.gravity = Gravity.TOP | Gravity.END;
         mp.setMargins(0, dp(8), dp(8), 0);
-        playerContainer.addView(menu, mp);
+        playerContainer.addView(menuButton, mp);
+
+        playerView.setControllerVisibilityListener(visibility ->
+                setOverlayChromeVisible(visibility == View.VISIBLE, true));
+        setOverlayChromeVisible(false, false);
+        playerView.hideController();
 
         detailsScroll = new ScrollView(this);
         detailsScroll.setFillViewport(true);
-        detailsScroll.setBackgroundColor(Color.rgb(13, 13, 15));
+        applyDetailsBackground();
         shell.addView(detailsScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         detailsColumn = new LinearLayout(this);
         detailsColumn.setOrientation(LinearLayout.VERTICAL);
-        detailsColumn.setPadding(dp(14), dp(14), dp(14), dp(26));
+        detailsColumn.setPadding(dp(16), dp(15), dp(16), dp(30));
         detailsScroll.addView(detailsColumn, new ScrollView.LayoutParams(-1, -2));
 
         titleView = new TextView(this);
         titleView.setTextColor(Color.WHITE);
-        titleView.setTextSize(20);
+        titleView.setTextSize(21);
         titleView.setTypeface(null, android.graphics.Typeface.BOLD);
-        titleView.setLineSpacing(0f, 1.05f);
+        titleView.setLineSpacing(0f, 1.08f);
         detailsColumn.addView(titleView, new LinearLayout.LayoutParams(-1, -2));
 
         metaView = new TextView(this);
         metaView.setTextColor(Color.rgb(165, 165, 174));
         metaView.setTextSize(12);
-        metaView.setPadding(0, dp(7), 0, dp(12));
+        metaView.setPadding(0, dp(6), 0, dp(9));
         detailsColumn.addView(metaView, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.CENTER_VERTICAL);
+        actions.setPadding(0, 0, 0, dp(3));
         detailsColumn.addView(actions, new LinearLayout.LayoutParams(-1, -2));
-        actions.addView(actionButton("Comments", this::openComments), new LinearLayout.LayoutParams(0, dp(46), 1f));
-        actions.addView(actionButton("Watch later", this::toggleWatchLater), new LinearLayout.LayoutParams(0, dp(46), 1f));
-        actions.addView(actionButton("Share", this::sharePage), new LinearLayout.LayoutParams(0, dp(46), 1f));
-
-        detailsColumn.addView(buildCommentsCard(), marginParams(dp(14), dp(12)));
+        actions.addView(actionButton(comments.isEmpty() ? "💬 Comments" : "💬 " + comments, this::openComments), actionParams());
+        actions.addView(actionButton("♡ Later", this::toggleWatchLater), actionParams());
+        actions.addView(actionButton("↗ Share", this::sharePage), actionParams());
 
         TextView relatedTitle = new TextView(this);
         relatedTitle.setText("Related videos");
@@ -295,6 +303,94 @@ public class VideoDetailActivity extends Activity {
 
         updateMetadataUi();
         setContentView(root);
+    }
+
+    private LinearLayout.LayoutParams actionParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(40), 1f);
+        params.setMargins(dp(3), 0, dp(3), 0);
+        return params;
+    }
+
+    private void setOverlayChromeVisible(boolean visible, boolean animate) {
+        setOverlayViewVisible(backButton, visible, animate);
+        setOverlayViewVisible(menuButton, visible, animate);
+    }
+
+    private void setOverlayViewVisible(View view, boolean visible, boolean animate) {
+        if (view == null) return;
+        view.animate().cancel();
+        if (visible) {
+            view.setVisibility(View.VISIBLE);
+            if (animate) {
+                view.setAlpha(0f);
+                view.animate().alpha(1f).setDuration(120L).start();
+            } else {
+                view.setAlpha(1f);
+            }
+        } else if (animate) {
+            view.animate().alpha(0f).setDuration(140L).withEndAction(() -> view.setVisibility(View.GONE)).start();
+        } else {
+            view.setAlpha(0f);
+            view.setVisibility(View.GONE);
+        }
+    }
+
+    private void applyDetailsBackground() {
+        if (detailsScroll == null) return;
+        if (!oledEnabled()) {
+            detailsScroll.setBackground(new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[] {Color.rgb(31, 18, 14), Color.rgb(16, 16, 19), Color.rgb(13, 13, 15)}
+            ));
+            return;
+        }
+        boolean glow = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean("ambient_feed_glow", true);
+        if (!glow) {
+            detailsScroll.setBackgroundColor(Color.BLACK);
+            return;
+        }
+        detailsScroll.setBackground(new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {Color.rgb(8, 3, 1), Color.rgb(2, 1, 0), Color.BLACK, Color.BLACK}
+        ));
+    }
+
+    private boolean oledEnabled() {
+        return getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean("oled_black_enabled", true);
+    }
+
+    private void playEntranceOnce() {
+        if (entrancePlayed || isFinishing()) return;
+        entrancePlayed = true;
+        if (playerContainer != null) {
+            playerContainer.animate().cancel();
+            playerContainer.setPivotX(playerContainer.getWidth() * 0.5f);
+            playerContainer.setPivotY(0f);
+            playerContainer.setScaleX(0.98f);
+            playerContainer.setScaleY(0.98f);
+            playerContainer.setAlpha(0.72f);
+            playerContainer.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .alpha(1f)
+                    .setDuration(180L)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+        if (detailsScroll != null) {
+            detailsScroll.animate().cancel();
+            detailsScroll.setAlpha(0.35f);
+            detailsScroll.setTranslationY(dp(6));
+            detailsScroll.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setStartDelay(25L)
+                    .setDuration(190L)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
     }
 
     private void finishSwipeMinimize() {
@@ -348,43 +444,13 @@ public class VideoDetailActivity extends Activity {
         }
     }
 
-    private View buildCommentsCard() {
-        MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(Color.rgb(25, 25, 28));
-        card.setStrokeColor(Color.rgb(49, 49, 55));
-        card.setStrokeWidth(dp(1));
-        card.setRadius(dp(16));
-        card.setClickable(true);
-        card.setFocusable(true);
-        card.setOnClickListener(v -> openComments());
-
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(15), dp(13), dp(15), dp(13));
-        card.addView(body, new MaterialCardView.LayoutParams(-1, -2));
-
-        commentsTitle = new TextView(this);
-        commentsTitle.setTextColor(Color.WHITE);
-        commentsTitle.setTextSize(16);
-        commentsTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        body.addView(commentsTitle);
-
-        commentsSubtitle = new TextView(this);
-        commentsSubtitle.setTextColor(Color.rgb(170, 170, 180));
-        commentsSubtitle.setTextSize(12);
-        commentsSubtitle.setPadding(0, dp(5), 0, 0);
-        body.addView(commentsSubtitle);
-        return card;
-    }
-
     private TextView actionButton(String text, Runnable action) {
         TextView button = new TextView(this);
         button.setText(text);
-        button.setTextColor(Color.WHITE);
-        button.setTextSize(12);
-        button.setTypeface(null, android.graphics.Typeface.BOLD);
+        button.setTextColor(Color.rgb(238, 238, 242));
+        button.setTextSize(13);
         button.setGravity(Gravity.CENTER);
-        button.setBackground(rounded(Color.rgb(31, 31, 35), dp(14)));
+        button.setBackground(actionPill());
         button.setClickable(true);
         button.setFocusable(true);
         button.setOnClickListener(v -> {
@@ -392,6 +458,14 @@ public class VideoDetailActivity extends Activity {
             action.run();
         });
         return button;
+    }
+
+    private GradientDrawable actionPill() {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(oledEnabled() ? Color.rgb(8, 8, 10) : Color.rgb(27, 27, 32));
+        bg.setCornerRadius(dp(20));
+        bg.setStroke(dp(1), oledEnabled() ? Color.rgb(30, 30, 34) : Color.rgb(55, 55, 63));
+        return bg;
     }
 
     private TextView overlayButton(String label, int size) {
@@ -468,12 +542,6 @@ public class VideoDetailActivity extends Activity {
             if (!uploader.isEmpty()) parts.add(uploader);
             metaView.setText(TextUtils.join("  •  ", parts));
         }
-        if (commentsTitle != null) {
-            commentsTitle.setText(comments.isEmpty() ? "Comments" : "Comments  " + comments);
-        }
-        if (commentsSubtitle != null) {
-            commentsSubtitle.setText("Open the native comment section without leaving the video page");
-        }
     }
 
     private void loadRelated() {
@@ -532,10 +600,11 @@ public class VideoDetailActivity extends Activity {
 
     private View buildRelatedCard(NativeContentItem item) {
         MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(Color.rgb(25, 25, 28));
-        card.setStrokeColor(Color.rgb(49, 49, 55));
+        card.setCardBackgroundColor(oledEnabled() ? Color.rgb(9, 9, 11) : Color.rgb(23, 23, 27));
+        card.setStrokeColor(oledEnabled() ? Color.rgb(29, 29, 33) : Color.rgb(49, 49, 57));
         card.setStrokeWidth(dp(1));
-        card.setRadius(dp(14));
+        card.setRadius(dp(18));
+        card.setCardElevation(0f);
         card.setClickable(true);
         card.setFocusable(true);
         card.setOnClickListener(v -> {
@@ -976,6 +1045,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void haptic(View view) {
+        if (view == null) return;
         if (!getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean("haptics_enabled", true)) return;
         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
@@ -993,6 +1063,7 @@ public class VideoDetailActivity extends Activity {
     protected void onResume() {
         super.onResume();
         updateSwipeEnabled();
+        if (detailsScroll != null) applyDetailsBackground();
     }
 
     @Override
@@ -1013,6 +1084,7 @@ public class VideoDetailActivity extends Activity {
         }
         savePlaybackState(false);
         releasePlayer();
+        if (thumbnailResolver != null) thumbnailResolver.close();
         io.shutdownNow();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         super.onDestroy();
