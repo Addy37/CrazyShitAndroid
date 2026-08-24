@@ -77,9 +77,8 @@ public final class ChaosFeedView extends FrameLayout {
     private static final String KEY_RECENT = "recent_urls";
     private static final String KEY_HIDDEN = "hidden_urls";
     private static final String KEY_MUTED = "muted";
-    private static final int MAX_RECENT = 180;
+    private static final int MAX_RECENT = 500;
     private static final int MAX_HIDDEN = 600;
-    private static final int MAX_SOURCE_PAGE = 8;
     private static final int LOAD_AHEAD_AT = 5;
     private static final String SITE = "https://crazyshit.com/";
 
@@ -96,6 +95,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Set<String> resolving = new HashSet<>();
     private final Set<String> unplayable = new HashSet<>();
     private final Random random = new Random();
+    private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
 
     private ViewPager2 pager;
     private ChaosAdapter adapter;
@@ -107,7 +107,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean autoAdvancePending;
     private boolean chaosMuted;
     private int autoAdvanceFrom = -1;
-    private int sourcePage = 1;
+    private int consecutiveDryLoads;
     private int selectedPosition;
 
     public ChaosFeedView(Activity activity, Host host) {
@@ -196,23 +196,24 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void refresh() {
-        pauseAll();
-        sourcePage = 1;
-        poolLoading = false;
-        autoAdvancePending = false;
-        autoAdvanceFrom = -1;
-        streamCache.clear();
-        resolving.clear();
-        unplayable.clear();
-        sessionUrls.clear();
-        items.clear();
-        adapter.notifyDataSetChanged();
-        initialProgress.setVisibility(View.VISIBLE);
-        empty.setVisibility(View.GONE);
-        selectedPosition = 0;
-        pager.setCurrentItem(0, false);
-        loadMorePool();
-    }
+    pauseAll();
+    consecutiveDryLoads = 0;
+    sourceMixer.resetDeck();
+    poolLoading = false;
+    autoAdvancePending = false;
+    autoAdvanceFrom = -1;
+    streamCache.clear();
+    resolving.clear();
+    unplayable.clear();
+    // Keep sessionUrls so Refresh cannot immediately deal the same clips back again.
+    items.clear();
+    adapter.notifyDataSetChanged();
+    initialProgress.setVisibility(View.VISIBLE);
+    empty.setVisibility(View.GONE);
+    selectedPosition = 0;
+    pager.setCurrentItem(0, false);
+    loadMorePool();
+}
 
     public void close() {
         pauseAll();
@@ -221,70 +222,69 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void loadMorePool() {
-        if (poolLoading) return;
-        poolLoading = true;
-        final int requestPage = sourcePage;
-        sourcePage++;
+    if (poolLoading) return;
+    poolLoading = true;
 
-        io.execute(() -> {
-            LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
-            try {
-                for (NativeContentItem item : repository.fetchFeed(activity, CrazyShitRepository.HOME, requestPage)) {
-                    if (isMedia(item)) combined.put(item.url, item);
-                }
-            } catch (Exception ignored) {
+    io.execute(() -> {
+        List<NativeContentItem> mixed;
+        try {
+            mixed = sourceMixer.loadRandomBatch(activity);
+        } catch (Exception ignored) {
+            mixed = Collections.emptyList();
+        }
+
+        ArrayList<NativeContentItem> fresh = new ArrayList<>();
+        ArrayList<NativeContentItem> recentFallback = new ArrayList<>();
+        for (NativeContentItem item : mixed) {
+            if (!isMedia(item) || hiddenUrls.contains(item.url)) continue;
+            if (recentSet.contains(item.url)) recentFallback.add(item);
+            else fresh.add(item);
+        }
+        Collections.shuffle(fresh, random);
+        Collections.shuffle(recentFallback, random);
+
+        activity.runOnUiThread(() -> {
+            poolLoading = false;
+            int before = items.size();
+            appendUnique(fresh);
+
+            int freshAdded = items.size() - before;
+            if (freshAdded == 0) consecutiveDryLoads++;
+            else consecutiveDryLoads = 0;
+
+            // Previously watched clips stay out of the normal draw. Only recycle them if
+            // several broad random batches in a row genuinely cannot produce fresh media.
+            if (freshAdded < 4 && consecutiveDryLoads >= 3) {
+                appendUnique(recentFallback);
             }
-            try {
-                for (NativeContentItem item : repository.fetchFeed(activity, CrazyShitRepository.TRENDING, requestPage)) {
-                    if (isMedia(item)) combined.putIfAbsent(item.url, item);
-                }
-            } catch (Exception ignored) {
+
+            int added = items.size() - before;
+            if (added > 0 && freshAdded == 0) consecutiveDryLoads = 0;
+
+            if (added > 0) {
+                adapter.notifyItemRangeInserted(before, added);
+                initialProgress.setVisibility(View.GONE);
+                empty.setVisibility(View.GONE);
+                resolveAhead(selectedPosition);
+                if (active && hostResumed) playSelected();
+                tryPendingAutoAdvance();
             }
 
-            ArrayList<NativeContentItem> fresh = new ArrayList<>();
-            ArrayList<NativeContentItem> recentFallback = new ArrayList<>();
-            for (NativeContentItem item : combined.values()) {
-                if (!isMedia(item) || hiddenUrls.contains(item.url)) continue;
-                if (recentSet.contains(item.url)) recentFallback.add(item);
-                else fresh.add(item);
+            boolean needsMore = items.size() < 14
+                    || (autoAdvancePending && autoAdvanceFrom + 1 >= items.size());
+            if (needsMore && consecutiveDryLoads < 4) {
+                loadMorePool();
+            } else if (items.isEmpty()) {
+                initialProgress.setVisibility(View.GONE);
+                empty.setText("Chaos couldn't find a playable pool right now.\nPull away and come back to retry.");
+                empty.setVisibility(View.VISIBLE);
+            } else if (autoAdvancePending && autoAdvanceFrom + 1 >= items.size()) {
+                autoAdvancePending = false;
+                autoAdvanceFrom = -1;
             }
-            Collections.shuffle(fresh, random);
-            Collections.shuffle(recentFallback, random);
-
-            activity.runOnUiThread(() -> {
-                poolLoading = false;
-                int before = items.size();
-                appendUnique(fresh);
-
-                if (items.size() - before < 6 && requestPage >= MAX_SOURCE_PAGE) {
-                    Collections.reverse(recentFallback);
-                    appendUnique(recentFallback);
-                }
-
-                int added = items.size() - before;
-                if (added > 0) {
-                    adapter.notifyItemRangeInserted(before, added);
-                    initialProgress.setVisibility(View.GONE);
-                    empty.setVisibility(View.GONE);
-                    resolveAhead(selectedPosition);
-                    if (active && hostResumed) playSelected();
-                    tryPendingAutoAdvance();
-                }
-
-                if (items.size() < 10 && requestPage < MAX_SOURCE_PAGE) {
-                    loadMorePool();
-                } else if (items.isEmpty() && requestPage >= MAX_SOURCE_PAGE) {
-                    initialProgress.setVisibility(View.GONE);
-                    empty.setText("Chaos couldn't find a playable pool right now.\nPull away and come back to retry.");
-                    empty.setVisibility(View.VISIBLE);
-                } else if (autoAdvancePending && requestPage >= MAX_SOURCE_PAGE
-                        && autoAdvanceFrom + 1 >= items.size()) {
-                    autoAdvancePending = false;
-                    autoAdvanceFrom = -1;
-                }
-            });
         });
-    }
+    });
+}
 
     private static boolean isMedia(NativeContentItem item) {
         return item != null
