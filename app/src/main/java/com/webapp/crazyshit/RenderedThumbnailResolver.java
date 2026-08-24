@@ -137,11 +137,33 @@ final class RenderedThumbnailResolver {
         if (currentPage == null) return;
         busy = true;
         attempt = 0;
+
+        final String page = currentPage;
+        io.execute(() -> {
+            String staticThumbnail = "";
+            try {
+                staticThumbnail = ThumbnailResolver.resolve(context, page);
+            } catch (Exception ignored) {
+            }
+            final String resolved = staticThumbnail;
+            main.post(() -> {
+                if (!busy || currentPage == null || !page.equals(currentPage)) return;
+                if (isUsable(resolved)) {
+                    finish(page, resolved);
+                } else {
+                    loadRenderedPage(page);
+                }
+            });
+        });
+    }
+
+    private void loadRenderedPage(String page) {
+        if (!busy || webView == null || page == null || !page.equals(currentPage)) return;
         try {
             webView.stopLoading();
-            webView.loadUrl(currentPage);
+            webView.loadUrl(page);
         } catch (Exception e) {
-            fallbackToVideo(currentPage);
+            fallbackToVideo(page);
         }
     }
 
@@ -232,7 +254,9 @@ final class RenderedThumbnailResolver {
                 } catch (Exception ignored) {
                 }
             }
-            if (callback != null) callback.onResolved(page, result);
+        }
+        if (page != null && callback != null) {
+            callback.onResolved(page, result == null ? "" : result);
         }
         if (page != null) {
             synchronized (pending) {

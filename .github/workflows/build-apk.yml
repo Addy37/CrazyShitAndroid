@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -22,6 +22,64 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Capture current Series and Categories artwork
+        id: capture_art
+        if: ${{ hashFiles('app/src/main/assets/browse_artwork.json') == '' }}
+        run: |
+          python3 -m pip install --quiet selenium pillow requests
+          python3 tools/capture_browse_art.py
+          mkdir -p app/src/main/assets
+          python3 - <<'PY'
+          import base64, io, json
+          from PIL import Image, ImageOps
+
+          with open('browse-art-bundle.json', 'r', encoding='utf-8') as f:
+              bundle = json.load(f)
+
+          mapping = {}
+          for item in bundle.get('items', []):
+              key = (item.get('key') or '').strip().lower()
+              data = item.get('jpeg_base64') or ''
+              if not key or not data:
+                  continue
+              raw = base64.b64decode(data)
+              image = Image.open(io.BytesIO(raw)).convert('RGB')
+              image = ImageOps.fit(image, (320, 180), method=Image.Resampling.LANCZOS, centering=(0.5, 0.45))
+              out = io.BytesIO()
+              image.save(out, 'JPEG', quality=68, optimize=True, progressive=True)
+              mapping[key] = base64.b64encode(out.getvalue()).decode('ascii')
+
+          with open('app/src/main/assets/browse_artwork.json', 'w', encoding='utf-8') as f:
+              json.dump(mapping, f, separators=(',', ':'))
+          print(f'Embedded {len(mapping)} browse card images')
+          if len(mapping) < 75:
+              raise SystemExit(f'Expected at least 75 embedded images, got {len(mapping)}')
+          PY
+          echo "captured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save embedded artwork to branch
+        if: ${{ steps.capture_art.outputs.captured == 'true' && github.event_name == 'pull_request' }}
+        run: |
+          cp app/src/main/assets/browse_artwork.json /tmp/browse_artwork.json
+          git fetch origin "${{ github.head_ref }}"
+          git checkout -B "${{ github.head_ref }}" "origin/${{ github.head_ref }}"
+          mkdir -p app/src/main/assets
+          cp /tmp/browse_artwork.json app/src/main/assets/browse_artwork.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/assets/browse_artwork.json
+          git commit -m "Embed Series and Categories artwork [skip ci]"
+          git push origin "${{ github.head_ref }}"
+
+      - name: Upload browse artwork bundle
+        if: ${{ steps.capture_art.outputs.captured == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrazyShit-browse-art
+          path: browse-art-bundle.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
