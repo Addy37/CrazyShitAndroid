@@ -5,11 +5,15 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 
 import org.json.JSONObject;
 
@@ -24,7 +28,7 @@ import java.util.Set;
  * Dedicated extractor for CrazyShit's JavaScript-driven Shit Show swipe feed.
  *
  * Shit Show is not a normal /cnt/medias/ listing, so the Jsoup feed parser intentionally does not
- * try to understand it. This source briefly boots the real page in an invisible WebView, observes
+ * try to understand it. This source briefly boots the real page in an off-screen WebView, observes
  * the rendered video elements and media requests, then hands direct playable URLs to native Chaos.
  * The WebView is destroyed after each harvest and is never shown to the user.
  */
@@ -95,8 +99,24 @@ final class ShitShowWebSource {
 
         WebView view = new WebView(activity);
         webView = view;
-        view.setAlpha(0f);
-        view.layout(0, 0, dp(activity, 360), dp(activity, 640));
+        view.setAlpha(0.01f);
+        view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        view.setFocusable(false);
+        view.setFocusableInTouchMode(false);
+
+        // Keep a real viewport attached to the activity so Shit Show's IntersectionObserver/swipe
+        // logic initializes exactly as it does in a browser. The Android view itself lives far
+        // off-screen, so it cannot cover or intercept the user's native Chaos controls.
+        ViewGroup host = activity.findViewById(android.R.id.content);
+        if (host != null) {
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                    dp(activity, 360), dp(activity, 640)
+            );
+            host.addView(view, params);
+            view.setTranslationX(-dp(activity, 1600));
+        } else {
+            view.layout(0, 0, dp(activity, 360), dp(activity, 640));
+        }
 
         WebSettings settings = view.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -185,6 +205,8 @@ final class ShitShowWebSource {
             old.loadUrl("about:blank");
             old.removeJavascriptInterface("CSShitBridge");
             old.setWebViewClient(null);
+            ViewParent parent = old.getParent();
+            if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(old);
             old.destroy();
         } catch (Exception ignored) {
         }
