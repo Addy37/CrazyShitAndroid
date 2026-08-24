@@ -45,8 +45,9 @@ final class VideoDetailControllerPolish {
                 playerView.setControllerAutoShow(false);
                 playerView.setControllerHideOnTouch(true);
                 playerView.setControllerShowTimeoutMs(CONTROL_TIMEOUT_MS);
-                playerView.setControllerVisibilityListener(visibility ->
-                        setChromeVisible(back, menu, visibility == View.VISIBLE, true));
+                PlayerView.ControllerVisibilityListener listener = visibility ->
+                        setChromeVisible(back, menu, visibility == View.VISIBLE, true);
+                playerView.setControllerVisibilityListener(listener);
                 playerView.hideController();
             } catch (Exception ignored) {
             }
