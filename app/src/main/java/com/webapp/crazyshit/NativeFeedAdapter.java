@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -71,7 +72,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private final SharedPreferences.OnSharedPreferenceChangeListener playbackListener;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private int resolverCursor;
-    private int viewMode = VIEW_CARDS;
+    private int viewMode = VIEW_LIST;
+    private boolean closed;
 
     public NativeFeedAdapter(Context context, Listener listener) {
         this.context = context.getApplicationContext();
@@ -82,7 +84,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         };
         playbackPrefs = this.context.getSharedPreferences("playback_history", Context.MODE_PRIVATE);
         playbackListener = (prefs, key) -> {
-            if (!"items".equals(key)) return;
+            if (!"items".equals(key) || closed) return;
             mainHandler.post(this::refreshPlaybackState);
         };
         playbackPrefs.registerOnSharedPreferenceChangeListener(playbackListener);
@@ -92,7 +94,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     public void setViewMode(int mode) {
         int next = mode;
-        if (next < VIEW_CARDS || next > VIEW_POSTERS) next = VIEW_CARDS;
+        if (next < VIEW_CARDS || next > VIEW_POSTERS) next = VIEW_LIST;
         if (viewMode == next) return;
         viewMode = next;
         notifyDataSetChanged();
@@ -100,6 +102,20 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     public int getViewMode() {
         return viewMode;
+    }
+
+    public void close() {
+        if (closed) return;
+        closed = true;
+        try {
+            playbackPrefs.unregisterOnSharedPreferenceChangeListener(playbackListener);
+        } catch (Exception ignored) {
+        }
+        mainHandler.removeCallbacksAndMessages(null);
+        for (RenderedThumbnailResolver resolver : thumbnailResolvers) {
+            if (resolver != null) resolver.close();
+        }
+        requestedThumbnails.clear();
     }
 
     public boolean isSectionAt(int position) {
@@ -162,12 +178,17 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     public void refreshPlaybackState() {
+        if (closed) return;
         reloadPlaybackStates();
         notifyDataSetChanged();
     }
 
     public void setResolvedThumbnail(String pageUrl, String thumbnailUrl) {
-        if (pageUrl == null || pageUrl.isEmpty() || thumbnailUrl == null || thumbnailUrl.isEmpty()) return;
+        if (closed || pageUrl == null || pageUrl.isEmpty()) return;
+        if (thumbnailUrl == null || thumbnailUrl.isEmpty()) {
+            requestedThumbnails.remove(pageUrl);
+            return;
+        }
         resolvedThumbnails.put(pageUrl, thumbnailUrl);
         for (int i = 0; i < items.size(); i++) {
             if (pageUrl.equals(items.get(i).url)) {
@@ -185,11 +206,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private void preloadRange(int start, int end) {
+        if (closed) return;
         for (int i = start; i < end; i++) requestThumbnail(items.get(i));
     }
 
     private void requestThumbnail(NativeContentItem item) {
-        if (item == null || item.isSection() || item.url == null || item.url.isEmpty()) return;
+        if (closed || item == null || item.isSection() || item.url == null || item.url.isEmpty()) return;
         if (item.isMeme() && item.imageUrl != null && !item.imageUrl.isEmpty()) return;
         if (resolvedThumbnails.containsKey(item.url)) return;
         if (!requestedThumbnails.add(item.url)) return;
@@ -226,12 +248,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         card.setClickable(false);
         card.setLongClickable(false);
 
-        RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, dp(card, 50));
-        params.setMargins(dp(card, 12), dp(card, 10), dp(card, 12), 0);
+        boolean landscape = isLandscape(parent);
+        RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, dp(card, landscape ? 44 : 50));
+        params.setMargins(dp(card, 12), dp(card, landscape ? 6 : 10), dp(card, 12), 0);
         card.setLayoutParams(params);
 
         TextView header = new TextView(parent.getContext());
-        header.setTextSize(17f);
+        header.setTextSize(landscape ? 16f : 17f);
         header.setTypeface(null, android.graphics.Typeface.BOLD);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setSingleLine(true);
@@ -247,41 +270,47 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         column.setOrientation(LinearLayout.VERTICAL);
         card.addView(column, new MaterialCardView.LayoutParams(-1, -2));
 
-        MediaViews media = addMedia(parent, column, 194, -1);
+        MediaViews media = addMedia(parent, column, isLandscape(parent) ? 176 : 194, -1);
         CopyViews copy = addCopy(parent, column, 16, 12, 14, 12, false);
         return new Holder(card, media, copy);
     }
 
     private Holder createListHolder(ViewGroup parent) {
-        MaterialCardView card = baseCard(parent, 12, 4, 15, 96);
+        boolean landscape = isLandscape(parent);
+        int height = landscape ? 88 : 96;
+        int width = landscape ? 124 : 136;
+        MaterialCardView card = baseCard(parent, 12, 4, 15, height);
         LinearLayout row = new LinearLayout(parent.getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         card.addView(row, new MaterialCardView.LayoutParams(-1, -1));
 
-        MediaViews media = addMedia(parent, row, 96, 136);
-        CopyViews copy = addCopy(parent, row, 15, 11, 12, 9, false);
+        MediaViews media = addMedia(parent, row, height, width);
+        CopyViews copy = addCopy(parent, row, landscape ? 14 : 15, 11, 12, landscape ? 7 : 9, false);
         return new Holder(card, media, copy);
     }
 
     private Holder createGridHolder(ViewGroup parent) {
-        MaterialCardView card = baseCard(parent, 6, 5, 14, 240);
+        int mediaHeight = responsiveGridMediaHeightDp(parent);
+        int cardHeight = mediaHeight + 104;
+        MaterialCardView card = baseCard(parent, 6, 5, 14, cardHeight);
         LinearLayout column = new LinearLayout(parent.getContext());
         column.setOrientation(LinearLayout.VERTICAL);
         card.addView(column, new MaterialCardView.LayoutParams(-1, -1));
 
-        MediaViews media = addMedia(parent, column, 128, -1);
+        MediaViews media = addMedia(parent, column, mediaHeight, -1);
         CopyViews copy = addCopy(parent, column, 14, 10, 10, 9, true);
         return new Holder(card, media, copy);
     }
 
     private Holder createPosterHolder(ViewGroup parent) {
-        MaterialCardView card = baseCard(parent, 6, 5, 14, 214);
+        int posterHeight = responsivePosterHeightDp(parent);
+        MaterialCardView card = baseCard(parent, 6, 5, 14, posterHeight);
         LinearLayout column = new LinearLayout(parent.getContext());
         column.setOrientation(LinearLayout.VERTICAL);
         card.addView(column, new MaterialCardView.LayoutParams(-1, -1));
 
-        MediaViews media = addMedia(parent, column, 214, -1);
+        MediaViews media = addMedia(parent, column, posterHeight, -1);
 
         LinearLayout overlay = new LinearLayout(parent.getContext());
         overlay.setOrientation(LinearLayout.VERTICAL);
@@ -717,6 +746,30 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         if (value >= 100d) return String.format(Locale.US, "%.0f", value);
         if (value >= 10d) return String.format(Locale.US, "%.1f", value).replace(".0", "");
         return String.format(Locale.US, "%.1f", value).replace(".0", "");
+    }
+
+    private static boolean isLandscape(View view) {
+        return view.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    private static int responsiveGridMediaHeightDp(View parent) {
+        Configuration config = parent.getResources().getConfiguration();
+        int widthDp = Math.max(320, config.screenWidthDp);
+        boolean landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE;
+        int columns = landscape ? (widthDp >= 900 ? 3 : 2) : 2;
+        int rail = landscape ? 68 : 0;
+        float cardWidth = Math.max(140f, (widthDp - rail - columns * 12f) / columns);
+        return Math.max(118, Math.min(160, Math.round(cardWidth * 9f / 16f)));
+    }
+
+    private static int responsivePosterHeightDp(View parent) {
+        Configuration config = parent.getResources().getConfiguration();
+        int widthDp = Math.max(320, config.screenWidthDp);
+        boolean landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE;
+        int columns = landscape ? (widthDp >= 900 ? 3 : 2) : 2;
+        int rail = landscape ? 68 : 0;
+        float cardWidth = Math.max(150f, (widthDp - rail - columns * 12f) / columns);
+        return Math.max(196, Math.min(240, Math.round(cardWidth * 1.06f)));
     }
 
     private static int dp(View view, int value) {

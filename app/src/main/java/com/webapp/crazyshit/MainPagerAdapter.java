@@ -27,8 +27,7 @@ import java.util.concurrent.Executors;
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
     public static final int PAGE_HOME = 0;
     public static final int PAGE_SERIES = 1;
-    // Compatibility aliases let the existing shell keep its proven pager routing while the
-    // visible navigation is upgraded by SeriesCategoriesNavController.
+    // Compatibility aliases retained for old callers while visible navigation is Series/Categories.
     public static final int PAGE_TRENDING = PAGE_SERIES;
     public static final int PAGE_CHAOS = 2;
     public static final int PAGE_CATEGORIES = 3;
@@ -91,9 +90,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public int viewMode(int position) {
-        if (position == PAGE_CHAOS) return NativeFeedAdapter.VIEW_LARGE;
+        if (position == PAGE_CHAOS) return NativeFeedAdapter.VIEW_CARDS;
         Page page = pageAt(position);
-        if (page == null) return NativeFeedAdapter.VIEW_LARGE;
+        if (page == null) return NativeFeedAdapter.VIEW_LIST;
         if (page.kind != PageKind.FEED) return NativeFeedAdapter.VIEW_GRID;
         return page.viewMode;
     }
@@ -104,8 +103,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (page == null || page.kind != PageKind.FEED) return;
 
         int safe = mode;
-        if (safe < NativeFeedAdapter.VIEW_LARGE || safe > NativeFeedAdapter.VIEW_GRID) {
-            safe = NativeFeedAdapter.VIEW_LARGE;
+        if (safe < NativeFeedAdapter.VIEW_CARDS || safe > NativeFeedAdapter.VIEW_POSTERS) {
+            safe = NativeFeedAdapter.VIEW_LIST;
         }
         page.viewMode = safe;
         activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
@@ -208,7 +207,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         });
         page.recycler.setAdapter(page.feedAdapter);
         page.viewMode = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getInt(prefKey, NativeFeedAdapter.VIEW_LARGE);
+                .getInt(prefKey, NativeFeedAdapter.VIEW_LIST);
+        if (page.viewMode < NativeFeedAdapter.VIEW_CARDS || page.viewMode > NativeFeedAdapter.VIEW_POSTERS) {
+            page.viewMode = NativeFeedAdapter.VIEW_LIST;
+        }
         applyFeedLayout(page);
 
         page.recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -279,11 +281,17 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.feedAdapter.setViewMode(page.viewMode);
         RecyclerView.LayoutManager old = page.recycler.getLayoutManager();
         int position = 0;
+        int offset = 0;
         if (old instanceof LinearLayoutManager) {
-            position = Math.max(0, ((LinearLayoutManager) old).findFirstVisibleItemPosition());
+            LinearLayoutManager lm = (LinearLayoutManager) old;
+            position = Math.max(0, lm.findFirstVisibleItemPosition());
+            View anchor = lm.findViewByPosition(position);
+            if (anchor != null) offset = anchor.getTop() - page.recycler.getPaddingTop();
         }
 
-        if (page.viewMode == NativeFeedAdapter.VIEW_GRID) {
+        LinearLayoutManager next;
+        if (page.viewMode == NativeFeedAdapter.VIEW_GRID ||
+                page.viewMode == NativeFeedAdapter.VIEW_POSTERS) {
             GridLayoutManager grid = new GridLayoutManager(activity, 2);
             grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
                 @Override
@@ -291,13 +299,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     return page.feedAdapter.isSectionAt(adapterPosition) ? 2 : 1;
                 }
             });
-            page.recycler.setLayoutManager(grid);
+            next = grid;
         } else {
-            page.recycler.setLayoutManager(new LinearLayoutManager(activity));
+            next = new LinearLayoutManager(activity);
         }
+        page.recycler.setLayoutManager(next);
 
         if (page.feedAdapter.getItemCount() > 0) {
-            page.recycler.scrollToPosition(Math.min(position, page.feedAdapter.getItemCount() - 1));
+            int safePosition = Math.min(position, page.feedAdapter.getItemCount() - 1);
+            next.scrollToPositionWithOffset(safePosition, offset);
         }
     }
 
@@ -422,7 +432,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         TextView empty;
         NativeFeedAdapter feedAdapter;
         NativeCategoryAdapter browseAdapter;
-        int viewMode = NativeFeedAdapter.VIEW_GRID;
+        int viewMode = NativeFeedAdapter.VIEW_LIST;
         int currentPage;
         boolean loading;
         boolean endReached;

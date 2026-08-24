@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.view.Gravity;
@@ -83,6 +84,16 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         notifyDataSetChanged();
     }
 
+    void close() {
+        if (thumbnailResolvers != null) {
+            for (RenderedThumbnailResolver resolver : thumbnailResolvers) {
+                if (resolver != null) resolver.close();
+            }
+        }
+        thumbnailResolvers = null;
+        requestedThumbnails.clear();
+    }
+
     @Override
     public long getItemId(int position) {
         Entry entry = entries.get(position);
@@ -99,14 +110,16 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     @NonNull
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        boolean landscape = parent.getResources().getConfiguration().orientation ==
+                Configuration.ORIENTATION_LANDSCAPE;
         if (viewType == TYPE_SECTION) {
             TextView title = new TextView(parent.getContext());
             title.setTextColor(Color.rgb(245, 245, 248));
-            title.setTextSize(17f);
+            title.setTextSize(landscape ? 16f : 17f);
             title.setTypeface(null, android.graphics.Typeface.BOLD);
             title.setGravity(Gravity.CENTER_VERTICAL);
-            title.setPadding(dp(parent, 16), dp(parent, 15), dp(parent, 16), dp(parent, 6));
-            title.setLayoutParams(new RecyclerView.LayoutParams(-1, dp(parent, 52)));
+            title.setPadding(dp(parent, 16), dp(parent, landscape ? 10 : 15), dp(parent, 16), dp(parent, 6));
+            title.setLayoutParams(new RecyclerView.LayoutParams(-1, dp(parent, landscape ? 46 : 52)));
             return new SectionHolder(title);
         }
 
@@ -115,7 +128,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         card.setRadius(dp(parent, 14));
         card.setStrokeWidth(dp(parent, 1));
         card.setStrokeColor(Color.rgb(51, 51, 58));
-        RecyclerView.LayoutParams cardParams = new RecyclerView.LayoutParams(-1, dp(parent, 108));
+        RecyclerView.LayoutParams cardParams = new RecyclerView.LayoutParams(-1, dp(parent, landscape ? 96 : 108));
         cardParams.setMargins(dp(parent, 10), dp(parent, 5), dp(parent, 10), dp(parent, 5));
         card.setLayoutParams(cardParams);
 
@@ -127,18 +140,18 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         ImageView image = new ImageView(parent.getContext());
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(Color.rgb(31, 31, 36));
-        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(parent, 150), -1);
+        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(parent, landscape ? 136 : 150), -1);
         row.addView(image, imageParams);
 
         LinearLayout text = new LinearLayout(parent.getContext());
         text.setOrientation(LinearLayout.VERTICAL);
         text.setGravity(Gravity.CENTER_VERTICAL);
-        text.setPadding(dp(parent, 13), dp(parent, 9), dp(parent, 13), dp(parent, 9));
+        text.setPadding(dp(parent, 13), dp(parent, landscape ? 7 : 9), dp(parent, 13), dp(parent, landscape ? 7 : 9));
         row.addView(text, new LinearLayout.LayoutParams(0, -1, 1f));
 
         TextView title = new TextView(parent.getContext());
         title.setTextColor(Color.WHITE);
-        title.setTextSize(15.5f);
+        title.setTextSize(landscape ? 15f : 15.5f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -146,7 +159,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
         TextView meta = new TextView(parent.getContext());
         meta.setTextColor(Color.rgb(174, 174, 184));
-        meta.setTextSize(12.5f);
+        meta.setTextSize(landscape ? 12f : 12.5f);
         meta.setMaxLines(2);
         meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
@@ -215,11 +228,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         return meta.toString();
     }
 
-    /**
-     * Search intentionally shares the exact media-thumbnail resolver used by NativeFeedAdapter.
-     * This keeps Home and Search on one proven thumbnail path instead of maintaining a second
-     * site-specific implementation.
-     */
+    /** Search intentionally shares the exact media-thumbnail resolver used by NativeFeedAdapter. */
     private void ensureResolvers(Context context) {
         if (thumbnailResolvers != null || context == null) return;
         Context app = context.getApplicationContext();
@@ -234,14 +243,22 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (item.url == null || item.url.isEmpty()) return;
         if (resolvedThumbnails.containsKey(item.url)) return;
         if (!requestedThumbnails.add(item.url)) return;
-        if (thumbnailResolvers == null || thumbnailResolvers.length == 0) return;
+        if (thumbnailResolvers == null || thumbnailResolvers.length == 0) {
+            requestedThumbnails.remove(item.url);
+            return;
+        }
         RenderedThumbnailResolver resolver =
                 thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
         resolver.request(item.url);
     }
 
     private void setResolvedThumbnail(String pageUrl, String thumbnailUrl) {
-        if (pageUrl == null || pageUrl.isEmpty() || thumbnailUrl == null || thumbnailUrl.isEmpty()) return;
+        if (pageUrl == null || pageUrl.isEmpty()) return;
+        if (thumbnailUrl == null || thumbnailUrl.isEmpty()) {
+            // A failed first pass should not poison this SearchActivity for the rest of its life.
+            requestedThumbnails.remove(pageUrl);
+            return;
+        }
         resolvedThumbnails.put(pageUrl, thumbnailUrl);
         for (int i = 0; i < entries.size(); i++) {
             Entry entry = entries.get(i);

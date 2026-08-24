@@ -1,8 +1,8 @@
 package com.webapp.crazyshit;
 
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
-import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -68,7 +68,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         card.setStrokeColor(Color.rgb(52, 52, 59));
         card.setCardElevation(dp(parent, 1));
 
-        RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, dp(parent, 154));
+        RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, dp(parent, responsiveHeightDp(parent)));
         params.setMargins(dp(parent, 7), dp(parent, 7), dp(parent, 7), dp(parent, 7));
         card.setLayoutParams(params);
 
@@ -92,7 +92,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         title.setMaxLines(2);
-        title.setEllipsize(TextUtils.TruncateAt.END);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         title.setPadding(dp(parent, 11), dp(parent, 6), dp(parent, 11), dp(parent, 7));
         FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(-1, dp(parent, 52));
         titleParams.gravity = Gravity.BOTTOM;
@@ -139,6 +139,23 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     @Override
     public int getItemCount() {
         return items.size();
+    }
+
+    private static int responsiveHeightDp(View parent) {
+        Configuration config = parent.getResources().getConfiguration();
+        int widthDp = Math.max(320, config.screenWidthDp);
+        boolean landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE;
+        int columns;
+        int rail = 0;
+        if (landscape) {
+            columns = widthDp >= 900 ? 4 : 3;
+            rail = 68;
+        } else {
+            columns = 2;
+        }
+        float available = Math.max(280f, widthDp - rail - (columns * 14f));
+        float cardWidth = available / columns;
+        return Math.max(136, Math.min(180, Math.round(cardWidth * 0.72f)));
     }
 
     private static int dp(View view, int value) {

@@ -2,7 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.AlertDialog;
 import android.content.Intent;
-import android.view.Gravity;
+import android.content.res.Configuration;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,7 +19,7 @@ import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** Central 2.6 view-style controller shared by Home and native collection feeds. */
+/** Central 2.6+ view-style controller shared by Home and native collection feeds. */
 final class FeedViewStyleController {
     private static final String HOME_PREF = "native_view_home";
     private static final String COLLECTION_PREF = "native_view_collection";
@@ -82,7 +82,7 @@ final class FeedViewStyleController {
         }
 
         int selected = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
+                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_LIST));
         AlertDialog dialog = new AlertDialog.Builder(activity)
                 .setTitle("View style")
                 .setSingleChoiceItems(LABELS, selected, null)
@@ -152,7 +152,7 @@ final class FeedViewStyleController {
 
     private static void applySavedMainLayout(NativeMainActivity activity) {
         int mode = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
+                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_LIST));
         applyMainMode(activity, mode);
     }
 
@@ -210,11 +210,14 @@ final class FeedViewStyleController {
         adapter.setViewMode(mode);
         LinearLayoutManager next;
         if (mode == NativeFeedAdapter.VIEW_GRID || mode == NativeFeedAdapter.VIEW_POSTERS) {
-            GridLayoutManager grid = new GridLayoutManager(recycler.getContext(), 2);
+            Configuration config = recycler.getResources().getConfiguration();
+            boolean landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE;
+            int columns = landscape && config.screenWidthDp >= 900 ? 3 : 2;
+            GridLayoutManager grid = new GridLayoutManager(recycler.getContext(), columns);
             grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
                 @Override
                 public int getSpanSize(int adapterPosition) {
-                    return adapter.isSectionAt(adapterPosition) ? 2 : 1;
+                    return adapter.isSectionAt(adapterPosition) ? columns : 1;
                 }
             });
             next = grid;
@@ -245,7 +248,7 @@ final class FeedViewStyleController {
         if (title != null && !"Home".contentEquals(title.getText())) return;
         if (subtitle == null) return;
         int mode = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
+                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_LIST));
         subtitle.setText("CrazyShit  •  " + label(mode));
     }
 
@@ -256,7 +259,7 @@ final class FeedViewStyleController {
 
     private static int safeMode(int mode) {
         if (mode < NativeFeedAdapter.VIEW_CARDS || mode > NativeFeedAdapter.VIEW_POSTERS) {
-            return NativeFeedAdapter.VIEW_CARDS;
+            return NativeFeedAdapter.VIEW_LIST;
         }
         return mode;
     }
