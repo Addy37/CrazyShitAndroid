@@ -39,35 +39,67 @@ final class ChaosSourceMixer {
     }
 
     List<NativeContentItem> loadRandomBatch(Context context) {
-        // Start the rendered Shit Show page before the normal network work. Category discovery and
-        // the six regular source requests then give the hidden player time to expose its first clip
-        // without holding up Chaos just to wait on the WebView.
+        // Start the rendered Shit Show page before the normal source work so it can harvest in
+        // parallel while the existing broad Chaos deck keeps doing what already tested well.
         shitShow.prewarm(context);
         ensureCatalog(context);
 
-        LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
+        LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
         int sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
         for (int i = 0; i < sourceCount; i++) {
-            addRequest(context, combined, nextRequest());
+            addRequest(context, regular, nextRequest());
         }
 
-        // Drain Shit Show after the regular sources. If the first rendered stream is still arriving,
-        // the source waits briefly on this IO thread so beta testing can see it in the initial pool
-        // instead of leaving harvested clips parked until Chaos eventually needs another batch.
+        ArrayList<NativeContentItem> regularItems = new ArrayList<>(regular.values());
+        Collections.shuffle(regularItems, random);
+
+        ArrayList<NativeContentItem> shitShowItems = new ArrayList<>();
         for (NativeContentItem item : shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)) {
             if (item == null || item.url == null || item.url.isEmpty()) continue;
-            combined.putIfAbsent(item.url, item);
+            if (regular.containsKey(item.url)) continue;
+            shitShowItems.add(item);
         }
+        Collections.shuffle(shitShowItems, random);
 
-        ArrayList<NativeContentItem> result = new ArrayList<>(combined.values());
-        Collections.shuffle(result, random);
-        return result;
+        return weaveShitShow(regularItems, shitShowItems);
     }
 
     void resetDeck() {
         sourceDeck.clear();
         usedSourcePages.clear();
         shitShow.resetDeck();
+    }
+
+    private List<NativeContentItem> weaveShitShow(
+            List<NativeContentItem> regularItems,
+            List<NativeContentItem> shitShowItems
+    ) {
+        if (shitShowItems == null || shitShowItems.isEmpty()) {
+            return regularItems == null ? new ArrayList<>() : new ArrayList<>(regularItems);
+        }
+
+        ArrayList<NativeContentItem> regular = regularItems == null
+                ? new ArrayList<>()
+                : new ArrayList<>(regularItems);
+        ArrayList<NativeContentItem> result = new ArrayList<>(regular.size() + shitShowItems.size());
+
+        // Keep the normal Chaos order randomized, but make a harvested Shit Show clip visible soon
+        // enough to be meaningful. Beta.10 shuffled eight possible clips into a potentially huge
+        // regular batch, so successful harvesting could still look like a total extractor failure.
+        int regularIndex = 0;
+        int nextShitAfter = 2 + random.nextInt(4); // first one after 2-5 regular clips
+        for (NativeContentItem shit : shitShowItems) {
+            int copied = 0;
+            while (regularIndex < regular.size() && copied < nextShitAfter) {
+                result.add(regular.get(regularIndex++));
+                copied++;
+            }
+            result.add(shit);
+            nextShitAfter = 5 + random.nextInt(6); // then keep a loose 5-10 clip spacing
+        }
+
+        while (regularIndex < regular.size()) result.add(regular.get(regularIndex++));
+        return result;
     }
 
     private void ensureCatalog(Context context) {
@@ -124,7 +156,6 @@ final class ChaosSourceMixer {
             if (usedSourcePages.add(key)) return new SourceRequest(url, page);
         }
 
-        // Once most source/page combinations have been sampled, start a fresh randomized cycle.
         usedSourcePages.clear();
         if (sourceDeck.isEmpty()) refillDeck();
         String url = sourceDeck.pollFirst();
