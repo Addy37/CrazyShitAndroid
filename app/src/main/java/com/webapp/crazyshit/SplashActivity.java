@@ -24,6 +24,7 @@ public final class SplashActivity extends Activity {
     private boolean leaving;
     private boolean handingOff;
     private View wordmark;
+    private View glow;
     private View sweep;
 
     @Override
@@ -46,7 +47,20 @@ public final class SplashActivity extends Activity {
     private void animateSplash() {
         View root = findViewById(R.id.splashRoot);
         wordmark = findViewById(R.id.splashWordmark);
+        glow = findViewById(R.id.splashGlow);
         sweep = findViewById(R.id.splashSweep);
+
+        if (glow != null) {
+            glow.setAlpha(0f);
+            glow.setScaleX(0.88f);
+            glow.setScaleY(0.88f);
+            glow.animate()
+                    .alpha(0.52f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(620L)
+                    .start();
+        }
 
         if (wordmark != null) {
             wordmark.setAlpha(0f);
@@ -138,6 +152,7 @@ public final class SplashActivity extends Activity {
         handingOff = true;
         handler.removeCallbacks(readinessRunnable);
         if (wordmark != null) wordmark.animate().cancel();
+        if (glow != null) glow.animate().cancel();
         if (sweep != null) sweep.animate().cancel();
 
         Intent intent = new Intent(this, NativeMainActivity.class);
@@ -158,6 +173,7 @@ public final class SplashActivity extends Activity {
         leaving = true;
         handler.removeCallbacksAndMessages(null);
         if (wordmark != null) wordmark.animate().cancel();
+        if (glow != null) glow.animate().cancel();
         if (sweep != null) sweep.animate().cancel();
         if (!handingOff) ChaosStartupHandoff.finish();
         super.onDestroy();

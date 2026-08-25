@@ -971,6 +971,7 @@ public final class ChaosFeedView extends FrameLayout {
                     player.pause();
                     stopProgressUpdates();
                 }
+                maybeCompleteStartupHandoff();
                 return;
             }
 
@@ -1032,6 +1033,7 @@ public final class ChaosFeedView extends FrameLayout {
                         poster.setVisibility(View.GONE);
                         updateProgress();
                         if (player != null && player.isPlaying()) startProgressUpdates();
+                        maybeCompleteStartupHandoff();
                     } else if (state == Player.STATE_ENDED) {
                         loading.setVisibility(View.GONE);
                         stopProgressUpdates();
@@ -1075,6 +1077,13 @@ public final class ChaosFeedView extends FrameLayout {
                 }
             });
             player.prepare();
+        }
+
+        private void maybeCompleteStartupHandoff() {
+            if (!ChaosStartupHandoff.isWaiting() || player == null) return;
+            if (!active || !hostResumed || boundPosition != selectedPosition) return;
+            if (player.getPlaybackState() != Player.STATE_READY) return;
+            ChaosStartupHandoff.markFirstChaosPlayerReady();
         }
 
         private void putHeaderIfMissing(Map<String, String> headers, String name, String value) {

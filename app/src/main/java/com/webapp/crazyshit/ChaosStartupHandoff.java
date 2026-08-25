@@ -1,14 +1,14 @@
 package com.webapp.crazyshit;
 
 /**
- * Tiny process-local bridge between SplashActivity and the first Chaos video frame.
+ * Tiny process-local bridge between SplashActivity and the first selected Chaos player.
  * It lets the branded splash remain visually continuous while NativeMainActivity starts underneath.
  */
 final class ChaosStartupHandoff {
     private static final Object LOCK = new Object();
 
     private static boolean waiting;
-    private static boolean firstFrameReady;
+    private static boolean firstChaosPlayerReady;
 
     private ChaosStartupHandoff() {
     }
@@ -16,7 +16,7 @@ final class ChaosStartupHandoff {
     static void begin() {
         synchronized (LOCK) {
             waiting = true;
-            firstFrameReady = false;
+            firstChaosPlayerReady = false;
         }
     }
 
@@ -26,22 +26,22 @@ final class ChaosStartupHandoff {
         }
     }
 
-    static boolean isFirstFrameReady() {
+    static boolean isFirstChaosPlayerReady() {
         synchronized (LOCK) {
-            return waiting && firstFrameReady;
+            return waiting && firstChaosPlayerReady;
         }
     }
 
-    static void markFirstFrameReady() {
+    static void markFirstChaosPlayerReady() {
         synchronized (LOCK) {
-            if (waiting) firstFrameReady = true;
+            if (waiting) firstChaosPlayerReady = true;
         }
     }
 
     static void finish() {
         synchronized (LOCK) {
             waiting = false;
-            firstFrameReady = false;
+            firstChaosPlayerReady = false;
         }
     }
 }

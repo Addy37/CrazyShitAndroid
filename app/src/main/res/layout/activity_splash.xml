@@ -8,6 +8,14 @@
     android:clipToPadding="false">
 
     <View
+        android:id="@+id/splashGlow"
+        android:layout_width="420dp"
+        android:layout_height="260dp"
+        android:layout_gravity="center"
+        android:alpha="0"
+        android:background="@drawable/splash_orange_glow" />
+
+    <View
         android:id="@+id/splashSweep"
         android:layout_width="190dp"
         android:layout_height="2dp"
@@ -20,8 +28,8 @@
         android:layout_width="match_parent"
         android:layout_height="320dp"
         android:layout_gravity="center"
-        android:layout_marginStart="20dp"
-        android:layout_marginEnd="20dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
         android:contentDescription="@null"
         android:scaleType="fitCenter"
         android:src="@drawable/splash_wordmark_transparent" />
