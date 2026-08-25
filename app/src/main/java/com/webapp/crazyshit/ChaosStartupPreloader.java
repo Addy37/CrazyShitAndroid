@@ -41,7 +41,10 @@ final class ChaosStartupPreloader {
 
     static boolean isReady() {
         synchronized (LOCK) {
-            return finished;
+            // NativeMainActivity can begin underneath the matching wordmark as soon as the first
+            // item exists. The resolver is allowed to keep warming in parallel while the handoff
+            // overlay waits for Media3's actual first rendered frame.
+            return finished || !READY.isEmpty();
         }
     }
 
