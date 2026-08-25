@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 final class ShitShowPlayableResolver {
     private static final long TIMEOUT_MS = 10_000L;
     private static final long FALLBACK_AFTER_MS = 3_000L;
+    private static final String DIRECT_MARKER = "csdirect=";
 
     private ShitShowPlayableResolver() {
     }
@@ -47,6 +48,7 @@ final class ShitShowPlayableResolver {
         CountDownLatch done = new CountDownLatch(1);
         AtomicReference<String> domMedia = new AtomicReference<>("");
         AtomicReference<String> requestMedia = new AtomicReference<>("");
+        AtomicReference<String> requestKind = new AtomicReference<>("");
         AtomicReference<String> title = new AtomicReference<>("Shit Show");
         AtomicReference<WebView> holder = new AtomicReference<>();
         long startedAt = System.currentTimeMillis();
@@ -109,7 +111,7 @@ final class ShitShowPlayableResolver {
 
                 @Override
                 public WebResourceResponse shouldInterceptRequest(WebView web, WebResourceRequest request) {
-                    observeRequest(request, requestMedia);
+                    observeRequest(request, requestMedia, requestKind);
                     return null;
                 }
 
@@ -117,6 +119,7 @@ final class ShitShowPlayableResolver {
                 public void onLoadResource(WebView web, String url) {
                     if (isDirectMedia(url) && !looksLikeAdHost(url)) {
                         requestMedia.compareAndSet("", cleanUrl(url));
+                        if (requestKind.get().isEmpty()) requestKind.set(kindFromUrl(url));
                     }
                 }
 
@@ -148,10 +151,13 @@ final class ShitShowPlayableResolver {
 
         String media = cleanUrl(domMedia.get());
         if (!isHttp(media)) media = cleanUrl(requestMedia.get());
+        if (isHttp(media) && !isDirectMedia(media)) {
+            media = markDirect(media, requestKind.get());
+        }
         final WebView old = holder.getAndSet(null);
         main.post(() -> destroy(old));
 
-        if (!isHttp(media)) return null;
+        if (!isHttp(media) || !isDirectMedia(media)) return null;
         return new CrazyShitRepository.StreamInfo(media, pageUrl, title.get());
     }
 
@@ -175,7 +181,11 @@ final class ShitShowPlayableResolver {
         );
     }
 
-    private static void observeRequest(WebResourceRequest request, AtomicReference<String> requestMedia) {
+    private static void observeRequest(
+            WebResourceRequest request,
+            AtomicReference<String> requestMedia,
+            AtomicReference<String> requestKind
+    ) {
         if (request == null || request.getUrl() == null || !"GET".equalsIgnoreCase(request.getMethod())) return;
         String url = cleanUrl(request.getUrl().toString());
         if (!isHttp(url) || looksLikeAdHost(url)) return;
@@ -192,10 +202,42 @@ final class ShitShowPlayableResolver {
         }
 
         String lowerAccept = accept.toLowerCase(Locale.US);
-        if (isDirectMedia(url) || lowerAccept.contains("video/")
-                || lowerAccept.contains("mpegurl") || lowerAccept.contains("dash+xml")) {
-            requestMedia.compareAndSet("", url);
+        boolean mediaRequest = isDirectMedia(url)
+                || lowerAccept.contains("video/")
+                || lowerAccept.contains("mpegurl")
+                || lowerAccept.contains("dash+xml");
+        if (!mediaRequest) return;
+
+        if (requestMedia.compareAndSet("", url)) {
+            if (lowerAccept.contains("mpegurl")) requestKind.set("m3u8");
+            else if (lowerAccept.contains("dash+xml")) requestKind.set("mpd");
+            else {
+                String fromUrl = kindFromUrl(url);
+                requestKind.set(fromUrl.isEmpty() ? "mp4" : fromUrl);
+            }
         }
+    }
+
+    private static String markDirect(String value, String kind) {
+        String url = cleanUrl(value);
+        if (!isHttp(url) || isDirectMedia(url)) return url;
+        String normalizedKind = safe(kind).toLowerCase(Locale.US);
+        if (!"m3u8".equals(normalizedKind) && !"mpd".equals(normalizedKind)
+                && !"webm".equals(normalizedKind) && !"m4v".equals(normalizedKind)) {
+            normalizedKind = "mp4";
+        }
+        String separator = url.contains("#") ? "&" : "#";
+        return url + separator + DIRECT_MARKER + "." + normalizedKind;
+    }
+
+    private static String kindFromUrl(String value) {
+        String lower = safe(value).toLowerCase(Locale.US);
+        if (lower.contains(".m3u8")) return "m3u8";
+        if (lower.contains(".mpd")) return "mpd";
+        if (lower.contains(".webm")) return "webm";
+        if (lower.contains(".m4v")) return "m4v";
+        if (lower.contains(".mp4")) return "mp4";
+        return "";
     }
 
     private static boolean isStoryUrl(String value) {
