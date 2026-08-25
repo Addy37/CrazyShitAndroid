@@ -43,6 +43,9 @@ final class UiFoundationCoordinator {
         if (activity instanceof NativeMainActivity) {
             NativeMainActivity main = (NativeMainActivity) activity;
             currentMain = new WeakReference<>(main);
+            // If this is a cold launch from SplashActivity, cover the native UI with the exact same
+            // wordmark until the selected Chaos player reports its first rendered frame.
+            ChaosStartupOverlayController.attach(main);
             attachMain(main, false);
             StableBottomNavigationController.attach(main);
             ChaosCompletedReplayController.attachSoon(main);
