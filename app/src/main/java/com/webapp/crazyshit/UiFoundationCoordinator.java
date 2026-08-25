@@ -78,8 +78,6 @@ final class UiFoundationCoordinator {
         if (activity instanceof NativeMainActivity) {
             NativeMainActivity main = (NativeMainActivity) activity;
             FeedViewStyleController.detachMain(main);
-            // Flash used to own a second floating Chaos button and a 320 ms nav polling loop.
-            // It is intentionally not attached in 2.8's stable portrait navigation path.
             FlashUiController.detach(main);
             UiPolishController.detach(main);
             LandscapeUiController.detach(main);
@@ -153,21 +151,19 @@ final class UiFoundationCoordinator {
         GlobalSearchUiController.attachSoon(main);
         FeedViewStyleController.attachMain(main);
         UiPolishController.attach(main);
-        // Do not attach FlashUiController here. Its old portrait navigation overlay/polling path
-        // was the source of the delayed tab geometry changes seen during device testing.
+        // Flash used to create a second floating Chaos button, move an active indicator and poll
+        // the Material nav every 320 ms. That entire portrait-nav path stays detached.
         FlashUiController.detach(main);
         WatchStatePolish.attach(main);
         PredictiveBackPolish.attach(main);
         OledImmersiveUiController.attachMain(main);
-
-        // Feed motion owns the final card transform state while RecyclerViews are moving.
         FeedMotionController.attach(main);
 
         boolean landscape = main.getResources().getConfiguration().orientation ==
                 Configuration.ORIENTATION_LANDSCAPE;
-        StableBottomNavigationController.applyOrientation(main);
 
         if (landscape) {
+            StableBottomNavigationController.applyOrientation(main);
             if (configurationChange) {
                 LandscapeUiController.apply(main);
             } else {
@@ -175,11 +171,14 @@ final class UiFoundationCoordinator {
             }
             LandscapeRailPolish.applySoon(main);
             LandscapeMoreDialog.attachSoon(main);
-            // The responsive main pass is useful in horizontal mode. In portrait it would call
-            // back into the old Material/Landscape navigation geometry, so portrait skips it.
             ResponsiveFitmentController.applySoon(main);
         } else {
+            // When rotating back from horizontal mode, let the landscape controller run one final
+            // portrait pass so it hides its rail and restores shell margins, then detach it. The
+            // custom portrait bar immediately hides the Material router again.
+            if (configurationChange) LandscapeUiController.apply(main);
             LandscapeUiController.detach(main);
+            StableBottomNavigationController.applyOrientation(main);
         }
     }
 }
