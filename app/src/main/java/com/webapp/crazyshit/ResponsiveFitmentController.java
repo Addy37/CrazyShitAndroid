@@ -12,6 +12,8 @@ import android.widget.LinearLayout;
 
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+
 import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -68,6 +70,7 @@ final class ResponsiveFitmentController {
         }
 
         if (activity instanceof NativeMainActivity) {
+            fitMain(activity, landscape);
             LandscapeUiController.apply((NativeMainActivity) activity);
         }
     }
@@ -94,6 +97,29 @@ final class ResponsiveFitmentController {
                 }
             }
         }
+    }
+
+    private static void fitMain(Activity activity, boolean landscape) {
+        BottomNavigationView nav = findFirst(
+                activity.findViewById(android.R.id.content),
+                BottomNavigationView.class
+        );
+        if (nav == null || nav.getLayoutParams() == null) return;
+
+        ViewGroup.LayoutParams raw = nav.getLayoutParams();
+        raw.height = dp(activity, landscape ? 56 : 62);
+        if (raw instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) raw;
+            int side = dp(activity, landscape ? 8 : 10);
+            margins.setMargins(
+                    side,
+                    dp(activity, 2),
+                    side,
+                    dp(activity, landscape ? 3 : 5)
+            );
+        }
+        nav.setMinimumHeight(0);
+        nav.setLayoutParams(raw);
     }
 
     private static void fitSearch(Activity activity, boolean landscape, int widthDp) {
