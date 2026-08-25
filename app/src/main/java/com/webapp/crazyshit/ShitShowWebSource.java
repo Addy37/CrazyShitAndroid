@@ -2,7 +2,6 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Context;
-import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -26,6 +25,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,10 +33,9 @@ import java.util.regex.Pattern;
 /**
  * Dedicated extractor for CrazyShit's JavaScript-driven Shit Show swipe feed.
  *
- * Shit Show is not a normal /cnt/medias/ listing, so the Jsoup feed parser intentionally does not
- * try to understand it. This source boots the real page in a hidden rendered WebView, watches the
- * DOM plus fetch/XHR/resource traffic, advances the real swipe player, and hands direct playable
- * streams to native Chaos.
+ * Shit Show is not a normal /cnt/medias/ listing. This source runs the real swipe page in a hidden
+ * rendered WebView, watches the page and its media traffic, advances the real player, and hands
+ * direct playable streams to native Chaos.
  */
 final class ShitShowWebSource {
     private static final String TAG = "ShitShowWebSource";
@@ -47,9 +46,9 @@ final class ShitShowWebSource {
 
     private static final int TARGET_CACHE = 24;
     private static final int MAX_CACHE = 80;
-    private static final long HARVEST_TIMEOUT_MS = 28_000L;
+    private static final long HARVEST_TIMEOUT_MS = 34_000L;
     private static final long PUMP_MS = 1_350L;
-    private static final long FIRST_BATCH_WAIT_MS = 2_500L;
+    private static final long FIRST_BATCH_WAIT_MS = 3_000L;
 
     private static final Pattern MEDIA_IN_PAYLOAD = Pattern.compile(
             "(?i)https?://[^\\s\\\"'<>]+?\\.(?:m3u8|mpd|mp4|webm|m4v)(?:\\?[^\\s\\\"'<>]*)?"
@@ -69,6 +68,7 @@ final class ShitShowWebSource {
     private int pumpCount;
     private int observedRequests;
     private int observedPayloads;
+    private int observedCandidates;
 
     void prewarm(Context context) {
         if (cachedCount() < 8) warm(context);
@@ -81,8 +81,6 @@ final class ShitShowWebSource {
         ArrayList<NativeContentItem> result = drainReady(requested);
         if (!result.isEmpty() || requested == 0) return result;
 
-        // Chaos calls this from its IO pool. Give the rendered page a short final chance to expose
-        // its first stream after the regular source requests have already been loading in parallel.
         if (Looper.myLooper() != Looper.getMainLooper()) {
             long deadline = SystemClock.uptimeMillis() + FIRST_BATCH_WAIT_MS;
             synchronized (lock) {
@@ -103,8 +101,7 @@ final class ShitShowWebSource {
     }
 
     void resetDeck() {
-        // Keep seenMedia across a Chaos refresh so the hidden source does not immediately recycle
-        // the same Shit Show streams. The next mixer request calls prewarm() with a fresh Activity.
+        // Keep seenMedia for this process. Chaos keeps its own session repeat protection too.
     }
 
     private ArrayList<NativeContentItem> drainReady(int maxItems) {
@@ -143,17 +140,16 @@ final class ShitShowWebSource {
         pumpCount = 0;
         observedRequests = 0;
         observedPayloads = 0;
+        observedCandidates = 0;
 
         WebView view = new WebView(activity);
         webView = view;
         view.setAlpha(0.01f);
+        view.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         view.setFocusable(false);
         view.setFocusableInTouchMode(false);
 
-        // Keep a real 360x640 viewport attached behind the app's native root. Beta.9 translated
-        // the WebView far off-screen, which can leave custom swipe/render logic throttled or idle.
-        // Index 0 keeps this extractor behind the visible native UI and out of the user's way.
         ViewGroup host = activity.findViewById(android.R.id.content);
         if (host != null) {
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
@@ -199,7 +195,7 @@ final class ShitShowWebSource {
 
             @Override
             public void onLoadResource(WebView web, String url) {
-                observeSameSiteResource(url);
+                observeResource(url);
             }
 
             @Override
@@ -207,16 +203,12 @@ final class ShitShowWebSource {
                     WebView web,
                     WebResourceRequest request
             ) {
-                if (request != null && request.getUrl() != null) {
-                    observeSameSiteResource(request.getUrl().toString());
-                }
+                observeRequest(request);
                 return null;
             }
         });
         view.loadUrl(PAGE);
 
-        // Page-finished can wait on unrelated ad/network resources. Probe the rendered document
-        // anyway so the extractor is not tied to every secondary request completing.
         main.postDelayed(() -> {
             if (webView != view || !isWarming()) return;
             installProbe(view);
@@ -265,9 +257,9 @@ final class ShitShowWebSource {
             long downTime = SystemClock.uptimeMillis();
 
             dispatchTouch(view, downTime, downTime, MotionEvent.ACTION_DOWN, x, startY);
-            dispatchTouch(view, downTime, downTime + 16L, MotionEvent.ACTION_MOVE, x, midY);
-            dispatchTouch(view, downTime, downTime + 32L, MotionEvent.ACTION_MOVE, x, endY);
-            dispatchTouch(view, downTime, downTime + 48L, MotionEvent.ACTION_UP, x, endY);
+            dispatchTouch(view, downTime, downTime + 28L, MotionEvent.ACTION_MOVE, x, midY);
+            dispatchTouch(view, downTime, downTime + 56L, MotionEvent.ACTION_MOVE, x, endY);
+            dispatchTouch(view, downTime, downTime + 84L, MotionEvent.ACTION_UP, x, endY);
         } catch (Exception ignored) {
         }
     }
@@ -290,10 +282,10 @@ final class ShitShowWebSource {
 
     private void finishHarvest(WebView view) {
         if (view != null) main.removeCallbacksAndMessages(view);
-        int cached = cachedCount();
-        Log.d(TAG, "harvest finished: cached=" + cached
+        Log.d(TAG, "harvest finished: cached=" + cachedCount()
                 + " requests=" + observedRequests
                 + " payloads=" + observedPayloads
+                + " candidates=" + observedCandidates
                 + " pumps=" + pumpCount);
         if (webView == view) destroyWebView();
         setWarming(false);
@@ -316,10 +308,31 @@ final class ShitShowWebSource {
         }
     }
 
-    private void observeSameSiteResource(String url) {
+    private void observeRequest(WebResourceRequest request) {
+        if (request == null || request.getUrl() == null) return;
         observedRequests++;
-        if (!isDirectMedia(url) || !isCrazyShitHost(url)) return;
-        enqueue(url, "", "Shit Show", PAGE);
+        String url = request.getUrl().toString();
+        if (isDirectMedia(url)) {
+            enqueueKnownMedia(url, "", "", "Shit Show", PAGE, false);
+            return;
+        }
+
+        try {
+            Map<String, String> headers = request.getRequestHeaders();
+            if (headers == null) return;
+            String accept = headers.get("Accept");
+            if (accept == null) accept = headers.get("accept");
+            if (isMediaMime(accept)) {
+                enqueueKnownMedia(url, accept, "", "Shit Show", PAGE, false);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void observeResource(String url) {
+        observedRequests++;
+        // Media can live on a CDN outside crazyshit.com. Beta.10 incorrectly discarded it here.
+        if (isDirectMedia(url)) enqueueKnownMedia(url, "", "", "Shit Show", PAGE, false);
     }
 
     private void harvestPayload(String raw) {
@@ -332,18 +345,26 @@ final class ShitShowWebSource {
 
         Matcher absolute = MEDIA_IN_PAYLOAD.matcher(text);
         while (absolute.find()) {
-            enqueue(absolute.group(), "", "Shit Show", PAGE);
+            enqueueKnownMedia(absolute.group(), "", "", "Shit Show", PAGE, false);
         }
 
         Matcher protocolRelative = PROTOCOL_RELATIVE_MEDIA_IN_PAYLOAD.matcher(text);
         while (protocolRelative.find()) {
-            enqueue(protocolRelative.group(), "", "Shit Show", PAGE);
+            enqueueKnownMedia(protocolRelative.group(), "", "", "Shit Show", PAGE, false);
         }
     }
 
-    private void enqueue(String mediaUrl, String posterUrl, String title, String pageUrl) {
-        String media = cleanUrl(mediaUrl);
-        if (!isDirectMedia(media)) return;
+    private void enqueueKnownMedia(
+            String mediaUrl,
+            String mime,
+            String posterUrl,
+            String title,
+            String pageUrl,
+            boolean fromMediaElement
+    ) {
+        String media = normalizePlayableCandidate(mediaUrl, mime, fromMediaElement);
+        if (media.isEmpty()) return;
+        observedCandidates++;
 
         String poster = cleanUrl(posterUrl);
         String label = cleanTitle(title);
@@ -366,6 +387,34 @@ final class ShitShowWebSource {
         }
     }
 
+    private static String normalizePlayableCandidate(String value, String mime, boolean fromMediaElement) {
+        String media = cleanUrl(value);
+        if (!isHttpUrl(media)) return "";
+        if (isDirectMedia(media)) return media;
+
+        String lowerMime = mime == null ? "" : mime.toLowerCase(Locale.US);
+        String suffix = "";
+        if (lowerMime.contains("mpegurl")) suffix = ".m3u8";
+        else if (lowerMime.contains("dash+xml")) suffix = ".mpd";
+        else if (lowerMime.contains("webm")) suffix = ".webm";
+        else if (lowerMime.startsWith("video/") || fromMediaElement) suffix = ".mp4";
+        if (suffix.isEmpty()) return "";
+
+        // A URL fragment is not sent to the server. It gives Media3 an extension hint for signed
+        // or API-style media endpoints whose real path has no file extension.
+        int hash = media.indexOf('#');
+        if (hash >= 0) media = media.substring(0, hash);
+        return media + "#csdirect" + suffix;
+    }
+
+    private static boolean isMediaMime(String value) {
+        if (value == null) return false;
+        String lower = value.toLowerCase(Locale.US);
+        return lower.contains("video/")
+                || lower.contains("mpegurl")
+                || lower.contains("dash+xml");
+    }
+
     private static String cleanTitle(String value) {
         String text = value == null ? "" : value.replaceAll("\\s+", " ").trim();
         if (text.isEmpty() || text.equalsIgnoreCase("Swipe up for next video")) return "Shit Show";
@@ -384,26 +433,20 @@ final class ShitShowWebSource {
         return url;
     }
 
-    private static boolean isDirectMedia(String value) {
+    private static boolean isHttpUrl(String value) {
         if (value == null) return false;
         String lower = value.toLowerCase(Locale.US);
-        if (!(lower.startsWith("http://") || lower.startsWith("https://"))) return false;
+        return lower.startsWith("http://") || lower.startsWith("https://");
+    }
+
+    private static boolean isDirectMedia(String value) {
+        if (!isHttpUrl(value)) return false;
+        String lower = value.toLowerCase(Locale.US);
         return lower.contains(".mp4")
                 || lower.contains(".webm")
                 || lower.contains(".m4v")
                 || lower.contains(".m3u8")
                 || lower.contains(".mpd");
-    }
-
-    private static boolean isCrazyShitHost(String value) {
-        try {
-            String host = Uri.parse(value).getHost();
-            if (host == null) return false;
-            host = host.toLowerCase(Locale.US);
-            return host.equals("crazyshit.com") || host.endsWith(".crazyshit.com");
-        } catch (Exception ignored) {
-            return false;
-        }
     }
 
     private boolean isWarming() {
@@ -428,11 +471,13 @@ final class ShitShowWebSource {
         public void onClip(String raw) {
             try {
                 JSONObject json = new JSONObject(raw == null ? "{}" : raw);
-                enqueue(
+                enqueueKnownMedia(
                         json.optString("media", ""),
+                        json.optString("mime", ""),
                         json.optString("poster", ""),
                         json.optString("title", "Shit Show"),
-                        json.optString("page", PAGE)
+                        json.optString("page", PAGE),
+                        true
                 );
             } catch (Exception ignored) {
             }
@@ -440,7 +485,12 @@ final class ShitShowWebSource {
 
         @JavascriptInterface
         public void onMediaUrl(String raw) {
-            enqueue(raw, "", "Shit Show", PAGE);
+            enqueueKnownMedia(raw, "", "", "Shit Show", PAGE, false);
+        }
+
+        @JavascriptInterface
+        public void onMediaCandidate(String raw, String mime) {
+            enqueueKnownMedia(raw, mime, "", "Shit Show", PAGE, false);
         }
 
         @JavascriptInterface
@@ -454,8 +504,11 @@ final class ShitShowWebSource {
             "if(window.__csShitShowProbe){window.__csShitShowScan&&window.__csShitShowScan();return;}" +
             "window.__csShitShowProbe=true;" +
             "var mediaRe=/\\.(mp4|webm|m4v|m3u8|mpd)(\\?|#|$)/i;" +
+            "var mediaType=/^(video\\/)|mpegurl|dash\\+xml/i;" +
+            "var watched=[];" +
             "function abs(v){try{return v?new URL(v,location.href).href:'';}catch(e){return v||'';}}" +
-            "function media(v){try{var u=abs(v);if(u&&mediaRe.test(u))CSShitBridge.onMediaUrl(u);}catch(e){}}" +
+            "function obvious(v){try{var u=abs(v);if(u&&mediaRe.test(u))CSShitBridge.onMediaUrl(u);}catch(e){}}" +
+            "function candidate(v,m){try{var u=abs(v);if(/^https?:/i.test(u))CSShitBridge.onMediaCandidate(u,m||'');}catch(e){}}" +
             "function payload(v){try{if(typeof v==='string'&&v.length)CSShitBridge.onPayload(v.slice(0,220000));}catch(e){}}" +
             "function titleFor(v,r){try{" +
             "var t=v.getAttribute('title')||v.getAttribute('aria-label')||v.getAttribute('data-title')||'';" +
@@ -464,47 +517,40 @@ final class ShitShowWebSource {
             "return (t||'').replace(/\\s+/g,' ').trim();}catch(e){return '';}}" +
             "function send(v){try{" +
             "v.muted=true;v.preload='auto';" +
-            "var s=v.currentSrc||v.src||'';if(!s){var q=v.querySelector('source[src]');if(q)s=q.src||q.getAttribute('src')||'';}" +
-            "if(s&&mediaRe.test(abs(s))){" +
+            "var q=v.querySelector('source[src]');" +
+            "var s=v.currentSrc||v.src||(q&&(q.src||q.getAttribute('src')))||'';" +
+            "var mt=(q&&(q.type||q.getAttribute('type')))||v.getAttribute('type')||'';" +
+            "if(s&&/^https?:/i.test(abs(s))){" +
             "var r=v.closest('[data-id],[data-video-id],article,section,.swiper-slide,.slide,.item')||v.parentElement;" +
             "var a=(r&&r.querySelector('a[href]'))||v.closest('a[href]');" +
             "var p=v.poster||v.getAttribute('poster')||'';" +
-            "CSShitBridge.onClip(JSON.stringify({media:abs(s),poster:abs(p),title:titleFor(v,r),page:a?abs(a.href):location.href}));}" +
+            "CSShitBridge.onClip(JSON.stringify({media:abs(s),mime:mt,poster:abs(p),title:titleFor(v,r),page:a?abs(a.href):location.href}));}" +
             "try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){});}catch(e){}" +
             "}catch(e){}}" +
-            "function scanAttrs(root){try{" +
-            "(root||document).querySelectorAll('[src],[data-src],[data-url],[data-file],[data-video],[data-stream],[data-media]').forEach(function(e){" +
-            "['src','data-src','data-url','data-file','data-video','data-stream','data-media'].forEach(function(k){var v=e.getAttribute&&e.getAttribute(k);if(v)media(v);});" +
+            "function scanAttrs(d){try{" +
+            "d.querySelectorAll('[src],[data-src],[data-url],[data-file],[data-video],[data-stream],[data-media]').forEach(function(e){" +
+            "var tag=(e.tagName||'').toLowerCase();" +
+            "['src','data-src','data-url','data-file','data-video','data-stream','data-media'].forEach(function(k){var v=e.getAttribute&&e.getAttribute(k);if(!v)return;if(tag==='video'||tag==='source')candidate(v,e.getAttribute('type')||'');else obvious(v);});" +
             "});}catch(e){}}" +
-            "function scan(){try{" +
-            "document.querySelectorAll('video').forEach(send);" +
-            "document.querySelectorAll('source[src]').forEach(function(e){media(e.src||e.getAttribute('src'));});" +
-            "scanAttrs(document);" +
-            "performance.getEntriesByType('resource').forEach(function(e){media(e.name||'');});" +
+            "function scanDoc(d){try{" +
+            "d.querySelectorAll('video').forEach(send);" +
+            "d.querySelectorAll('source[src]').forEach(function(e){candidate(e.src||e.getAttribute('src'),e.type||e.getAttribute('type')||'');});" +
+            "scanAttrs(d);" +
+            "d.querySelectorAll('script:not([src])').forEach(function(s){payload(s.textContent||'');});" +
+            "d.querySelectorAll('iframe').forEach(function(f){try{if(f.contentDocument){watch(f.contentDocument);scanDoc(f.contentDocument);}}catch(e){}});" +
             "}catch(e){}}" +
-            "window.__csShitShowScan=scan;" +
-            "try{new PerformanceObserver(function(list){list.getEntries().forEach(function(e){media(e.name||'');});}).observe({entryTypes:['resource']});}catch(e){}" +
-            "try{" +
-            "if(window.fetch&&!window.__csShitFetch){" +
-            "window.__csShitFetch=window.fetch;" +
-            "window.fetch=function(){return window.__csShitFetch.apply(this,arguments).then(function(r){" +
-            "try{media(r.url||'');var c=r.clone();c.text().then(payload).catch(function(){});}catch(e){}return r;});};}" +
-            "}catch(e){}" +
-            "try{" +
-            "if(window.XMLHttpRequest&&!XMLHttpRequest.prototype.__csShitWrapped){" +
-            "XMLHttpRequest.prototype.__csShitWrapped=true;" +
-            "var xo=XMLHttpRequest.prototype.open,xs=XMLHttpRequest.prototype.send;" +
+            "function watch(d){try{if(!d||watched.indexOf(d)>=0)return;watched.push(d);" +
+            "new MutationObserver(function(){scanDoc(d);}).observe(d.documentElement||d,{subtree:true,childList:true,attributes:true," +
+            "attributeFilter:['src','poster','data-src','data-url','data-file','data-video','data-stream','data-media']});}catch(e){}}" +
+            "function scan(){scanDoc(document);try{performance.getEntriesByType('resource').forEach(function(e){obvious(e.name||'');});}catch(e){}}" +
+            "window.__csShitShowScan=scan;watch(document);" +
+            "try{new PerformanceObserver(function(list){list.getEntries().forEach(function(e){obvious(e.name||'');});}).observe({entryTypes:['resource']});}catch(e){}" +
+            "try{if(window.fetch&&!window.__csShitFetch){window.__csShitFetch=window.fetch;window.fetch=function(){return window.__csShitFetch.apply(this,arguments).then(function(r){" +
+            "try{var ct=(r.headers&&r.headers.get&&r.headers.get('content-type'))||'';if(mediaType.test(ct))candidate(r.url||'',ct);else obvious(r.url||'');var c=r.clone();c.text().then(payload).catch(function(){});}catch(e){}return r;});};}}catch(e){}" +
+            "try{if(window.XMLHttpRequest&&!XMLHttpRequest.prototype.__csShitWrapped){XMLHttpRequest.prototype.__csShitWrapped=true;var xo=XMLHttpRequest.prototype.open,xs=XMLHttpRequest.prototype.send;" +
             "XMLHttpRequest.prototype.open=function(m,u){try{this.__csShitUrl=abs(u);}catch(e){}return xo.apply(this,arguments);};" +
-            "XMLHttpRequest.prototype.send=function(){" +
-            "try{this.addEventListener('load',function(){try{media(this.responseURL||this.__csShitUrl||'');" +
-            "if(!this.responseType||this.responseType==='text')payload(this.responseText||'');}catch(e){}});}catch(e){}" +
-            "return xs.apply(this,arguments);};}" +
-            "}catch(e){}" +
-            "try{document.querySelectorAll('script:not([src])').forEach(function(s){payload(s.textContent||'');});}catch(e){}" +
-            "new MutationObserver(function(ms){scan();ms.forEach(function(m){if(m.target)scanAttrs(m.target.parentElement||document);});})" +
-            ".observe(document.documentElement||document,{subtree:true,childList:true,attributes:true," +
-            "attributeFilter:['src','poster','data-src','data-url','data-file','data-video','data-stream','data-media']});" +
-            "setInterval(scan,600);scan();" +
+            "XMLHttpRequest.prototype.send=function(){try{this.addEventListener('load',function(){try{var ct=this.getResponseHeader('content-type')||'';var u=this.responseURL||this.__csShitUrl||'';if(mediaType.test(ct))candidate(u,ct);else obvious(u);if(!this.responseType||this.responseType==='text')payload(this.responseText||'');}catch(e){}});}catch(e){}return xs.apply(this,arguments);};}}catch(e){}" +
+            "setInterval(scan,550);scan();" +
             "})();";
 
     private static final String SCAN_AND_ADVANCE_JS =
@@ -518,25 +564,10 @@ final class ShitShowWebSource {
             "try{if(window.swiper&&typeof window.swiper.slideNext==='function')window.swiper.slideNext();}catch(e){}" +
             "function pe(n,y){try{t.dispatchEvent(new PointerEvent(n,{pointerId:1,pointerType:'touch',clientX:w*0.5,clientY:y,bubbles:true,cancelable:true,isPrimary:true}));}catch(e){}}" +
             "pe('pointerdown',h*0.78);pe('pointermove',h*0.48);pe('pointerup',h*0.20);" +
-            "try{" +
-            "if(window.Touch&&window.TouchEvent){" +
-            "var a=new Touch({identifier:7,target:t,clientX:w*0.5,clientY:h*0.78});" +
-            "var b=new Touch({identifier:7,target:t,clientX:w*0.5,clientY:h*0.20});" +
-            "t.dispatchEvent(new TouchEvent('touchstart',{touches:[a],targetTouches:[a],changedTouches:[a],bubbles:true,cancelable:true}));" +
-            "t.dispatchEvent(new TouchEvent('touchmove',{touches:[b],targetTouches:[b],changedTouches:[b],bubbles:true,cancelable:true}));" +
-            "t.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[b],bubbles:true,cancelable:true}));}" +
-            "}catch(e){}" +
-            "try{" +
-            "var sc=t;while(sc&&sc!==document.body&&!(sc.scrollHeight>sc.clientHeight+80))sc=sc.parentElement;" +
-            "if(sc&&sc!==document.body)sc.scrollBy(0,Math.max(420,h*0.92));else window.scrollBy(0,Math.max(420,h*0.92));" +
-            "}catch(e){}" +
+            "try{var sc=t;while(sc&&sc!==document.body&&!(sc.scrollHeight>sc.clientHeight+80))sc=sc.parentElement;if(sc&&sc!==document.body)sc.scrollBy(0,Math.max(420,h*0.92));else window.scrollBy(0,Math.max(420,h*0.92));}catch(e){}" +
             "try{t.dispatchEvent(new WheelEvent('wheel',{deltaY:h,bubbles:true,cancelable:true}));}catch(e){}" +
             "try{document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',code:'ArrowDown',bubbles:true,cancelable:true}));}catch(e){}" +
-            "try{" +
-            "var bs=document.querySelectorAll('button,[role=button]');" +
-            "for(var i=0;i<bs.length;i++){var q=((bs[i].getAttribute('aria-label')||'')+' '+(bs[i].getAttribute('title')||'')+' '+(bs[i].textContent||'')).trim();" +
-            "if(/\\bnext\\b/i.test(q)){bs[i].click();break;}}" +
-            "}catch(e){}" +
+            "try{var bs=document.querySelectorAll('button,[role=button]');for(var i=0;i<bs.length;i++){var q=((bs[i].getAttribute('aria-label')||'')+' '+(bs[i].getAttribute('title')||'')+' '+(bs[i].textContent||'')).trim();if(/\\bnext\\b/i.test(q)){bs[i].click();break;}}}catch(e){}" +
             "document.querySelectorAll('video').forEach(function(x){try{x.muted=true;x.preload='auto';var p=x.play();if(p&&p.catch)p.catch(function(){});}catch(e){}});" +
             "}catch(e){}})();";
 }
