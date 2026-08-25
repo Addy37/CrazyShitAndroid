@@ -27,7 +27,7 @@ final class ChaosSourceMixer {
 
     private final CrazyShitRepository repository;
     private final Random random;
-    private final ShitShowWebSource shitShow = new ShitShowWebSource();
+    private final ShitShowSafeSource shitShow = new ShitShowSafeSource();
     private final ArrayList<String> catalog = new ArrayList<>();
     private final ArrayDeque<String> sourceDeck = new ArrayDeque<>();
     private final Set<String> usedSourcePages = new HashSet<>();
