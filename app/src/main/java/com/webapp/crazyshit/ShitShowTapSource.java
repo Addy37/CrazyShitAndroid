@@ -2,12 +2,10 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Context;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.view.Gravity;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.webkit.CookieManager;
@@ -17,7 +15,6 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-import android.widget.TextView;
 
 import org.json.JSONObject;
 
@@ -39,7 +36,6 @@ final class ShitShowTapSource {
     private static final long FIRST_BATCH_WAIT_MS = 6_500L;
     private static final long HARVEST_TIMEOUT_MS = 18_000L;
     private static final long PUMP_MS = 850L;
-    private static final long DIAGNOSTIC_KEEP_MS = 30_000L;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Object lock = new Object();
@@ -48,18 +44,7 @@ final class ShitShowTapSource {
 
     private boolean warming;
     private WebView webView;
-    private TextView diagnosticView;
     private long harvestStartedAt;
-    private int pumpCount;
-    private int storiesSeen;
-    private int storiesAccepted;
-    private int directStories;
-    private int pageStories;
-    private int pageFinishedCount;
-    private String pageState = "idle";
-    private String firstTitle = "";
-    private String firstPage = "";
-    private String lastError = "";
 
     void prewarm(Context context) {
         if (cachedCount() < 8) warm(context);
@@ -91,7 +76,7 @@ final class ShitShowTapSource {
     }
 
     void resetDeck() {
-        // Keep process-level Shit Show history. Chaos has its own 500-URL repeat protection too.
+        // Keep process-level Shit Show history. Chaos has its own repeat protection too.
     }
 
     private ArrayList<NativeContentItem> drainReady(int maxItems) {
@@ -126,9 +111,7 @@ final class ShitShowTapSource {
         }
 
         destroyWebView();
-        resetDiagnostics();
         harvestStartedAt = System.currentTimeMillis();
-        attachDiagnosticView(activity);
 
         WebView view = new WebView(activity);
         webView = view;
@@ -179,25 +162,13 @@ final class ShitShowTapSource {
             }
 
             @Override
-            public void onPageStarted(WebView web, String url, android.graphics.Bitmap favicon) {
-                pageState = "started";
-                refreshDiagnosticView();
-            }
-
-            @Override
             public void onPageFinished(WebView web, String url) {
-                pageFinishedCount++;
-                pageState = "loaded";
                 harvestStories(web);
                 schedulePump(web);
-                refreshDiagnosticView();
             }
         });
 
-        pageState = "loading";
-        refreshDiagnosticView();
         view.loadUrl(PAGE);
-
         main.postDelayed(() -> {
             if (webView != view || !isWarming()) return;
             harvestStories(view);
@@ -218,12 +189,10 @@ final class ShitShowTapSource {
 
     private void pump(WebView view) {
         if (view == null || webView != view || !isWarming()) return;
-        pumpCount++;
         harvestStories(view);
 
         boolean enough = cachedCount() >= TARGET_CACHE;
         boolean timedOut = System.currentTimeMillis() - harvestStartedAt >= HARVEST_TIMEOUT_MS;
-        refreshDiagnosticView();
         if (enough || timedOut) {
             finishHarvest(view);
             return;
@@ -236,7 +205,6 @@ final class ShitShowTapSource {
     }
 
     private void acceptStory(String raw) {
-        storiesSeen++;
         try {
             JSONObject json = new JSONObject(raw == null ? "{}" : raw);
             String pageUrl = cleanUrl(json.optString("page", ""));
@@ -246,16 +214,9 @@ final class ShitShowTapSource {
             String views = cleanText(json.optString("views", ""));
             String comments = cleanText(json.optString("comments", ""));
 
-            if (firstPage.isEmpty() && !pageUrl.isEmpty()) firstPage = pageUrl;
-
             String itemUrl = "";
-            boolean directItem = false;
-            if (isDirectMedia(direct)) {
-                itemUrl = direct;
-                directItem = true;
-            } else if (isUsableStoryPage(pageUrl)) {
-                itemUrl = pageUrl;
-            }
+            if (isDirectMedia(direct)) itemUrl = direct;
+            else if (isUsableStoryPage(pageUrl)) itemUrl = pageUrl;
             if (itemUrl.isEmpty()) return;
 
             synchronized (lock) {
@@ -270,16 +231,9 @@ final class ShitShowTapSource {
                         "Shit Show",
                         comments
                 ));
-                storiesAccepted++;
-                if (directItem) directStories++;
-                else pageStories++;
-                if (firstTitle.isEmpty()) firstTitle = title;
                 lock.notifyAll();
             }
-            refreshDiagnosticView();
-        } catch (Exception error) {
-            lastError = cleanText(error.getClass().getSimpleName() + ": " + error.getMessage());
-            refreshDiagnosticView();
+        } catch (Exception ignored) {
         }
     }
 
@@ -344,79 +298,10 @@ final class ShitShowTapSource {
         return value == null ? "" : value.toString().replaceAll("\\s+", " ").trim();
     }
 
-    private void resetDiagnostics() {
-        pumpCount = 0;
-        storiesSeen = 0;
-        storiesAccepted = 0;
-        directStories = 0;
-        pageStories = 0;
-        pageFinishedCount = 0;
-        pageState = "starting";
-        firstTitle = "";
-        firstPage = "";
-        lastError = "";
-    }
-
-    private void attachDiagnosticView(Activity activity) {
-        ViewGroup host = activity.findViewById(android.R.id.content);
-        if (host == null) return;
-        TextView view = new TextView(activity);
-        diagnosticView = view;
-        view.setTextColor(Color.WHITE);
-        view.setTextSize(10.2f);
-        view.setGravity(Gravity.START);
-        view.setPadding(dp(activity, 8), dp(activity, 6), dp(activity, 8), dp(activity, 6));
-        view.setBackgroundColor(Color.argb(220, 0, 0, 0));
-        view.setElevation(dp(activity, 32));
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        params.gravity = Gravity.TOP | Gravity.START;
-        params.leftMargin = dp(activity, 8);
-        params.topMargin = dp(activity, 8);
-        params.rightMargin = dp(activity, 8);
-        host.addView(view, params);
-        refreshDiagnosticView();
-    }
-
-    private void refreshDiagnosticView() {
-        TextView view = diagnosticView;
-        if (view == null) return;
-        if (Looper.myLooper() != Looper.getMainLooper()) {
-            main.post(this::refreshDiagnosticView);
-            return;
-        }
-        StringBuilder text = new StringBuilder();
-        text.append("Shit Show B21 ").append(isWarming() ? "RUN" : "STOP").append('\n');
-        text.append("page:").append(pageState).append(" f:").append(pageFinishedCount)
-                .append(" pump:").append(pumpCount).append('\n');
-        text.append("stories:").append(storiesSeen)
-                .append(" accepted:").append(storiesAccepted)
-                .append(" cache:").append(cachedCount()).append('\n');
-        text.append("pageUrls:").append(pageStories).append(" direct:").append(directStories);
-        if (!firstTitle.isEmpty()) text.append('\n').append("first:").append(shorten(firstTitle, 56));
-        if (!firstPage.isEmpty()) text.append('\n').append("url:").append(shorten(firstPage, 72));
-        if (!lastError.isEmpty()) text.append('\n').append("err:").append(shorten(lastError, 72));
-        view.setText(text.toString());
-    }
-
     private void finishHarvest(WebView view) {
         if (view != null) main.removeCallbacksAndMessages(view);
-        pageState = cachedCount() > 0 ? "captured" : "stopped";
-        refreshDiagnosticView();
         if (webView == view) destroyWebView();
         setWarming(false);
-        refreshDiagnosticView();
-
-        main.postDelayed(() -> {
-            if (isWarming()) return;
-            TextView old = diagnosticView;
-            diagnosticView = null;
-            if (old == null) return;
-            ViewParent parent = old.getParent();
-            if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(old);
-        }, DIAGNOSTIC_KEEP_MS);
     }
 
     private void destroyWebView() {
@@ -452,12 +337,6 @@ final class ShitShowTapSource {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
-    private static String shorten(String value, int max) {
-        String text = cleanText(value);
-        if (text.length() <= max) return text;
-        return text.substring(0, Math.max(0, max - 1)).trim() + "…";
-    }
-
     private final class Bridge {
         @JavascriptInterface
         public void onStory(String raw) {
@@ -466,8 +345,7 @@ final class ShitShowTapSource {
 
         @JavascriptInterface
         public void onProbeError(String error) {
-            lastError = cleanText(error);
-            refreshDiagnosticView();
+            // Production source deliberately keeps diagnostics off-screen.
         }
     }
 
