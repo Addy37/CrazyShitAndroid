@@ -26,6 +26,12 @@ import androidx.webkit.WebViewFeature;
 
 import org.json.JSONObject;
 
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -37,28 +43,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Focused Shit Show diagnostic/harvest source.
+ * B19 Shit Show diagnostic source.
  *
- * B17 proved /shitshow/ runs document-start JavaScript and makes early fetches, but the last
- * captured request was analytics and no media appeared. B18 keeps the early hooks, records useful
- * fetch/XHR URLs, inspects the real site script (especially index.min.js), and surfaces a short
- * code/route hint so the next fix can target the site's actual initialization logic.
+ * B18 exposed the real static.crazyshit.com index.min.js bundle, but the page could not read that
+ * cross-origin script body because of browser CORS. B19 downloads that first-party bundle from
+ * Android, mines its code and route strings, and reports real JavaScript/resource errors.
  */
 final class ShitShowTapSource {
     private static final String PAGE = CrazyShitRepository.BASE + "shitshow/";
     private static final int TARGET_CACHE = 24;
     private static final int MAX_CACHE = 80;
-    private static final long HARVEST_TIMEOUT_MS = 52_000L;
+    private static final long HARVEST_TIMEOUT_MS = 55_000L;
     private static final long PUMP_MS = 1_100L;
     private static final long FIRST_BATCH_WAIT_MS = 7_000L;
-    private static final long DIAGNOSTIC_KEEP_MS = 100_000L;
+    private static final long DIAGNOSTIC_KEEP_MS = 110_000L;
+    private static final int MAX_SCRIPT_BYTES = 2_000_000;
 
-    private static final Pattern MEDIA_IN_PAYLOAD = Pattern.compile(
+    private static final Pattern MEDIA_IN_TEXT = Pattern.compile(
             "(?i)https?://[^\\s\\\"'<>]+?\\.(?:m3u8|mpd|mp4|webm|m4v)(?:\\?[^\\s\\\"'<>]*)?"
     );
-    private static final Pattern PROTOCOL_MEDIA_IN_PAYLOAD = Pattern.compile(
-            "(?i)//[^\\s\\\"'<>]+?\\.(?:m3u8|mpd|mp4|webm|m4v)(?:\\?[^\\s\\\"'<>]*)?"
-    );
+    private static final Pattern QUOTED = Pattern.compile("[\\\"'`]([^\\\"'`]{1,180})[\\\"'`]");
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Object lock = new Object();
@@ -69,6 +73,7 @@ final class ShitShowTapSource {
 
     private boolean warming;
     private boolean documentStartSupported;
+    private boolean scriptFetchStarted;
     private WebView webView;
     private TextView diagnosticView;
     private long harvestStartedAt;
@@ -98,9 +103,11 @@ final class ShitShowTapSource {
     private String lastEarlyKind = "";
     private String lastInterestingRequest = "";
     private String scriptUrlHint = "";
+    private String scriptStatus = "idle";
     private String frameHint = "";
     private String codeHint = "";
     private String routeHint = "";
+    private String inlineHint = "";
     private String payloadHint = "";
     private String bodyHint = "";
     private String jsErrorHint = "";
@@ -136,7 +143,7 @@ final class ShitShowTapSource {
     }
 
     void resetDeck() {
-        // Keep media history for this process. Chaos also protects the current session from repeats.
+        // Keep process-level media history. Chaos has its own repeat protection too.
     }
 
     private ArrayList<NativeContentItem> drainReady(int maxItems) {
@@ -293,21 +300,22 @@ final class ShitShowTapSource {
 
     private boolean blockExternalMainFrame(String value) {
         if (value == null || value.trim().isEmpty()) return true;
-        if (isSameOrigin(value) || "about:blank".equalsIgnoreCase(value.trim())) return false;
+        if (isSiteHost(value) || "about:blank".equalsIgnoreCase(value.trim())) return false;
         externalBlocks++;
         blockedUrl = safe(value);
         refreshDiagnosticView();
         return true;
     }
 
-    private static boolean isSameOrigin(String value) {
-        if (value == null || value.trim().isEmpty()) return false;
+    private static boolean isSiteHost(String value) {
         try {
-            Uri uri = Uri.parse(value.trim());
+            Uri uri = Uri.parse(safe(value));
             String scheme = safe(uri.getScheme()).toLowerCase(Locale.US);
             String host = safe(uri.getHost()).toLowerCase(Locale.US);
             return ("http".equals(scheme) || "https".equals(scheme))
-                    && ("crazyshit.com".equals(host) || "www.crazyshit.com".equals(host));
+                    && ("crazyshit.com".equals(host)
+                    || "www.crazyshit.com".equals(host)
+                    || "static.crazyshit.com".equals(host));
         } catch (Exception ignored) {
             return false;
         }
@@ -382,7 +390,7 @@ final class ShitShowTapSource {
                 || lower.contains("trustkiwi") || lower.contains("clickwhole")) return;
         synchronized (lock) {
             if (!seenUsefulNetwork.add(url)) return;
-            while (usefulNetwork.size() >= 4) usefulNetwork.removeFirst();
+            while (usefulNetwork.size() >= 5) usefulNetwork.removeFirst();
             usefulNetwork.addLast(url);
         }
     }
@@ -398,17 +406,113 @@ final class ShitShowTapSource {
         return "";
     }
 
+    private void fetchScriptOutsideCors(String scriptUrl) {
+        String candidate = safe(scriptUrl);
+        if (!isSiteHost(candidate)) return;
+        synchronized (lock) {
+            if (scriptFetchStarted) return;
+            scriptFetchStarted = true;
+            scriptStatus = "fetching";
+        }
+        refreshDiagnosticView();
+
+        String userAgent = "";
+        WebView current = webView;
+        if (current != null) {
+            try {
+                userAgent = safe(current.getSettings().getUserAgentString());
+            } catch (Exception ignored) {
+            }
+        }
+        String cookie = "";
+        try {
+            cookie = safe(CookieManager.getInstance().getCookie(PAGE));
+        } catch (Exception ignored) {
+        }
+        final String ua = userAgent;
+        final String cookieHeader = cookie;
+
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) new URL(candidate).openConnection();
+                connection.setConnectTimeout(12_000);
+                connection.setReadTimeout(15_000);
+                connection.setInstanceFollowRedirects(true);
+                connection.setRequestProperty("Accept", "*/*");
+                connection.setRequestProperty("Referer", PAGE);
+                if (!ua.isEmpty()) connection.setRequestProperty("User-Agent", ua);
+                if (!cookieHeader.isEmpty()) connection.setRequestProperty("Cookie", cookieHeader);
+
+                int status = connection.getResponseCode();
+                InputStream stream = status >= 200 && status < 400
+                        ? connection.getInputStream() : connection.getErrorStream();
+                if (stream == null) throw new IllegalStateException("HTTP " + status + " no body");
+
+                StringBuilder text = new StringBuilder();
+                try (Reader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
+                    char[] buffer = new char[8192];
+                    int count;
+                    while ((count = reader.read(buffer)) >= 0 && text.length() < MAX_SCRIPT_BYTES) {
+                        int room = MAX_SCRIPT_BYTES - text.length();
+                        text.append(buffer, 0, Math.min(count, room));
+                        if (room <= count) break;
+                    }
+                }
+
+                inspectScriptText(candidate, text.toString());
+                scriptStatus = "ok:" + text.length();
+            } catch (Exception error) {
+                scriptStatus = "ERR " + safe(error.getClass().getSimpleName() + ": " + error.getMessage());
+            } finally {
+                if (connection != null) connection.disconnect();
+                main.post(this::refreshDiagnosticView);
+            }
+        }, "ShitShowScriptB19").start();
+    }
+
+    private void inspectScriptText(String sourceUrl, String script) {
+        if (script == null || script.isEmpty()) return;
+        String lower = script.toLowerCase(Locale.US);
+        String[] keys = {"shitshow", "shit-show", "swipe", "/api/", "fetch(", "$.ajax", "ajax", "video", "next"};
+        int best = -1;
+        for (String key : keys) {
+            int at = lower.indexOf(key);
+            if (at >= 0 && (best < 0 || at < best)) best = at;
+        }
+        if (best >= 0) {
+            int start = Math.max(0, best - 220);
+            int end = Math.min(script.length(), best + 520);
+            codeHint = safe(script.substring(start, end));
+        }
+
+        ArrayList<String> routes = new ArrayList<>();
+        Matcher strings = QUOTED.matcher(script);
+        while (strings.find() && routes.size() < 8) {
+            String value = safe(strings.group(1));
+            String l = value.toLowerCase(Locale.US);
+            if (l.contains("shitshow") || l.contains("/api/") || l.contains("ajax")
+                    || l.contains("video") || l.contains("feed") || l.contains("swipe")
+                    || l.contains("next") || l.contains("random")) {
+                if (!routes.contains(value)) routes.add(value);
+            }
+        }
+        if (!routes.isEmpty()) routeHint = String.join(" | ", routes);
+
+        Matcher media = MEDIA_IN_TEXT.matcher(script);
+        while (media.find()) enqueue(media.group(), "", "", "Shit Show", false);
+
+        scriptUrlHint = sourceUrl;
+    }
+
     private void harvestPayload(String sourceUrl, String mime, String raw) {
         if (raw == null || raw.isEmpty()) return;
         observedPayloads++;
         String text = raw.replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&");
         payloadHint = safe(text);
         if (payloadHint.length() > 100) payloadHint = payloadHint.substring(0, 100);
-
-        Matcher absolute = MEDIA_IN_PAYLOAD.matcher(text);
-        while (absolute.find()) enqueue(absolute.group(), mime, "", "Shit Show", false);
-        Matcher protocol = PROTOCOL_MEDIA_IN_PAYLOAD.matcher(text);
-        while (protocol.find()) enqueue("https:" + protocol.group(), mime, "", "Shit Show", false);
+        Matcher media = MEDIA_IN_TEXT.matcher(text);
+        while (media.find()) enqueue(media.group(), mime, "", "Shit Show", false);
         refreshDiagnosticView();
     }
 
@@ -500,15 +604,18 @@ final class ShitShowTapSource {
         jsIframeCount = 0;
         externalBlocks = 0;
         documentStartSupported = false;
+        scriptFetchStarted = false;
         pageState = "starting";
         lastPageUrl = PAGE;
         jsReadyState = "";
         lastEarlyKind = "";
         lastInterestingRequest = "";
         scriptUrlHint = "";
+        scriptStatus = "idle";
         frameHint = "";
         codeHint = "";
         routeHint = "";
+        inlineHint = "";
         payloadHint = "";
         bodyHint = "";
         jsErrorHint = "";
@@ -525,10 +632,10 @@ final class ShitShowTapSource {
         TextView view = new TextView(activity);
         diagnosticView = view;
         view.setTextColor(Color.WHITE);
-        view.setTextSize(9.8f);
+        view.setTextSize(9.4f);
         view.setGravity(Gravity.START);
         view.setPadding(dp(activity, 8), dp(activity, 6), dp(activity, 8), dp(activity, 6));
-        view.setBackgroundColor(Color.argb(224, 0, 0, 0));
+        view.setBackgroundColor(Color.argb(225, 0, 0, 0));
         view.setElevation(dp(activity, 32));
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -550,35 +657,37 @@ final class ShitShowTapSource {
             return;
         }
         StringBuilder text = new StringBuilder();
-        text.append("Shit Show debug B18  ").append(isWarming() ? "RUN" : "STOP").append('\n');
+        text.append("Shit Show debug B19  ").append(isWarming() ? "RUN" : "STOP").append('\n');
         text.append("page:").append(pageState)
                 .append(" c").append(pageCommitCount).append("/f").append(pageFinishedCount)
                 .append(" DOM:").append(jsReadyState.isEmpty() ? "?" : jsReadyState)
                 .append(" early:").append(documentStartSupported ? "ON" : "OFF").append('\n');
         text.append("ev:").append(earlyEvents).append(" f:").append(earlyFetches)
                 .append(" x:").append(earlyXhrs).append(" blob:").append(earlyBlobs)
-                .append(" mse:").append(earlyMse).append(" last:").append(shorten(lastEarlyKind, 13)).append('\n');
+                .append(" mse:").append(earlyMse).append(" last:").append(shorten(lastEarlyKind, 12)).append('\n');
         text.append("video:").append(jsVideoCount).append(" http:").append(jsHttpVideoCount)
                 .append(" blobv:").append(jsBlobVideoCount).append(" src:").append(jsSourceCount)
                 .append(" js:").append(jsScriptCount).append(" fr:").append(jsIframeCount).append('\n');
         text.append("req:").append(observedRequests).append(" payload:").append(observedPayloads)
                 .append(" cand:").append(observedCandidates).append(" cache:").append(cachedCount())
                 .append(" pump:").append(pumpCount).append(" ext:").append(externalBlocks).append('\n');
+        text.append("script:").append(shorten(scriptStatus, 28)).append('\n');
         String net1 = networkHint(0);
         String net2 = networkHint(1);
         if (!net1.isEmpty()) text.append("net1:").append(shorten(net1, 72)).append('\n');
         if (!net2.isEmpty()) text.append("net2:").append(shorten(net2, 72)).append('\n');
-        if (!scriptUrlHint.isEmpty()) text.append("js*:").append(shorten(scriptUrlHint, 72)).append('\n');
-        if (!routeHint.isEmpty()) text.append("route*:").append(shorten(routeHint, 76)).append('\n');
-        if (!codeHint.isEmpty()) text.append("code:").append(shorten(codeHint, 86)).append('\n');
-        if (!jsErrorHint.isEmpty()) text.append("err:").append(shorten(jsErrorHint, 82)).append('\n');
-        if (!frameHint.isEmpty()) text.append("frame:").append(shorten(frameHint, 70)).append('\n');
+        if (!scriptUrlHint.isEmpty()) text.append("js*:").append(shorten(scriptUrlHint, 78)).append('\n');
+        if (!routeHint.isEmpty()) text.append("route*:").append(shorten(routeHint, 88)).append('\n');
+        if (!codeHint.isEmpty()) text.append("code:").append(shorten(codeHint, 100)).append('\n');
+        if (!inlineHint.isEmpty()) text.append("inline:").append(shorten(inlineHint, 88)).append('\n');
+        if (!jsErrorHint.isEmpty()) text.append("err:").append(shorten(jsErrorHint, 94)).append('\n');
+        if (!frameHint.isEmpty()) text.append("frame:").append(shorten(frameHint, 74)).append('\n');
         if (net1.isEmpty() && net2.isEmpty() && !lastInterestingRequest.isEmpty()) {
-            text.append("req*:").append(shorten(lastInterestingRequest, 72)).append('\n');
+            text.append("req*:").append(shorten(lastInterestingRequest, 74)).append('\n');
         }
-        if (codeHint.isEmpty() && !payloadHint.isEmpty()) text.append("body*:").append(shorten(payloadHint, 82)).append('\n');
-        else if (codeHint.isEmpty() && !bodyHint.isEmpty()) text.append(shorten(bodyHint, 82)).append('\n');
-        if (!blockedUrl.isEmpty()) text.append("blocked:").append(shorten(blockedUrl, 68));
+        if (codeHint.isEmpty() && !payloadHint.isEmpty()) text.append("body*:").append(shorten(payloadHint, 86)).append('\n');
+        else if (codeHint.isEmpty() && !bodyHint.isEmpty()) text.append(shorten(bodyHint, 86)).append('\n');
+        if (!blockedUrl.isEmpty()) text.append("blocked:").append(shorten(blockedUrl, 70));
         view.setText(text.toString().trim());
     }
 
@@ -652,7 +761,8 @@ final class ShitShowTapSource {
             else if ("blob".equals(kind)) earlyBlobs++;
             else if ("mse".equals(kind)) earlyMse++;
             else if ("js-error".equals(kind) || "promise-error".equals(kind)) jsErrorHint = safe(meta);
-            if (("fetch".equals(kind) || "xhr".equals(kind)) && url != null && !url.isEmpty()) {
+            if (("fetch".equals(kind) || "fetch-res".equals(kind)
+                    || "xhr".equals(kind) || "xhr-res".equals(kind)) && url != null && !url.isEmpty()) {
                 rememberUsefulNetwork(url);
             }
             refreshDiagnosticView();
@@ -664,29 +774,19 @@ final class ShitShowTapSource {
         }
 
         @JavascriptInterface
-        public void onScriptProbe(String url, String snippet, String routes) {
-            String candidate = safe(url);
-            if (!candidate.isEmpty() && (scriptUrlHint.isEmpty()
-                    || candidate.toLowerCase(Locale.US).contains("index.min.js"))) {
-                scriptUrlHint = candidate;
-            }
-            String cleanSnippet = safe(snippet);
-            if (!cleanSnippet.isEmpty()) codeHint = cleanSnippet;
-            String cleanRoutes = safe(routes);
-            if (!cleanRoutes.isEmpty()) routeHint = cleanRoutes;
-            refreshDiagnosticView();
-        }
-
-        @JavascriptInterface
         public void onState(String raw) {
             try {
                 JSONObject json = new JSONObject(raw == null ? "{}" : raw);
                 lastPageUrl = safe(json.optString("url", lastPageUrl));
                 jsReadyState = safe(json.optString("ready", jsReadyState));
                 bodyHint = safe(json.optString("body", bodyHint));
-                String candidateScript = safe(json.optString("scriptUrl", ""));
-                if (!candidateScript.isEmpty()) scriptUrlHint = candidateScript;
                 frameHint = safe(json.optString("frame", frameHint));
+                inlineHint = safe(json.optString("inline", inlineHint));
+                String candidateScript = safe(json.optString("scriptUrl", ""));
+                if (!candidateScript.isEmpty()) {
+                    scriptUrlHint = candidateScript;
+                    fetchScriptOutsideCors(candidateScript);
+                }
                 jsVideoCount = json.optInt("videos", jsVideoCount);
                 jsHttpVideoCount = json.optInt("httpVideos", jsHttpVideoCount);
                 jsBlobVideoCount = json.optInt("blobVideos", jsBlobVideoCount);
@@ -721,15 +821,17 @@ final class ShitShowTapSource {
 
     private static final String EARLY_HOOK_JS =
             "(function(){try{" +
-            "if(window.__csEarlyB18)return;window.__csEarlyB18=true;" +
+            "if(window.__csEarlyB19)return;window.__csEarlyB19=true;" +
             "function abs(v){try{return v?new URL(v,location.href).href:'';}catch(e){return String(v||'');}}" +
             "function ev(k,u,m){try{CSShitBridge.onEarly(k,abs(u||''),String(m||''));}catch(e){}}" +
-            "function pay(u,m,t){try{if(typeof t==='string'&&t.length)CSShitBridge.onPayload(abs(u||''),String(m||''),t.slice(0,280000));}catch(e){}}" +
-            "try{addEventListener('error',function(e){ev('js-error','',(e&&e.message)||'window error');},true);addEventListener('unhandledrejection',function(e){var r=e&&e.reason;ev('promise-error','',r&&(r.message||String(r))||'rejection');});}catch(e){}" +
-            "try{var of=window.fetch;if(of){window.__csOrigFetch=of.bind(window);window.fetch=function(input){var u='';try{u=typeof input==='string'?input:(input&&input.url)||'';}catch(e){}ev('fetch',u,'');return of.apply(this,arguments).then(function(r){try{var ct=(r.headers&&r.headers.get&&r.headers.get('content-type'))||'';ev('fetch-res',r.url||u,ct);r.clone().text().then(function(t){pay(r.url||u,ct,t);}).catch(function(){});}catch(e){}return r;});};}}catch(e){}" +
+            "function pay(u,m,t){try{if(typeof t==='string'&&t.length)CSShitBridge.onPayload(abs(u||''),String(m||''),t.slice(0,300000));}catch(e){}}" +
+            "try{addEventListener('error',function(e){var m='';try{if(e&&e.message)m=e.message+' @ '+(e.filename||'')+':'+(e.lineno||0);else{var t=e&&e.target;m='resource '+((t&&t.tagName)||'?')+' '+((t&&(t.src||t.href))||'');}}catch(x){}ev('js-error','',m||'error');},true);addEventListener('unhandledrejection',function(e){var r=e&&e.reason;ev('promise-error','',r&&(r.stack||r.message||String(r))||'rejection');});}catch(e){}" +
+            "try{var of=window.fetch;if(of){window.fetch=function(input){var u='';try{u=typeof input==='string'?input:(input&&input.url)||'';}catch(e){}ev('fetch',u,'');return of.apply(this,arguments).then(function(r){try{var ct=(r.headers&&r.headers.get&&r.headers.get('content-type'))||'';ev('fetch-res',r.url||u,ct);r.clone().text().then(function(t){pay(r.url||u,ct,t);}).catch(function(){});}catch(e){}return r;});};}}catch(e){}" +
             "try{var xo=XMLHttpRequest.prototype.open,xs=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(m,u){this.__csUrl=abs(u);ev('xhr',u,m);return xo.apply(this,arguments);};XMLHttpRequest.prototype.send=function(){try{this.addEventListener('load',function(){try{var ct=this.getResponseHeader('content-type')||'',u=this.responseURL||this.__csUrl||'';ev('xhr-res',u,ct);if(!this.responseType||this.responseType==='text')pay(u,ct,this.responseText||'');}catch(e){}});}catch(e){}return xs.apply(this,arguments);};}catch(e){}" +
             "try{var oc=URL.createObjectURL;if(oc){URL.createObjectURL=function(o){var r=oc.apply(this,arguments);ev('blob',r,Object.prototype.toString.call(o));return r;};}}catch(e){}" +
             "try{if(window.MediaSource&&MediaSource.prototype.addSourceBuffer){var asb=MediaSource.prototype.addSourceBuffer;MediaSource.prototype.addSourceBuffer=function(t){ev('mse','',t);return asb.apply(this,arguments);};}}catch(e){}" +
+            "try{var ow=window.WebSocket;if(ow){window.WebSocket=function(u,p){ev('ws',u,'');return p===undefined?new ow(u):new ow(u,p);};window.WebSocket.prototype=ow.prototype;}}catch(e){}" +
+            "try{var oe=window.EventSource;if(oe){window.EventSource=function(u,c){ev('eventsource',u,'');return new oe(u,c);};window.EventSource.prototype=oe.prototype;}}catch(e){}" +
             "try{var sa=Element.prototype.setAttribute;Element.prototype.setAttribute=function(n,v){try{var tag=(this.tagName||'').toLowerCase();if((tag==='video'||tag==='source')&&String(n).toLowerCase()==='src')ev('media-src',v,tag);}catch(e){}return sa.apply(this,arguments);};}catch(e){}" +
             "}catch(e){}})();";
 
@@ -741,11 +843,10 @@ final class ShitShowTapSource {
             "document.querySelectorAll('video').forEach(function(v){videos++;var q=v.querySelector('source[src]'),s=v.currentSrc||v.src||(q&&(q.src||q.getAttribute('src')))||'',m=(q&&(q.type||q.getAttribute('type')))||v.getAttribute('type')||'';if(/^https?:/i.test(s))httpVideos++;if(/^blob:/i.test(s))blobVideos++;if(/^https?:/i.test(abs(s))){var r=v.closest('article,section,.swiper-slide,.slide,.item')||v.parentElement,p=v.poster||v.getAttribute('poster')||'',t=(v.getAttribute('title')||v.getAttribute('aria-label')||(r&&r.textContent)||'Shit Show').replace(/\\s+/g,' ').trim().slice(0,120);CSShitBridge.onClip(JSON.stringify({media:abs(s),mime:m,poster:abs(p),title:t}));}try{v.muted=true;v.preload='auto';var pr=v.play();if(pr&&pr.catch)pr.catch(function(){});}catch(e){}});" +
             "document.querySelectorAll('source[src]').forEach(function(s){sources++;cand(s.src||s.getAttribute('src'),s.type||s.getAttribute('type')||'');});" +
             "try{performance.getEntriesByType('resource').forEach(function(e){var n=e.name||'';if(/\\.(mp4|webm|m4v|m3u8|mpd)(\\?|#|$)/i.test(n))cand(n,'');});}catch(e){}" +
-            "var scripts=[].slice.call(document.scripts||[]),picked='';for(var i=0;i<scripts.length;i++){var su=abs(scripts[i].src||'');if(/index\\.min\\.js/i.test(su)){picked=su;break;}if(!picked&&su&&new URL(su,location.href).origin===location.origin)picked=su;}" +
+            "var scripts=[].slice.call(document.scripts||[]),picked='',inline='';for(var i=0;i<scripts.length;i++){var su=abs(scripts[i].src||'');if(/index\\.min\\.js/i.test(su)){picked=su;break;}}for(var j=0;j<scripts.length&&!inline;j++){if(scripts[j].src)continue;var tx=scripts[j].textContent||'';if(/shitshow|swipe|video|ajax|fetch\\(/i.test(tx))inline=tx.replace(/\\s+/g,' ').trim().slice(0,220);}" +
             "var fr='',fi=document.querySelector('iframe[src]');if(fi)fr=abs(fi.getAttribute('src')||fi.src||'');" +
             "var body=(document.body&&document.body.innerText||'').replace(/\\s+/g,' ').trim();" +
-            "CSShitBridge.onState(JSON.stringify({url:location.href,ready:document.readyState,body:body.slice(0,90),scriptUrl:picked,frame:fr,videos:videos,httpVideos:httpVideos,blobVideos:blobVideos,sources:sources,scripts:scripts.length,frames:document.querySelectorAll('iframe').length}));" +
-            "if(!window.__csScriptProbeB18){window.__csScriptProbeB18=true;var targets=[];for(var j=0;j<scripts.length;j++){try{var u=abs(scripts[j].src||'');if(!u)continue;var o=new URL(u,location.href);if(o.origin!==location.origin)continue;if(/index\\.min\\.js/i.test(u))targets.unshift(u);else targets.push(u);}catch(e){}}targets=targets.slice(0,8);var pf=window.__csOrigFetch||window.fetch;targets.forEach(function(u){try{pf(u).then(function(r){return r.text();}).then(function(t){try{var low=t.toLowerCase(),keys=['shitshow','swipe','video','fetch(','$.ajax','ajax','next'],ix=-1;for(var k=0;k<keys.length;k++){var z=low.indexOf(keys[k]);if(z>=0&&(ix<0||z<ix))ix=z;}var sn='';if(ix>=0)sn=t.slice(Math.max(0,ix-150),Math.min(t.length,ix+350)).replace(/\\s+/g,' ');var routes=[],rx=/[\\\"'`]([^\\\"'`]{1,180})[\\\"'`]/g,m;while((m=rx.exec(t))&&routes.length<4){var q=m[1];if(/shitshow|\\/api\\/|ajax|video|feed|swipe|next/i.test(q)&&routes.indexOf(q)<0)routes.push(q);}if(sn||routes.length||/index\\.min\\.js/i.test(u))CSShitBridge.onScriptProbe(u,sn,routes.join(' | '));}catch(e){}}).catch(function(){});}catch(e){}});}" +
+            "CSShitBridge.onState(JSON.stringify({url:location.href,ready:document.readyState,body:body.slice(0,90),scriptUrl:picked,frame:fr,inline:inline,videos:videos,httpVideos:httpVideos,blobVideos:blobVideos,sources:sources,scripts:scripts.length,frames:document.querySelectorAll('iframe').length}));" +
             "}catch(e){}})();";
 
     private static final String SCAN_AND_ADVANCE_JS =
