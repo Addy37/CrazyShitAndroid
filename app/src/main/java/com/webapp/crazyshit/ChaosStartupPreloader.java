@@ -9,12 +9,13 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * One-shot process startup cache used to overlap the splash animation with the first Chaos feed
- * request. It deliberately preloads only regular feed metadata. Shit Show keeps its proven WebView
- * warmup path once the native Chaos screen exists.
+ * One-shot process startup cache used to overlap the splash animation with useful Chaos work.
+ * The first regular item is exposed as soon as its feed metadata arrives, then its playable page
+ * is resolved once during the remaining splash time to warm DNS/TLS/page caches before Chaos asks
+ * for the same clip. Shit Show keeps its proven WebView warmup path once native Chaos exists.
  */
 final class ChaosStartupPreloader {
-    private static final int STARTER_ITEMS = 6;
+    private static final int STARTER_ITEMS = 1;
     private static final Object LOCK = new Object();
     private static final ArrayList<NativeContentItem> READY = new ArrayList<>();
 
@@ -40,7 +41,7 @@ final class ChaosStartupPreloader {
 
     static boolean isReady() {
         synchronized (LOCK) {
-            return finished || !READY.isEmpty();
+            return finished;
         }
     }
 
@@ -54,9 +55,9 @@ final class ChaosStartupPreloader {
     }
 
     private static void load(Context context) {
-        ArrayList<NativeContentItem> result = new ArrayList<>();
+        CrazyShitRepository repository = new CrazyShitRepository();
+        NativeContentItem first = null;
         try {
-            CrazyShitRepository repository = new CrazyShitRepository();
             Random random = new Random();
             ArrayList<String> sources = new ArrayList<>(Arrays.asList(
                     CrazyShitRepository.HOME,
@@ -79,14 +80,25 @@ final class ChaosStartupPreloader {
                 if (candidates.isEmpty()) continue;
 
                 Collections.shuffle(candidates, random);
-                int take = Math.min(STARTER_ITEMS, candidates.size());
-                result.addAll(candidates.subList(0, take));
+                first = candidates.get(0);
+                synchronized (LOCK) {
+                    READY.clear();
+                    READY.add(first);
+                }
                 break;
+            }
+
+            // Warm the exact first clip while the branded intro is still on screen. The native
+            // feed keeps the original story/page URL and resolves it normally again if necessary,
+            // so this cannot change comments, sharing, history, or Shit Show routing semantics.
+            if (first != null) {
+                try {
+                    repository.resolvePlayable(context, first.url);
+                } catch (Exception ignored) {
+                }
             }
         } finally {
             synchronized (LOCK) {
-                READY.clear();
-                READY.addAll(result);
                 finished = true;
                 LOCK.notifyAll();
             }
