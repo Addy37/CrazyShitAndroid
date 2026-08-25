@@ -9,25 +9,26 @@
 
     <View
         android:id="@+id/splashGlow"
-        android:layout_width="300dp"
-        android:layout_height="300dp"
+        android:layout_width="320dp"
+        android:layout_height="320dp"
         android:layout_gravity="center"
         android:alpha="0"
         android:background="@drawable/splash_orange_glow" />
 
-    <ImageView
-        android:id="@+id/splashArt"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:contentDescription="@null"
-        android:scaleType="fitCenter"
-        android:src="@drawable/splash_art" />
-
     <View
         android:id="@+id/splashSweep"
-        android:layout_width="150dp"
+        android:layout_width="210dp"
         android:layout_height="2dp"
         android:layout_gravity="center"
         android:alpha="0"
         android:background="@drawable/splash_light_streak" />
+
+    <ImageView
+        android:id="@+id/splashArt"
+        android:layout_width="210dp"
+        android:layout_height="210dp"
+        android:layout_gravity="center"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_launcher_art" />
 </FrameLayout>
