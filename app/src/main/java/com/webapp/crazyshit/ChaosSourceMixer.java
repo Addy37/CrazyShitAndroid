@@ -21,7 +21,8 @@ import java.util.Set;
 final class ChaosSourceMixer {
     private static final int MAX_SOURCE_PAGE = 8;
     private static final int SOURCES_PER_BATCH = 6;
-    private static final int SHIT_SHOW_PER_BATCH = 8;
+    private static final int REGULAR_ITEMS_PER_SOURCE = 6;
+    private static final int SHIT_SHOW_PER_BATCH = 14;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
 
@@ -39,9 +40,10 @@ final class ChaosSourceMixer {
     }
 
     List<NativeContentItem> loadRandomBatch(Context context) {
-        // Harvest Shit Show story permalinks in parallel with the existing broad Chaos deck.
-        // The actual stream is resolved later, close to playback, so signed URLs stay fresh and
-        // the exact story referrer/cookies are preserved for Media3.
+        // Keep the full breadth of the randomized source/page deck, but sample each selected feed
+        // instead of dumping dozens of items from one page into the same Chaos batch. This keeps
+        // Home/Trending/Videos/User Uploads/categories broad while giving Shit Show a meaningful
+        // share of the finished random pool.
         shitShow.prewarm(context);
         ensureCatalog(context);
 
@@ -85,7 +87,7 @@ final class ChaosSourceMixer {
         ArrayList<NativeContentItem> result = new ArrayList<>(regular.size() + shitShowItems.size());
 
         int regularIndex = 0;
-        int nextShitAfter = 2 + random.nextInt(4);
+        int nextShitAfter = 1 + random.nextInt(3);
         for (NativeContentItem shit : shitShowItems) {
             int copied = 0;
             while (regularIndex < regular.size() && copied < nextShitAfter) {
@@ -93,7 +95,7 @@ final class ChaosSourceMixer {
                 copied++;
             }
             result.add(shit);
-            nextShitAfter = 5 + random.nextInt(6);
+            nextShitAfter = 3 + random.nextInt(3);
         }
 
         while (regularIndex < regular.size()) result.add(regular.get(regularIndex++));
@@ -128,9 +130,16 @@ final class ChaosSourceMixer {
                             SourceRequest request) {
         if (request == null) return;
         try {
+            ArrayList<NativeContentItem> candidates = new ArrayList<>();
             for (NativeContentItem item : repository.fetchFeed(context, request.url, request.page)) {
                 if (item == null || item.url == null || item.url.isEmpty()) continue;
                 if (!NativeContentItem.KIND_MEDIA.equals(item.kind)) continue;
+                candidates.add(item);
+            }
+            Collections.shuffle(candidates, random);
+            int take = Math.min(REGULAR_ITEMS_PER_SOURCE, candidates.size());
+            for (int i = 0; i < take; i++) {
+                NativeContentItem item = candidates.get(i);
                 combined.putIfAbsent(item.url, item);
             }
         } catch (Exception ignored) {
