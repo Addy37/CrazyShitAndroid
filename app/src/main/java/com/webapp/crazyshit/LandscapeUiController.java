@@ -28,16 +28,16 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Responsive landscape treatment for the native app shell.
+ * Responsive horizontal-orientation treatment for the native app shell.
  *
- * Portrait stays untouched. Landscape replaces the tall bottom navigation with a slim
- * left rail, compacts the top bar, and renders native feeds as a denser grid. Chaos keeps
+ * Portrait stays untouched. Horizontal orientation replaces the tall bottom navigation with a
+ * slim left rail, compacts the top bar, and renders native feeds as a denser grid. Chaos keeps
  * its existing immersive fullscreen behavior and hides the adaptive rail entirely.
  */
 final class LandscapeUiController {
     private static final int NAV_HOME = 1;
-    private static final int NAV_TRENDING = 2;
-    private static final int NAV_MEMES = 3;
+    private static final int NAV_SERIES = 2;
+    private static final int NAV_CATEGORIES = 3;
     private static final int NAV_CHAOS = 4;
     private static final int NAV_MORE = 5;
 
@@ -145,9 +145,9 @@ final class LandscapeUiController {
         rail.addView(menu, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         addRailButton(activity, state, menu, NAV_HOME, "Home", R.drawable.ic_nav_home);
-        addRailButton(activity, state, menu, NAV_TRENDING, "Trending", R.drawable.ic_nav_trending);
+        addRailButton(activity, state, menu, NAV_SERIES, "Series", R.drawable.ic_nav_series);
         addRailButton(activity, state, menu, NAV_CHAOS, "Chaos", R.drawable.ic_nav_chaos);
-        addRailButton(activity, state, menu, NAV_MEMES, "Memes", R.drawable.ic_nav_memes);
+        addRailButton(activity, state, menu, NAV_CATEGORIES, "Categories", R.drawable.ic_nav_categories);
         addRailButton(activity, state, menu, NAV_MORE, "More", R.drawable.ic_nav_more);
 
         if (state.overlayRoot instanceof FrameLayout) {
@@ -342,8 +342,11 @@ final class LandscapeUiController {
                     Integer restore = state.originalFeedModes.remove(adapter);
                     if (restore != null && adapter.getViewMode() != restore) adapter.setViewMode(restore);
                     int mode = restore == null ? adapter.getViewMode() : restore;
-                    if (mode == NativeFeedAdapter.VIEW_GRID) useGrid(activity, recycler, 2);
-                    else useLinear(activity, recycler);
+                    if (mode == NativeFeedAdapter.VIEW_GRID || mode == NativeFeedAdapter.VIEW_POSTERS) {
+                        useGrid(activity, recycler, 2);
+                    } else {
+                        useLinear(activity, recycler);
+                    }
                     setRecyclerPadding(activity, recycler, 0, 5, 0, 18);
                 }
             } else if (rawAdapter instanceof NativeCategoryAdapter) {

@@ -16,7 +16,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -27,17 +26,14 @@ import java.util.concurrent.Executors;
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
     public static final int PAGE_HOME = 0;
     public static final int PAGE_SERIES = 1;
-    // Compatibility aliases retained for old callers while visible navigation is Series/Categories.
-    public static final int PAGE_TRENDING = PAGE_SERIES;
     public static final int PAGE_CHAOS = 2;
     public static final int PAGE_CATEGORIES = 3;
-    public static final int PAGE_MEMES = PAGE_CATEGORIES;
     public static final int PAGE_COUNT = 4;
     private static final int PAGE_ARRAY_COUNT = 4;
 
     public interface Host {
-        void onOpenItem(NativeContentItem item, boolean meme);
-        void onLongPressItem(NativeContentItem item, View anchor, boolean meme);
+        void onOpenItem(NativeContentItem item);
+        void onLongPressItem(NativeContentItem item, View anchor);
         void onOpenComments(NativeContentItem item);
     }
 
@@ -69,7 +65,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         chaosView = new ChaosFeedView(activity, new ChaosFeedView.Host() {
             @Override
             public void openDetails(NativeContentItem item) {
-                host.onOpenItem(item, false);
+                host.onOpenItem(item);
             }
 
             @Override
@@ -142,6 +138,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         chaosView.onHostPause();
     }
 
+    public void onConfigurationChanged() {
+        chaosView.onConfigurationChanged();
+    }
+
     public void close() {
         chaosView.close();
         browseArtworkResolver.close();
@@ -190,13 +190,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             @Override
             public void onOpen(NativeContentItem item) {
                 if (item == null || item.isSection()) return;
-                host.onOpenItem(item, false);
+                host.onOpenItem(item);
             }
 
             @Override
             public void onLongPress(NativeContentItem item, View anchor) {
                 if (item == null || item.isSection()) return;
-                host.onLongPressItem(item, anchor, false);
+                host.onLongPressItem(item, anchor);
             }
 
             @Override

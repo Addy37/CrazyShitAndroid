@@ -20,17 +20,17 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Small app-wide polish layer for the native shell.
+ * Small interaction polish layer for the native shell.
  *
- * Keeps the existing layouts and behavior intact while adding softer transitions,
- * consistent accent colors and subtle touch feedback to feed cards.
+ * 2.8 removes the old permanent view-tree polling loop. Existing views are polished once and
+ * RecyclerView children are handled when they attach, so scrolling does not trigger a full app
+ * hierarchy scan every few hundred milliseconds.
  */
 final class UiPolishController {
     private static final int ORANGE = Color.rgb(255, 90, 31);
     private static final int MUTED = Color.rgb(166, 166, 176);
-    private static final long TICK_MS = 650L;
 
-    private static final Map<NativeMainActivity, Loop> LOOPS = new WeakHashMap<>();
+    private static final Map<NativeMainActivity, State> STATES = new WeakHashMap<>();
     private static final Map<View, Boolean> POLISHED = new WeakHashMap<>();
     private static final Map<ViewPager2, Boolean> PAGERS = new WeakHashMap<>();
 
@@ -39,63 +39,74 @@ final class UiPolishController {
 
     static void attach(NativeMainActivity activity) {
         if (activity == null || activity.isFinishing()) return;
-        Loop loop = LOOPS.get(activity);
-        if (loop == null) {
-            loop = new Loop(activity);
-            LOOPS.put(activity, loop);
-        }
-        loop.start();
+        State old = STATES.remove(activity);
+        if (old != null) old.detach();
+
+        State state = new State(activity);
+        STATES.put(activity, state);
+        activity.getWindow().getDecorView().post(state::attach);
     }
 
     static void detach(NativeMainActivity activity) {
-        Loop loop = LOOPS.remove(activity);
-        if (loop != null) loop.stop();
+        State state = STATES.remove(activity);
+        if (state != null) state.detach();
     }
 
-    private static final class Loop implements Runnable {
+    private static final class State {
         private final WeakReference<NativeMainActivity> activityRef;
-        private boolean running;
+        private final Map<RecyclerView, RecyclerView.OnChildAttachStateChangeListener> childListeners =
+                new WeakHashMap<>();
 
-        Loop(NativeMainActivity activity) {
+        State(NativeMainActivity activity) {
             activityRef = new WeakReference<>(activity);
         }
 
-        void start() {
+        void attach() {
             NativeMainActivity activity = activityRef.get();
             if (activity == null || activity.isFinishing()) return;
-            running = true;
-            View decor = activity.getWindow().getDecorView();
-            decor.removeCallbacks(this);
-            decor.post(this);
-        }
-
-        void stop() {
-            running = false;
-            NativeMainActivity activity = activityRef.get();
-            if (activity != null) activity.getWindow().getDecorView().removeCallbacks(this);
-        }
-
-        @Override
-        public void run() {
-            NativeMainActivity activity = activityRef.get();
-            if (!running || activity == null || activity.isFinishing()) return;
-
-            activity.getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
-            activity.getWindow().setNavigationBarColor(Color.rgb(13, 13, 15));
-
             View root = activity.findViewById(android.R.id.content);
-            if (root != null) polishTree(activity, root, false);
+            if (root != null) polishTree(activity, root, false, this);
+        }
 
-            activity.getWindow().getDecorView().postDelayed(this, TICK_MS);
+        void watchRecycler(NativeMainActivity activity, RecyclerView recycler) {
+            if (recycler == null || childListeners.containsKey(recycler)) return;
+            RecyclerView.OnChildAttachStateChangeListener listener =
+                    new RecyclerView.OnChildAttachStateChangeListener() {
+                        @Override
+                        public void onChildViewAttachedToWindow(View view) {
+                            polishAttachedTree(activity, view, false);
+                        }
+
+                        @Override
+                        public void onChildViewDetachedFromWindow(View view) {
+                        }
+                    };
+            recycler.addOnChildAttachStateChangeListener(listener);
+            childListeners.put(recycler, listener);
+        }
+
+        void detach() {
+            for (Map.Entry<RecyclerView, RecyclerView.OnChildAttachStateChangeListener> entry
+                    : childListeners.entrySet()) {
+                RecyclerView recycler = entry.getKey();
+                if (recycler != null) recycler.removeOnChildAttachStateChangeListener(entry.getValue());
+            }
+            childListeners.clear();
         }
     }
 
-    private static void polishTree(NativeMainActivity activity, View view, boolean insideChaos) {
+    private static void polishTree(
+            NativeMainActivity activity,
+            View view,
+            boolean insideChaos,
+            State state
+    ) {
         boolean chaos = insideChaos || view instanceof ChaosFeedView;
 
         if (view instanceof ViewPager2) {
             ViewPager2 pager = (ViewPager2) view;
-            if (!chaos && pager.getOrientation() == ViewPager2.ORIENTATION_HORIZONTAL && !PAGERS.containsKey(pager)) {
+            if (!chaos && pager.getOrientation() == ViewPager2.ORIENTATION_HORIZONTAL &&
+                    !PAGERS.containsKey(pager)) {
                 PAGERS.put(pager, Boolean.TRUE);
                 pager.setPageTransformer((page, position) -> {
                     float distance = Math.min(1f, Math.abs(position));
@@ -114,31 +125,45 @@ final class UiPolishController {
 
         if (view instanceof RecyclerView && !chaos && !(view.getParent() instanceof ViewPager2)) {
             RecyclerView recycler = (RecyclerView) view;
-            if (recycler.getItemAnimator() == null) {
-                DefaultItemAnimator animator = new DefaultItemAnimator();
-                animator.setAddDuration(180L);
-                animator.setRemoveDuration(150L);
-                animator.setMoveDuration(180L);
-                animator.setChangeDuration(140L);
-                animator.setSupportsChangeAnimations(false);
-                recycler.setItemAnimator(animator);
-            }
+            polishRecycler(recycler);
+            state.watchRecycler(activity, recycler);
         }
+
+        polishAttachedTree(activity, view, chaos);
+
+        if (!(view instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            polishTree(activity, group.getChildAt(i), chaos, state);
+        }
+    }
+
+    private static void polishAttachedTree(NativeMainActivity activity, View view, boolean insideChaos) {
+        boolean chaos = insideChaos || view instanceof ChaosFeedView;
 
         if (view instanceof MaterialCardView && !chaos) {
             polishCard(activity, (MaterialCardView) view);
         }
-
         if (view instanceof ProgressBar) {
-            ProgressBar progress = (ProgressBar) view;
-            progress.setIndeterminateTintList(ColorStateList.valueOf(ORANGE));
+            ((ProgressBar) view).setIndeterminateTintList(ColorStateList.valueOf(ORANGE));
         }
 
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
-            polishTree(activity, group.getChildAt(i), chaos);
+            polishAttachedTree(activity, group.getChildAt(i), chaos);
         }
+    }
+
+    private static void polishRecycler(RecyclerView recycler) {
+        if (recycler.getItemAnimator() != null) return;
+        DefaultItemAnimator animator = new DefaultItemAnimator();
+        animator.setAddDuration(180L);
+        animator.setRemoveDuration(150L);
+        animator.setMoveDuration(180L);
+        animator.setChangeDuration(140L);
+        animator.setSupportsChangeAnimations(false);
+        recycler.setItemAnimator(animator);
     }
 
     private static void polishNavigation(BottomNavigationView nav) {
@@ -155,7 +180,7 @@ final class UiPolishController {
         nav.setItemTextColor(tint);
         nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(48, 255, 90, 31)));
 
-        // v2.2.1 draws its own moving indicator, so disable Material's extra selected bubble.
+        // The floating navigation layer draws its own moving indicator.
         try {
             Method enabled = nav.getClass().getMethod("setItemActiveIndicatorEnabled", boolean.class);
             enabled.invoke(nav, false);

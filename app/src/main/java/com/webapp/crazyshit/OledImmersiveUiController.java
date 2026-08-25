@@ -29,8 +29,8 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * 2.7 OLED immersive feed layer. It keeps the visual depth from the first 2.7 pass, but moves
- * nearly all chrome to true black and makes artwork glow and scroll motion deliberately subtle.
+ * OLED immersive feed layer. In 2.8 the top header is deliberately static so RecyclerView scroll
+ * geometry never changes under the user's finger.
  */
 final class OledImmersiveUiController {
     private static final int OLED_BG = Color.BLACK;
@@ -114,7 +114,6 @@ final class OledImmersiveUiController {
             state.pageCallback = new ViewPager2.OnPageChangeCallback() {
                 @Override
                 public void onPageSelected(int position) {
-                    callbackState.collapse = 0f;
                     resetHeader(activity, callbackState);
                     pager.postDelayed(() -> bindCurrentMainRecycler(activity, callbackState), 80L);
                 }
@@ -122,6 +121,7 @@ final class OledImmersiveUiController {
             pager.registerOnPageChangeCallback(state.pageCallback);
         }
 
+        resetHeader(activity, state);
         bindCurrentMainRecycler(activity, state);
     }
 
@@ -143,6 +143,7 @@ final class OledImmersiveUiController {
         state.headerTitle = largestText(topBar);
         state.headerSubtitle = null;
         styleTopBar(activity, topBar);
+        resetHeader(activity, state);
         makeTransparent(recycler);
         if (recycler.getParent() instanceof View) makeTransparent((View) recycler.getParent());
         setAmbientBackground(state, state.baseBg, false);
@@ -208,9 +209,7 @@ final class OledImmersiveUiController {
         state.scrollListener = new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
-                if (activity.getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE) {
-                    updateHeaderCollapse(activity, state, view, dy);
-                }
+                // Header geometry is intentionally static in 2.8. Do not touch the top bar here.
                 applyMotion(activity, view);
                 scheduleAmbient(activity, state, view, 260L);
             }
@@ -342,52 +341,38 @@ final class OledImmersiveUiController {
         }
     }
 
-    private static void updateHeaderCollapse(Activity activity, State state, RecyclerView recycler, int dy) {
-        if (state.topBar == null) return;
-        SharedPreferences prefs = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
-        if (!prefs.getBoolean("collapse_header_enabled", true)) {
-            resetHeader(activity, state);
-            return;
-        }
-        if (!recycler.canScrollVertically(-1)) {
-            state.collapse = 0f;
-        } else {
-            float delta = dy / (float) Math.max(1, dp(activity, 320));
-            state.collapse = clamp(state.collapse + delta, 0f, 1f);
-        }
-        applyHeaderProgress(activity, state, state.collapse);
-    }
-
     private static void resetHeader(Activity activity, State state) {
-        state.collapse = 0f;
-        applyHeaderProgress(activity, state, 0f);
-    }
-
-    private static void applyHeaderProgress(Activity activity, State state, float progress) {
         View top = state.topBar;
         if (top == null) return;
+        top.animate().cancel();
         ViewGroup.LayoutParams raw = top.getLayoutParams();
         if (raw != null) {
             int expanded = activity instanceof NativeFeedBrowserActivity ? 64 : 70;
-            int collapsed = activity instanceof NativeFeedBrowserActivity ? 56 : 58;
-            raw.height = dp(activity, Math.round(expanded + (collapsed - expanded) * progress));
+            raw.height = dp(activity, expanded);
             top.setLayoutParams(raw);
         }
         if (state.headerTitle != null) {
-            float normal = activity instanceof NativeFeedBrowserActivity ? 20f : 19f;
-            state.headerTitle.setTextSize(normal - (1.0f * progress));
-            state.headerTitle.setTranslationY(dp(activity, 1.0f) * progress);
+            state.headerTitle.animate().cancel();
+            state.headerTitle.setTextSize(activity instanceof NativeFeedBrowserActivity ? 20f : 19f);
+            state.headerTitle.setTranslationY(0f);
+            state.headerTitle.setScaleX(1f);
+            state.headerTitle.setScaleY(1f);
+            state.headerTitle.setAlpha(1f);
         }
         if (state.headerSubtitle != null) {
-            state.headerSubtitle.setAlpha(1f - (0.65f * progress));
-            state.headerSubtitle.setScaleY(1f - (0.04f * progress));
+            state.headerSubtitle.animate().cancel();
+            state.headerSubtitle.setAlpha(1f);
+            state.headerSubtitle.setScaleX(1f);
+            state.headerSubtitle.setScaleY(1f);
+            state.headerSubtitle.setTranslationY(0f);
         }
         ImageView icon = firstImage(top);
         if (icon != null) {
-            float scale = 1f - (0.06f * progress);
-            icon.setScaleX(scale);
-            icon.setScaleY(scale);
-            icon.setAlpha(1f - (0.06f * progress));
+            icon.animate().cancel();
+            icon.setScaleX(1f);
+            icon.setScaleY(1f);
+            icon.setAlpha(1f);
+            icon.setTranslationY(0f);
         }
     }
 
@@ -698,7 +683,6 @@ final class OledImmersiveUiController {
         ValueAnimator ambientAnimator;
         int baseBg = OLED_BG;
         int currentAmbient = OLED_BG;
-        float collapse;
         boolean ambientPosted;
 
         State(Activity activity) {

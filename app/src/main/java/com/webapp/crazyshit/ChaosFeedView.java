@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
@@ -31,6 +32,7 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -76,9 +78,8 @@ public final class ChaosFeedView extends FrameLayout {
     private static final String KEY_RECENT = "recent_urls";
     private static final String KEY_HIDDEN = "hidden_urls";
     private static final String KEY_MUTED = "muted";
-    private static final int MAX_RECENT = 180;
+    private static final int MAX_RECENT = 500;
     private static final int MAX_HIDDEN = 600;
-    private static final int MAX_SOURCE_PAGE = 8;
     private static final int LOAD_AHEAD_AT = 5;
     private static final String SITE = "https://crazyshit.com/";
 
@@ -95,6 +96,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Set<String> resolving = new HashSet<>();
     private final Set<String> unplayable = new HashSet<>();
     private final Random random = new Random();
+    private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
 
     private ViewPager2 pager;
     private ChaosAdapter adapter;
@@ -106,7 +108,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean autoAdvancePending;
     private boolean chaosMuted;
     private int autoAdvanceFrom = -1;
-    private int sourcePage = 1;
+    private int consecutiveDryLoads;
     private int selectedPosition;
 
     public ChaosFeedView(Activity activity, Host host) {
@@ -171,6 +173,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (active && hostResumed) {
             resolveAhead(selectedPosition);
             playSelected();
+            syncVisibleChrome();
         } else {
             pauseAll();
         }
@@ -178,7 +181,10 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void onHostResume() {
         hostResumed = true;
-        if (active) playSelected();
+        if (active) {
+            playSelected();
+            syncVisibleChrome();
+        }
     }
 
     public void onHostPause() {
@@ -186,24 +192,29 @@ public final class ChaosFeedView extends FrameLayout {
         pauseAll();
     }
 
-    public void refresh() {
-        pauseAll();
-        sourcePage = 1;
-        poolLoading = false;
-        autoAdvancePending = false;
-        autoAdvanceFrom = -1;
-        streamCache.clear();
-        resolving.clear();
-        unplayable.clear();
-        sessionUrls.clear();
-        items.clear();
-        adapter.notifyDataSetChanged();
-        initialProgress.setVisibility(View.VISIBLE);
-        empty.setVisibility(View.GONE);
-        selectedPosition = 0;
-        pager.setCurrentItem(0, false);
-        loadMorePool();
+    public void onConfigurationChanged() {
+        syncVisibleChrome();
     }
+
+    public void refresh() {
+    pauseAll();
+    consecutiveDryLoads = 0;
+    sourceMixer.resetDeck();
+    poolLoading = false;
+    autoAdvancePending = false;
+    autoAdvanceFrom = -1;
+    streamCache.clear();
+    resolving.clear();
+    unplayable.clear();
+    // Keep sessionUrls so Refresh cannot immediately deal the same clips back again.
+    items.clear();
+    adapter.notifyDataSetChanged();
+    initialProgress.setVisibility(View.VISIBLE);
+    empty.setVisibility(View.GONE);
+    selectedPosition = 0;
+    pager.setCurrentItem(0, false);
+    loadMorePool();
+}
 
     public void close() {
         pauseAll();
@@ -212,75 +223,81 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void loadMorePool() {
-        if (poolLoading) return;
-        poolLoading = true;
-        final int requestPage = sourcePage;
-        sourcePage++;
+    if (poolLoading) return;
+    poolLoading = true;
 
-        io.execute(() -> {
-            LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
-            try {
-                for (NativeContentItem item : repository.fetchFeed(activity, CrazyShitRepository.HOME, requestPage)) {
-                    if (item != null && !item.url.isEmpty()) combined.put(item.url, item);
-                }
-            } catch (Exception ignored) {
+    io.execute(() -> {
+        List<NativeContentItem> mixed;
+        try {
+            mixed = sourceMixer.loadRandomBatch(activity);
+        } catch (Exception ignored) {
+            mixed = Collections.emptyList();
+        }
+
+        ArrayList<NativeContentItem> fresh = new ArrayList<>();
+        ArrayList<NativeContentItem> recentFallback = new ArrayList<>();
+        for (NativeContentItem item : mixed) {
+            if (!isMedia(item) || hiddenUrls.contains(item.url)) continue;
+            if (recentSet.contains(item.url)) recentFallback.add(item);
+            else fresh.add(item);
+        }
+        Collections.shuffle(fresh, random);
+        Collections.shuffle(recentFallback, random);
+
+        activity.runOnUiThread(() -> {
+            poolLoading = false;
+            int before = items.size();
+            appendUnique(fresh);
+
+            int freshAdded = items.size() - before;
+            if (freshAdded == 0) consecutiveDryLoads++;
+            else consecutiveDryLoads = 0;
+
+            // Previously watched clips stay out of the normal draw. Only recycle them if
+            // several broad random batches in a row genuinely cannot produce fresh media.
+            if (freshAdded < 4 && consecutiveDryLoads >= 3) {
+                appendUnique(recentFallback);
             }
-            try {
-                for (NativeContentItem item : repository.fetchFeed(activity, CrazyShitRepository.TRENDING, requestPage)) {
-                    if (item != null && !item.url.isEmpty()) combined.putIfAbsent(item.url, item);
-                }
-            } catch (Exception ignored) {
+
+            int added = items.size() - before;
+            if (added > 0 && freshAdded == 0) consecutiveDryLoads = 0;
+
+            if (added > 0) {
+                adapter.notifyItemRangeInserted(before, added);
+                initialProgress.setVisibility(View.GONE);
+                empty.setVisibility(View.GONE);
+                resolveAhead(selectedPosition);
+                if (active && hostResumed) playSelected();
+                tryPendingAutoAdvance();
             }
 
-            ArrayList<NativeContentItem> fresh = new ArrayList<>();
-            ArrayList<NativeContentItem> recentFallback = new ArrayList<>();
-            for (NativeContentItem item : combined.values()) {
-                if (item == null || item.url.isEmpty() || hiddenUrls.contains(item.url)) continue;
-                if (recentSet.contains(item.url)) recentFallback.add(item);
-                else fresh.add(item);
+            boolean needsMore = items.size() < 14
+                    || (autoAdvancePending && autoAdvanceFrom + 1 >= items.size());
+            if (needsMore && consecutiveDryLoads < 4) {
+                loadMorePool();
+            } else if (items.isEmpty()) {
+                initialProgress.setVisibility(View.GONE);
+                empty.setText("Chaos couldn't find a playable pool right now.\nPull away and come back to retry.");
+                empty.setVisibility(View.VISIBLE);
+            } else if (autoAdvancePending && autoAdvanceFrom + 1 >= items.size()) {
+                autoAdvancePending = false;
+                autoAdvanceFrom = -1;
             }
-            Collections.shuffle(fresh, random);
-            Collections.shuffle(recentFallback, random);
-
-            activity.runOnUiThread(() -> {
-                poolLoading = false;
-                int before = items.size();
-                appendUnique(fresh);
-
-                if (items.size() - before < 6 && requestPage >= MAX_SOURCE_PAGE) {
-                    Collections.reverse(recentFallback);
-                    appendUnique(recentFallback);
-                }
-
-                int added = items.size() - before;
-                if (added > 0) {
-                    adapter.notifyItemRangeInserted(before, added);
-                    initialProgress.setVisibility(View.GONE);
-                    empty.setVisibility(View.GONE);
-                    resolveAhead(selectedPosition);
-                    if (active && hostResumed) playSelected();
-                    tryPendingAutoAdvance();
-                }
-
-                if (items.size() < 10 && requestPage < MAX_SOURCE_PAGE) {
-                    loadMorePool();
-                } else if (items.isEmpty() && requestPage >= MAX_SOURCE_PAGE) {
-                    initialProgress.setVisibility(View.GONE);
-                    empty.setText("Chaos couldn't find a playable pool right now.\nPull away and come back to retry.");
-                    empty.setVisibility(View.VISIBLE);
-                } else if (autoAdvancePending && requestPage >= MAX_SOURCE_PAGE
-                        && autoAdvanceFrom + 1 >= items.size()) {
-                    autoAdvancePending = false;
-                    autoAdvanceFrom = -1;
-                }
-            });
         });
+    });
+}
+
+    private static boolean isMedia(NativeContentItem item) {
+        return item != null
+                && NativeContentItem.KIND_MEDIA.equals(item.kind)
+                && item.url != null
+                && !item.url.isEmpty();
     }
 
     private void appendUnique(List<NativeContentItem> candidates) {
         if (candidates == null) return;
         for (NativeContentItem item : candidates) {
-            if (item == null || item.url == null || item.url.isEmpty()) continue;
+            if (!isMedia(item)) continue;
             if (hiddenUrls.contains(item.url)) continue;
             if (!sessionUrls.add(item.url)) continue;
             items.add(item);
@@ -402,6 +419,15 @@ public final class ChaosFeedView extends FrameLayout {
         for (int i = 0; i < rv.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
             if (raw instanceof ChaosHolder) ((ChaosHolder) raw).releasePlayer();
+        }
+    }
+
+    private void syncVisibleChrome() {
+        RecyclerView rv = pagerRecycler();
+        if (rv == null) return;
+        for (int i = 0; i < rv.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
+            if (raw instanceof ChaosHolder) ((ChaosHolder) raw).syncOrientationChrome();
         }
     }
 
@@ -688,6 +714,9 @@ public final class ChaosFeedView extends FrameLayout {
             lower.setGravity(Gravity.BOTTOM);
             lower.setPadding(dp(16), dp(18), dp(10), dp(30));
             lower.setBackgroundColor(Color.TRANSPARENT);
+            lower.setClickable(false);
+            lower.setLongClickable(false);
+            lower.setFocusable(false);
             FrameLayout.LayoutParams lowerParams = new FrameLayout.LayoutParams(-1, -2);
             lowerParams.gravity = Gravity.BOTTOM;
             root.addView(lower, lowerParams);
@@ -806,7 +835,6 @@ public final class ChaosFeedView extends FrameLayout {
                 showMoreMenu();
                 return true;
             };
-            lower.setOnLongClickListener(menuLongPress);
             title.setOnLongClickListener(menuLongPress);
             meta.setOnLongClickListener(menuLongPress);
 
@@ -911,6 +939,7 @@ public final class ChaosFeedView extends FrameLayout {
             meta.setText(info);
             updateSaveButton(next, save);
             loading.setVisibility(View.VISIBLE);
+            failure.setText("Couldn't play this one\nSwipe up for the next video");
             failure.setVisibility(View.GONE);
             poster.setVisibility(View.VISIBLE);
             Glide.with(poster).clear(poster);
@@ -926,6 +955,7 @@ public final class ChaosFeedView extends FrameLayout {
                         .error(new ColorDrawable(Color.rgb(20, 20, 22)))
                         .into(poster);
             }
+            syncOrientationChrome();
         }
 
         void prepare(CrazyShitRepository.StreamInfo nextStream, boolean autoplay) {
@@ -951,13 +981,18 @@ public final class ChaosFeedView extends FrameLayout {
                 http.setUserAgent(WebSettings.getDefaultUserAgent(activity));
             } catch (Exception ignored) {
             }
+
             Map<String, String> headers = new HashMap<>();
+            try {
+                headers.putAll(ShitShowPlayableResolver.playbackHeaders(nextStream.mediaUrl));
+            } catch (Exception ignored) {
+            }
             if (nextStream.pageUrl != null && !nextStream.pageUrl.isEmpty()) {
-                headers.put("Referer", nextStream.pageUrl);
+                putHeaderIfMissing(headers, "Referer", nextStream.pageUrl);
                 try {
                     Uri page = Uri.parse(nextStream.pageUrl);
                     if (page.getScheme() != null && page.getHost() != null) {
-                        headers.put("Origin", page.getScheme() + "://" + page.getHost());
+                        putHeaderIfMissing(headers, "Origin", page.getScheme() + "://" + page.getHost());
                     }
                 } catch (Exception ignored) {
                 }
@@ -967,7 +1002,7 @@ public final class ChaosFeedView extends FrameLayout {
                 if ((cookies == null || cookies.isEmpty()) && nextStream.pageUrl != null) {
                     cookies = CookieManager.getInstance().getCookie(nextStream.pageUrl);
                 }
-                if (cookies != null && !cookies.isEmpty()) headers.put("Cookie", cookies);
+                if (cookies != null && !cookies.isEmpty()) putHeaderIfMissing(headers, "Cookie", cookies);
             } catch (Exception ignored) {
             }
             if (!headers.isEmpty()) http.setDefaultRequestProperties(headers);
@@ -985,6 +1020,7 @@ public final class ChaosFeedView extends FrameLayout {
             String lowerUrl = nextStream.mediaUrl.toLowerCase(Locale.US);
             if (lowerUrl.contains(".m3u8")) media.setMimeType(MimeTypes.APPLICATION_M3U8);
             else if (lowerUrl.contains(".mpd")) media.setMimeType(MimeTypes.APPLICATION_MPD);
+            else if (lowerUrl.contains(".mp4") || lowerUrl.contains(".m4v")) media.setMimeType(MimeTypes.VIDEO_MP4);
             player.setMediaItem(media.build());
             player.setPlayWhenReady(autoplay);
             if (autoplay) everStarted = true;
@@ -1035,10 +1071,18 @@ public final class ChaosFeedView extends FrameLayout {
                 public void onPlayerError(PlaybackException error) {
                     loading.setVisibility(View.GONE);
                     stopProgressUpdates();
-                    showPlaybackFailure();
+                    showPlaybackFailure(error);
                 }
             });
             player.prepare();
+        }
+
+        private void putHeaderIfMissing(Map<String, String> headers, String name, String value) {
+            if (headers == null || name == null || value == null || value.trim().isEmpty()) return;
+            for (String key : headers.keySet()) {
+                if (key != null && name.equalsIgnoreCase(key)) return;
+            }
+            headers.put(name, value);
         }
 
         private void showMoreMenu() {
@@ -1110,6 +1154,35 @@ public final class ChaosFeedView extends FrameLayout {
             showControls(false);
         }
 
+        private boolean portrait() {
+            return activity.getResources().getConfiguration().orientation
+                    != Configuration.ORIENTATION_LANDSCAPE;
+        }
+
+        void syncOrientationChrome() {
+            root.removeCallbacks(hideControlsRunnable);
+            root.removeCallbacks(hideSeekBarRunnable);
+            lower.animate().cancel();
+            mute.animate().cancel();
+            seekBar.animate().cancel();
+
+            controlsVisible = true;
+            lower.setVisibility(View.VISIBLE);
+            mute.setVisibility(View.VISIBLE);
+            lower.setAlpha(1f);
+            mute.setAlpha(1f);
+
+            if (seekBar.getVisibility() != View.VISIBLE) {
+                seekBar.setVisibility(View.VISIBLE);
+                seekBar.setAlpha(1f);
+            }
+            if (!scrubbing) root.postDelayed(hideSeekBarRunnable, 2200L);
+
+            if (!portrait() && player != null && player.isPlaying() && !scrubbing) {
+                root.postDelayed(hideControlsRunnable, 2200L);
+            }
+        }
+
         private void showControls(boolean autoHide) {
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(hideSeekBarRunnable);
@@ -1124,10 +1197,20 @@ public final class ChaosFeedView extends FrameLayout {
             mute.setAlpha(1f);
             seekBar.setAlpha(1f);
             if (!scrubbing) root.postDelayed(hideSeekBarRunnable, 2200L);
-            if (autoHide && !scrubbing) root.postDelayed(hideControlsRunnable, 2200L);
+            if (autoHide && !scrubbing && !portrait()) {
+                root.postDelayed(hideControlsRunnable, 2200L);
+            }
         }
 
         private void hideControlsNow() {
+            if (portrait()) {
+                controlsVisible = true;
+                lower.setVisibility(View.VISIBLE);
+                mute.setVisibility(View.VISIBLE);
+                lower.setAlpha(1f);
+                mute.setAlpha(1f);
+                return;
+            }
             if (scrubbing || player == null || !player.isPlaying()) return;
             controlsVisible = false;
             lower.animate()
@@ -1183,7 +1266,41 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void showPlaybackFailure() {
+            showPlaybackFailure(null);
+        }
+
+        private void showPlaybackFailure(PlaybackException error) {
             loading.setVisibility(View.GONE);
+            StringBuilder message = new StringBuilder("Couldn't play this one\nSwipe up for the next video");
+            if (error != null) {
+                message.append("\n\nMedia3 code ").append(error.errorCode);
+                Throwable cursor = error;
+                while (cursor != null) {
+                    if (cursor instanceof HttpDataSource.InvalidResponseCodeException) {
+                        message.append(" • HTTP ")
+                                .append(((HttpDataSource.InvalidResponseCodeException) cursor).responseCode);
+                        break;
+                    }
+                    cursor = cursor.getCause();
+                }
+
+                Throwable rootCause = error;
+                while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+                    rootCause = rootCause.getCause();
+                }
+                if (rootCause != error) {
+                    String causeName = rootCause.getClass().getSimpleName();
+                    if (causeName != null && !causeName.isEmpty()) message.append("\n").append(causeName);
+                }
+
+                String detail = error.getMessage();
+                if (detail != null) {
+                    detail = detail.replaceAll("\\s+", " ").trim();
+                    if (detail.length() > 110) detail = detail.substring(0, 110) + "…";
+                    if (!detail.isEmpty()) message.append("\n").append(detail);
+                }
+            }
+            failure.setText(message.toString());
             failure.setVisibility(View.VISIBLE);
             poster.setVisibility(View.VISIBLE);
             showControlsPersistent();

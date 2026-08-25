@@ -1,38 +1,48 @@
-# CrazyShit v2.7.2
+# CrazyShit v2.8.0
 
-CrazyShit 2.7.2 is the responsive fitment and stability release. It keeps the OLED Immersive UI from 2.7 while tightening behavior across portrait, horizontal orientation, wide screens and secondary native screens.
+CrazyShit 2.8 is the Chaos + Foundation release. It keeps the OLED look of 2.7.2 while making Chaos the center of the app, adding native Shit Show playback, stabilizing navigation, and simplifying the UI code underneath it.
 
-## Responsive fitment
+## Chaos is now the main experience
 
-- Main feed geometry is reapplied after theme and motion polish so rotation sizing stays consistent
-- Home and collection feed cards use better horizontal sizing
-- Grid and Posters now use responsive media and card heights instead of fixed phone-only dimensions
-- Series and Categories artwork cards scale with available column width
-- Settings and Library use centered maximum widths on wider displays instead of stretching edge to edge
-- Search uses tighter header and result spacing in horizontal orientation
-- Additional safe-area and display-cutout handling was added to older native screens
+- Fresh app launches open directly to Chaos
+- Chaos pulls randomized videos from Home, Trending, Videos, User Uploads, and all currently exposed site categories
+- Regular source pages are sampled instead of dumping entire feeds into one batch, keeping the mix broad and unpredictable
+- Shit Show is now a first-class Chaos source using the site's embedded story data and rendered playback context
+- Shit Show and regular content are mixed at roughly a 50/50 target while both are available, so Shit Show normally appears about every other swipe
+- Session repeat protection remembers up to 500 watched URLs and avoids already offered clips
+- Completed Chaos videos restart from the beginning when you swipe back to them, while partially watched clips keep their position
 
-## Feed and browsing polish
+## Shit Show playback
 
-- Posters is fully supported throughout the pager and collection view-mode plumbing
-- List remains the default and fallback feed style
-- Changing view styles preserves the visible item and scroll offset more accurately
-- Search and normal feed thumbnail failures can retry instead of remaining blocked for the session
+- Shit Show stories are harvested from the site's JavaScript-driven story data instead of being treated like a normal HTML feed
+- Story permalinks are resolved on demand immediately before playback
+- The app forwards the rendered WebView media request context into Media3, including the request headers/referrer/cookies needed by Shit Show streams
+- Extensionless video endpoints are identified correctly as playable media
+- Native title, views, save, comments, share, progress, swipe, and auto-advance UI remain available around Shit Show clips
 
-## Resource and lifecycle cleanup
+## Navigation and UI stability
 
-- Rendered thumbnail resolvers now explicitly destroy their WebViews, clear pending work and shut down executors
-- Feed and Search adapters release thumbnail resources and playback listeners when screens close
-- Settings and Library now participate in Android predictive back on supported devices
+- The top feed header is permanently static, removing the old slow-scroll/collapsing-header glitch
+- The preferred Material/OLED floating bottom navigation remains the portrait design
+- The old Flash navigation polling and duplicate floating Chaos button path are disabled
+- One navigation owner now keeps portrait height, margins, item transforms, and active-state geometry stable through tab changes and resume
+- Horizontal mode keeps the existing left navigation rail with a clean portrait/horizontal handoff
+- Portrait video controls and compact progress behavior remain intact
 
-## Existing behavior retained
+## Foundation cleanup
+
+- Native UI lifecycle ordering is centralized through the foundation coordinator
+- Several old compatibility/polish ownership paths were removed or detached after their behavior moved into the views/controllers that actually own it
+- Chaos filtering, portrait chrome, source mixing, playback resolution, and replay behavior now live closer to the Chaos feed itself
+- Responsive geometry remains the final layout authority instead of multiple controllers continuously fighting over the same views
+- Pull-request builds include the 2.8 compatibility regression guard, Android lint audit, and hard APK compilation gate
+
+## Existing features retained
 
 - OLED Black remains the default visual theme
-- Ambient Glow, Motion Effects and Collapsing Header remain individually configurable
-- Chaos keeps the media-only filtering fix from 2.7.1
-- Continue Watching, History, Watch Later, global Search and context-aware Related videos remain intact
-- Series and Categories continue using embedded artwork
-- Stable application ID and signing identity are unchanged, so 2.7.2 installs over earlier stable 2.7 builds while retaining app data
+- Home, Series, Categories, More, Search, Continue Watching, History, and Watch Later remain available
+- Cards, Grid, Posters, embedded Series/Category artwork, related videos, comments, save, and share remain intact
+- Stable application ID and signing identity are unchanged, so 2.8.0 installs as an update over 2.7.2
 
 ## Project status
 
