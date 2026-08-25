@@ -11,6 +11,7 @@ import android.view.ViewParent;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -114,7 +115,9 @@ final class ShitShowPlayableResolver {
 
                 @Override
                 public void onLoadResource(WebView web, String url) {
-                    if (isDirectMedia(url)) requestMedia.compareAndSet("", cleanUrl(url));
+                    if (isDirectMedia(url) && !looksLikeAdHost(url)) {
+                        requestMedia.compareAndSet("", cleanUrl(url));
+                    }
                 }
 
                 @Override
@@ -127,7 +130,7 @@ final class ShitShowPlayableResolver {
                     main.postDelayed(() -> {
                         if (holder.get() != web || done.getCount() == 0L) return;
                         String fallback = requestMedia.get();
-                        if (!fallback.isEmpty() && System.currentTimeMillis() - startedAt >= FALLBACK_AFTER_MS) {
+                        if (isHttp(fallback) && System.currentTimeMillis() - startedAt >= FALLBACK_AFTER_MS) {
                             done.countDown();
                         }
                     }, FALLBACK_AFTER_MS);
@@ -144,11 +147,11 @@ final class ShitShowPlayableResolver {
         }
 
         String media = cleanUrl(domMedia.get());
-        if (!isDirectMedia(media)) media = cleanUrl(requestMedia.get());
+        if (!isHttp(media)) media = cleanUrl(requestMedia.get());
         final WebView old = holder.getAndSet(null);
         main.post(() -> destroy(old));
 
-        if (!isDirectMedia(media)) return null;
+        if (!isHttp(media)) return null;
         return new CrazyShitRepository.StreamInfo(media, pageUrl, title.get());
     }
 
@@ -281,7 +284,7 @@ final class ShitShowPlayableResolver {
         @JavascriptInterface
         public void onMedia(String value, String videoTitle) {
             String candidate = cleanUrl(value);
-            if (!isDirectMedia(candidate)) return;
+            if (!isHttp(candidate)) return;
             media.compareAndSet("", candidate);
             String cleanTitle = safe(videoTitle);
             if (!cleanTitle.isEmpty()) title.set(cleanTitle);
