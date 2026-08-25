@@ -27,7 +27,7 @@ final class ChaosSourceMixer {
 
     private final CrazyShitRepository repository;
     private final Random random;
-    private final ShitShowResolvedSource shitShow = new ShitShowResolvedSource();
+    private final ShitShowTapSource shitShow = new ShitShowTapSource();
     private final ArrayList<String> catalog = new ArrayList<>();
     private final ArrayDeque<String> sourceDeck = new ArrayDeque<>();
     private final Set<String> usedSourcePages = new HashSet<>();
@@ -39,8 +39,9 @@ final class ChaosSourceMixer {
     }
 
     List<NativeContentItem> loadRandomBatch(Context context) {
-        // Start the rendered Shit Show page before the normal source work so it can harvest in
-        // parallel while the existing broad Chaos deck keeps doing what already tested well.
+        // Harvest Shit Show story permalinks in parallel with the existing broad Chaos deck.
+        // The actual stream is resolved later, close to playback, so signed URLs stay fresh and
+        // the exact story referrer/cookies are preserved for Media3.
         shitShow.prewarm(context);
         ensureCatalog(context);
 
@@ -83,11 +84,8 @@ final class ChaosSourceMixer {
                 : new ArrayList<>(regularItems);
         ArrayList<NativeContentItem> result = new ArrayList<>(regular.size() + shitShowItems.size());
 
-        // Keep the normal Chaos order randomized, but make a harvested Shit Show clip visible soon
-        // enough to be meaningful. Beta.10 shuffled eight possible clips into a potentially huge
-        // regular batch, so successful harvesting could still look like a total extractor failure.
         int regularIndex = 0;
-        int nextShitAfter = 2 + random.nextInt(4); // first one after 2-5 regular clips
+        int nextShitAfter = 2 + random.nextInt(4);
         for (NativeContentItem shit : shitShowItems) {
             int copied = 0;
             while (regularIndex < regular.size() && copied < nextShitAfter) {
@@ -95,7 +93,7 @@ final class ChaosSourceMixer {
                 copied++;
             }
             result.add(shit);
-            nextShitAfter = 5 + random.nextInt(6); // then keep a loose 5-10 clip spacing
+            nextShitAfter = 5 + random.nextInt(6);
         }
 
         while (regularIndex < regular.size()) result.add(regular.get(regularIndex++));
@@ -117,7 +115,6 @@ final class ChaosSourceMixer {
                 urls.add(category.url.trim());
             }
         } catch (Exception ignored) {
-            // Core sources above keep Chaos working if the categories index is temporarily down.
         }
 
         catalog.clear();
@@ -137,8 +134,6 @@ final class ChaosSourceMixer {
                 combined.putIfAbsent(item.url, item);
             }
         } catch (Exception ignored) {
-            // A randomly selected page may not exist for a smaller category. Other sources in the
-            // batch still contribute and the next draw will choose a different source/page pair.
         }
     }
 
