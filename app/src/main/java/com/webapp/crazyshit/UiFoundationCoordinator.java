@@ -2,8 +2,14 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.view.Menu;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.lang.ref.WeakReference;
+import java.util.WeakHashMap;
 
 /**
  * Single lifecycle owner for the native UI foundation.
@@ -14,11 +20,15 @@ import java.lang.ref.WeakReference;
  */
 final class UiFoundationCoordinator {
     private static WeakReference<NativeMainActivity> currentMain = new WeakReference<>(null);
+    private static final WeakHashMap<NativeMainActivity, Boolean> FRESH_MAIN = new WeakHashMap<>();
 
     private UiFoundationCoordinator() {
     }
 
     static void onActivityCreated(Activity activity, Bundle savedInstanceState) {
+        if (activity instanceof NativeMainActivity) {
+            FRESH_MAIN.put((NativeMainActivity) activity, savedInstanceState == null);
+        }
         if (activity instanceof VideoDetailActivity) {
             VideoDetailTransitionPolish.apply(activity);
             WatchStatePolish.showResumeToast((VideoDetailActivity) activity);
@@ -34,6 +44,7 @@ final class UiFoundationCoordinator {
             NativeMainActivity main = (NativeMainActivity) activity;
             currentMain = new WeakReference<>(main);
             attachMain(main, false);
+            openChaosOnFreshLaunch(main);
         } else if (activity instanceof NativeFeedBrowserActivity) {
             NativeFeedBrowserActivity browser = (NativeFeedBrowserActivity) activity;
             FeedViewStyleController.attachBrowser(browser);
@@ -65,6 +76,7 @@ final class UiFoundationCoordinator {
             FlashUiController.detach(main);
             UiPolishController.detach(main);
             LandscapeUiController.detach(main);
+            FRESH_MAIN.remove(main);
 
             NativeMainActivity current = currentMain.get();
             if (current == activity) currentMain.clear();
@@ -83,6 +95,42 @@ final class UiFoundationCoordinator {
             if (main.isFinishing()) return;
             attachMain(main, true);
         }, 80L);
+    }
+
+    private static void openChaosOnFreshLaunch(NativeMainActivity main) {
+        if (main == null || main.isFinishing()) return;
+        Boolean fresh = FRESH_MAIN.get(main);
+        if (!Boolean.TRUE.equals(fresh)) return;
+        if (!main.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .getBoolean("age_warning_accepted", false)) {
+            return;
+        }
+        FRESH_MAIN.put(main, false);
+
+        main.getWindow().getDecorView().post(() -> {
+            if (main.isFinishing()) return;
+            BottomNavigationView nav = findFirst(main.findViewById(android.R.id.content), BottomNavigationView.class);
+            if (nav == null) return;
+            Menu menu = nav.getMenu();
+            for (int i = 0; i < menu.size(); i++) {
+                if (menu.getItem(i).getTitle() != null
+                        && "Chaos".contentEquals(menu.getItem(i).getTitle())) {
+                    nav.setSelectedItemId(menu.getItem(i).getItemId());
+                    break;
+                }
+            }
+        });
+    }
+
+    private static <T> T findFirst(View view, Class<T> type) {
+        if (type.isInstance(view)) return type.cast(view);
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            T found = findFirst(group.getChildAt(i), type);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private static void attachMain(NativeMainActivity main, boolean configurationChange) {
