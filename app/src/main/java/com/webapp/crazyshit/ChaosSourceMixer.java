@@ -4,6 +4,7 @@ import android.content.Context;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -23,6 +24,7 @@ final class ChaosSourceMixer {
     private static final int SOURCES_PER_BATCH = 6;
     private static final int REGULAR_ITEMS_PER_SOURCE = 4;
     private static final int SHIT_SHOW_PER_BATCH = 24;
+    private static final int STARTER_ITEMS = 6;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
 
@@ -33,6 +35,7 @@ final class ChaosSourceMixer {
     private final ArrayDeque<String> sourceDeck = new ArrayDeque<>();
     private final Set<String> usedSourcePages = new HashSet<>();
     private boolean catalogLoaded;
+    private boolean starterPending = true;
 
     ChaosSourceMixer(CrazyShitRepository repository, Random random) {
         this.repository = repository;
@@ -40,10 +43,20 @@ final class ChaosSourceMixer {
     }
 
     List<NativeContentItem> loadRandomBatch(Context context) {
+        // Cold-start optimization: warm Shit Show immediately, but let the first Chaos request
+        // return from one known regular source instead of waiting for the full six-source catalog
+        // and rendered Shit Show cache. ChaosFeedView automatically asks for another batch when
+        // fewer than 14 items are present, so the full near-50/50 pool fills behind the first clip.
+        shitShow.prewarm(context);
+        if (starterPending) {
+            starterPending = false;
+            List<NativeContentItem> starter = loadStarterBatch(context);
+            if (!starter.isEmpty()) return starter;
+        }
+
         // Keep all six regular source slots so Home/Trending/Videos/User Uploads/categories remain
         // broad, but cap each source at four clips. Pair that with up to 24 Shit Show stories so
         // the finished Chaos batch is intentionally close to a 50/50 mix.
-        shitShow.prewarm(context);
         ensureCatalog(context);
 
         LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
@@ -69,7 +82,37 @@ final class ChaosSourceMixer {
     void resetDeck() {
         sourceDeck.clear();
         usedSourcePages.clear();
+        starterPending = true;
         shitShow.resetDeck();
+    }
+
+    private List<NativeContentItem> loadStarterBatch(Context context) {
+        ArrayList<String> starterSources = new ArrayList<>(Arrays.asList(
+                CrazyShitRepository.HOME,
+                CrazyShitRepository.TRENDING,
+                VIDEOS,
+                USER_UPLOADS
+        ));
+        Collections.shuffle(starterSources, random);
+
+        // Usually the first source succeeds. Fall through only when a source is temporarily empty
+        // or unavailable so startup still has a reliable escape hatch without loading the catalog.
+        for (String url : starterSources) {
+            try {
+                ArrayList<NativeContentItem> candidates = new ArrayList<>();
+                for (NativeContentItem item : repository.fetchFeed(context, url, 1)) {
+                    if (item == null || item.url == null || item.url.isEmpty()) continue;
+                    if (!NativeContentItem.KIND_MEDIA.equals(item.kind)) continue;
+                    candidates.add(item);
+                }
+                if (candidates.isEmpty()) continue;
+                Collections.shuffle(candidates, random);
+                int take = Math.min(STARTER_ITEMS, candidates.size());
+                return new ArrayList<>(candidates.subList(0, take));
+            } catch (Exception ignored) {
+            }
+        }
+        return new ArrayList<>();
     }
 
     private List<NativeContentItem> weaveShitShow(
