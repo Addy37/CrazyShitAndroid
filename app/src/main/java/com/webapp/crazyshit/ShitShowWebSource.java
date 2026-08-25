@@ -38,19 +38,20 @@ import java.util.regex.Pattern;
 /**
  * Dedicated extractor for CrazyShit's JavaScript-driven Shit Show swipe feed.
  *
- * Shit Show is not a normal /cnt/medias/ listing. This source runs the real swipe page in a hidden
- * rendered WebView, watches the page and its media traffic, advances the real player, and hands
- * direct playable streams to native Chaos.
+ * Shit Show is activated by the site's own navigation flow. Loading /shitshow/ directly can return
+ * the ordinary page shell without starting the swipe player, so this source boots the homepage and
+ * triggers the real Shit Show control inside a rendered WebView before harvesting media.
  */
 final class ShitShowWebSource {
     private static final String TAG = "ShitShowWebSource";
+    private static final String HOME = CrazyShitRepository.BASE;
     private static final String PAGE = CrazyShitRepository.BASE + "shitshow/";
 
     private static final int TARGET_CACHE = 24;
     private static final int MAX_CACHE = 80;
-    private static final long HARVEST_TIMEOUT_MS = 34_000L;
+    private static final long HARVEST_TIMEOUT_MS = 45_000L;
     private static final long PUMP_MS = 1_350L;
-    private static final long FIRST_BATCH_WAIT_MS = 3_000L;
+    private static final long FIRST_BATCH_WAIT_MS = 6_000L;
     private static final long DIAGNOSTIC_KEEP_MS = 90_000L;
 
     private static final Pattern MEDIA_IN_PAYLOAD = Pattern.compile(
@@ -76,6 +77,7 @@ final class ShitShowWebSource {
     private int observedCandidates;
     private int pageCommitCount;
     private int pageFinishedCount;
+    private int activationAttempts;
     private int jsVideoCount;
     private int jsHttpVideoCount;
     private int jsBlobCount;
@@ -84,6 +86,8 @@ final class ShitShowWebSource {
     private int jsSameOriginFrameCount;
     private int jsShadowRootCount;
     private int jsResourceCount;
+    private int jsShitShowLinks;
+    private int jsSwipeHints;
 
     private String pageState = "idle";
     private String lastPageUrl = "";
@@ -91,6 +95,8 @@ final class ShitShowWebSource {
     private String jsTitle = "";
     private String jsBodyHint = "";
     private String jsFrameSrc = "";
+    private String activationState = "idle";
+    private String activationHref = "";
     private String lastError = "";
 
     void prewarm(Context context) {
@@ -192,8 +198,6 @@ final class ShitShowWebSource {
         settings.setSupportMultipleWindows(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
 
-        // Use the real installed Android System WebView UA. Beta.10/11 froze Chrome 139 here, which
-        // can make a modern JavaScript/anti-bot page serve different behavior than the actual engine.
         try {
             settings.setUserAgentString(WebSettings.getDefaultUserAgent(activity));
         } catch (Exception ignored) {
@@ -206,8 +210,8 @@ final class ShitShowWebSource {
         } catch (Exception ignored) {
         }
 
-        pageState = "loading";
-        lastPageUrl = PAGE;
+        pageState = "loading-home";
+        lastPageUrl = HOME;
         refreshDiagnosticView();
 
         view.addJavascriptInterface(new Bridge(), "CSShitBridge");
@@ -219,7 +223,6 @@ final class ShitShowWebSource {
                 lastPageUrl = safe(url);
                 refreshDiagnosticView();
                 installProbe(web);
-                schedulePump(web);
             }
 
             @Override
@@ -229,6 +232,7 @@ final class ShitShowWebSource {
                 lastPageUrl = safe(url);
                 refreshDiagnosticView();
                 installProbe(web);
+                maybeActivate(web);
                 schedulePump(web);
             }
 
@@ -273,11 +277,14 @@ final class ShitShowWebSource {
             }
         });
 
-        view.loadUrl(PAGE);
+        // The real site exposes Shit Show from its normal navigation. Enter through Home so its
+        // JavaScript click handler can initialize the player instead of booting /shitshow/ cold.
+        view.loadUrl(HOME);
 
         main.postDelayed(() -> {
             if (webView != view || !isWarming()) return;
             installProbe(view);
+            maybeActivate(view);
             schedulePump(view);
         }, 2_500L);
     }
@@ -289,6 +296,7 @@ final class ShitShowWebSource {
         observedCandidates = 0;
         pageCommitCount = 0;
         pageFinishedCount = 0;
+        activationAttempts = 0;
         jsVideoCount = 0;
         jsHttpVideoCount = 0;
         jsBlobCount = 0;
@@ -297,12 +305,16 @@ final class ShitShowWebSource {
         jsSameOriginFrameCount = 0;
         jsShadowRootCount = 0;
         jsResourceCount = 0;
+        jsShitShowLinks = 0;
+        jsSwipeHints = 0;
         pageState = "starting";
-        lastPageUrl = PAGE;
+        lastPageUrl = HOME;
         jsReadyState = "";
         jsTitle = "";
         jsBodyHint = "";
         jsFrameSrc = "";
+        activationState = "idle";
+        activationHref = "";
         lastError = "";
     }
 
@@ -319,10 +331,10 @@ final class ShitShowWebSource {
         TextView view = new TextView(activity);
         diagnosticView = view;
         view.setTextColor(Color.WHITE);
-        view.setTextSize(11f);
+        view.setTextSize(10.5f);
         view.setGravity(Gravity.START);
         view.setPadding(dp(activity, 8), dp(activity, 6), dp(activity, 8), dp(activity, 6));
-        view.setBackgroundColor(Color.argb(210, 0, 0, 0));
+        view.setBackgroundColor(Color.argb(215, 0, 0, 0));
         view.setElevation(dp(activity, 32));
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
@@ -346,36 +358,41 @@ final class ShitShowWebSource {
         }
 
         StringBuilder text = new StringBuilder();
-        text.append("Shit Show debug B12  ")
+        text.append("Shit Show debug B13  ")
                 .append(isWarming() ? "RUN" : "STOP")
                 .append('\n');
         text.append("page:")
                 .append(pageState)
                 .append(" c").append(pageCommitCount)
-                .append("/f").append(pageFinishedCount);
-        if (!jsReadyState.isEmpty()) text.append("  DOM:").append(jsReadyState);
-        text.append('\n');
-
-        text.append("video:")
-                .append(jsVideoCount)
+                .append("/f").append(pageFinishedCount)
+                .append(" DOM:").append(jsReadyState.isEmpty() ? "?" : jsReadyState)
+                .append('\n');
+        text.append("act:").append(activationAttempts)
+                .append(' ').append(shorten(activationState, 28))
+                .append(" links:").append(jsShitShowLinks)
+                .append(" swipe:").append(jsSwipeHints)
+                .append('\n');
+        text.append("video:").append(jsVideoCount)
                 .append(" http:").append(jsHttpVideoCount)
                 .append(" blob:").append(jsBlobCount)
                 .append(" src:").append(jsSourceCount)
                 .append('\n');
-
-        text.append("frame:")
-                .append(jsFrameCount)
+        text.append("frame:").append(jsFrameCount)
                 .append(" same:").append(jsSameOriginFrameCount)
                 .append(" shadow:").append(jsShadowRootCount)
                 .append(" res:").append(jsResourceCount)
                 .append('\n');
-
-        text.append("req:")
-                .append(observedRequests)
+        text.append("req:").append(observedRequests)
                 .append(" payload:").append(observedPayloads)
                 .append(" cand:").append(observedCandidates)
                 .append(" cache:").append(cachedCount())
-                .append(" pump:").append(pumpCount);
+                .append(" pump:").append(pumpCount)
+                .append('\n');
+        text.append("url:").append(shorten(lastPageUrl, 72));
+
+        if (!activationHref.isEmpty()) {
+            text.append('\n').append("target:").append(shorten(activationHref, 68));
+        }
 
         String hint = !lastError.isEmpty() ? "ERR " + lastError
                 : !jsBodyHint.isEmpty() ? jsBodyHint
@@ -383,7 +400,7 @@ final class ShitShowWebSource {
         if (!hint.isEmpty()) text.append('\n').append(shorten(hint, 82));
 
         String frame = shorten(jsFrameSrc, 76);
-        if (!frame.isEmpty()) text.append('\n').append("iframe: ").append(frame);
+        if (!frame.isEmpty()) text.append('\n').append("iframe:").append(frame);
 
         view.setText(text.toString());
     }
@@ -404,6 +421,37 @@ final class ShitShowWebSource {
         view.evaluateJavascript(PROBE_JS, null);
     }
 
+    private void maybeActivate(WebView view) {
+        if (view == null || webView != view || !isWarming()) return;
+        if (jsVideoCount > 0 || jsSwipeHints > 0 || activationAttempts >= 2) return;
+
+        activationAttempts++;
+        activationState = activationAttempts == 1 ? "locating-native" : "fallback-js";
+        refreshDiagnosticView();
+
+        if (activationAttempts == 1) {
+            view.evaluateJavascript(ACTIVATE_TARGET_JS, null);
+        } else {
+            view.evaluateJavascript(ACTIVATE_CLICK_JS, null);
+        }
+    }
+
+    private void dispatchActivationTap(WebView view, float cssX, float cssY, float cssWidth, float cssHeight) {
+        if (view == null || webView != view) return;
+        if (cssWidth <= 0f || cssHeight <= 0f) return;
+
+        float x = cssX * Math.max(1, view.getWidth()) / cssWidth;
+        float y = cssY * Math.max(1, view.getHeight()) / cssHeight;
+        x = Math.max(1f, Math.min(view.getWidth() - 1f, x));
+        y = Math.max(1f, Math.min(view.getHeight() - 1f, y));
+
+        long downTime = SystemClock.uptimeMillis();
+        dispatchTouch(view, downTime, downTime, MotionEvent.ACTION_DOWN, x, y);
+        dispatchTouch(view, downTime, downTime + 90L, MotionEvent.ACTION_UP, x, y);
+        activationState = "native-tap";
+        refreshDiagnosticView();
+    }
+
     private void schedulePump(WebView view) {
         main.removeCallbacksAndMessages(view);
         main.postAtTime(() -> pump(view), view, SystemClock.uptimeMillis() + 250L);
@@ -414,10 +462,16 @@ final class ShitShowWebSource {
 
         pumpCount++;
         view.evaluateJavascript(SCAN_AND_ADVANCE_JS, null);
-        dispatchNativeSwipe(view);
-        try {
-            view.pageDown(false);
-        } catch (Exception ignored) {
+
+        // If the real player has not appeared after several scans, try one JS click fallback.
+        if (pumpCount == 4 && jsVideoCount == 0 && jsSwipeHints == 0) maybeActivate(view);
+
+        if (jsVideoCount > 0 || jsSwipeHints > 0) {
+            dispatchNativeSwipe(view);
+            try {
+                view.pageDown(false);
+            } catch (Exception ignored) {
+            }
         }
         refreshDiagnosticView();
 
@@ -475,6 +529,7 @@ final class ShitShowWebSource {
                 + " candidates=" + observedCandidates
                 + " videos=" + jsVideoCount
                 + " blobs=" + jsBlobCount
+                + " activation=" + activationState
                 + " pumps=" + pumpCount);
 
         if (webView == view) destroyWebView();
@@ -701,6 +756,32 @@ final class ShitShowWebSource {
         }
 
         @JavascriptInterface
+        public void onActivationTarget(String raw) {
+            try {
+                JSONObject json = new JSONObject(raw == null ? "{}" : raw);
+                activationHref = safe(json.optString("href", ""));
+                activationState = "target-found";
+                float x = (float) json.optDouble("x", -1d);
+                float y = (float) json.optDouble("y", -1d);
+                float width = (float) json.optDouble("width", 0d);
+                float height = (float) json.optDouble("height", 0d);
+                WebView target = webView;
+                main.post(() -> dispatchActivationTap(target, x, y, width, height));
+                refreshDiagnosticView();
+            } catch (Exception ignored) {
+                activationState = "bad-target";
+                refreshDiagnosticView();
+            }
+        }
+
+        @JavascriptInterface
+        public void onActivation(String state, String href) {
+            activationState = safe(state);
+            activationHref = safe(href);
+            refreshDiagnosticView();
+        }
+
+        @JavascriptInterface
         public void onState(String raw) {
             try {
                 JSONObject json = new JSONObject(raw == null ? "{}" : raw);
@@ -717,11 +798,34 @@ final class ShitShowWebSource {
                 jsSameOriginFrameCount = json.optInt("sameFrames", jsSameOriginFrameCount);
                 jsShadowRootCount = json.optInt("shadows", jsShadowRootCount);
                 jsResourceCount = json.optInt("resources", jsResourceCount);
+                jsShitShowLinks = json.optInt("shitLinks", jsShitShowLinks);
+                jsSwipeHints = json.optInt("swipeHints", jsSwipeHints);
                 refreshDiagnosticView();
             } catch (Exception ignored) {
             }
         }
     }
+
+    private static final String ACTIVATE_TARGET_JS =
+            "(function(){try{" +
+            "function txt(e){return ((e.textContent||'')+' '+(e.getAttribute&&e.getAttribute('aria-label')||'')+' '+(e.getAttribute&&e.getAttribute('title')||'')).replace(/\\s+/g,' ').trim().toLowerCase();}" +
+            "var all=[].slice.call(document.querySelectorAll('a[href],button,[role=button]'));" +
+            "var el=null;for(var i=0;i<all.length;i++){var h=(all[i].getAttribute&&all[i].getAttribute('href')||'').toLowerCase();if(h.indexOf('/shitshow')>=0||/\\bshit\\s*show\\b/.test(txt(all[i]))){el=all[i];break;}}" +
+            "if(!el){CSShitBridge.onActivation('no-link',location.href);return;}" +
+            "try{el.scrollIntoView({block:'center',inline:'center'});}catch(e){}" +
+            "setTimeout(function(){try{var r=el.getBoundingClientRect();var h=el.href||el.getAttribute('href')||'';CSShitBridge.onActivationTarget(JSON.stringify({href:h,x:r.left+r.width/2,y:r.top+r.height/2,width:window.innerWidth||document.documentElement.clientWidth,height:window.innerHeight||document.documentElement.clientHeight}));}catch(e){CSShitBridge.onActivation('target-error',String(e));}},120);" +
+            "}catch(e){CSShitBridge.onActivation('locate-error',String(e));}})();";
+
+    private static final String ACTIVATE_CLICK_JS =
+            "(function(){try{" +
+            "function txt(e){return ((e.textContent||'')+' '+(e.getAttribute&&e.getAttribute('aria-label')||'')+' '+(e.getAttribute&&e.getAttribute('title')||'')).replace(/\\s+/g,' ').trim().toLowerCase();}" +
+            "var all=[].slice.call(document.querySelectorAll('a[href],button,[role=button]'));" +
+            "var el=null;for(var i=0;i<all.length;i++){var h=(all[i].getAttribute&&all[i].getAttribute('href')||'').toLowerCase();if(h.indexOf('/shitshow')>=0||/\\bshit\\s*show\\b/.test(txt(all[i]))){el=all[i];break;}}" +
+            "if(!el){CSShitBridge.onActivation('js-no-link',location.href);return;}" +
+            "var href=el.href||el.getAttribute('href')||'';" +
+            "try{el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));}catch(e){}" +
+            "el.click();CSShitBridge.onActivation('js-click',href);" +
+            "}catch(e){CSShitBridge.onActivation('js-error',String(e));}})();";
 
     private static final String PROBE_JS =
             "(function(){" +
@@ -734,55 +838,17 @@ final class ShitShowWebSource {
             "function obvious(v){try{var u=abs(v);if(u&&mediaRe.test(u))CSShitBridge.onMediaUrl(u);}catch(e){}}" +
             "function candidate(v,m){try{var u=abs(v);if(/^https?:/i.test(u))CSShitBridge.onMediaCandidate(u,m||'');}catch(e){}}" +
             "function payload(v){try{if(typeof v==='string'&&v.length)CSShitBridge.onPayload(v.slice(0,220000));}catch(e){}}" +
-            "function titleFor(v,r){try{" +
-            "var t=v.getAttribute('title')||v.getAttribute('aria-label')||v.getAttribute('data-title')||'';" +
-            "if(!t&&r){var e=r.querySelector('[data-title],.title,.caption,h1,h2,h3,h4');if(e)t=e.getAttribute('data-title')||e.textContent||'';}" +
-            "return (t||'').replace(/\\s+/g,' ').trim();}catch(e){return '';}}" +
-            "function send(v){try{" +
-            "v.muted=true;v.preload='auto';" +
-            "var q=v.querySelector('source[src]');" +
-            "var s=v.currentSrc||v.src||(q&&(q.src||q.getAttribute('src')))||'';" +
-            "var mt=(q&&(q.type||q.getAttribute('type')))||v.getAttribute('type')||'';" +
-            "if(s&&/^https?:/i.test(abs(s))){" +
-            "var r=v.closest('[data-id],[data-video-id],article,section,.swiper-slide,.slide,.item')||v.parentElement;" +
-            "var a=(r&&r.querySelector('a[href]'))||v.closest('a[href]');" +
-            "var p=v.poster||v.getAttribute('poster')||'';" +
-            "CSShitBridge.onClip(JSON.stringify({media:abs(s),mime:mt,poster:abs(p),title:titleFor(v,r),page:a?abs(a.href):location.href}));}" +
-            "try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){});}catch(e){}" +
-            "}catch(e){}}" +
-            "function scanAttrs(d){try{" +
-            "d.querySelectorAll('[src],[data-src],[data-url],[data-file],[data-video],[data-stream],[data-media]').forEach(function(e){" +
-            "var tag=(e.tagName||'').toLowerCase();" +
-            "['src','data-src','data-url','data-file','data-video','data-stream','data-media'].forEach(function(k){var v=e.getAttribute&&e.getAttribute(k);if(!v)return;if(tag==='video'||tag==='source')candidate(v,e.getAttribute('type')||'');else obvious(v);});" +
-            "});}catch(e){}}" +
-            "function scanDoc(d){try{" +
-            "d.querySelectorAll('video').forEach(send);" +
-            "d.querySelectorAll('source[src]').forEach(function(e){candidate(e.src||e.getAttribute('src'),e.type||e.getAttribute('type')||'');});" +
-            "scanAttrs(d);" +
-            "d.querySelectorAll('script:not([src])').forEach(function(s){payload(s.textContent||'');});" +
-            "d.querySelectorAll('iframe').forEach(function(f){try{if(f.contentDocument){watch(f.contentDocument);scanDoc(f.contentDocument);}}catch(e){}});" +
-            "}catch(e){}}" +
-            "function watch(d){try{if(!d||watched.indexOf(d)>=0)return;watched.push(d);" +
-            "new MutationObserver(function(){scanDoc(d);}).observe(d.documentElement||d,{subtree:true,childList:true,attributes:true,attributeFilter:['src','poster','data-src','data-url','data-file','data-video','data-stream','data-media']});}catch(e){}}" +
-            "function state(){try{" +
-            "var videos=0,httpVideos=0,blobVideos=0,sources=0,frames=0,sameFrames=0,shadows=0;" +
-            "function countDoc(d){try{var vs=d.querySelectorAll('video');videos+=vs.length;sources+=d.querySelectorAll('source[src]').length;" +
-            "vs.forEach(function(v){var u=v.currentSrc||v.src||'';if(/^https?:/i.test(u))httpVideos++;if(/^blob:/i.test(u))blobVideos++;});" +
-            "d.querySelectorAll('*').forEach(function(e){try{if(e.shadowRoot)shadows++;}catch(x){}});}catch(e){}}" +
-            "countDoc(document);" +
-            "var fs=document.querySelectorAll('iframe');frames=fs.length;var first='';" +
-            "fs.forEach(function(f){try{if(!first)first=f.src||f.getAttribute('src')||'';if(f.contentDocument){sameFrames++;countDoc(f.contentDocument);}}catch(e){}});" +
-            "var body=(document.body&&document.body.innerText||'').replace(/\\s+/g,' ').trim().slice(0,90);" +
-            "CSShitBridge.onState(JSON.stringify({url:location.href,ready:document.readyState,title:document.title||'',body:body,videos:videos,httpVideos:httpVideos,blobVideos:blobVideos,sources:sources,frames:frames,sameFrames:sameFrames,shadows:shadows,resources:(performance.getEntriesByType('resource')||[]).length,frameSrc:abs(first)}));" +
-            "}catch(e){}}" +
+            "function titleFor(v,r){try{var t=v.getAttribute('title')||v.getAttribute('aria-label')||v.getAttribute('data-title')||'';if(!t&&r){var e=r.querySelector('[data-title],.title,.caption,h1,h2,h3,h4');if(e)t=e.getAttribute('data-title')||e.textContent||'';}return (t||'').replace(/\\s+/g,' ').trim();}catch(e){return '';}}" +
+            "function send(v){try{v.muted=true;v.preload='auto';var q=v.querySelector('source[src]');var s=v.currentSrc||v.src||(q&&(q.src||q.getAttribute('src')))||'';var mt=(q&&(q.type||q.getAttribute('type')))||v.getAttribute('type')||'';if(s&&/^https?:/i.test(abs(s))){var r=v.closest('[data-id],[data-video-id],article,section,.swiper-slide,.slide,.item')||v.parentElement;var a=(r&&r.querySelector('a[href]'))||v.closest('a[href]');var p=v.poster||v.getAttribute('poster')||'';CSShitBridge.onClip(JSON.stringify({media:abs(s),mime:mt,poster:abs(p),title:titleFor(v,r),page:a?abs(a.href):location.href}));}try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){});}catch(e){}}catch(e){}}" +
+            "function scanAttrs(d){try{d.querySelectorAll('[src],[data-src],[data-url],[data-file],[data-video],[data-stream],[data-media]').forEach(function(e){var tag=(e.tagName||'').toLowerCase();['src','data-src','data-url','data-file','data-video','data-stream','data-media'].forEach(function(k){var v=e.getAttribute&&e.getAttribute(k);if(!v)return;if(tag==='video'||tag==='source')candidate(v,e.getAttribute('type')||'');else obvious(v);});});}catch(e){}}" +
+            "function scanDoc(d){try{d.querySelectorAll('video').forEach(send);d.querySelectorAll('source[src]').forEach(function(e){candidate(e.src||e.getAttribute('src'),e.type||e.getAttribute('type')||'');});scanAttrs(d);d.querySelectorAll('script:not([src])').forEach(function(s){payload(s.textContent||'');});d.querySelectorAll('iframe').forEach(function(f){try{if(f.contentDocument){watch(f.contentDocument);scanDoc(f.contentDocument);}}catch(e){}});}catch(e){}}" +
+            "function watch(d){try{if(!d||watched.indexOf(d)>=0)return;watched.push(d);new MutationObserver(function(){scanDoc(d);}).observe(d.documentElement||d,{subtree:true,childList:true,attributes:true,attributeFilter:['src','poster','data-src','data-url','data-file','data-video','data-stream','data-media']});}catch(e){}}" +
+            "function state(){try{var videos=0,httpVideos=0,blobVideos=0,sources=0,frames=0,sameFrames=0,shadows=0,shitLinks=0;function countDoc(d){try{var vs=d.querySelectorAll('video');videos+=vs.length;sources+=d.querySelectorAll('source[src]').length;vs.forEach(function(v){var u=v.currentSrc||v.src||'';if(/^https?:/i.test(u))httpVideos++;if(/^blob:/i.test(u))blobVideos++;});d.querySelectorAll('*').forEach(function(e){try{if(e.shadowRoot)shadows++;}catch(x){}});}catch(e){}}countDoc(document);var fs=document.querySelectorAll('iframe');frames=fs.length;var first='';fs.forEach(function(f){try{if(!first)first=f.src||f.getAttribute('src')||'';if(f.contentDocument){sameFrames++;countDoc(f.contentDocument);}}catch(e){}});var links=[].slice.call(document.querySelectorAll('a[href],button,[role=button]'));links.forEach(function(e){var h=(e.getAttribute&&e.getAttribute('href')||'').toLowerCase();var t=((e.textContent||'')+' '+(e.getAttribute&&e.getAttribute('aria-label')||'')).toLowerCase();if(h.indexOf('/shitshow')>=0||/shit\\s*show/.test(t))shitLinks++;});var full=(document.body&&document.body.innerText||'').replace(/\\s+/g,' ').trim();var swipeHints=(full.toLowerCase().indexOf('swipe up for next video')>=0)?1:0;var body=full.slice(0,90);CSShitBridge.onState(JSON.stringify({url:location.href,ready:document.readyState,title:document.title||'',body:body,videos:videos,httpVideos:httpVideos,blobVideos:blobVideos,sources:sources,frames:frames,sameFrames:sameFrames,shadows:shadows,resources:(performance.getEntriesByType('resource')||[]).length,frameSrc:abs(first),shitLinks:shitLinks,swipeHints:swipeHints}));}catch(e){}}" +
             "function scan(){scanDoc(document);try{performance.getEntriesByType('resource').forEach(function(e){obvious(e.name||'');});}catch(e){}state();}" +
             "window.__csShitShowScan=scan;watch(document);" +
             "try{new PerformanceObserver(function(list){list.getEntries().forEach(function(e){obvious(e.name||'');});}).observe({entryTypes:['resource']});}catch(e){}" +
-            "try{if(window.fetch&&!window.__csShitFetch){window.__csShitFetch=window.fetch;window.fetch=function(){return window.__csShitFetch.apply(this,arguments).then(function(r){" +
-            "try{var ct=(r.headers&&r.headers.get&&r.headers.get('content-type'))||'';if(mediaType.test(ct))candidate(r.url||'',ct);else obvious(r.url||'');var c=r.clone();c.text().then(payload).catch(function(){});}catch(e){}return r;});};}}catch(e){}" +
-            "try{if(window.XMLHttpRequest&&!XMLHttpRequest.prototype.__csShitWrapped){XMLHttpRequest.prototype.__csShitWrapped=true;var xo=XMLHttpRequest.prototype.open,xs=XMLHttpRequest.prototype.send;" +
-            "XMLHttpRequest.prototype.open=function(m,u){try{this.__csShitUrl=abs(u);}catch(e){}return xo.apply(this,arguments);};" +
-            "XMLHttpRequest.prototype.send=function(){try{this.addEventListener('load',function(){try{var ct=this.getResponseHeader('content-type')||'';var u=this.responseURL||this.__csShitUrl||'';if(mediaType.test(ct))candidate(u,ct);else obvious(u);if(!this.responseType||this.responseType==='text')payload(this.responseText||'');}catch(e){}});}catch(e){}return xs.apply(this,arguments);};}}catch(e){}" +
+            "try{if(window.fetch&&!window.__csShitFetch){window.__csShitFetch=window.fetch;window.fetch=function(){return window.__csShitFetch.apply(this,arguments).then(function(r){try{var ct=(r.headers&&r.headers.get&&r.headers.get('content-type'))||'';if(mediaType.test(ct))candidate(r.url||'',ct);else obvious(r.url||'');var c=r.clone();c.text().then(payload).catch(function(){});}catch(e){}return r;});};}}catch(e){}" +
+            "try{if(window.XMLHttpRequest&&!XMLHttpRequest.prototype.__csShitWrapped){XMLHttpRequest.prototype.__csShitWrapped=true;var xo=XMLHttpRequest.prototype.open,xs=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(m,u){try{this.__csShitUrl=abs(u);}catch(e){}return xo.apply(this,arguments);};XMLHttpRequest.prototype.send=function(){try{this.addEventListener('load',function(){try{var ct=this.getResponseHeader('content-type')||'';var u=this.responseURL||this.__csShitUrl||'';if(mediaType.test(ct))candidate(u,ct);else obvious(u);if(!this.responseType||this.responseType==='text')payload(this.responseText||'');}catch(e){}});}catch(e){}return xs.apply(this,arguments);};}}catch(e){}" +
             "setInterval(scan,550);scan();" +
             "})();";
 
@@ -791,6 +857,7 @@ final class ShitShowWebSource {
             "window.__csShitShowScan&&window.__csShitShowScan();" +
             "var w=Math.max(window.innerWidth||0,320),h=Math.max(window.innerHeight||0,600);" +
             "var v=document.querySelector('video');" +
+            "if(!v)return;" +
             "var t=v||(document.elementFromPoint&&document.elementFromPoint(w*0.5,h*0.5))||document.body;" +
             "var s=(v&&v.closest('.swiper,.swiper-container,[class*=swiper],[class*=swipe],[data-swiper]'))||t;" +
             "try{if(s&&s.swiper&&typeof s.swiper.slideNext==='function')s.swiper.slideNext();}catch(e){}" +
@@ -799,8 +866,6 @@ final class ShitShowWebSource {
             "pe('pointerdown',h*0.78);pe('pointermove',h*0.48);pe('pointerup',h*0.20);" +
             "try{var sc=t;while(sc&&sc!==document.body&&!(sc.scrollHeight>sc.clientHeight+80))sc=sc.parentElement;if(sc&&sc!==document.body)sc.scrollBy(0,Math.max(420,h*0.92));else window.scrollBy(0,Math.max(420,h*0.92));}catch(e){}" +
             "try{t.dispatchEvent(new WheelEvent('wheel',{deltaY:h,bubbles:true,cancelable:true}));}catch(e){}" +
-            "try{document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',code:'ArrowDown',bubbles:true,cancelable:true}));}catch(e){}" +
-            "try{var bs=document.querySelectorAll('button,[role=button]');for(var i=0;i<bs.length;i++){var q=((bs[i].getAttribute('aria-label')||'')+' '+(bs[i].getAttribute('title')||'')+' '+(bs[i].textContent||'')).trim();if(/\\bnext\\b/i.test(q)){bs[i].click();break;}}}catch(e){}" +
             "document.querySelectorAll('video').forEach(function(x){try{x.muted=true;x.preload='auto';var p=x.play();if(p&&p.catch)p.catch(function(){});}catch(e){}});" +
             "}catch(e){}})();";
 }
