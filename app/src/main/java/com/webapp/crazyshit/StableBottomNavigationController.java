@@ -9,6 +9,7 @@ import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -26,10 +27,10 @@ import java.util.WeakHashMap;
 /**
  * Single owner for the visible portrait bottom navigation.
  *
- * The old Material BottomNavigationView is retained only as a detached-looking logical router so
- * its existing activity callbacks and landscape rail behavior keep working. It is always GONE in
- * portrait. This custom bar owns every visible pixel, selected state and item position, so Material
- * label animations and the old Flash nav polling loop cannot rearrange it after launch.
+ * The old Material BottomNavigationView remains alive only as a logical router for the activity's
+ * existing callbacks. In portrait it is physically detached from the shell, so legacy code cannot
+ * accidentally make it visible underneath the custom bar. It is reattached for landscape before
+ * the existing rail controller runs.
  */
 final class StableBottomNavigationController {
     private static final int NAV_HOME = 1;
@@ -81,6 +82,8 @@ final class StableBottomNavigationController {
         FrameLayout customRoot;
         LinearLayout track;
         ViewPager2.OnPageChangeCallback pageCallback;
+        ViewGroup.LayoutParams routerLayoutParams;
+        int routerIndex = -1;
         int selectedId = NAV_HOME;
 
         State(NativeMainActivity activity) {
@@ -94,8 +97,7 @@ final class StableBottomNavigationController {
             pager = field(activity, "primaryPager", ViewPager2.class);
             if (materialRouter == null || shell == null || pager == null) return;
 
-            // Keep the Material view available to the existing navigation listener and landscape
-            // rail, but remove it completely from portrait layout and accessibility.
+            rememberRouterPlacement();
             materialRouter.setVisibility(View.GONE);
             materialRouter.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
 
@@ -136,9 +138,9 @@ final class StableBottomNavigationController {
                     Configuration.ORIENTATION_LANDSCAPE;
             if (landscape) {
                 customRoot.setVisibility(View.GONE);
-                // LandscapeUiController owns the rail. Its router may remain GONE.
+                attachRouterForLandscape();
             } else {
-                materialRouter.setVisibility(View.GONE);
+                detachRouterForPortrait();
                 customRoot.setVisibility(View.VISIBLE);
             }
         }
@@ -147,6 +149,46 @@ final class StableBottomNavigationController {
             if (pager == null) return;
             selectedId = idForPage(pager.getCurrentItem());
             updateSelection(false);
+        }
+
+        private void rememberRouterPlacement() {
+            if (materialRouter == null) return;
+            ViewParent parent = materialRouter.getParent();
+            if (parent instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) parent;
+                routerIndex = group.indexOfChild(materialRouter);
+                routerLayoutParams = materialRouter.getLayoutParams();
+            }
+        }
+
+        private void detachRouterForPortrait() {
+            if (materialRouter == null) return;
+            materialRouter.setVisibility(View.GONE);
+            materialRouter.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            ViewParent parent = materialRouter.getParent();
+            if (parent instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) parent;
+                if (routerIndex < 0) routerIndex = group.indexOfChild(materialRouter);
+                if (routerLayoutParams == null) routerLayoutParams = materialRouter.getLayoutParams();
+                group.removeView(materialRouter);
+            }
+        }
+
+        private void attachRouterForLandscape() {
+            if (materialRouter == null || shell == null) return;
+            if (materialRouter.getParent() == null) {
+                int index = routerIndex < 0
+                        ? shell.getChildCount()
+                        : Math.min(routerIndex, shell.getChildCount());
+                if (routerLayoutParams != null) {
+                    shell.addView(materialRouter, index, routerLayoutParams);
+                } else {
+                    shell.addView(materialRouter, index);
+                }
+            }
+            // The landscape rail uses this object as a menu/router source. It does not need the
+            // original Material bar rendered on screen.
+            materialRouter.setVisibility(View.GONE);
         }
 
         private void buildCustomBar() {
@@ -260,6 +302,12 @@ final class StableBottomNavigationController {
 
             int previous = selectedId;
             materialRouter.setSelectedItemId(id);
+            // Legacy chrome code may try to make the router visible while handling the selection.
+            // It is detached in portrait, so this remains a logical-only operation.
+            if (activity.getResources().getConfiguration().orientation !=
+                    Configuration.ORIENTATION_LANDSCAPE) {
+                detachRouterForPortrait();
+            }
             if (id != NAV_MORE) {
                 selectedId = id;
                 updateSelection(true);
@@ -275,6 +323,10 @@ final class StableBottomNavigationController {
                 @Override
                 public void onPageSelected(int position) {
                     selectedId = idForPage(position);
+                    if (activity.getResources().getConfiguration().orientation !=
+                            Configuration.ORIENTATION_LANDSCAPE) {
+                        detachRouterForPortrait();
+                    }
                     updateSelection(true);
                 }
             };
