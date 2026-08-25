@@ -32,6 +32,7 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -938,6 +939,7 @@ public final class ChaosFeedView extends FrameLayout {
             meta.setText(info);
             updateSaveButton(next, save);
             loading.setVisibility(View.VISIBLE);
+            failure.setText("Couldn't play this one\nSwipe up for the next video");
             failure.setVisibility(View.GONE);
             poster.setVisibility(View.VISIBLE);
             Glide.with(poster).clear(poster);
@@ -979,13 +981,18 @@ public final class ChaosFeedView extends FrameLayout {
                 http.setUserAgent(WebSettings.getDefaultUserAgent(activity));
             } catch (Exception ignored) {
             }
+
             Map<String, String> headers = new HashMap<>();
+            try {
+                headers.putAll(ShitShowPlayableResolver.playbackHeaders(nextStream.mediaUrl));
+            } catch (Exception ignored) {
+            }
             if (nextStream.pageUrl != null && !nextStream.pageUrl.isEmpty()) {
-                headers.put("Referer", nextStream.pageUrl);
+                putHeaderIfMissing(headers, "Referer", nextStream.pageUrl);
                 try {
                     Uri page = Uri.parse(nextStream.pageUrl);
                     if (page.getScheme() != null && page.getHost() != null) {
-                        headers.put("Origin", page.getScheme() + "://" + page.getHost());
+                        putHeaderIfMissing(headers, "Origin", page.getScheme() + "://" + page.getHost());
                     }
                 } catch (Exception ignored) {
                 }
@@ -995,7 +1002,7 @@ public final class ChaosFeedView extends FrameLayout {
                 if ((cookies == null || cookies.isEmpty()) && nextStream.pageUrl != null) {
                     cookies = CookieManager.getInstance().getCookie(nextStream.pageUrl);
                 }
-                if (cookies != null && !cookies.isEmpty()) headers.put("Cookie", cookies);
+                if (cookies != null && !cookies.isEmpty()) putHeaderIfMissing(headers, "Cookie", cookies);
             } catch (Exception ignored) {
             }
             if (!headers.isEmpty()) http.setDefaultRequestProperties(headers);
@@ -1013,6 +1020,7 @@ public final class ChaosFeedView extends FrameLayout {
             String lowerUrl = nextStream.mediaUrl.toLowerCase(Locale.US);
             if (lowerUrl.contains(".m3u8")) media.setMimeType(MimeTypes.APPLICATION_M3U8);
             else if (lowerUrl.contains(".mpd")) media.setMimeType(MimeTypes.APPLICATION_MPD);
+            else if (lowerUrl.contains(".mp4") || lowerUrl.contains(".m4v")) media.setMimeType(MimeTypes.VIDEO_MP4);
             player.setMediaItem(media.build());
             player.setPlayWhenReady(autoplay);
             if (autoplay) everStarted = true;
@@ -1063,10 +1071,18 @@ public final class ChaosFeedView extends FrameLayout {
                 public void onPlayerError(PlaybackException error) {
                     loading.setVisibility(View.GONE);
                     stopProgressUpdates();
-                    showPlaybackFailure();
+                    showPlaybackFailure(error);
                 }
             });
             player.prepare();
+        }
+
+        private void putHeaderIfMissing(Map<String, String> headers, String name, String value) {
+            if (headers == null || name == null || value == null || value.trim().isEmpty()) return;
+            for (String key : headers.keySet()) {
+                if (key != null && name.equalsIgnoreCase(key)) return;
+            }
+            headers.put(name, value);
         }
 
         private void showMoreMenu() {
@@ -1250,7 +1266,41 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void showPlaybackFailure() {
+            showPlaybackFailure(null);
+        }
+
+        private void showPlaybackFailure(PlaybackException error) {
             loading.setVisibility(View.GONE);
+            StringBuilder message = new StringBuilder("Couldn't play this one\nSwipe up for the next video");
+            if (error != null) {
+                message.append("\n\nMedia3 code ").append(error.errorCode);
+                Throwable cursor = error;
+                while (cursor != null) {
+                    if (cursor instanceof HttpDataSource.InvalidResponseCodeException) {
+                        message.append(" • HTTP ")
+                                .append(((HttpDataSource.InvalidResponseCodeException) cursor).responseCode);
+                        break;
+                    }
+                    cursor = cursor.getCause();
+                }
+
+                Throwable rootCause = error;
+                while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+                    rootCause = rootCause.getCause();
+                }
+                if (rootCause != error) {
+                    String causeName = rootCause.getClass().getSimpleName();
+                    if (causeName != null && !causeName.isEmpty()) message.append("\n").append(causeName);
+                }
+
+                String detail = error.getMessage();
+                if (detail != null) {
+                    detail = detail.replaceAll("\\s+", " ").trim();
+                    if (detail.length() > 110) detail = detail.substring(0, 110) + "…";
+                    if (!detail.isEmpty()) message.append("\n").append(detail);
+                }
+            }
+            failure.setText(message.toString());
             failure.setVisibility(View.VISIBLE);
             poster.setVisibility(View.VISIBLE);
             showControlsPersistent();
