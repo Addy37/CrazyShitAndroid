@@ -21,8 +21,8 @@ import java.util.Set;
 final class ChaosSourceMixer {
     private static final int MAX_SOURCE_PAGE = 8;
     private static final int SOURCES_PER_BATCH = 6;
-    private static final int REGULAR_ITEMS_PER_SOURCE = 6;
-    private static final int SHIT_SHOW_PER_BATCH = 14;
+    private static final int REGULAR_ITEMS_PER_SOURCE = 4;
+    private static final int SHIT_SHOW_PER_BATCH = 24;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
 
@@ -40,10 +40,9 @@ final class ChaosSourceMixer {
     }
 
     List<NativeContentItem> loadRandomBatch(Context context) {
-        // Keep the full breadth of the randomized source/page deck, but sample each selected feed
-        // instead of dumping dozens of items from one page into the same Chaos batch. This keeps
-        // Home/Trending/Videos/User Uploads/categories broad while giving Shit Show a meaningful
-        // share of the finished random pool.
+        // Keep all six regular source slots so Home/Trending/Videos/User Uploads/categories remain
+        // broad, but cap each source at four clips. Pair that with up to 24 Shit Show stories so
+        // the finished Chaos batch is intentionally close to a 50/50 mix.
         shitShow.prewarm(context);
         ensureCatalog(context);
 
@@ -84,20 +83,25 @@ final class ChaosSourceMixer {
         ArrayList<NativeContentItem> regular = regularItems == null
                 ? new ArrayList<>()
                 : new ArrayList<>(regularItems);
-        ArrayList<NativeContentItem> result = new ArrayList<>(regular.size() + shitShowItems.size());
+        ArrayList<NativeContentItem> shit = new ArrayList<>(shitShowItems);
+        ArrayList<NativeContentItem> result = new ArrayList<>(regular.size() + shit.size());
 
         int regularIndex = 0;
-        int nextShitAfter = 1 + random.nextInt(3);
-        for (NativeContentItem shit : shitShowItems) {
-            int copied = 0;
-            while (regularIndex < regular.size() && copied < nextShitAfter) {
+        int shitIndex = 0;
+        boolean shitNext = random.nextBoolean();
+
+        // Alternate sources while both are available. Randomizing which side starts keeps refreshes
+        // from feeling scripted while still making Shit Show appear roughly every other swipe.
+        while (regularIndex < regular.size() && shitIndex < shit.size()) {
+            if (shitNext) {
+                result.add(shit.get(shitIndex++));
+            } else {
                 result.add(regular.get(regularIndex++));
-                copied++;
             }
-            result.add(shit);
-            nextShitAfter = 3 + random.nextInt(3);
+            shitNext = !shitNext;
         }
 
+        while (shitIndex < shit.size()) result.add(shit.get(shitIndex++));
         while (regularIndex < regular.size()) result.add(regular.get(regularIndex++));
         return result;
     }
