@@ -8,7 +8,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.Gravity;
-import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.webkit.CookieManager;
@@ -30,21 +29,17 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Shit Show story source.
- *
- * B19 proved the rendered /shitshow/ document already contains an embedded stories array with
- * CrazyShit story IDs, titles and permalinks. We do not need to reverse-engineer the site's video
- * player or sniff its final MP4. A story permalink can flow through the same resolvePlayable()
- * path used by every other CrazyShit media page.
+ * Harvests the embedded Shit Show story list and returns normal CrazyShit permalinks.
+ * The repository resolves those permalinks into playable streams later.
  */
 final class ShitShowTapSource {
     private static final String PAGE = CrazyShitRepository.BASE + "shitshow/";
     private static final int MAX_CACHE = 80;
     private static final int TARGET_CACHE = 24;
     private static final long FIRST_BATCH_WAIT_MS = 6_500L;
-    private static final long HARVEST_TIMEOUT_MS = 22_000L;
+    private static final long HARVEST_TIMEOUT_MS = 18_000L;
     private static final long PUMP_MS = 850L;
-    private static final long DIAGNOSTIC_KEEP_MS = 35_000L;
+    private static final long DIAGNOSTIC_KEEP_MS = 30_000L;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Object lock = new Object();
@@ -63,6 +58,7 @@ final class ShitShowTapSource {
     private int pageFinishedCount;
     private String pageState = "idle";
     private String firstTitle = "";
+    private String firstPage = "";
     private String lastError = "";
 
     void prewarm(Context context) {
@@ -95,7 +91,7 @@ final class ShitShowTapSource {
     }
 
     void resetDeck() {
-        // Preserve process-level Shit Show history. Chaos also tracks 500 watched URLs.
+        // Keep process-level Shit Show history. Chaos has its own 500-URL repeat protection too.
     }
 
     private ArrayList<NativeContentItem> drainReady(int maxItems) {
@@ -137,8 +133,7 @@ final class ShitShowTapSource {
         WebView view = new WebView(activity);
         webView = view;
         view.setAlpha(0.01f);
-        view.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        view.setImportantForAccessibility(WebView.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         view.setFocusable(false);
         view.setFocusableInTouchMode(false);
 
@@ -237,8 +232,7 @@ final class ShitShowTapSource {
     }
 
     private void harvestStories(WebView view) {
-        if (view == null) return;
-        view.evaluateJavascript(HARVEST_STORIES_JS, null);
+        if (view != null) view.evaluateJavascript(HARVEST_STORIES_JS, null);
     }
 
     private void acceptStory(String raw) {
@@ -251,6 +245,8 @@ final class ShitShowTapSource {
             String poster = cleanUrl(json.optString("poster", ""));
             String views = cleanText(json.optString("views", ""));
             String comments = cleanText(json.optString("comments", ""));
+
+            if (firstPage.isEmpty() && !pageUrl.isEmpty()) firstPage = pageUrl;
 
             String itemUrl = "";
             boolean directItem = false;
@@ -289,11 +285,23 @@ final class ShitShowTapSource {
 
     private static boolean isUsableStoryPage(String value) {
         if (!isCrazyShitPage(value)) return false;
-        String lower = value.toLowerCase(Locale.US);
-        return !lower.endsWith("/shitshow/") && !lower.endsWith("/shitshow")
-                && (lower.contains("/cnt/medias/") || lower.contains("/media/")
-                || lower.contains("/video/") || lower.contains("/videos/")
-                || lower.contains("/story/") || lower.contains("/stories/"));
+        try {
+            Uri uri = Uri.parse(cleanUrl(value));
+            String path = cleanText(uri.getPath()).toLowerCase(Locale.US);
+            if (path.isEmpty() || "/".equals(path)) return false;
+            String normalized = path.endsWith("/") ? path : path + "/";
+            if ("/shitshow/".equals(normalized)
+                    || "/categories/".equals(normalized)
+                    || "/trending/".equals(normalized)
+                    || "/videos/".equals(normalized)
+                    || "/submissions/".equals(normalized)
+                    || "/search/".equals(normalized)) {
+                return false;
+            }
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private static boolean isCrazyShitPage(String value) {
@@ -317,7 +325,10 @@ final class ShitShowTapSource {
 
     private static String cleanUrl(String value) {
         if (value == null) return "";
-        String url = value.trim().replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&");
+        String url = value.trim()
+                .replace("\\/", "/")
+                .replace("\\u0026", "&")
+                .replace("&amp;", "&");
         if (url.startsWith("//")) return "https:" + url;
         if (url.startsWith("/")) return "https://crazyshit.com" + url;
         return url;
@@ -342,6 +353,7 @@ final class ShitShowTapSource {
         pageFinishedCount = 0;
         pageState = "starting";
         firstTitle = "";
+        firstPage = "";
         lastError = "";
     }
 
@@ -376,14 +388,15 @@ final class ShitShowTapSource {
             return;
         }
         StringBuilder text = new StringBuilder();
-        text.append("Shit Show B20 ").append(isWarming() ? "RUN" : "STOP").append('\n');
+        text.append("Shit Show B21 ").append(isWarming() ? "RUN" : "STOP").append('\n');
         text.append("page:").append(pageState).append(" f:").append(pageFinishedCount)
                 .append(" pump:").append(pumpCount).append('\n');
         text.append("stories:").append(storiesSeen)
                 .append(" accepted:").append(storiesAccepted)
                 .append(" cache:").append(cachedCount()).append('\n');
         text.append("pageUrls:").append(pageStories).append(" direct:").append(directStories);
-        if (!firstTitle.isEmpty()) text.append('\n').append("first:").append(shorten(firstTitle, 64));
+        if (!firstTitle.isEmpty()) text.append('\n').append("first:").append(shorten(firstTitle, 56));
+        if (!firstPage.isEmpty()) text.append('\n').append("url:").append(shorten(firstPage, 72));
         if (!lastError.isEmpty()) text.append('\n').append("err:").append(shorten(lastError, 72));
         view.setText(text.toString());
     }
@@ -463,13 +476,13 @@ final class ShitShowTapSource {
             "function abs(v){try{return v?new URL(v,location.href).href:'';}catch(e){return String(v||'');}}" +
             "function str(v){return v==null?'':String(v);}" +
             "function first(o,ks){for(var i=0;i<ks.length;i++){var v=o&&o[ks[i]];if(v!=null&&v!=='')return v;}return '';}" +
-            "function media(o){var out='',seen=[];function walk(v,k,d){if(out||v==null||d>4)return;if(typeof v==='string'){var s=abs(v);if(/\\.(mp4|webm|m4v|m3u8|mpd)(\\?|#|$)/i.test(s))out=s;return;}if(typeof v!=='object')return;if(seen.indexOf(v)>=0)return;seen.push(v);if(Array.isArray(v)){for(var i=0;i<v.length&&!out&&i<20;i++)walk(v[i],k,d+1);return;}var keys=Object.keys(v);for(var j=0;j<keys.length&&!out&&j<80;j++){var q=keys[j],l=q.toLowerCase();if(/video|media|file|stream|source|src|url|mp4|hls/.test(l)||d<2)walk(v[q],q,d+1);}}walk(o,'',0);return out;}" +
-            "function poster(o){var v=first(o,['poster','thumbnail','thumb','image','image_url','thumbnail_url','preview','cover']);if(typeof v==='object'&&v){v=first(v,['url','src','large','medium','small']);}return abs(v);}" +
             "function page(o){var v=first(o,['permalink','link','href','page','page_url','story_url']);if(!v){var u=o&&o.url;if(typeof u==='string'&&!/\\.(mp4|webm|m4v|m3u8|mpd)(\\?|#|$)/i.test(u))v=u;}return abs(v);}" +
-            "function good(a){if(!Array.isArray(a)||!a.length)return false;var hits=0;for(var i=0;i<a.length&&i<8;i++){var o=a[i];if(o&&typeof o==='object'&&(o.permalink||o.id)&&(o.title||o.name||o.permalink))hits++;}return hits>0;}" +
-            "function emit(a){if(!good(a))return 0;var n=0;for(var i=0;i<a.length&&i<120;i++){var o=a[i];if(!o||typeof o!=='object')continue;var p=page(o),m=media(o);if(!p&&!m)continue;var title=str(first(o,['title','name','headline','caption'])||'Shit Show');var views=str(first(o,['views','view_count','viewCount','views_count']));var comments=str(first(o,['comments','comment_count','commentCount','comments_count']));CSShitBridge.onStory(JSON.stringify({page:p,media:m,title:title,poster:poster(o),views:views,comments:comments,id:str(o.id||'')}));n++;}return n;}" +
-            "var sent=0,names=['_stories','stories','shitshowStories','shitShowStories','storyList','story_list'];for(var i=0;i<names.length;i++){try{sent+=emit(window[names[i]]);}catch(e){}}" +
+            "function media(o){var v=first(o,['video','video_url','media','media_url','stream','stream_url','src','source','file']);if(typeof v==='object'&&v)v=first(v,['url','src','file','mp4','hls']);var s=abs(v);return /\\.(mp4|webm|m4v|m3u8|mpd)(\\?|#|$)/i.test(s)?s:'';}" +
+            "function poster(o){var v=first(o,['poster','thumbnail','thumb','image','image_url','thumbnail_url','preview','cover']);if(typeof v==='object'&&v)v=first(v,['url','src','large','medium','small']);return abs(v);}" +
+            "function good(a){if(!Array.isArray(a)||!a.length)return false;var hits=0;for(var i=0;i<a.length&&i<10;i++){var o=a[i];if(o&&typeof o==='object'&&(o.permalink||o.id)&&(o.title||o.name||o.permalink))hits++;}return hits>0;}" +
+            "function emit(a){if(!good(a))return 0;var n=0;for(var i=0;i<a.length&&i<80;i++){var o=a[i];if(!o||typeof o!=='object')continue;var p=page(o),m=media(o);if(!p&&!m)continue;CSShitBridge.onStory(JSON.stringify({page:p,media:m,title:str(first(o,['title','name','headline','caption'])||'Shit Show'),poster:poster(o),views:str(first(o,['views','view_count','viewCount','views_count'])),comments:str(first(o,['comments','comment_count','commentCount','comments_count'])),id:str(o.id||'')}));n++;}return n;}" +
+            "var sent=0,names=['_stories','stories','shitshowStories','shitShowStories','storyList','story_list'];" +
+            "for(var i=0;i<names.length;i++){try{sent+=emit(window[names[i]]);}catch(e){}}" +
             "if(!sent){try{var ks=Object.keys(window);for(var j=0;j<ks.length&&j<2500;j++){var v;try{v=window[ks[j]];}catch(e){continue;}if(good(v)){sent+=emit(v);if(sent)break;}}}catch(e){}}" +
-            "if(!sent){try{var ss=[].slice.call(document.scripts||[]);for(var q=0;q<ss.length&&!sent;q++){if(ss[q].src)continue;var t=ss[q].textContent||'';if(!/\\b_?stories\\b/.test(t))continue;var re=/(?:var|let|const)?\\s*(_?stories)\\s*=\\s*\\[/g,mx;while((mx=re.exec(t))&&!sent){var st=t.indexOf('[',mx.index),dep=0,quote='',esc=false,end=-1;for(var z=st;z<t.length;z++){var c=t.charAt(z);if(quote){if(esc){esc=false;continue;}if(c==='\\\\'){esc=true;continue;}if(c===quote)quote='';continue;}if(c==='\"'||c===\"'\"||c==='`'){quote=c;continue;}if(c==='[')dep++;else if(c===']'){dep--;if(dep===0){end=z;break;}}}if(end>st){var raw=t.slice(st,end+1),arr=null;try{arr=JSON.parse(raw);}catch(e){try{arr=(new Function('return ('+raw+')'))();}catch(x){}}sent+=emit(arr);}}}}catch(e){}}" +
             "}catch(e){try{CSShitBridge.onProbeError(String(e&&e.stack||e));}catch(x){}}})();";
 }
