@@ -61,8 +61,6 @@ public final class CrazyShitRepository {
         int sectionOrdinal = 0;
         int mediaCount = 0;
 
-        // Walk the real document order. Section titles become normal data items before the first
-        // unique media item in that group, so RecyclerView never needs to be mutated after layout.
         for (Element node : doc.getAllElements()) {
             String tag = node.tagName();
             if (!"a".equalsIgnoreCase(tag)) {
@@ -103,7 +101,6 @@ public final class CrazyShitRepository {
             if (mediaCount >= 60) break;
         }
 
-        // If the site changes its section markup, fail soft and keep the working media feed.
         if (mediaCount == 0) return parsePlainFeed(doc);
         return result;
     }
@@ -157,9 +154,6 @@ public final class CrazyShitRepository {
         Matcher ownMatch = SECTION_HEADER.matcher(own);
         if (ownMatch.find()) return clean(ownMatch.group(1));
 
-        // Some site headers wrap individual words in spans, so the container has no useful
-        // ownText(). Checking its combined text still stays safe because the pattern only accepts
-        // the known CrazyShit group/date formats and only at the beginning of the element.
         String combined = clean(element.text());
         Matcher combinedMatch = SECTION_HEADER.matcher(combined);
         if (combinedMatch.find()) return clean(combinedMatch.group(1));
@@ -206,9 +200,16 @@ public final class CrazyShitRepository {
     }
 
     public StreamInfo resolvePlayable(Context context, String pageUrl) throws IOException {
-        // Shit Show is harvested from its rendered swipe player and already gives us the
-        // direct media URL. Avoid trying to parse an MP4/HLS manifest as an HTML page.
         String normalizedPageUrl = normalizeUrl(pageUrl);
+
+        // Keep Shit Show as a story permalink until Chaos is about to play it. Resolving here
+        // preserves the exact story referrer/cookies and avoids letting short-lived stream URLs
+        // age in the mixed feed before the user reaches them.
+        if (isShitShowStory(normalizedPageUrl)) {
+            StreamInfo rendered = ShitShowPlayableResolver.resolve(context, normalizedPageUrl);
+            if (rendered != null) return rendered;
+        }
+
         if (isDirectMedia(normalizedPageUrl)) {
             return new StreamInfo(normalizedPageUrl, BASE + "shitshow/", "Shit Show");
         }
@@ -454,6 +455,15 @@ public final class CrazyShitRepository {
 
     private boolean isMediaPage(String url) {
         return url != null && url.contains("crazyshit.com/cnt/medias/");
+    }
+
+    private boolean isShitShowStory(String url) {
+        if (url == null) return false;
+        String lower = url.toLowerCase(Locale.US);
+        String plain = "https://crazyshit.com/shitshow/";
+        String www = "https://www.crazyshit.com/shitshow/";
+        return (lower.startsWith(plain) && lower.length() > plain.length())
+                || (lower.startsWith(www) && lower.length() > www.length());
     }
 
     private boolean isDirectMedia(String url) {
