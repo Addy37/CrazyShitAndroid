@@ -297,7 +297,10 @@ final class ShitShowTapSource {
     }
 
     private boolean playerActive() {
-        return jsVideoCount > 0 || jsSwipeHints > 0 || jsOverlayHints > 0 || cachedCount() > 0;
+        // B15 treated generic overlay-like DOM nodes as proof that Shit Show was active. The
+        // homepage already has those nodes, so activation stopped before the first real tap.
+        // Only real playback signals may stop the activation retry loop.
+        return jsVideoCount > 0 || jsSwipeHints > 0 || cachedCount() > 0;
     }
 
     private void maybeActivate(WebView view) {
@@ -537,7 +540,7 @@ final class ShitShowTapSource {
             return;
         }
         StringBuilder text = new StringBuilder();
-        text.append("Shit Show debug B15  ").append(isWarming() ? "RUN" : "STOP").append('\n');
+        text.append("Shit Show debug B16  ").append(isWarming() ? "RUN" : "STOP").append('\n');
         text.append("page:").append(pageState)
                 .append(" c").append(pageCommitCount).append("/f").append(pageFinishedCount)
                 .append(" DOM:").append(jsReadyState.isEmpty() ? "?" : jsReadyState).append('\n');
