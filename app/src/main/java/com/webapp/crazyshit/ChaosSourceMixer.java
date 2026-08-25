@@ -39,19 +39,24 @@ final class ChaosSourceMixer {
     }
 
     List<NativeContentItem> loadRandomBatch(Context context) {
+        // Start the rendered Shit Show page before the normal network work. Category discovery and
+        // the six regular source requests then give the hidden player time to expose its first clip
+        // without holding up Chaos just to wait on the WebView.
+        shitShow.prewarm(context);
         ensureCatalog(context);
+
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
-
-        // Shit Show is harvested asynchronously from its rendered swipe player. The first regular
-        // batch warms that source; subsequent loads mix the harvested direct clips into Chaos.
-        for (NativeContentItem item : shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)) {
-            if (item == null || item.url == null || item.url.isEmpty()) continue;
-            combined.putIfAbsent(item.url, item);
-        }
-
         int sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
         for (int i = 0; i < sourceCount; i++) {
             addRequest(context, combined, nextRequest());
+        }
+
+        // Drain Shit Show after the regular sources. If the first rendered stream is still arriving,
+        // the source waits briefly on this IO thread so beta testing can see it in the initial pool
+        // instead of leaving harvested clips parked until Chaos eventually needs another batch.
+        for (NativeContentItem item : shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)) {
+            if (item == null || item.url == null || item.url.isEmpty()) continue;
+            combined.putIfAbsent(item.url, item);
         }
 
         ArrayList<NativeContentItem> result = new ArrayList<>(combined.values());
