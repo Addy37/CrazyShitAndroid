@@ -17,6 +17,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -34,8 +35,19 @@ final class ShitShowPlayableResolver {
     private static final long TIMEOUT_MS = 10_000L;
     private static final long FALLBACK_AFTER_MS = 3_000L;
     private static final String DIRECT_MARKER = "csdirect=";
+    private static final int MAX_HEADER_CACHE = 96;
+    private static final Object HEADER_LOCK = new Object();
+    private static final LinkedHashMap<String, Map<String, String>> HEADER_CACHE = new LinkedHashMap<>();
 
     private ShitShowPlayableResolver() {
+    }
+
+    static Map<String, String> playbackHeaders(String mediaUrl) {
+        String key = cleanUrl(mediaUrl);
+        synchronized (HEADER_LOCK) {
+            Map<String, String> headers = HEADER_CACHE.get(key);
+            return headers == null ? new LinkedHashMap<>() : new LinkedHashMap<>(headers);
+        }
     }
 
     static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl) {
@@ -49,9 +61,9 @@ final class ShitShowPlayableResolver {
         AtomicReference<String> domMedia = new AtomicReference<>("");
         AtomicReference<String> requestMedia = new AtomicReference<>("");
         AtomicReference<String> requestKind = new AtomicReference<>("");
+        AtomicReference<Map<String, String>> requestHeaders = new AtomicReference<>(new LinkedHashMap<>());
         AtomicReference<String> title = new AtomicReference<>("Shit Show");
         AtomicReference<WebView> holder = new AtomicReference<>();
-        long startedAt = System.currentTimeMillis();
         Handler main = new Handler(Looper.getMainLooper());
 
         main.post(() -> {
@@ -96,7 +108,7 @@ final class ShitShowPlayableResolver {
             } catch (Exception ignored) {
             }
 
-            view.addJavascriptInterface(new Bridge(domMedia, title, done), "CSResolveBridge");
+            view.addJavascriptInterface(new Bridge(domMedia, title), "CSResolveBridge");
             view.setWebViewClient(new WebViewClient() {
                 @Override
                 public boolean shouldOverrideUrlLoading(WebView web, WebResourceRequest request) {
@@ -111,7 +123,7 @@ final class ShitShowPlayableResolver {
 
                 @Override
                 public WebResourceResponse shouldInterceptRequest(WebView web, WebResourceRequest request) {
-                    observeRequest(request, requestMedia, requestKind);
+                    observeRequest(request, requestMedia, requestKind, requestHeaders, done);
                     return null;
                 }
 
@@ -133,9 +145,8 @@ final class ShitShowPlayableResolver {
                     main.postDelayed(() -> {
                         if (holder.get() != web || done.getCount() == 0L) return;
                         String fallback = requestMedia.get();
-                        if (isHttp(fallback) && System.currentTimeMillis() - startedAt >= FALLBACK_AFTER_MS) {
-                            done.countDown();
-                        }
+                        if (!isHttp(fallback)) fallback = domMedia.get();
+                        if (isHttp(fallback)) done.countDown();
                     }, FALLBACK_AFTER_MS);
                 }
             });
@@ -149,8 +160,17 @@ final class ShitShowPlayableResolver {
             Thread.currentThread().interrupt();
         }
 
-        String media = cleanUrl(domMedia.get());
-        if (!isHttp(media)) media = cleanUrl(requestMedia.get());
+        // Prefer the actual request the rendered player made. DOM currentSrc is only a fallback.
+        String rawMedia = cleanUrl(requestMedia.get());
+        if (!isHttp(rawMedia)) rawMedia = cleanUrl(domMedia.get());
+        Map<String, String> headers = buildPlaybackHeaders(
+                activity,
+                rawMedia,
+                pageUrl,
+                requestHeaders.get()
+        );
+
+        String media = rawMedia;
         if (isHttp(media) && !isDirectMedia(media)) {
             media = markDirect(media, requestKind.get());
         }
@@ -158,6 +178,7 @@ final class ShitShowPlayableResolver {
         main.post(() -> destroy(old));
 
         if (!isHttp(media) || !isDirectMedia(media)) return null;
+        rememberHeaders(media, headers);
         return new CrazyShitRepository.StreamInfo(media, pageUrl, title.get());
     }
 
@@ -184,38 +205,131 @@ final class ShitShowPlayableResolver {
     private static void observeRequest(
             WebResourceRequest request,
             AtomicReference<String> requestMedia,
-            AtomicReference<String> requestKind
+            AtomicReference<String> requestKind,
+            AtomicReference<Map<String, String>> requestHeaders,
+            CountDownLatch done
     ) {
         if (request == null || request.getUrl() == null || !"GET".equalsIgnoreCase(request.getMethod())) return;
         String url = cleanUrl(request.getUrl().toString());
         if (!isHttp(url) || looksLikeAdHost(url)) return;
 
-        String accept = "";
+        Map<String, String> rawHeaders = null;
         try {
-            Map<String, String> headers = request.getRequestHeaders();
-            if (headers != null) {
-                accept = headers.get("Accept");
-                if (accept == null) accept = headers.get("accept");
-                if (accept == null) accept = "";
-            }
+            rawHeaders = request.getRequestHeaders();
         } catch (Exception ignored) {
         }
 
+        String accept = header(rawHeaders, "Accept");
+        String destination = header(rawHeaders, "Sec-Fetch-Dest");
+        String range = header(rawHeaders, "Range");
         String lowerAccept = accept.toLowerCase(Locale.US);
         boolean mediaRequest = isDirectMedia(url)
                 || lowerAccept.contains("video/")
                 || lowerAccept.contains("mpegurl")
-                || lowerAccept.contains("dash+xml");
+                || lowerAccept.contains("dash+xml")
+                || "video".equalsIgnoreCase(destination)
+                || !range.isEmpty();
         if (!mediaRequest) return;
 
         if (requestMedia.compareAndSet("", url)) {
+            requestHeaders.set(copyForwardHeaders(rawHeaders));
             if (lowerAccept.contains("mpegurl")) requestKind.set("m3u8");
             else if (lowerAccept.contains("dash+xml")) requestKind.set("mpd");
             else {
                 String fromUrl = kindFromUrl(url);
                 requestKind.set(fromUrl.isEmpty() ? "mp4" : fromUrl);
             }
+            done.countDown();
         }
+    }
+
+    private static Map<String, String> copyForwardHeaders(Map<String, String> raw) {
+        LinkedHashMap<String, String> result = new LinkedHashMap<>();
+        if (raw == null) return result;
+        for (Map.Entry<String, String> entry : raw.entrySet()) {
+            String name = safe(entry.getKey());
+            String value = safe(entry.getValue());
+            if (name.isEmpty() || value.isEmpty() || !safeToForward(name)) continue;
+            result.put(name, value);
+        }
+        return result;
+    }
+
+    private static boolean safeToForward(String name) {
+        String lower = safe(name).toLowerCase(Locale.US);
+        return !lower.isEmpty()
+                && !lower.startsWith(":")
+                && !"host".equals(lower)
+                && !"connection".equals(lower)
+                && !"content-length".equals(lower)
+                && !"accept-encoding".equals(lower)
+                && !"range".equals(lower);
+    }
+
+    private static Map<String, String> buildPlaybackHeaders(
+            Context context,
+            String mediaUrl,
+            String pageUrl,
+            Map<String, String> captured
+    ) {
+        LinkedHashMap<String, String> headers = new LinkedHashMap<>();
+        if (captured != null) headers.putAll(captured);
+
+        putIfMissing(headers, "Referer", pageUrl);
+        try {
+            Uri page = Uri.parse(cleanUrl(pageUrl));
+            if (page.getScheme() != null && page.getHost() != null) {
+                putIfMissing(headers, "Origin", page.getScheme() + "://" + page.getHost());
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            putIfMissing(headers, "User-Agent", WebSettings.getDefaultUserAgent(context));
+        } catch (Exception ignored) {
+        }
+        putIfMissing(headers, "Accept", "video/*,*/*;q=0.8");
+
+        try {
+            String cookies = CookieManager.getInstance().getCookie(mediaUrl);
+            if ((cookies == null || cookies.trim().isEmpty()) && pageUrl != null) {
+                cookies = CookieManager.getInstance().getCookie(pageUrl);
+            }
+            if (cookies != null && !cookies.trim().isEmpty()) {
+                putIfMissing(headers, "Cookie", cookies);
+            }
+        } catch (Exception ignored) {
+        }
+        return headers;
+    }
+
+    private static void rememberHeaders(String mediaUrl, Map<String, String> headers) {
+        String key = cleanUrl(mediaUrl);
+        if (key.isEmpty() || headers == null || headers.isEmpty()) return;
+        synchronized (HEADER_LOCK) {
+            HEADER_CACHE.remove(key);
+            HEADER_CACHE.put(key, new LinkedHashMap<>(headers));
+            while (HEADER_CACHE.size() > MAX_HEADER_CACHE) {
+                String oldest = HEADER_CACHE.keySet().iterator().next();
+                HEADER_CACHE.remove(oldest);
+            }
+        }
+    }
+
+    private static String header(Map<String, String> headers, String name) {
+        if (headers == null || name == null) return "";
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            if (entry.getKey() != null && name.equalsIgnoreCase(entry.getKey())) {
+                return safe(entry.getValue());
+            }
+        }
+        return "";
+    }
+
+    private static void putIfMissing(Map<String, String> headers, String name, String value) {
+        String cleanValue = safe(value);
+        if (headers == null || name == null || cleanValue.isEmpty()) return;
+        if (!header(headers, name).isEmpty()) return;
+        headers.put(name, cleanValue);
     }
 
     private static String markDirect(String value, String kind) {
@@ -315,12 +429,10 @@ final class ShitShowPlayableResolver {
     private static final class Bridge {
         private final AtomicReference<String> media;
         private final AtomicReference<String> title;
-        private final CountDownLatch done;
 
-        Bridge(AtomicReference<String> media, AtomicReference<String> title, CountDownLatch done) {
+        Bridge(AtomicReference<String> media, AtomicReference<String> title) {
             this.media = media;
             this.title = title;
-            this.done = done;
         }
 
         @JavascriptInterface
@@ -330,7 +442,6 @@ final class ShitShowPlayableResolver {
             media.compareAndSet("", candidate);
             String cleanTitle = safe(videoTitle);
             if (!cleanTitle.isEmpty()) title.set(cleanTitle);
-            done.countDown();
         }
     }
 }
