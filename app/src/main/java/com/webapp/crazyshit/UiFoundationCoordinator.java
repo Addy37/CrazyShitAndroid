@@ -157,5 +157,6 @@ final class UiFoundationCoordinator {
         LandscapeRailPolish.applySoon(main);
         LandscapeMoreDialog.attachSoon(main);
         ResponsiveFitmentController.applySoon(main);
+        MainBottomNavigationFitment.applySoon(main);
     }
 }
