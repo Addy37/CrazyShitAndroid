@@ -22,7 +22,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Converts harvested Shit Show story permalinks into direct media URLs before they enter Chaos.
+ * Converts harvested Shit Show story permalinks into media URLs before they enter Chaos.
  */
 final class ShitShowResolvedSource {
     private static final int MAX_RESOLVE_PER_BATCH = 4;
@@ -36,6 +36,7 @@ final class ShitShowResolvedSource {
     private int attempts;
     private int resolvedCount;
     private int failedCount;
+    private int markedCount;
     private TextView statusView;
 
     void prewarm(Context context) {
@@ -101,6 +102,7 @@ final class ShitShowResolvedSource {
 
         synchronized (this) {
             resolvedCount++;
+            if (stream.mediaUrl.contains("csdirect=.")) markedCount++;
         }
         refreshStatus();
         return new NativeContentItem(
@@ -153,12 +155,15 @@ final class ShitShowResolvedSource {
         int a;
         int ok;
         int fail;
+        int marked;
         synchronized (this) {
             a = attempts;
             ok = resolvedCount;
             fail = failedCount;
+            marked = markedCount;
         }
-        view.setText("Shit Show resolver B22\nattempts:" + a + "  ok:" + ok + "  fail:" + fail);
+        view.setText("Shit Show resolver B23\nattempts:" + a + "  ok:" + ok
+                + "  fail:" + fail + "  marked:" + marked);
     }
 
     private static int dp(Context context, int value) {
