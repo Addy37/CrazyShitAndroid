@@ -22,6 +22,8 @@ public final class SplashActivity extends Activity {
     private long splashStartedAt;
     private boolean leaving;
     private View glow;
+    private View art;
+    private View sweep;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,7 +33,8 @@ public final class SplashActivity extends Activity {
         getWindow().setNavigationBarColor(Color.BLACK);
         setContentView(R.layout.activity_splash);
 
-        // Use the visual intro time to do useful Chaos work instead of adding dead startup delay.
+        // The visual intro overlaps useful Chaos work. The preloader now also resolves the first
+        // regular clip once so the handoff is much less likely to land on a visible video spinner.
         ChaosStartupPreloader.start(this);
         animateSplash();
         handler.postDelayed(readinessRunnable, MIN_SPLASH_MS);
@@ -39,68 +42,80 @@ public final class SplashActivity extends Activity {
 
     private void animateSplash() {
         View root = findViewById(R.id.splashRoot);
-        View art = findViewById(R.id.splashArt);
+        art = findViewById(R.id.splashArt);
         glow = findViewById(R.id.splashGlow);
-        View sweep = findViewById(R.id.splashSweep);
+        sweep = findViewById(R.id.splashSweep);
 
         if (art != null) {
             art.setAlpha(0f);
-            art.setScaleX(0.92f);
-            art.setScaleY(0.92f);
+            art.setScaleX(0.82f);
+            art.setScaleY(0.82f);
+            art.setRotation(-1.2f);
 
             AnimatorSet entrance = new AnimatorSet();
             entrance.playTogether(
                     ObjectAnimator.ofFloat(art, View.ALPHA, 0f, 1f),
-                    ObjectAnimator.ofFloat(art, View.SCALE_X, 0.92f, 1.0f),
-                    ObjectAnimator.ofFloat(art, View.SCALE_Y, 0.92f, 1.0f)
+                    ObjectAnimator.ofFloat(art, View.SCALE_X, 0.82f, 1.045f),
+                    ObjectAnimator.ofFloat(art, View.SCALE_Y, 0.82f, 1.045f),
+                    ObjectAnimator.ofFloat(art, View.ROTATION, -1.2f, 0f)
             );
-            entrance.setDuration(520L);
+            entrance.setDuration(390L);
             entrance.start();
 
-            // Two tiny offsets create a restrained glitch rather than a distracting shake.
+            handler.postDelayed(() -> {
+                if (leaving || art == null) return;
+                art.animate()
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setDuration(120L)
+                        .start();
+            }, 390L);
+
+            // Two very short offsets give the logo a tiny digital snap without turning the intro
+            // into a distracting shake effect.
             ObjectAnimator glitchOne = ObjectAnimator.ofFloat(
-                    art, View.TRANSLATION_X, 0f, dp(2), -dp(1), 0f
+                    art, View.TRANSLATION_X, 0f, dp(3), -dp(1.5f), 0f
             );
-            glitchOne.setStartDelay(420L);
-            glitchOne.setDuration(90L);
+            glitchOne.setStartDelay(455L);
+            glitchOne.setDuration(74L);
             glitchOne.start();
 
             ObjectAnimator glitchTwo = ObjectAnimator.ofFloat(
-                    art, View.TRANSLATION_X, 0f, -dp(1), dp(1), 0f
+                    art, View.TRANSLATION_X, 0f, -dp(1.5f), dp(1), 0f
             );
-            glitchTwo.setStartDelay(610L);
-            glitchTwo.setDuration(70L);
+            glitchTwo.setStartDelay(650L);
+            glitchTwo.setDuration(58L);
             glitchTwo.start();
         }
 
         if (glow != null) {
             glow.setAlpha(0f);
-            glow.setScaleX(0.70f);
-            glow.setScaleY(0.70f);
+            glow.setScaleX(0.62f);
+            glow.setScaleY(0.62f);
             glow.animate()
-                    .alpha(0.62f)
+                    .alpha(0.68f)
                     .scaleX(1f)
                     .scaleY(1f)
-                    .setDuration(460L)
-                    .withEndAction(() -> handler.postDelayed(this::pulseGlow, 80L))
+                    .setDuration(430L)
+                    .withEndAction(() -> handler.postDelayed(this::pulseGlow, 90L))
                     .start();
         }
 
         if (root != null && sweep != null) {
             sweep.post(() -> {
                 if (leaving) return;
-                float start = -Math.max(dp(180), sweep.getWidth() * 1.2f);
-                float end = root.getWidth() + Math.max(dp(180), sweep.getWidth());
+                float start = -Math.max(dp(220), sweep.getWidth() * 1.3f);
+                float end = root.getWidth() + Math.max(dp(220), sweep.getWidth());
                 sweep.setTranslationX(start);
                 sweep.setAlpha(0f);
                 sweep.animate()
-                        .alpha(0.82f)
+                        .alpha(0.90f)
                         .translationX(end)
-                        .setStartDelay(310L)
-                        .setDuration(520L)
+                        .setStartDelay(300L)
+                        .setDuration(500L)
                         .withEndAction(() -> sweep.animate()
                                 .alpha(0f)
-                                .setDuration(100L)
+                                .setDuration(90L)
                                 .start())
                         .start();
             });
@@ -109,12 +124,12 @@ public final class SplashActivity extends Activity {
 
     private void pulseGlow() {
         if (leaving || glow == null) return;
-        boolean bright = glow.getAlpha() > 0.48f;
+        boolean bright = glow.getAlpha() > 0.50f;
         glow.animate()
-                .alpha(bright ? 0.34f : 0.56f)
-                .scaleX(bright ? 1.06f : 0.98f)
-                .scaleY(bright ? 1.06f : 0.98f)
-                .setDuration(340L)
+                .alpha(bright ? 0.38f : 0.60f)
+                .scaleX(bright ? 1.055f : 0.985f)
+                .scaleY(bright ? 1.055f : 0.985f)
+                .setDuration(330L)
                 .withEndAction(this::pulseGlow)
                 .start();
     }
@@ -139,6 +154,10 @@ public final class SplashActivity extends Activity {
         if (leaving) return;
         leaving = true;
         handler.removeCallbacks(readinessRunnable);
+        if (art != null) art.animate().cancel();
+        if (glow != null) glow.animate().cancel();
+        if (sweep != null) sweep.animate().cancel();
+
         Intent intent = new Intent(this, NativeMainActivity.class);
         startActivity(intent);
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
@@ -153,7 +172,9 @@ public final class SplashActivity extends Activity {
     protected void onDestroy() {
         leaving = true;
         handler.removeCallbacksAndMessages(null);
+        if (art != null) art.animate().cancel();
         if (glow != null) glow.animate().cancel();
+        if (sweep != null) sweep.animate().cancel();
         super.onDestroy();
     }
 }
