@@ -37,20 +37,21 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * B17 diagnostic/harvest source for CrazyShit's Shit Show.
+ * Focused Shit Show diagnostic/harvest source.
  *
- * B16 proved the real homepage control only navigates to /shitshow/. This source therefore loads
- * that real route and installs fetch/XHR/media hooks at document start, before the site's own
- * startup JavaScript can make and finish the request that supplies the swipe deck.
+ * B17 proved /shitshow/ runs document-start JavaScript and makes early fetches, but the last
+ * captured request was analytics and no media appeared. B18 keeps the early hooks, records useful
+ * fetch/XHR URLs, inspects the real site script (especially index.min.js), and surfaces a short
+ * code/route hint so the next fix can target the site's actual initialization logic.
  */
 final class ShitShowTapSource {
     private static final String PAGE = CrazyShitRepository.BASE + "shitshow/";
     private static final int TARGET_CACHE = 24;
     private static final int MAX_CACHE = 80;
-    private static final long HARVEST_TIMEOUT_MS = 48_000L;
+    private static final long HARVEST_TIMEOUT_MS = 52_000L;
     private static final long PUMP_MS = 1_100L;
     private static final long FIRST_BATCH_WAIT_MS = 7_000L;
-    private static final long DIAGNOSTIC_KEEP_MS = 90_000L;
+    private static final long DIAGNOSTIC_KEEP_MS = 100_000L;
 
     private static final Pattern MEDIA_IN_PAYLOAD = Pattern.compile(
             "(?i)https?://[^\\s\\\"'<>]+?\\.(?:m3u8|mpd|mp4|webm|m4v)(?:\\?[^\\s\\\"'<>]*)?"
@@ -63,6 +64,8 @@ final class ShitShowTapSource {
     private final Object lock = new Object();
     private final ArrayDeque<NativeContentItem> ready = new ArrayDeque<>();
     private final Set<String> seenMedia = new HashSet<>();
+    private final ArrayDeque<String> usefulNetwork = new ArrayDeque<>();
+    private final Set<String> seenUsefulNetwork = new HashSet<>();
 
     private boolean warming;
     private boolean documentStartSupported;
@@ -93,11 +96,14 @@ final class ShitShowTapSource {
     private String lastPageUrl = "";
     private String jsReadyState = "";
     private String lastEarlyKind = "";
-    private String lastDataUrl = "";
     private String lastInterestingRequest = "";
-    private String scriptHint = "";
+    private String scriptUrlHint = "";
+    private String frameHint = "";
+    private String codeHint = "";
+    private String routeHint = "";
     private String payloadHint = "";
     private String bodyHint = "";
+    private String jsErrorHint = "";
     private String blockedUrl = "";
 
     void prewarm(Context context) {
@@ -207,7 +213,6 @@ final class ShitShowTapSource {
 
         view.addJavascriptInterface(new Bridge(), "CSShitBridge");
         installDocumentStartHook(view);
-
         view.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView web, WebResourceRequest request) {
@@ -347,7 +352,6 @@ final class ShitShowTapSource {
             }
         } catch (Exception ignored) {
         }
-
         if (isInterestingRequest(url, accept)) lastInterestingRequest = safe(url);
         if (isDirectMedia(url)) enqueue(url, accept, "", "Shit Show", false);
         else if (isMediaMime(accept)) enqueue(url, accept, "", "Shit Show", false);
@@ -369,13 +373,37 @@ final class ShitShowTapSource {
                 || lower.contains("media") || lower.contains("json");
     }
 
+    private void rememberUsefulNetwork(String value) {
+        String url = safe(value);
+        if (url.isEmpty()) return;
+        String lower = url.toLowerCase(Locale.US);
+        if (lower.contains("google.com/g/collect") || lower.contains("google-analytics")
+                || lower.contains("googletagmanager") || lower.contains("doubleclick")
+                || lower.contains("trustkiwi") || lower.contains("clickwhole")) return;
+        synchronized (lock) {
+            if (!seenUsefulNetwork.add(url)) return;
+            while (usefulNetwork.size() >= 4) usefulNetwork.removeFirst();
+            usefulNetwork.addLast(url);
+        }
+    }
+
+    private String networkHint(int offset) {
+        synchronized (lock) {
+            if (offset < 0 || offset >= usefulNetwork.size()) return "";
+            int i = 0;
+            for (String value : usefulNetwork) {
+                if (i++ == offset) return value;
+            }
+        }
+        return "";
+    }
+
     private void harvestPayload(String sourceUrl, String mime, String raw) {
         if (raw == null || raw.isEmpty()) return;
         observedPayloads++;
-        lastDataUrl = safe(sourceUrl);
         String text = raw.replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&");
         payloadHint = safe(text);
-        if (payloadHint.length() > 110) payloadHint = payloadHint.substring(0, 110);
+        if (payloadHint.length() > 100) payloadHint = payloadHint.substring(0, 100);
 
         Matcher absolute = MEDIA_IN_PAYLOAD.matcher(text);
         while (absolute.find()) enqueue(absolute.group(), mime, "", "Shit Show", false);
@@ -476,12 +504,19 @@ final class ShitShowTapSource {
         lastPageUrl = PAGE;
         jsReadyState = "";
         lastEarlyKind = "";
-        lastDataUrl = "";
         lastInterestingRequest = "";
-        scriptHint = "";
+        scriptUrlHint = "";
+        frameHint = "";
+        codeHint = "";
+        routeHint = "";
         payloadHint = "";
         bodyHint = "";
+        jsErrorHint = "";
         blockedUrl = "";
+        synchronized (lock) {
+            usefulNetwork.clear();
+            seenUsefulNetwork.clear();
+        }
     }
 
     private void attachDiagnosticView(Activity activity) {
@@ -490,10 +525,10 @@ final class ShitShowTapSource {
         TextView view = new TextView(activity);
         diagnosticView = view;
         view.setTextColor(Color.WHITE);
-        view.setTextSize(10.2f);
+        view.setTextSize(9.8f);
         view.setGravity(Gravity.START);
         view.setPadding(dp(activity, 8), dp(activity, 6), dp(activity, 8), dp(activity, 6));
-        view.setBackgroundColor(Color.argb(220, 0, 0, 0));
+        view.setBackgroundColor(Color.argb(224, 0, 0, 0));
         view.setElevation(dp(activity, 32));
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -515,28 +550,36 @@ final class ShitShowTapSource {
             return;
         }
         StringBuilder text = new StringBuilder();
-        text.append("Shit Show debug B17  ").append(isWarming() ? "RUN" : "STOP").append('\n');
+        text.append("Shit Show debug B18  ").append(isWarming() ? "RUN" : "STOP").append('\n');
         text.append("page:").append(pageState)
                 .append(" c").append(pageCommitCount).append("/f").append(pageFinishedCount)
                 .append(" DOM:").append(jsReadyState.isEmpty() ? "?" : jsReadyState)
                 .append(" early:").append(documentStartSupported ? "ON" : "OFF").append('\n');
         text.append("ev:").append(earlyEvents).append(" f:").append(earlyFetches)
                 .append(" x:").append(earlyXhrs).append(" blob:").append(earlyBlobs)
-                .append(" mse:").append(earlyMse).append(" last:").append(shorten(lastEarlyKind, 16)).append('\n');
+                .append(" mse:").append(earlyMse).append(" last:").append(shorten(lastEarlyKind, 13)).append('\n');
         text.append("video:").append(jsVideoCount).append(" http:").append(jsHttpVideoCount)
                 .append(" blobv:").append(jsBlobVideoCount).append(" src:").append(jsSourceCount)
-                .append(" scripts:").append(jsScriptCount).append(" frames:").append(jsIframeCount).append('\n');
+                .append(" js:").append(jsScriptCount).append(" fr:").append(jsIframeCount).append('\n');
         text.append("req:").append(observedRequests).append(" payload:").append(observedPayloads)
                 .append(" cand:").append(observedCandidates).append(" cache:").append(cachedCount())
                 .append(" pump:").append(pumpCount).append(" ext:").append(externalBlocks).append('\n');
-        text.append("url:").append(shorten(lastPageUrl, 70));
-        if (!lastDataUrl.isEmpty()) text.append('\n').append("data:").append(shorten(lastDataUrl, 68));
-        else if (!lastInterestingRequest.isEmpty()) text.append('\n').append("req*:").append(shorten(lastInterestingRequest, 68));
-        if (!scriptHint.isEmpty()) text.append('\n').append("js:").append(shorten(scriptHint, 72));
-        if (!payloadHint.isEmpty()) text.append('\n').append("body*:").append(shorten(payloadHint, 82));
-        else if (!bodyHint.isEmpty()) text.append('\n').append(shorten(bodyHint, 82));
-        if (!blockedUrl.isEmpty()) text.append('\n').append("blocked:").append(shorten(blockedUrl, 66));
-        view.setText(text.toString());
+        String net1 = networkHint(0);
+        String net2 = networkHint(1);
+        if (!net1.isEmpty()) text.append("net1:").append(shorten(net1, 72)).append('\n');
+        if (!net2.isEmpty()) text.append("net2:").append(shorten(net2, 72)).append('\n');
+        if (!scriptUrlHint.isEmpty()) text.append("js*:").append(shorten(scriptUrlHint, 72)).append('\n');
+        if (!routeHint.isEmpty()) text.append("route*:").append(shorten(routeHint, 76)).append('\n');
+        if (!codeHint.isEmpty()) text.append("code:").append(shorten(codeHint, 86)).append('\n');
+        if (!jsErrorHint.isEmpty()) text.append("err:").append(shorten(jsErrorHint, 82)).append('\n');
+        if (!frameHint.isEmpty()) text.append("frame:").append(shorten(frameHint, 70)).append('\n');
+        if (net1.isEmpty() && net2.isEmpty() && !lastInterestingRequest.isEmpty()) {
+            text.append("req*:").append(shorten(lastInterestingRequest, 72)).append('\n');
+        }
+        if (codeHint.isEmpty() && !payloadHint.isEmpty()) text.append("body*:").append(shorten(payloadHint, 82)).append('\n');
+        else if (codeHint.isEmpty() && !bodyHint.isEmpty()) text.append(shorten(bodyHint, 82)).append('\n');
+        if (!blockedUrl.isEmpty()) text.append("blocked:").append(shorten(blockedUrl, 68));
+        view.setText(text.toString().trim());
     }
 
     private void finishHarvest(WebView view) {
@@ -608,7 +651,10 @@ final class ShitShowTapSource {
             else if ("xhr".equals(kind)) earlyXhrs++;
             else if ("blob".equals(kind)) earlyBlobs++;
             else if ("mse".equals(kind)) earlyMse++;
-            if (url != null && !url.isEmpty()) lastDataUrl = safe(url);
+            else if ("js-error".equals(kind) || "promise-error".equals(kind)) jsErrorHint = safe(meta);
+            if (("fetch".equals(kind) || "xhr".equals(kind)) && url != null && !url.isEmpty()) {
+                rememberUsefulNetwork(url);
+            }
             refreshDiagnosticView();
         }
 
@@ -618,13 +664,29 @@ final class ShitShowTapSource {
         }
 
         @JavascriptInterface
+        public void onScriptProbe(String url, String snippet, String routes) {
+            String candidate = safe(url);
+            if (!candidate.isEmpty() && (scriptUrlHint.isEmpty()
+                    || candidate.toLowerCase(Locale.US).contains("index.min.js"))) {
+                scriptUrlHint = candidate;
+            }
+            String cleanSnippet = safe(snippet);
+            if (!cleanSnippet.isEmpty()) codeHint = cleanSnippet;
+            String cleanRoutes = safe(routes);
+            if (!cleanRoutes.isEmpty()) routeHint = cleanRoutes;
+            refreshDiagnosticView();
+        }
+
+        @JavascriptInterface
         public void onState(String raw) {
             try {
                 JSONObject json = new JSONObject(raw == null ? "{}" : raw);
                 lastPageUrl = safe(json.optString("url", lastPageUrl));
                 jsReadyState = safe(json.optString("ready", jsReadyState));
                 bodyHint = safe(json.optString("body", bodyHint));
-                scriptHint = safe(json.optString("scriptHint", scriptHint));
+                String candidateScript = safe(json.optString("scriptUrl", ""));
+                if (!candidateScript.isEmpty()) scriptUrlHint = candidateScript;
+                frameHint = safe(json.optString("frame", frameHint));
                 jsVideoCount = json.optInt("videos", jsVideoCount);
                 jsHttpVideoCount = json.optInt("httpVideos", jsHttpVideoCount);
                 jsBlobVideoCount = json.optInt("blobVideos", jsBlobVideoCount);
@@ -659,11 +721,12 @@ final class ShitShowTapSource {
 
     private static final String EARLY_HOOK_JS =
             "(function(){try{" +
-            "if(window.__csEarlyB17)return;window.__csEarlyB17=true;" +
+            "if(window.__csEarlyB18)return;window.__csEarlyB18=true;" +
             "function abs(v){try{return v?new URL(v,location.href).href:'';}catch(e){return String(v||'');}}" +
             "function ev(k,u,m){try{CSShitBridge.onEarly(k,abs(u||''),String(m||''));}catch(e){}}" +
-            "function pay(u,m,t){try{if(typeof t==='string'&&t.length)CSShitBridge.onPayload(abs(u||''),String(m||''),t.slice(0,260000));}catch(e){}}" +
-            "try{var of=window.fetch;if(of){window.fetch=function(input){var u='';try{u=typeof input==='string'?input:(input&&input.url)||'';}catch(e){}ev('fetch',u,'');return of.apply(this,arguments).then(function(r){try{var ct=(r.headers&&r.headers.get&&r.headers.get('content-type'))||'';ev('fetch-res',r.url||u,ct);r.clone().text().then(function(t){pay(r.url||u,ct,t);}).catch(function(){});}catch(e){}return r;});};}}catch(e){}" +
+            "function pay(u,m,t){try{if(typeof t==='string'&&t.length)CSShitBridge.onPayload(abs(u||''),String(m||''),t.slice(0,280000));}catch(e){}}" +
+            "try{addEventListener('error',function(e){ev('js-error','',(e&&e.message)||'window error');},true);addEventListener('unhandledrejection',function(e){var r=e&&e.reason;ev('promise-error','',r&&(r.message||String(r))||'rejection');});}catch(e){}" +
+            "try{var of=window.fetch;if(of){window.__csOrigFetch=of.bind(window);window.fetch=function(input){var u='';try{u=typeof input==='string'?input:(input&&input.url)||'';}catch(e){}ev('fetch',u,'');return of.apply(this,arguments).then(function(r){try{var ct=(r.headers&&r.headers.get&&r.headers.get('content-type'))||'';ev('fetch-res',r.url||u,ct);r.clone().text().then(function(t){pay(r.url||u,ct,t);}).catch(function(){});}catch(e){}return r;});};}}catch(e){}" +
             "try{var xo=XMLHttpRequest.prototype.open,xs=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(m,u){this.__csUrl=abs(u);ev('xhr',u,m);return xo.apply(this,arguments);};XMLHttpRequest.prototype.send=function(){try{this.addEventListener('load',function(){try{var ct=this.getResponseHeader('content-type')||'',u=this.responseURL||this.__csUrl||'';ev('xhr-res',u,ct);if(!this.responseType||this.responseType==='text')pay(u,ct,this.responseText||'');}catch(e){}});}catch(e){}return xs.apply(this,arguments);};}catch(e){}" +
             "try{var oc=URL.createObjectURL;if(oc){URL.createObjectURL=function(o){var r=oc.apply(this,arguments);ev('blob',r,Object.prototype.toString.call(o));return r;};}}catch(e){}" +
             "try{if(window.MediaSource&&MediaSource.prototype.addSourceBuffer){var asb=MediaSource.prototype.addSourceBuffer;MediaSource.prototype.addSourceBuffer=function(t){ev('mse','',t);return asb.apply(this,arguments);};}}catch(e){}" +
@@ -678,9 +741,11 @@ final class ShitShowTapSource {
             "document.querySelectorAll('video').forEach(function(v){videos++;var q=v.querySelector('source[src]'),s=v.currentSrc||v.src||(q&&(q.src||q.getAttribute('src')))||'',m=(q&&(q.type||q.getAttribute('type')))||v.getAttribute('type')||'';if(/^https?:/i.test(s))httpVideos++;if(/^blob:/i.test(s))blobVideos++;if(/^https?:/i.test(abs(s))){var r=v.closest('article,section,.swiper-slide,.slide,.item')||v.parentElement,p=v.poster||v.getAttribute('poster')||'',t=(v.getAttribute('title')||v.getAttribute('aria-label')||(r&&r.textContent)||'Shit Show').replace(/\\s+/g,' ').trim().slice(0,120);CSShitBridge.onClip(JSON.stringify({media:abs(s),mime:m,poster:abs(p),title:t}));}try{v.muted=true;v.preload='auto';var pr=v.play();if(pr&&pr.catch)pr.catch(function(){});}catch(e){}});" +
             "document.querySelectorAll('source[src]').forEach(function(s){sources++;cand(s.src||s.getAttribute('src'),s.type||s.getAttribute('type')||'');});" +
             "try{performance.getEntriesByType('resource').forEach(function(e){var n=e.name||'';if(/\\.(mp4|webm|m4v|m3u8|mpd)(\\?|#|$)/i.test(n))cand(n,'');});}catch(e){}" +
-            "var scripts=[].slice.call(document.scripts||[]),sh='';for(var i=0;i<scripts.length;i++){var s=scripts[i].src||'';if(s){sh+=s.split('/').pop().split('?')[0]+' ';if(sh.length>110)break;}}" +
+            "var scripts=[].slice.call(document.scripts||[]),picked='';for(var i=0;i<scripts.length;i++){var su=abs(scripts[i].src||'');if(/index\\.min\\.js/i.test(su)){picked=su;break;}if(!picked&&su&&new URL(su,location.href).origin===location.origin)picked=su;}" +
+            "var fr='',fi=document.querySelector('iframe[src]');if(fi)fr=abs(fi.getAttribute('src')||fi.src||'');" +
             "var body=(document.body&&document.body.innerText||'').replace(/\\s+/g,' ').trim();" +
-            "CSShitBridge.onState(JSON.stringify({url:location.href,ready:document.readyState,body:body.slice(0,90),scriptHint:sh.trim(),videos:videos,httpVideos:httpVideos,blobVideos:blobVideos,sources:sources,scripts:scripts.length,frames:document.querySelectorAll('iframe').length}));" +
+            "CSShitBridge.onState(JSON.stringify({url:location.href,ready:document.readyState,body:body.slice(0,90),scriptUrl:picked,frame:fr,videos:videos,httpVideos:httpVideos,blobVideos:blobVideos,sources:sources,scripts:scripts.length,frames:document.querySelectorAll('iframe').length}));" +
+            "if(!window.__csScriptProbeB18){window.__csScriptProbeB18=true;var targets=[];for(var j=0;j<scripts.length;j++){try{var u=abs(scripts[j].src||'');if(!u)continue;var o=new URL(u,location.href);if(o.origin!==location.origin)continue;if(/index\\.min\\.js/i.test(u))targets.unshift(u);else targets.push(u);}catch(e){}}targets=targets.slice(0,8);var pf=window.__csOrigFetch||window.fetch;targets.forEach(function(u){try{pf(u).then(function(r){return r.text();}).then(function(t){try{var low=t.toLowerCase(),keys=['shitshow','swipe','video','fetch(','$.ajax','ajax','next'],ix=-1;for(var k=0;k<keys.length;k++){var z=low.indexOf(keys[k]);if(z>=0&&(ix<0||z<ix))ix=z;}var sn='';if(ix>=0)sn=t.slice(Math.max(0,ix-150),Math.min(t.length,ix+350)).replace(/\\s+/g,' ');var routes=[],rx=/[\\\"'`]([^\\\"'`]{1,180})[\\\"'`]/g,m;while((m=rx.exec(t))&&routes.length<4){var q=m[1];if(/shitshow|\\/api\\/|ajax|video|feed|swipe|next/i.test(q)&&routes.indexOf(q)<0)routes.push(q);}if(sn||routes.length||/index\\.min\\.js/i.test(u))CSShitBridge.onScriptProbe(u,sn,routes.join(' | '));}catch(e){}}).catch(function(){});}catch(e){}});}" +
             "}catch(e){}})();";
 
     private static final String SCAN_AND_ADVANCE_JS =
