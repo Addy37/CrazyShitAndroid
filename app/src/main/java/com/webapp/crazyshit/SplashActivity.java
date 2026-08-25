@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.View;
+import android.view.animation.OvershootInterpolator;
 
 public final class SplashActivity extends Activity {
     private static final long MIN_SPLASH_MS = 850L;
@@ -21,8 +22,8 @@ public final class SplashActivity extends Activity {
 
     private long splashStartedAt;
     private boolean leaving;
-    private View glow;
-    private View art;
+    private boolean handingOff;
+    private View wordmark;
     private View sweep;
 
     @Override
@@ -33,8 +34,10 @@ public final class SplashActivity extends Activity {
         getWindow().setNavigationBarColor(Color.BLACK);
         setContentView(R.layout.activity_splash);
 
-        // The visual intro overlaps useful Chaos work. The preloader now also resolves the first
-        // regular clip once so the handoff is much less likely to land on a visible video spinner.
+        // The visual intro and native app startup are now one continuous handoff. Metadata begins
+        // loading here; NativeMainActivity keeps this same wordmark visible until the selected
+        // Chaos player has actually rendered a frame.
+        ChaosStartupHandoff.begin();
         ChaosStartupPreloader.start(this);
         animateSplash();
         handler.postDelayed(readinessRunnable, MIN_SPLASH_MS);
@@ -42,77 +45,68 @@ public final class SplashActivity extends Activity {
 
     private void animateSplash() {
         View root = findViewById(R.id.splashRoot);
-        art = findViewById(R.id.splashArt);
-        glow = findViewById(R.id.splashGlow);
+        wordmark = findViewById(R.id.splashWordmark);
         sweep = findViewById(R.id.splashSweep);
 
-        if (art != null) {
-            art.setAlpha(0f);
-            art.setScaleX(0.82f);
-            art.setScaleY(0.82f);
-            art.setRotation(-1.2f);
+        if (wordmark != null) {
+            wordmark.setAlpha(0f);
+            wordmark.setScaleX(0.94f);
+            wordmark.setScaleY(0.94f);
+
+            // A quick broken-signal flicker lets the distressed art reveal itself before snapping
+            // into the clean hold frame.
+            ObjectAnimator flicker = ObjectAnimator.ofFloat(
+                    wordmark,
+                    View.ALPHA,
+                    0f, 0.16f, 0f, 0.58f, 0.32f, 1f
+            );
+            flicker.setDuration(300L);
+
+            ObjectAnimator scaleX = ObjectAnimator.ofFloat(wordmark, View.SCALE_X, 0.94f, 1.018f);
+            ObjectAnimator scaleY = ObjectAnimator.ofFloat(wordmark, View.SCALE_Y, 0.94f, 1.018f);
+            scaleX.setDuration(430L);
+            scaleY.setDuration(430L);
 
             AnimatorSet entrance = new AnimatorSet();
-            entrance.playTogether(
-                    ObjectAnimator.ofFloat(art, View.ALPHA, 0f, 1f),
-                    ObjectAnimator.ofFloat(art, View.SCALE_X, 0.82f, 1.045f),
-                    ObjectAnimator.ofFloat(art, View.SCALE_Y, 0.82f, 1.045f),
-                    ObjectAnimator.ofFloat(art, View.ROTATION, -1.2f, 0f)
-            );
-            entrance.setDuration(390L);
+            entrance.playTogether(flicker, scaleX, scaleY);
+            entrance.setInterpolator(new OvershootInterpolator(0.45f));
             entrance.start();
 
             handler.postDelayed(() -> {
-                if (leaving || art == null) return;
-                art.animate()
+                if (leaving || wordmark == null) return;
+                wordmark.animate()
                         .scaleX(1f)
                         .scaleY(1f)
-                        .setDuration(120L)
+                        .setDuration(100L)
                         .start();
-            }, 390L);
+            }, 430L);
 
-            // Two very short offsets give the logo a tiny digital snap without turning the intro
-            // into a distracting shake effect.
             ObjectAnimator glitchOne = ObjectAnimator.ofFloat(
-                    art, View.TRANSLATION_X, 0f, dp(3), -dp(1.5f), 0f
+                    wordmark, View.TRANSLATION_X, 0f, dp(4), -dp(2), 0f
             );
-            glitchOne.setStartDelay(455L);
-            glitchOne.setDuration(74L);
+            glitchOne.setStartDelay(165L);
+            glitchOne.setDuration(82L);
             glitchOne.start();
 
             ObjectAnimator glitchTwo = ObjectAnimator.ofFloat(
-                    art, View.TRANSLATION_X, 0f, -dp(1.5f), dp(1), 0f
+                    wordmark, View.TRANSLATION_X, 0f, -dp(2), dp(1.3f), 0f
             );
-            glitchTwo.setStartDelay(650L);
-            glitchTwo.setDuration(58L);
+            glitchTwo.setStartDelay(500L);
+            glitchTwo.setDuration(66L);
             glitchTwo.start();
-        }
-
-        if (glow != null) {
-            glow.setAlpha(0f);
-            glow.setScaleX(0.62f);
-            glow.setScaleY(0.62f);
-            glow.animate()
-                    .alpha(0.68f)
-                    .scaleX(1f)
-                    .scaleY(1f)
-                    .setDuration(430L)
-                    .withEndAction(() -> handler.postDelayed(this::pulseGlow, 90L))
-                    .start();
         }
 
         if (root != null && sweep != null) {
             sweep.post(() -> {
                 if (leaving) return;
-                float start = -Math.max(dp(220), sweep.getWidth() * 1.3f);
-                float end = root.getWidth() + Math.max(dp(220), sweep.getWidth());
-                sweep.setTranslationX(start);
+                float travel = root.getWidth() * 0.5f + Math.max(dp(210), sweep.getWidth());
+                sweep.setTranslationX(-travel);
                 sweep.setAlpha(0f);
                 sweep.animate()
-                        .alpha(0.90f)
-                        .translationX(end)
-                        .setStartDelay(300L)
-                        .setDuration(500L)
+                        .alpha(0.92f)
+                        .translationX(travel)
+                        .setStartDelay(260L)
+                        .setDuration(430L)
                         .withEndAction(() -> sweep.animate()
                                 .alpha(0f)
                                 .setDuration(90L)
@@ -120,18 +114,6 @@ public final class SplashActivity extends Activity {
                         .start();
             });
         }
-    }
-
-    private void pulseGlow() {
-        if (leaving || glow == null) return;
-        boolean bright = glow.getAlpha() > 0.50f;
-        glow.animate()
-                .alpha(bright ? 0.38f : 0.60f)
-                .scaleX(bright ? 1.055f : 0.985f)
-                .scaleY(bright ? 1.055f : 0.985f)
-                .setDuration(330L)
-                .withEndAction(this::pulseGlow)
-                .start();
     }
 
     private void checkReadyToLaunch() {
@@ -153,14 +135,17 @@ public final class SplashActivity extends Activity {
     private void launchApp() {
         if (leaving) return;
         leaving = true;
+        handingOff = true;
         handler.removeCallbacks(readinessRunnable);
-        if (art != null) art.animate().cancel();
-        if (glow != null) glow.animate().cancel();
+        if (wordmark != null) wordmark.animate().cancel();
         if (sweep != null) sweep.animate().cancel();
 
         Intent intent = new Intent(this, NativeMainActivity.class);
+        intent.putExtra(ChaosStartupOverlayController.EXTRA_STARTUP_HANDOFF, true);
         startActivity(intent);
-        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+        // NativeMainActivity immediately draws the same black + wordmark composition, so a system
+        // activity transition would only introduce a flash between two intentionally identical views.
+        overridePendingTransition(0, 0);
         finish();
     }
 
@@ -172,9 +157,9 @@ public final class SplashActivity extends Activity {
     protected void onDestroy() {
         leaving = true;
         handler.removeCallbacksAndMessages(null);
-        if (art != null) art.animate().cancel();
-        if (glow != null) glow.animate().cancel();
+        if (wordmark != null) wordmark.animate().cancel();
         if (sweep != null) sweep.animate().cancel();
+        if (!handingOff) ChaosStartupHandoff.finish();
         super.onDestroy();
     }
 }
