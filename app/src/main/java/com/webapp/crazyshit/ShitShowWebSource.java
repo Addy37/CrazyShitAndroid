@@ -2,21 +2,26 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import org.json.JSONObject;
 
@@ -40,15 +45,13 @@ import java.util.regex.Pattern;
 final class ShitShowWebSource {
     private static final String TAG = "ShitShowWebSource";
     private static final String PAGE = CrazyShitRepository.BASE + "shitshow/";
-    private static final String MOBILE_USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
     private static final int TARGET_CACHE = 24;
     private static final int MAX_CACHE = 80;
     private static final long HARVEST_TIMEOUT_MS = 34_000L;
     private static final long PUMP_MS = 1_350L;
     private static final long FIRST_BATCH_WAIT_MS = 3_000L;
+    private static final long DIAGNOSTIC_KEEP_MS = 90_000L;
 
     private static final Pattern MEDIA_IN_PAYLOAD = Pattern.compile(
             "(?i)https?://[^\\s\\\"'<>]+?\\.(?:m3u8|mpd|mp4|webm|m4v)(?:\\?[^\\s\\\"'<>]*)?"
@@ -64,11 +67,31 @@ final class ShitShowWebSource {
 
     private boolean warming;
     private WebView webView;
+    private TextView diagnosticView;
     private long harvestStartedAt;
+
     private int pumpCount;
     private int observedRequests;
     private int observedPayloads;
     private int observedCandidates;
+    private int pageCommitCount;
+    private int pageFinishedCount;
+    private int jsVideoCount;
+    private int jsHttpVideoCount;
+    private int jsBlobCount;
+    private int jsSourceCount;
+    private int jsFrameCount;
+    private int jsSameOriginFrameCount;
+    private int jsShadowRootCount;
+    private int jsResourceCount;
+
+    private String pageState = "idle";
+    private String lastPageUrl = "";
+    private String jsReadyState = "";
+    private String jsTitle = "";
+    private String jsBodyHint = "";
+    private String jsFrameSrc = "";
+    private String lastError = "";
 
     void prewarm(Context context) {
         if (cachedCount() < 8) warm(context);
@@ -136,11 +159,9 @@ final class ShitShowWebSource {
         }
 
         destroyWebView();
+        resetDiagnostics();
         harvestStartedAt = System.currentTimeMillis();
-        pumpCount = 0;
-        observedRequests = 0;
-        observedPayloads = 0;
-        observedCandidates = 0;
+        attachDiagnosticView(activity);
 
         WebView view = new WebView(activity);
         webView = view;
@@ -170,7 +191,13 @@ final class ShitShowWebSource {
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         settings.setSupportMultipleWindows(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-        settings.setUserAgentString(MOBILE_USER_AGENT);
+
+        // Use the real installed Android System WebView UA. Beta.10/11 froze Chrome 139 here, which
+        // can make a modern JavaScript/anti-bot page serve different behavior than the actual engine.
+        try {
+            settings.setUserAgentString(WebSettings.getDefaultUserAgent(activity));
+        } catch (Exception ignored) {
+        }
 
         try {
             CookieManager cookies = CookieManager.getInstance();
@@ -179,18 +206,56 @@ final class ShitShowWebSource {
         } catch (Exception ignored) {
         }
 
+        pageState = "loading";
+        lastPageUrl = PAGE;
+        refreshDiagnosticView();
+
         view.addJavascriptInterface(new Bridge(), "CSShitBridge");
         view.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageCommitVisible(WebView web, String url) {
+                pageCommitCount++;
+                pageState = "commit";
+                lastPageUrl = safe(url);
+                refreshDiagnosticView();
                 installProbe(web);
                 schedulePump(web);
             }
 
             @Override
             public void onPageFinished(WebView web, String url) {
+                pageFinishedCount++;
+                pageState = "finished";
+                lastPageUrl = safe(url);
+                refreshDiagnosticView();
                 installProbe(web);
                 schedulePump(web);
+            }
+
+            @Override
+            public void onReceivedError(
+                    WebView web,
+                    WebResourceRequest request,
+                    WebResourceError error
+            ) {
+                if (request != null && request.isForMainFrame()) {
+                    lastError = "load " + (error == null ? "error" : safe(error.getDescription()));
+                    pageState = "error";
+                    refreshDiagnosticView();
+                }
+            }
+
+            @Override
+            public void onReceivedHttpError(
+                    WebView web,
+                    WebResourceRequest request,
+                    WebResourceResponse response
+            ) {
+                if (request != null && request.isForMainFrame() && response != null) {
+                    lastError = "HTTP " + response.getStatusCode();
+                    pageState = "http-error";
+                    refreshDiagnosticView();
+                }
             }
 
             @Override
@@ -199,7 +264,7 @@ final class ShitShowWebSource {
             }
 
             @Override
-            public android.webkit.WebResourceResponse shouldInterceptRequest(
+            public WebResourceResponse shouldInterceptRequest(
                     WebView web,
                     WebResourceRequest request
             ) {
@@ -207,6 +272,7 @@ final class ShitShowWebSource {
                 return null;
             }
         });
+
         view.loadUrl(PAGE);
 
         main.postDelayed(() -> {
@@ -214,6 +280,123 @@ final class ShitShowWebSource {
             installProbe(view);
             schedulePump(view);
         }, 2_500L);
+    }
+
+    private void resetDiagnostics() {
+        pumpCount = 0;
+        observedRequests = 0;
+        observedPayloads = 0;
+        observedCandidates = 0;
+        pageCommitCount = 0;
+        pageFinishedCount = 0;
+        jsVideoCount = 0;
+        jsHttpVideoCount = 0;
+        jsBlobCount = 0;
+        jsSourceCount = 0;
+        jsFrameCount = 0;
+        jsSameOriginFrameCount = 0;
+        jsShadowRootCount = 0;
+        jsResourceCount = 0;
+        pageState = "starting";
+        lastPageUrl = PAGE;
+        jsReadyState = "";
+        jsTitle = "";
+        jsBodyHint = "";
+        jsFrameSrc = "";
+        lastError = "";
+    }
+
+    private void attachDiagnosticView(Activity activity) {
+        if (diagnosticView != null && diagnosticView.getParent() != null) {
+            diagnosticView.setVisibility(View.VISIBLE);
+            refreshDiagnosticView();
+            return;
+        }
+
+        ViewGroup host = activity.findViewById(android.R.id.content);
+        if (host == null) return;
+
+        TextView view = new TextView(activity);
+        diagnosticView = view;
+        view.setTextColor(Color.WHITE);
+        view.setTextSize(11f);
+        view.setGravity(Gravity.START);
+        view.setPadding(dp(activity, 8), dp(activity, 6), dp(activity, 8), dp(activity, 6));
+        view.setBackgroundColor(Color.argb(210, 0, 0, 0));
+        view.setElevation(dp(activity, 32));
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.gravity = Gravity.TOP | Gravity.START;
+        params.leftMargin = dp(activity, 8);
+        params.topMargin = dp(activity, 8);
+        params.rightMargin = dp(activity, 8);
+        host.addView(view, params);
+        refreshDiagnosticView();
+    }
+
+    private void refreshDiagnosticView() {
+        TextView view = diagnosticView;
+        if (view == null) return;
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            main.post(this::refreshDiagnosticView);
+            return;
+        }
+
+        StringBuilder text = new StringBuilder();
+        text.append("Shit Show debug B12  ")
+                .append(isWarming() ? "RUN" : "STOP")
+                .append('\n');
+        text.append("page:")
+                .append(pageState)
+                .append(" c").append(pageCommitCount)
+                .append("/f").append(pageFinishedCount);
+        if (!jsReadyState.isEmpty()) text.append("  DOM:").append(jsReadyState);
+        text.append('\n');
+
+        text.append("video:")
+                .append(jsVideoCount)
+                .append(" http:").append(jsHttpVideoCount)
+                .append(" blob:").append(jsBlobCount)
+                .append(" src:").append(jsSourceCount)
+                .append('\n');
+
+        text.append("frame:")
+                .append(jsFrameCount)
+                .append(" same:").append(jsSameOriginFrameCount)
+                .append(" shadow:").append(jsShadowRootCount)
+                .append(" res:").append(jsResourceCount)
+                .append('\n');
+
+        text.append("req:")
+                .append(observedRequests)
+                .append(" payload:").append(observedPayloads)
+                .append(" cand:").append(observedCandidates)
+                .append(" cache:").append(cachedCount())
+                .append(" pump:").append(pumpCount);
+
+        String hint = !lastError.isEmpty() ? "ERR " + lastError
+                : !jsBodyHint.isEmpty() ? jsBodyHint
+                : jsTitle;
+        if (!hint.isEmpty()) text.append('\n').append(shorten(hint, 82));
+
+        String frame = shorten(jsFrameSrc, 76);
+        if (!frame.isEmpty()) text.append('\n').append("iframe: ").append(frame);
+
+        view.setText(text.toString());
+    }
+
+    private void scheduleDiagnosticRemoval() {
+        main.postDelayed(() -> {
+            if (isWarming()) return;
+            TextView view = diagnosticView;
+            diagnosticView = null;
+            if (view == null) return;
+            ViewParent parent = view.getParent();
+            if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+        }, DIAGNOSTIC_KEEP_MS);
     }
 
     private void installProbe(WebView view) {
@@ -236,6 +419,7 @@ final class ShitShowWebSource {
             view.pageDown(false);
         } catch (Exception ignored) {
         }
+        refreshDiagnosticView();
 
         boolean enough = cachedCount() >= TARGET_CACHE;
         boolean timedOut = System.currentTimeMillis() - harvestStartedAt >= HARVEST_TIMEOUT_MS;
@@ -282,13 +466,21 @@ final class ShitShowWebSource {
 
     private void finishHarvest(WebView view) {
         if (view != null) main.removeCallbacksAndMessages(view);
+        pageState = cachedCount() > 0 ? "captured" : "stopped";
+        refreshDiagnosticView();
+
         Log.d(TAG, "harvest finished: cached=" + cachedCount()
                 + " requests=" + observedRequests
                 + " payloads=" + observedPayloads
                 + " candidates=" + observedCandidates
+                + " videos=" + jsVideoCount
+                + " blobs=" + jsBlobCount
                 + " pumps=" + pumpCount);
+
         if (webView == view) destroyWebView();
         setWarming(false);
+        refreshDiagnosticView();
+        scheduleDiagnosticRemoval();
     }
 
     private void destroyWebView() {
@@ -327,11 +519,11 @@ final class ShitShowWebSource {
             }
         } catch (Exception ignored) {
         }
+        refreshDiagnosticView();
     }
 
     private void observeResource(String url) {
         observedRequests++;
-        // Media can live on a CDN outside crazyshit.com. Beta.10 incorrectly discarded it here.
         if (isDirectMedia(url)) enqueueKnownMedia(url, "", "", "Shit Show", PAGE, false);
     }
 
@@ -352,6 +544,7 @@ final class ShitShowWebSource {
         while (protocolRelative.find()) {
             enqueueKnownMedia(protocolRelative.group(), "", "", "Shit Show", PAGE, false);
         }
+        refreshDiagnosticView();
     }
 
     private void enqueueKnownMedia(
@@ -385,6 +578,7 @@ final class ShitShowWebSource {
             ));
             lock.notifyAll();
         }
+        refreshDiagnosticView();
     }
 
     private static String normalizePlayableCandidate(String value, String mime, boolean fromMediaElement) {
@@ -400,8 +594,6 @@ final class ShitShowWebSource {
         else if (lowerMime.startsWith("video/") || fromMediaElement) suffix = ".mp4";
         if (suffix.isEmpty()) return "";
 
-        // A URL fragment is not sent to the server. It gives Media3 an extension hint for signed
-        // or API-style media endpoints whose real path has no file extension.
         int hash = media.indexOf('#');
         if (hash >= 0) media = media.substring(0, hash);
         return media + "#csdirect" + suffix;
@@ -466,6 +658,16 @@ final class ShitShowWebSource {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
+    private static String safe(CharSequence value) {
+        return value == null ? "" : value.toString().replaceAll("\\s+", " ").trim();
+    }
+
+    private static String shorten(String value, int max) {
+        String text = safe(value);
+        if (text.length() <= max) return text;
+        return text.substring(0, Math.max(0, max - 1)).trim() + "…";
+    }
+
     private final class Bridge {
         @JavascriptInterface
         public void onClip(String raw) {
@@ -497,6 +699,28 @@ final class ShitShowWebSource {
         public void onPayload(String raw) {
             harvestPayload(raw);
         }
+
+        @JavascriptInterface
+        public void onState(String raw) {
+            try {
+                JSONObject json = new JSONObject(raw == null ? "{}" : raw);
+                lastPageUrl = json.optString("url", lastPageUrl);
+                jsReadyState = safe(json.optString("ready", jsReadyState));
+                jsTitle = safe(json.optString("title", jsTitle));
+                jsBodyHint = safe(json.optString("body", jsBodyHint));
+                jsFrameSrc = safe(json.optString("frameSrc", jsFrameSrc));
+                jsVideoCount = json.optInt("videos", jsVideoCount);
+                jsHttpVideoCount = json.optInt("httpVideos", jsHttpVideoCount);
+                jsBlobCount = json.optInt("blobVideos", jsBlobCount);
+                jsSourceCount = json.optInt("sources", jsSourceCount);
+                jsFrameCount = json.optInt("frames", jsFrameCount);
+                jsSameOriginFrameCount = json.optInt("sameFrames", jsSameOriginFrameCount);
+                jsShadowRootCount = json.optInt("shadows", jsShadowRootCount);
+                jsResourceCount = json.optInt("resources", jsResourceCount);
+                refreshDiagnosticView();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private static final String PROBE_JS =
@@ -512,8 +736,7 @@ final class ShitShowWebSource {
             "function payload(v){try{if(typeof v==='string'&&v.length)CSShitBridge.onPayload(v.slice(0,220000));}catch(e){}}" +
             "function titleFor(v,r){try{" +
             "var t=v.getAttribute('title')||v.getAttribute('aria-label')||v.getAttribute('data-title')||'';" +
-            "if(!t&&r){var e=r.querySelector('[data-title],.title,.caption,h1,h2,h3,h4');" +
-            "if(e)t=e.getAttribute('data-title')||e.textContent||'';}" +
+            "if(!t&&r){var e=r.querySelector('[data-title],.title,.caption,h1,h2,h3,h4');if(e)t=e.getAttribute('data-title')||e.textContent||'';}" +
             "return (t||'').replace(/\\s+/g,' ').trim();}catch(e){return '';}}" +
             "function send(v){try{" +
             "v.muted=true;v.preload='auto';" +
@@ -540,9 +763,19 @@ final class ShitShowWebSource {
             "d.querySelectorAll('iframe').forEach(function(f){try{if(f.contentDocument){watch(f.contentDocument);scanDoc(f.contentDocument);}}catch(e){}});" +
             "}catch(e){}}" +
             "function watch(d){try{if(!d||watched.indexOf(d)>=0)return;watched.push(d);" +
-            "new MutationObserver(function(){scanDoc(d);}).observe(d.documentElement||d,{subtree:true,childList:true,attributes:true," +
-            "attributeFilter:['src','poster','data-src','data-url','data-file','data-video','data-stream','data-media']});}catch(e){}}" +
-            "function scan(){scanDoc(document);try{performance.getEntriesByType('resource').forEach(function(e){obvious(e.name||'');});}catch(e){}}" +
+            "new MutationObserver(function(){scanDoc(d);}).observe(d.documentElement||d,{subtree:true,childList:true,attributes:true,attributeFilter:['src','poster','data-src','data-url','data-file','data-video','data-stream','data-media']});}catch(e){}}" +
+            "function state(){try{" +
+            "var videos=0,httpVideos=0,blobVideos=0,sources=0,frames=0,sameFrames=0,shadows=0;" +
+            "function countDoc(d){try{var vs=d.querySelectorAll('video');videos+=vs.length;sources+=d.querySelectorAll('source[src]').length;" +
+            "vs.forEach(function(v){var u=v.currentSrc||v.src||'';if(/^https?:/i.test(u))httpVideos++;if(/^blob:/i.test(u))blobVideos++;});" +
+            "d.querySelectorAll('*').forEach(function(e){try{if(e.shadowRoot)shadows++;}catch(x){}});}catch(e){}}" +
+            "countDoc(document);" +
+            "var fs=document.querySelectorAll('iframe');frames=fs.length;var first='';" +
+            "fs.forEach(function(f){try{if(!first)first=f.src||f.getAttribute('src')||'';if(f.contentDocument){sameFrames++;countDoc(f.contentDocument);}}catch(e){}});" +
+            "var body=(document.body&&document.body.innerText||'').replace(/\\s+/g,' ').trim().slice(0,90);" +
+            "CSShitBridge.onState(JSON.stringify({url:location.href,ready:document.readyState,title:document.title||'',body:body,videos:videos,httpVideos:httpVideos,blobVideos:blobVideos,sources:sources,frames:frames,sameFrames:sameFrames,shadows:shadows,resources:(performance.getEntriesByType('resource')||[]).length,frameSrc:abs(first)}));" +
+            "}catch(e){}}" +
+            "function scan(){scanDoc(document);try{performance.getEntriesByType('resource').forEach(function(e){obvious(e.name||'');});}catch(e){}state();}" +
             "window.__csShitShowScan=scan;watch(document);" +
             "try{new PerformanceObserver(function(list){list.getEntries().forEach(function(e){obvious(e.name||'');});}).observe({entryTypes:['resource']});}catch(e){}" +
             "try{if(window.fetch&&!window.__csShitFetch){window.__csShitFetch=window.fetch;window.fetch=function(){return window.__csShitFetch.apply(this,arguments).then(function(r){" +
