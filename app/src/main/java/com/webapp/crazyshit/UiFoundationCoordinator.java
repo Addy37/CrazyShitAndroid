@@ -4,12 +4,11 @@ import android.app.Activity;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.Menu;
-import android.view.View;
-import android.view.ViewGroup;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.util.WeakHashMap;
 
 /**
@@ -118,10 +117,10 @@ final class UiFoundationCoordinator {
 
         main.getWindow().getDecorView().post(() -> {
             if (main.isFinishing()) return;
-            BottomNavigationView nav = findFirst(
-                    main.findViewById(android.R.id.content),
-                    BottomNavigationView.class
-            );
+            // The Material navigation object is intentionally detached from the portrait view
+            // hierarchy, but it remains the activity's logical router. Read the field directly
+            // instead of searching the view tree so fresh launches can still route to Chaos.
+            BottomNavigationView nav = field(main, "bottomNavigation", BottomNavigationView.class);
             if (nav == null) return;
             Menu menu = nav.getMenu();
             for (int i = 0; i < menu.size(); i++) {
@@ -134,13 +133,27 @@ final class UiFoundationCoordinator {
         });
     }
 
-    private static <T> T findFirst(View view, Class<T> type) {
-        if (type.isInstance(view)) return type.cast(view);
-        if (!(view instanceof ViewGroup)) return null;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            T found = findFirst(group.getChildAt(i), type);
-            if (found != null) return found;
+    @SuppressWarnings("unchecked")
+    private static <T> T field(Object target, String name, Class<T> type) {
+        Field field = findField(target == null ? null : target.getClass(), name);
+        if (field == null) return null;
+        try {
+            field.setAccessible(true);
+            Object value = field.get(target);
+            return type.isInstance(value) ? (T) value : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static Field findField(Class<?> type, String name) {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
         }
         return null;
     }
@@ -175,7 +188,7 @@ final class UiFoundationCoordinator {
         } else {
             // When rotating back from horizontal mode, let the landscape controller run one final
             // portrait pass so it hides its rail and restores shell margins, then detach it. The
-            // custom portrait bar immediately hides the Material router again.
+            // custom portrait bar immediately removes the Material router from the layout again.
             if (configurationChange) LandscapeUiController.apply(main);
             LandscapeUiController.detach(main);
             StableBottomNavigationController.applyOrientation(main);
