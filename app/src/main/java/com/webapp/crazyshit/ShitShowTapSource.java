@@ -8,7 +8,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.Gravity;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -21,6 +20,9 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 
 import org.json.JSONObject;
 
@@ -35,22 +37,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Activates CrazyShit's Shit Show as a rendered site overlay instead of treating /shitshow/ as a
- * normal destination page. External ad navigation and the fallback /shitshow/ route are blocked,
- * while the exact Shit Show control is retried with native WebView touch events.
+ * B17 diagnostic/harvest source for CrazyShit's Shit Show.
+ *
+ * B16 proved the real homepage control only navigates to /shitshow/. This source therefore loads
+ * that real route and installs fetch/XHR/media hooks at document start, before the site's own
+ * startup JavaScript can make and finish the request that supplies the swipe deck.
  */
 final class ShitShowTapSource {
-    private static final String HOME = CrazyShitRepository.BASE;
+    private static final String PAGE = CrazyShitRepository.BASE + "shitshow/";
     private static final int TARGET_CACHE = 24;
     private static final int MAX_CACHE = 80;
-    private static final int MAX_ACTIVATION_ATTEMPTS = 8;
-    private static final long HARVEST_TIMEOUT_MS = 55_000L;
-    private static final long PUMP_MS = 1_250L;
-    private static final long FIRST_BATCH_WAIT_MS = 6_000L;
+    private static final long HARVEST_TIMEOUT_MS = 48_000L;
+    private static final long PUMP_MS = 1_100L;
+    private static final long FIRST_BATCH_WAIT_MS = 7_000L;
     private static final long DIAGNOSTIC_KEEP_MS = 90_000L;
 
     private static final Pattern MEDIA_IN_PAYLOAD = Pattern.compile(
             "(?i)https?://[^\\s\\\"'<>]+?\\.(?:m3u8|mpd|mp4|webm|m4v)(?:\\?[^\\s\\\"'<>]*)?"
+    );
+    private static final Pattern PROTOCOL_MEDIA_IN_PAYLOAD = Pattern.compile(
+            "(?i)//[^\\s\\\"'<>]+?\\.(?:m3u8|mpd|mp4|webm|m4v)(?:\\?[^\\s\\\"'<>]*)?"
     );
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -59,6 +65,7 @@ final class ShitShowTapSource {
     private final Set<String> seenMedia = new HashSet<>();
 
     private boolean warming;
+    private boolean documentStartSupported;
     private WebView webView;
     private TextView diagnosticView;
     private long harvestStartedAt;
@@ -69,24 +76,29 @@ final class ShitShowTapSource {
     private int observedCandidates;
     private int pageCommitCount;
     private int pageFinishedCount;
-    private int activationAttempts;
-    private int exactLinks;
-    private int externalBlocks;
-    private int routeBlocks;
-    private int jsSwipeHints;
+    private int earlyEvents;
+    private int earlyFetches;
+    private int earlyXhrs;
+    private int earlyBlobs;
+    private int earlyMse;
     private int jsVideoCount;
     private int jsHttpVideoCount;
-    private int jsBlobCount;
+    private int jsBlobVideoCount;
     private int jsSourceCount;
-    private int jsOverlayHints;
+    private int jsScriptCount;
+    private int jsIframeCount;
+    private int externalBlocks;
 
     private String pageState = "idle";
     private String lastPageUrl = "";
     private String jsReadyState = "";
-    private String activationState = "idle";
-    private String activationHref = "";
-    private String blockedUrl = "";
+    private String lastEarlyKind = "";
+    private String lastDataUrl = "";
+    private String lastInterestingRequest = "";
+    private String scriptHint = "";
+    private String payloadHint = "";
     private String bodyHint = "";
+    private String blockedUrl = "";
 
     void prewarm(Context context) {
         if (cachedCount() < 8) warm(context);
@@ -118,7 +130,7 @@ final class ShitShowTapSource {
     }
 
     void resetDeck() {
-        // Keep media history for this process. Chaos also has its own session repeat protection.
+        // Keep media history for this process. Chaos also protects the current session from repeats.
     }
 
     private ArrayList<NativeContentItem> drainReady(int maxItems) {
@@ -193,21 +205,27 @@ final class ShitShowTapSource {
         } catch (Exception ignored) {
         }
 
-        pageState = "loading-home";
-        lastPageUrl = HOME;
-        refreshDiagnosticView();
-
         view.addJavascriptInterface(new Bridge(), "CSShitBridge");
+        installDocumentStartHook(view);
+
         view.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView web, WebResourceRequest request) {
                 if (request == null || request.getUrl() == null || !request.isForMainFrame()) return false;
-                return blockMainFrame(web, request.getUrl().toString());
+                return blockExternalMainFrame(request.getUrl().toString());
             }
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView web, String url) {
-                return blockMainFrame(web, url);
+                return blockExternalMainFrame(url);
+            }
+
+            @Override
+            public void onPageStarted(WebView web, String url, android.graphics.Bitmap favicon) {
+                lastPageUrl = safe(url);
+                pageState = "started";
+                if (!documentStartSupported) web.evaluateJavascript(EARLY_HOOK_JS, null);
+                refreshDiagnosticView();
             }
 
             @Override
@@ -223,11 +241,10 @@ final class ShitShowTapSource {
             public void onPageFinished(WebView web, String url) {
                 pageFinishedCount++;
                 lastPageUrl = safe(url);
-                pageState = "home-loaded";
+                pageState = "loaded";
                 installProbe(web);
-                refreshDiagnosticView();
-                main.postDelayed(() -> maybeActivate(web), 500L);
                 schedulePump(web);
+                refreshDiagnosticView();
             }
 
             @Override
@@ -242,39 +259,44 @@ final class ShitShowTapSource {
             }
         });
 
-        view.loadUrl(HOME);
+        pageState = "loading-shitshow";
+        lastPageUrl = PAGE;
+        refreshDiagnosticView();
+        view.loadUrl(PAGE);
+
         main.postDelayed(() -> {
             if (webView != view || !isWarming()) return;
             installProbe(view);
-            maybeActivate(view);
             schedulePump(view);
-        }, 2_500L);
+        }, 2_000L);
     }
 
-    private boolean blockMainFrame(WebView web, String value) {
+    private void installDocumentStartHook(WebView view) {
+        documentStartSupported = false;
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                Set<String> origins = new HashSet<>();
+                origins.add("https://crazyshit.com");
+                origins.add("https://www.crazyshit.com");
+                WebViewCompat.addDocumentStartJavaScript(view, EARLY_HOOK_JS, origins);
+                documentStartSupported = true;
+            }
+        } catch (Exception ignored) {
+            documentStartSupported = false;
+        }
+    }
+
+    private boolean blockExternalMainFrame(String value) {
         if (value == null || value.trim().isEmpty()) return true;
-        if (isShitShowRoute(value)) {
-            routeBlocks++;
-            blockedUrl = safe(value);
-            activationState = "blocked-route";
-            refreshDiagnosticView();
-            main.postDelayed(() -> maybeActivate(web), 550L);
-            return true;
-        }
-        if (!isSameOrigin(value)) {
-            externalBlocks++;
-            blockedUrl = safe(value);
-            activationState = "blocked-external";
-            refreshDiagnosticView();
-            main.postDelayed(() -> maybeActivate(web), 550L);
-            return true;
-        }
-        return false;
+        if (isSameOrigin(value) || "about:blank".equalsIgnoreCase(value.trim())) return false;
+        externalBlocks++;
+        blockedUrl = safe(value);
+        refreshDiagnosticView();
+        return true;
     }
 
     private static boolean isSameOrigin(String value) {
         if (value == null || value.trim().isEmpty()) return false;
-        if ("about:blank".equalsIgnoreCase(value.trim())) return true;
         try {
             Uri uri = Uri.parse(value.trim());
             String scheme = safe(uri.getScheme()).toLowerCase(Locale.US);
@@ -286,70 +308,20 @@ final class ShitShowTapSource {
         }
     }
 
-    private static boolean isShitShowRoute(String value) {
-        if (!isSameOrigin(value)) return false;
-        try {
-            String path = safe(Uri.parse(value).getPath()).replaceAll("/+$", "");
-            return "/shitshow".equalsIgnoreCase(path);
-        } catch (Exception ignored) {
-            return false;
-        }
-    }
-
-    private boolean playerActive() {
-        // B15 treated generic overlay-like DOM nodes as proof that Shit Show was active. The
-        // homepage already has those nodes, so activation stopped before the first real tap.
-        // Only real playback signals may stop the activation retry loop.
-        return jsVideoCount > 0 || jsSwipeHints > 0 || cachedCount() > 0;
-    }
-
-    private void maybeActivate(WebView view) {
-        if (view == null || webView != view || !isWarming() || playerActive()) return;
-        if (activationAttempts >= MAX_ACTIVATION_ATTEMPTS) return;
-        activationAttempts++;
-        activationState = "locating-exact";
-        refreshDiagnosticView();
-        view.evaluateJavascript(LOCATE_EXACT_JS, null);
-    }
-
-    private void dispatchActivationTap(WebView view, float cssX, float cssY, float cssWidth, float cssHeight) {
-        if (view == null || webView != view || cssWidth <= 0f || cssHeight <= 0f) return;
-        float x = cssX * Math.max(1, view.getWidth()) / cssWidth;
-        float y = cssY * Math.max(1, view.getHeight()) / cssHeight;
-        x = Math.max(1f, Math.min(view.getWidth() - 1f, x));
-        y = Math.max(1f, Math.min(view.getHeight() - 1f, y));
-
-        activationState = "native-tap";
-        refreshDiagnosticView();
-        long downTime = SystemClock.uptimeMillis();
-        dispatchTouch(view, downTime, downTime, MotionEvent.ACTION_DOWN, x, y);
-        dispatchTouch(view, downTime, downTime + 80L, MotionEvent.ACTION_UP, x, y);
-        main.postDelayed(() -> {
-            installProbe(view);
-            if (!playerActive()) maybeActivate(view);
-        }, 900L);
-    }
-
     private void schedulePump(WebView view) {
         main.removeCallbacksAndMessages(view);
-        main.postAtTime(() -> pump(view), view, SystemClock.uptimeMillis() + 350L);
+        main.postAtTime(() -> pump(view), view, SystemClock.uptimeMillis() + 300L);
     }
 
     private void pump(WebView view) {
         if (view == null || webView != view || !isWarming()) return;
         pumpCount++;
         installProbe(view);
+        view.evaluateJavascript(SCAN_AND_ADVANCE_JS, null);
 
-        if (playerActive()) {
-            view.evaluateJavascript(SCAN_AND_ADVANCE_JS, null);
-            dispatchNativeSwipe(view);
-        } else if (pumpCount % 2 == 0) {
-            maybeActivate(view);
-        }
-
-        refreshDiagnosticView();
         boolean enough = cachedCount() >= TARGET_CACHE;
         boolean timedOut = System.currentTimeMillis() - harvestStartedAt >= HARVEST_TIMEOUT_MS;
+        refreshDiagnosticView();
         if (enough || timedOut) {
             finishHarvest(view);
             return;
@@ -361,56 +333,55 @@ final class ShitShowTapSource {
         if (view != null) view.evaluateJavascript(PROBE_JS, null);
     }
 
-    private void dispatchNativeSwipe(WebView view) {
-        try {
-            float width = view.getWidth() > 0 ? view.getWidth() : dp(view.getContext(), 360);
-            float height = view.getHeight() > 0 ? view.getHeight() : dp(view.getContext(), 640);
-            float x = width * 0.5f;
-            long downTime = SystemClock.uptimeMillis();
-            dispatchTouch(view, downTime, downTime, MotionEvent.ACTION_DOWN, x, height * 0.78f);
-            dispatchTouch(view, downTime, downTime + 35L, MotionEvent.ACTION_MOVE, x, height * 0.48f);
-            dispatchTouch(view, downTime, downTime + 70L, MotionEvent.ACTION_UP, x, height * 0.20f);
-        } catch (Exception ignored) {
-        }
-    }
-
-    private static void dispatchTouch(WebView view, long downTime, long eventTime, int action, float x, float y) {
-        MotionEvent event = MotionEvent.obtain(downTime, eventTime, action, x, y, 0);
-        try {
-            view.dispatchTouchEvent(event);
-        } finally {
-            event.recycle();
-        }
-    }
-
     private void observeRequest(WebResourceRequest request) {
         if (request == null || request.getUrl() == null) return;
         observedRequests++;
         String url = request.getUrl().toString();
-        if (isDirectMedia(url)) {
-            enqueue(url, "", "", "Shit Show", false);
-            return;
-        }
+        String accept = "";
         try {
             Map<String, String> headers = request.getRequestHeaders();
-            String accept = headers == null ? "" : headers.get("Accept");
-            if (accept == null && headers != null) accept = headers.get("accept");
-            if (isMediaMime(accept)) enqueue(url, accept, "", "Shit Show", false);
+            if (headers != null) {
+                accept = headers.get("Accept");
+                if (accept == null) accept = headers.get("accept");
+                if (accept == null) accept = "";
+            }
         } catch (Exception ignored) {
         }
+
+        if (isInterestingRequest(url, accept)) lastInterestingRequest = safe(url);
+        if (isDirectMedia(url)) enqueue(url, accept, "", "Shit Show", false);
+        else if (isMediaMime(accept)) enqueue(url, accept, "", "Shit Show", false);
+        refreshDiagnosticView();
     }
 
     private void observeResource(String url) {
         observedRequests++;
+        if (isInterestingRequest(url, "")) lastInterestingRequest = safe(url);
         if (isDirectMedia(url)) enqueue(url, "", "", "Shit Show", false);
     }
 
-    private void harvestPayload(String raw) {
+    private static boolean isInterestingRequest(String url, String accept) {
+        String lower = safe(url).toLowerCase(Locale.US);
+        String a = safe(accept).toLowerCase(Locale.US);
+        if (a.contains("json") || a.contains("video") || a.contains("mpegurl")) return true;
+        return lower.contains("shitshow") || lower.contains("/api/") || lower.contains("ajax")
+                || lower.contains("feed") || lower.contains("clip") || lower.contains("video")
+                || lower.contains("media") || lower.contains("json");
+    }
+
+    private void harvestPayload(String sourceUrl, String mime, String raw) {
         if (raw == null || raw.isEmpty()) return;
         observedPayloads++;
+        lastDataUrl = safe(sourceUrl);
         String text = raw.replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&");
-        Matcher matcher = MEDIA_IN_PAYLOAD.matcher(text);
-        while (matcher.find()) enqueue(matcher.group(), "", "", "Shit Show", false);
+        payloadHint = safe(text);
+        if (payloadHint.length() > 110) payloadHint = payloadHint.substring(0, 110);
+
+        Matcher absolute = MEDIA_IN_PAYLOAD.matcher(text);
+        while (absolute.find()) enqueue(absolute.group(), mime, "", "Shit Show", false);
+        Matcher protocol = PROTOCOL_MEDIA_IN_PAYLOAD.matcher(text);
+        while (protocol.find()) enqueue("https:" + protocol.group(), mime, "", "Shit Show", false);
+        refreshDiagnosticView();
     }
 
     private void enqueue(String mediaUrl, String mime, String posterUrl, String title, boolean mediaElement) {
@@ -438,7 +409,7 @@ final class ShitShowTapSource {
         String media = cleanUrl(value);
         if (!isHttpUrl(media)) return "";
         if (isDirectMedia(media)) return media;
-        String lowerMime = mime == null ? "" : mime.toLowerCase(Locale.US);
+        String lowerMime = safe(mime).toLowerCase(Locale.US);
         String suffix = "";
         if (lowerMime.contains("mpegurl")) suffix = ".m3u8";
         else if (lowerMime.contains("dash+xml")) suffix = ".mpd";
@@ -451,8 +422,7 @@ final class ShitShowTapSource {
     }
 
     private static boolean isMediaMime(String value) {
-        if (value == null) return false;
-        String lower = value.toLowerCase(Locale.US);
+        String lower = safe(value).toLowerCase(Locale.US);
         return lower.contains("video/") || lower.contains("mpegurl") || lower.contains("dash+xml");
     }
 
@@ -464,8 +434,7 @@ final class ShitShowTapSource {
     }
 
     private static boolean isHttpUrl(String value) {
-        if (value == null) return false;
-        String lower = value.toLowerCase(Locale.US);
+        String lower = safe(value).toLowerCase(Locale.US);
         return lower.startsWith("http://") || lower.startsWith("https://");
     }
 
@@ -490,23 +459,29 @@ final class ShitShowTapSource {
         observedCandidates = 0;
         pageCommitCount = 0;
         pageFinishedCount = 0;
-        activationAttempts = 0;
-        exactLinks = 0;
-        externalBlocks = 0;
-        routeBlocks = 0;
-        jsSwipeHints = 0;
+        earlyEvents = 0;
+        earlyFetches = 0;
+        earlyXhrs = 0;
+        earlyBlobs = 0;
+        earlyMse = 0;
         jsVideoCount = 0;
         jsHttpVideoCount = 0;
-        jsBlobCount = 0;
+        jsBlobVideoCount = 0;
         jsSourceCount = 0;
-        jsOverlayHints = 0;
+        jsScriptCount = 0;
+        jsIframeCount = 0;
+        externalBlocks = 0;
+        documentStartSupported = false;
         pageState = "starting";
-        lastPageUrl = HOME;
+        lastPageUrl = PAGE;
         jsReadyState = "";
-        activationState = "idle";
-        activationHref = "";
-        blockedUrl = "";
+        lastEarlyKind = "";
+        lastDataUrl = "";
+        lastInterestingRequest = "";
+        scriptHint = "";
+        payloadHint = "";
         bodyHint = "";
+        blockedUrl = "";
     }
 
     private void attachDiagnosticView(Activity activity) {
@@ -515,10 +490,10 @@ final class ShitShowTapSource {
         TextView view = new TextView(activity);
         diagnosticView = view;
         view.setTextColor(Color.WHITE);
-        view.setTextSize(10.5f);
+        view.setTextSize(10.2f);
         view.setGravity(Gravity.START);
         view.setPadding(dp(activity, 8), dp(activity, 6), dp(activity, 8), dp(activity, 6));
-        view.setBackgroundColor(Color.argb(215, 0, 0, 0));
+        view.setBackgroundColor(Color.argb(220, 0, 0, 0));
         view.setElevation(dp(activity, 32));
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -540,24 +515,27 @@ final class ShitShowTapSource {
             return;
         }
         StringBuilder text = new StringBuilder();
-        text.append("Shit Show debug B16  ").append(isWarming() ? "RUN" : "STOP").append('\n');
+        text.append("Shit Show debug B17  ").append(isWarming() ? "RUN" : "STOP").append('\n');
         text.append("page:").append(pageState)
                 .append(" c").append(pageCommitCount).append("/f").append(pageFinishedCount)
-                .append(" DOM:").append(jsReadyState.isEmpty() ? "?" : jsReadyState).append('\n');
-        text.append("act:").append(activationAttempts).append(' ').append(shorten(activationState, 20))
-                .append(" exact:").append(exactLinks)
-                .append(" route:").append(routeBlocks)
-                .append(" ext:").append(externalBlocks).append('\n');
+                .append(" DOM:").append(jsReadyState.isEmpty() ? "?" : jsReadyState)
+                .append(" early:").append(documentStartSupported ? "ON" : "OFF").append('\n');
+        text.append("ev:").append(earlyEvents).append(" f:").append(earlyFetches)
+                .append(" x:").append(earlyXhrs).append(" blob:").append(earlyBlobs)
+                .append(" mse:").append(earlyMse).append(" last:").append(shorten(lastEarlyKind, 16)).append('\n');
         text.append("video:").append(jsVideoCount).append(" http:").append(jsHttpVideoCount)
-                .append(" blob:").append(jsBlobCount).append(" src:").append(jsSourceCount)
-                .append(" swipe:").append(jsSwipeHints).append(" ov:").append(jsOverlayHints).append('\n');
+                .append(" blobv:").append(jsBlobVideoCount).append(" src:").append(jsSourceCount)
+                .append(" scripts:").append(jsScriptCount).append(" frames:").append(jsIframeCount).append('\n');
         text.append("req:").append(observedRequests).append(" payload:").append(observedPayloads)
                 .append(" cand:").append(observedCandidates).append(" cache:").append(cachedCount())
-                .append(" pump:").append(pumpCount).append('\n');
-        text.append("url:").append(shorten(lastPageUrl, 72));
-        if (!activationHref.isEmpty()) text.append('\n').append("target:").append(shorten(activationHref, 68));
+                .append(" pump:").append(pumpCount).append(" ext:").append(externalBlocks).append('\n');
+        text.append("url:").append(shorten(lastPageUrl, 70));
+        if (!lastDataUrl.isEmpty()) text.append('\n').append("data:").append(shorten(lastDataUrl, 68));
+        else if (!lastInterestingRequest.isEmpty()) text.append('\n').append("req*:").append(shorten(lastInterestingRequest, 68));
+        if (!scriptHint.isEmpty()) text.append('\n').append("js:").append(shorten(scriptHint, 72));
+        if (!payloadHint.isEmpty()) text.append('\n').append("body*:").append(shorten(payloadHint, 82));
+        else if (!bodyHint.isEmpty()) text.append('\n').append(shorten(bodyHint, 82));
         if (!blockedUrl.isEmpty()) text.append('\n').append("blocked:").append(shorten(blockedUrl, 66));
-        if (!bodyHint.isEmpty()) text.append('\n').append(shorten(bodyHint, 82));
         view.setText(text.toString());
     }
 
@@ -623,24 +601,20 @@ final class ShitShowTapSource {
 
     private final class Bridge {
         @JavascriptInterface
-        public void onTarget(String raw) {
-            try {
-                JSONObject json = new JSONObject(raw == null ? "{}" : raw);
-                exactLinks = json.optInt("exact", exactLinks);
-                activationHref = safe(json.optString("href", activationHref));
-                String state = safe(json.optString("state", ""));
-                if (!state.isEmpty()) activationState = state;
-                float x = (float) json.optDouble("x", -1d);
-                float y = (float) json.optDouble("y", -1d);
-                float width = (float) json.optDouble("width", -1d);
-                float height = (float) json.optDouble("height", -1d);
-                refreshDiagnosticView();
-                if (x >= 0f && y >= 0f && width > 0f && height > 0f) {
-                    WebView view = webView;
-                    main.post(() -> dispatchActivationTap(view, x, y, width, height));
-                }
-            } catch (Exception ignored) {
-            }
+        public void onEarly(String kind, String url, String meta) {
+            earlyEvents++;
+            lastEarlyKind = safe(kind);
+            if ("fetch".equals(kind)) earlyFetches++;
+            else if ("xhr".equals(kind)) earlyXhrs++;
+            else if ("blob".equals(kind)) earlyBlobs++;
+            else if ("mse".equals(kind)) earlyMse++;
+            if (url != null && !url.isEmpty()) lastDataUrl = safe(url);
+            refreshDiagnosticView();
+        }
+
+        @JavascriptInterface
+        public void onPayload(String url, String mime, String raw) {
+            harvestPayload(url, mime, raw);
         }
 
         @JavascriptInterface
@@ -650,13 +624,13 @@ final class ShitShowTapSource {
                 lastPageUrl = safe(json.optString("url", lastPageUrl));
                 jsReadyState = safe(json.optString("ready", jsReadyState));
                 bodyHint = safe(json.optString("body", bodyHint));
-                exactLinks = json.optInt("exact", exactLinks);
-                jsSwipeHints = json.optInt("swipe", jsSwipeHints);
+                scriptHint = safe(json.optString("scriptHint", scriptHint));
                 jsVideoCount = json.optInt("videos", jsVideoCount);
                 jsHttpVideoCount = json.optInt("httpVideos", jsHttpVideoCount);
-                jsBlobCount = json.optInt("blobVideos", jsBlobCount);
+                jsBlobVideoCount = json.optInt("blobVideos", jsBlobVideoCount);
                 jsSourceCount = json.optInt("sources", jsSourceCount);
-                jsOverlayHints = json.optInt("overlay", jsOverlayHints);
+                jsScriptCount = json.optInt("scripts", jsScriptCount);
+                jsIframeCount = json.optInt("frames", jsIframeCount);
                 refreshDiagnosticView();
             } catch (Exception ignored) {
             }
@@ -681,43 +655,39 @@ final class ShitShowTapSource {
         public void onMediaCandidate(String url, String mime) {
             enqueue(url, mime, "", "Shit Show", false);
         }
-
-        @JavascriptInterface
-        public void onPayload(String raw) {
-            harvestPayload(raw);
-        }
     }
 
-    private static final String LOCATE_EXACT_JS =
+    private static final String EARLY_HOOK_JS =
             "(function(){try{" +
-            "var all=[].slice.call(document.querySelectorAll('a[href]')),hits=[];" +
-            "for(var i=0;i<all.length;i++){try{var u=new URL(all[i].getAttribute('href'),location.href),p=u.pathname.replace(/\\/+$/,'');if(u.origin===location.origin&&p==='/shitshow')hits.push(all[i]);}catch(e){}}" +
-            "if(!hits.length){CSShitBridge.onTarget(JSON.stringify({state:'no-exact',href:'',exact:0}));return;}" +
-            "var el=null;for(var j=0;j<hits.length;j++){var r=hits[j].getBoundingClientRect();if(r.width>8&&r.height>8){el=hits[j];break;}}if(!el)el=hits[0];" +
-            "try{el.scrollIntoView({block:'center',inline:'center'});}catch(e){}" +
-            "setTimeout(function(){try{var r=el.getBoundingClientRect(),u=new URL(el.getAttribute('href'),location.href);CSShitBridge.onTarget(JSON.stringify({state:'target-ready',href:u.href,exact:hits.length,x:r.left+r.width/2,y:r.top+r.height/2,width:window.innerWidth||document.documentElement.clientWidth,height:window.innerHeight||document.documentElement.clientHeight}));}catch(e){}},120);" +
+            "if(window.__csEarlyB17)return;window.__csEarlyB17=true;" +
+            "function abs(v){try{return v?new URL(v,location.href).href:'';}catch(e){return String(v||'');}}" +
+            "function ev(k,u,m){try{CSShitBridge.onEarly(k,abs(u||''),String(m||''));}catch(e){}}" +
+            "function pay(u,m,t){try{if(typeof t==='string'&&t.length)CSShitBridge.onPayload(abs(u||''),String(m||''),t.slice(0,260000));}catch(e){}}" +
+            "try{var of=window.fetch;if(of){window.fetch=function(input){var u='';try{u=typeof input==='string'?input:(input&&input.url)||'';}catch(e){}ev('fetch',u,'');return of.apply(this,arguments).then(function(r){try{var ct=(r.headers&&r.headers.get&&r.headers.get('content-type'))||'';ev('fetch-res',r.url||u,ct);r.clone().text().then(function(t){pay(r.url||u,ct,t);}).catch(function(){});}catch(e){}return r;});};}}catch(e){}" +
+            "try{var xo=XMLHttpRequest.prototype.open,xs=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(m,u){this.__csUrl=abs(u);ev('xhr',u,m);return xo.apply(this,arguments);};XMLHttpRequest.prototype.send=function(){try{this.addEventListener('load',function(){try{var ct=this.getResponseHeader('content-type')||'',u=this.responseURL||this.__csUrl||'';ev('xhr-res',u,ct);if(!this.responseType||this.responseType==='text')pay(u,ct,this.responseText||'');}catch(e){}});}catch(e){}return xs.apply(this,arguments);};}catch(e){}" +
+            "try{var oc=URL.createObjectURL;if(oc){URL.createObjectURL=function(o){var r=oc.apply(this,arguments);ev('blob',r,Object.prototype.toString.call(o));return r;};}}catch(e){}" +
+            "try{if(window.MediaSource&&MediaSource.prototype.addSourceBuffer){var asb=MediaSource.prototype.addSourceBuffer;MediaSource.prototype.addSourceBuffer=function(t){ev('mse','',t);return asb.apply(this,arguments);};}}catch(e){}" +
+            "try{var sa=Element.prototype.setAttribute;Element.prototype.setAttribute=function(n,v){try{var tag=(this.tagName||'').toLowerCase();if((tag==='video'||tag==='source')&&String(n).toLowerCase()==='src')ev('media-src',v,tag);}catch(e){}return sa.apply(this,arguments);};}catch(e){}" +
             "}catch(e){}})();";
 
     private static final String PROBE_JS =
             "(function(){try{" +
-            "if(!window.__csTapProbe){window.__csTapProbe=true;var mt=/^(video\\/)|mpegurl|dash\\+xml/i;" +
-            "function abs(v){try{return v?new URL(v,location.href).href:'';}catch(e){return v||'';}}" +
-            "function cand(v,m){try{var u=abs(v);if(/^https?:/i.test(u))CSShitBridge.onMediaCandidate(u,m||'');}catch(e){}}" +
-            "function payload(v){try{if(typeof v==='string'&&v.length)CSShitBridge.onPayload(v.slice(0,220000));}catch(e){}}" +
-            "try{var of=window.fetch;if(of){window.fetch=function(){return of.apply(this,arguments).then(function(r){try{var ct=(r.headers&&r.headers.get&&r.headers.get('content-type'))||'';if(mt.test(ct))cand(r.url||'',ct);r.clone().text().then(payload).catch(function(){});}catch(e){}return r;});};}}catch(e){}" +
-            "try{var xo=XMLHttpRequest.prototype.open,xs=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(m,u){this.__csUrl=abs(u);return xo.apply(this,arguments);};XMLHttpRequest.prototype.send=function(){try{this.addEventListener('load',function(){try{var ct=this.getResponseHeader('content-type')||'',u=this.responseURL||this.__csUrl||'';if(mt.test(ct))cand(u,ct);if(!this.responseType||this.responseType==='text')payload(this.responseText||'');}catch(e){}});}catch(e){}return xs.apply(this,arguments);};}catch(e){}" +
-            "}" +
-            "function scan(){try{var videos=0,httpVideos=0,blobVideos=0,sources=0,swipe=0,exact=0,overlay=0;" +
+            "function abs(v){try{return v?new URL(v,location.href).href:'';}catch(e){return String(v||'');}}" +
+            "function cand(v,m){try{var u=abs(v);if(/^https?:/i.test(u))CSShitBridge.onMediaCandidate(u,String(m||''));}catch(e){}}" +
+            "var videos=0,httpVideos=0,blobVideos=0,sources=0;" +
             "document.querySelectorAll('video').forEach(function(v){videos++;var q=v.querySelector('source[src]'),s=v.currentSrc||v.src||(q&&(q.src||q.getAttribute('src')))||'',m=(q&&(q.type||q.getAttribute('type')))||v.getAttribute('type')||'';if(/^https?:/i.test(s))httpVideos++;if(/^blob:/i.test(s))blobVideos++;if(/^https?:/i.test(abs(s))){var r=v.closest('article,section,.swiper-slide,.slide,.item')||v.parentElement,p=v.poster||v.getAttribute('poster')||'',t=(v.getAttribute('title')||v.getAttribute('aria-label')||(r&&r.textContent)||'Shit Show').replace(/\\s+/g,' ').trim().slice(0,120);CSShitBridge.onClip(JSON.stringify({media:abs(s),mime:m,poster:abs(p),title:t}));}try{v.muted=true;v.preload='auto';var pr=v.play();if(pr&&pr.catch)pr.catch(function(){});}catch(e){}});" +
             "document.querySelectorAll('source[src]').forEach(function(s){sources++;cand(s.src||s.getAttribute('src'),s.type||s.getAttribute('type')||'');});" +
-            "document.querySelectorAll('a[href]').forEach(function(a){try{var u=new URL(a.getAttribute('href'),location.href),p=u.pathname.replace(/\\/+$/,'');if(u.origin===location.origin&&p==='/shitshow')exact++;}catch(e){}});" +
-            "var body=(document.body&&document.body.innerText||'').replace(/\\s+/g,' ').trim();if(/swipe\\s+up\\s+for\\s+next\\s+video/i.test(body))swipe++;" +
-            "overlay=document.querySelectorAll('[class*=shitshow],[id*=shitshow],[class*=swiper],[class*=swipe],[data-swiper]').length;" +
             "try{performance.getEntriesByType('resource').forEach(function(e){var n=e.name||'';if(/\\.(mp4|webm|m4v|m3u8|mpd)(\\?|#|$)/i.test(n))cand(n,'');});}catch(e){}" +
-            "CSShitBridge.onState(JSON.stringify({url:location.href,ready:document.readyState,body:body.slice(0,90),exact:exact,swipe:swipe,videos:videos,httpVideos:httpVideos,blobVideos:blobVideos,sources:sources,overlay:overlay}));" +
-            "}catch(e){}}window.__csTapScan=scan;scan();" +
+            "var scripts=[].slice.call(document.scripts||[]),sh='';for(var i=0;i<scripts.length;i++){var s=scripts[i].src||'';if(s){sh+=s.split('/').pop().split('?')[0]+' ';if(sh.length>110)break;}}" +
+            "var body=(document.body&&document.body.innerText||'').replace(/\\s+/g,' ').trim();" +
+            "CSShitBridge.onState(JSON.stringify({url:location.href,ready:document.readyState,body:body.slice(0,90),scriptHint:sh.trim(),videos:videos,httpVideos:httpVideos,blobVideos:blobVideos,sources:sources,scripts:scripts.length,frames:document.querySelectorAll('iframe').length}));" +
             "}catch(e){}})();";
 
     private static final String SCAN_AND_ADVANCE_JS =
-            "(function(){try{window.__csTapScan&&window.__csTapScan();var h=Math.max(window.innerHeight||0,600);var v=document.querySelector('video');try{var s=v&&v.closest('.swiper,.swiper-container,[class*=swiper],[class*=swipe],[data-swiper]');if(s&&s.swiper&&typeof s.swiper.slideNext==='function')s.swiper.slideNext();}catch(e){}try{window.scrollBy(0,Math.max(420,h*.92));}catch(e){}}catch(e){}})();";
+            "(function(){try{" +
+            "var v=document.querySelector('video'),h=Math.max(window.innerHeight||0,600);" +
+            "try{var s=v&&v.closest('.swiper,.swiper-container,[class*=swiper],[class*=swipe],[data-swiper]');if(s&&s.swiper&&typeof s.swiper.slideNext==='function')s.swiper.slideNext();}catch(e){}" +
+            "try{window.dispatchEvent(new WheelEvent('wheel',{deltaY:Math.max(420,h*.9),bubbles:true,cancelable:true}));}catch(e){}" +
+            "try{window.scrollBy(0,Math.max(420,h*.92));}catch(e){}" +
+            "}catch(e){}})();";
 }
