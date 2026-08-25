@@ -45,11 +45,15 @@ final class ChaosSourceMixer {
     List<NativeContentItem> loadRandomBatch(Context context) {
         // Cold-start optimization: warm Shit Show immediately, but let the first Chaos request
         // return from one known regular source instead of waiting for the full six-source catalog
-        // and rendered Shit Show cache. ChaosFeedView automatically asks for another batch when
-        // fewer than 14 items are present, so the full near-50/50 pool fills behind the first clip.
+        // and rendered Shit Show cache. The splash now preloads this same tiny pool while its intro
+        // is visible, so the mixer can usually hand the first items to Chaos without another fetch.
         shitShow.prewarm(context);
         if (starterPending) {
             starterPending = false;
+
+            List<NativeContentItem> preloaded = ChaosStartupPreloader.takeStarter();
+            if (!preloaded.isEmpty()) return preloaded;
+
             List<NativeContentItem> starter = loadStarterBatch(context);
             if (!starter.isEmpty()) return starter;
         }
