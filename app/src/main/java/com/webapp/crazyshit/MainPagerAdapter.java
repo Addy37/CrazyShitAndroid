@@ -67,11 +67,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             public void openDetails(NativeContentItem item) {
                 host.onOpenItem(item);
             }
-
-            @Override
-            public void openComments(NativeContentItem item) {
-                host.onOpenComments(item);
-            }
         });
         chaosView.setActive(false);
 

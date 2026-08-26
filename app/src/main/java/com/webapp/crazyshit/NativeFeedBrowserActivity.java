@@ -132,11 +132,13 @@ public final class NativeFeedBrowserActivity extends Activity {
             @Override
             public void onComments(NativeContentItem item) {
                 if (item == null || item.isSection() || memeMode) return;
-                Intent intent = new Intent(NativeFeedBrowserActivity.this, CommentsActivity.class);
-                intent.putExtra(CommentsActivity.EXTRA_PAGE_URL, item.url);
-                intent.putExtra(CommentsActivity.EXTRA_TITLE, item.title);
-                intent.putExtra(CommentsActivity.EXTRA_COUNT, item.comments);
-                startActivity(intent);
+                new InlineCommentsDialog(
+                        NativeFeedBrowserActivity.this,
+                        item.url,
+                        item.title,
+                        item.comments,
+                        null
+                ).show();
             }
         });
         recycler.setAdapter(adapter);

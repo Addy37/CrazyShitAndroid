@@ -49,11 +49,11 @@ public class CommentsActivity extends Activity {
             Pattern.CASE_INSENSITIVE
     );
 
-    private static final String USER_AGENT =
+    static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
-    private static final String COMMENTS_JS =
+    static final String COMMENTS_JS =
             "(() => {" +
             "const clean=s=>(s||'').replace(/\\s+/g,' ').trim();" +
             "const pageText=clean(document.body?document.body.innerText:'');" +

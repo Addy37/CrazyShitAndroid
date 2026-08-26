@@ -615,11 +615,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void openComments(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
-        Intent intent = new Intent(this, CommentsActivity.class);
-        intent.putExtra(CommentsActivity.EXTRA_PAGE_URL, item.url);
-        intent.putExtra(CommentsActivity.EXTRA_TITLE, item.title);
-        intent.putExtra(CommentsActivity.EXTRA_COUNT, item.comments);
-        startActivity(intent);
+        new InlineCommentsDialog(
+                this,
+                item.url,
+                item.title,
+                item.comments,
+                null
+        ).show();
     }
 
     private String viewPreferenceKey() {

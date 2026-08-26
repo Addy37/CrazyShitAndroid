@@ -71,7 +71,6 @@ import java.util.concurrent.Executors;
 public final class ChaosFeedView extends FrameLayout {
     public interface Host {
         void openDetails(NativeContentItem item);
-        void openComments(NativeContentItem item);
     }
 
     private static final String PREFS = "chaos_feed";
@@ -102,6 +101,7 @@ public final class ChaosFeedView extends FrameLayout {
     private ChaosAdapter adapter;
     private TextView empty;
     private ProgressBar initialProgress;
+    private InlineCommentsDialog commentsDialog;
     private boolean active;
     private boolean hostResumed = true;
     private boolean poolLoading;
@@ -193,6 +193,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onConfigurationChanged() {
+        if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         syncVisibleChrome();
     }
 
@@ -217,6 +218,7 @@ public final class ChaosFeedView extends FrameLayout {
 }
 
     public void close() {
+        if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         pauseAll();
         releaseVisiblePlayers();
         io.shutdownNow();
@@ -580,6 +582,75 @@ public final class ChaosFeedView extends FrameLayout {
         button.setText(FavoriteStore.contains(activity, item.url) ? "★\nSaved" : "☆\nSave");
     }
 
+    private void openInlineComments(NativeContentItem item) {
+        if (item == null || item.url == null || item.url.isEmpty()) return;
+        if (commentsDialog != null && commentsDialog.isShowing()) return;
+
+        pager.animate().cancel();
+        pager.setUserInputEnabled(false);
+        commentsDialog = new InlineCommentsDialog(
+                activity,
+                item.url,
+                item.title,
+                item.comments,
+                new InlineCommentsDialog.ResizeListener() {
+                    @Override
+                    public void onSheetTopChanged(int topOnScreen) {
+                        resizeForComments(topOnScreen);
+                    }
+
+                    @Override
+                    public void onSheetClosed() {
+                        commentsDialog = null;
+                        restoreAfterComments();
+                    }
+                }
+        );
+        commentsDialog.show();
+    }
+
+    private void resizeForComments(int sheetTopOnScreen) {
+        if (pager == null || pager.getHeight() <= 0) return;
+        int[] pagerLocation = new int[2];
+        pager.getLocationOnScreen(pagerLocation);
+        float available = Math.max(0f, sheetTopOnScreen - pagerLocation[1]);
+        float scale = Math.max(0.26f, Math.min(1f, available / pager.getHeight()));
+        pager.animate().cancel();
+        pager.setPivotX(pager.getWidth() / 2f);
+        pager.setPivotY(0f);
+        pager.setScaleX(scale);
+        pager.setScaleY(scale);
+    }
+
+    private void restoreAfterComments() {
+        if (pager == null) return;
+        pager.animate().cancel();
+        pager.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(190L)
+                .withEndAction(() -> {
+                    pager.setScaleX(1f);
+                    pager.setScaleY(1f);
+                    pager.setUserInputEnabled(true);
+                    ChaosHolder holder = holderAt(selectedPosition);
+                    if (holder != null) holder.showControlsTemporarily();
+                })
+                .start();
+    }
+
+    private void preloadReadyComments(NativeContentItem item, int position) {
+        if (item == null || position != selectedPosition || !active || !hostResumed) return;
+        String url = item.url;
+        pager.postDelayed(() -> {
+            if (!active || !hostResumed || position != selectedPosition) return;
+            if (selectedPosition < 0 || selectedPosition >= items.size()) return;
+            NativeContentItem selected = items.get(selectedPosition);
+            if (selected == null || !url.equals(selected.url)) return;
+            NativeCommentsLoader.preload(activity, url);
+        }, 850L);
+    }
+
     private void haptic(View view) {
         if (view == null) return;
         if (!activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
@@ -850,7 +921,7 @@ public final class ChaosFeedView extends FrameLayout {
             });
             comments.setOnClickListener(v -> {
                 haptic(v);
-                if (item != null) host.openComments(item);
+                if (item != null) openInlineComments(item);
             });
             share.setOnClickListener(v -> {
                 haptic(v);
@@ -972,6 +1043,7 @@ public final class ChaosFeedView extends FrameLayout {
                     stopProgressUpdates();
                 }
                 maybeCompleteStartupHandoff();
+                preloadReadyComments(item, boundPosition);
                 return;
             }
 
@@ -1034,6 +1106,7 @@ public final class ChaosFeedView extends FrameLayout {
                         updateProgress();
                         if (player != null && player.isPlaying()) startProgressUpdates();
                         maybeCompleteStartupHandoff();
+                        preloadReadyComments(item, boundPosition);
                     } else if (state == Player.STATE_ENDED) {
                         loading.setVisibility(View.GONE);
                         stopProgressUpdates();
@@ -1127,7 +1200,7 @@ public final class ChaosFeedView extends FrameLayout {
                                 toggleSaved(item, save);
                                 break;
                             case 3:
-                                host.openComments(item);
+                                openInlineComments(item);
                                 break;
                             case 4:
                                 share(item);

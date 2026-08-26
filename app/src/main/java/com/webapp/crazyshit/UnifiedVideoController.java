@@ -715,7 +715,16 @@ final class UnifiedVideoController {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
-                if (playbackState == Player.STATE_ENDED) savePlaybackState(true);
+                if (playbackState == Player.STATE_READY) {
+                    String readyPageUrl = pageUrl;
+                    playerView.postDelayed(() -> {
+                        if (readyPageUrl.equals(pageUrl)) {
+                            NativeCommentsLoader.preload(activity, readyPageUrl);
+                        }
+                    }, 650L);
+                } else if (playbackState == Player.STATE_ENDED) {
+                    savePlaybackState(true);
+                }
             }
 
             @Override
@@ -919,12 +928,13 @@ final class UnifiedVideoController {
 
     private void openComments() {
         if (pageUrl.isEmpty()) return;
-        savePlaybackState(false);
-        Intent intent = new Intent(activity, CommentsActivity.class);
-        intent.putExtra(CommentsActivity.EXTRA_PAGE_URL, pageUrl);
-        intent.putExtra(CommentsActivity.EXTRA_TITLE, title);
-        intent.putExtra(CommentsActivity.EXTRA_COUNT, comments);
-        activity.startActivity(intent);
+        new InlineCommentsDialog(
+                activity,
+                pageUrl,
+                title,
+                comments,
+                null
+        ).show();
     }
 
     private void toggleWatchLater() {
