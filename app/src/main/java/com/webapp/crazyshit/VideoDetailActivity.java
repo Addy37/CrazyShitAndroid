@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -15,7 +16,9 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
+import android.view.TextureView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
@@ -98,6 +101,10 @@ public class VideoDetailActivity extends Activity {
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
     private OnBackInvokedCallback backCallback;
+    private FrameLayout relatedBackPreviewLayer;
+    private ImageView relatedBackPreviewImage;
+    private VideoHistoryEntry relatedBackPreviewEntry;
+    private float relatedBackDirection = 1f;
 
     private String mediaUrl;
     private String pageUrl;
@@ -126,6 +133,7 @@ public class VideoDetailActivity extends Activity {
         final String userAgent;
         final String cookies;
         final long positionMs;
+        final Bitmap previewBitmap;
 
         VideoHistoryEntry(
                 String mediaUrl,
@@ -136,7 +144,8 @@ public class VideoDetailActivity extends Activity {
                 String comments,
                 String userAgent,
                 String cookies,
-                long positionMs
+                long positionMs,
+                Bitmap previewBitmap
         ) {
             this.mediaUrl = mediaUrl;
             this.pageUrl = pageUrl;
@@ -147,6 +156,7 @@ public class VideoDetailActivity extends Activity {
             this.userAgent = userAgent;
             this.cookies = cookies;
             this.positionMs = positionMs;
+            this.previewBitmap = previewBitmap;
         }
     }
 
@@ -861,9 +871,12 @@ public class VideoDetailActivity extends Activity {
                 comments,
                 userAgent,
                 cookies,
-                position
+                position,
+                captureRelatedBackPreview()
         ));
-        while (relatedHistory.size() > RELATED_HISTORY_LIMIT) relatedHistory.removeFirst();
+        while (relatedHistory.size() > RELATED_HISTORY_LIMIT) {
+            recycleHistoryPreview(relatedHistory.removeFirst());
+        }
     }
 
     private boolean restorePreviousRelatedVideo() {
@@ -886,7 +899,229 @@ public class VideoDetailActivity extends Activity {
         buildPlayer(previous.positionMs);
         if (detailsScroll != null) detailsScroll.smoothScrollTo(0, 0);
         loadRelated();
+        recycleHistoryPreview(previous);
         return true;
+    }
+
+    private Bitmap captureRelatedBackPreview() {
+        TextureView texture = findTextureView(playerView);
+        if (texture == null || !texture.isAvailable() || texture.getWidth() <= 0 || texture.getHeight() <= 0) {
+            return null;
+        }
+        int targetWidth = Math.min(texture.getWidth(), 480);
+        int targetHeight = Math.max(1, Math.round(texture.getHeight() * (targetWidth / (float) texture.getWidth())));
+        Bitmap frame = null;
+        try {
+            frame = texture.getBitmap(targetWidth, targetHeight);
+            if (frame == null) return null;
+            Bitmap compact = frame.copy(Bitmap.Config.RGB_565, false);
+            if (compact == null) return frame;
+            frame.recycle();
+            return compact;
+        } catch (Throwable ignored) {
+            if (frame != null && !frame.isRecycled()) frame.recycle();
+            return null;
+        }
+    }
+
+    private TextureView findTextureView(View candidate) {
+        if (candidate instanceof TextureView) return (TextureView) candidate;
+        if (!(candidate instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) candidate;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            TextureView texture = findTextureView(group.getChildAt(i));
+            if (texture != null) return texture;
+        }
+        return null;
+    }
+
+    private void recycleHistoryPreview(VideoHistoryEntry entry) {
+        if (entry == null || entry.previewBitmap == null || entry.previewBitmap.isRecycled()) return;
+        entry.previewBitmap.recycle();
+    }
+
+    boolean canPreviewRelatedBack() {
+        return !minimizing
+                && root != null
+                && shell != null
+                && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE
+                && !relatedHistory.isEmpty();
+    }
+
+    boolean startRelatedBackPreview(boolean fromRight) {
+        if (!canPreviewRelatedBack()) return false;
+        VideoHistoryEntry previous = relatedHistory.peekLast();
+        if (previous == null) return false;
+
+        clearRelatedBackPreviewLayer();
+        resetRelatedBackForeground();
+        relatedBackPreviewEntry = previous;
+        relatedBackDirection = fromRight ? -1f : 1f;
+
+        FrameLayout preview = new FrameLayout(this);
+        preview.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
+        preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+
+        FrameLayout mediaPreview = new FrameLayout(this);
+        mediaPreview.setBackgroundColor(Color.BLACK);
+        FrameLayout.LayoutParams mediaParams = new FrameLayout.LayoutParams(-1, portraitPlayerHeight());
+        mediaParams.topMargin = shell.getPaddingTop();
+        preview.addView(mediaPreview, mediaParams);
+
+        Bitmap bitmap = previous.previewBitmap;
+        if (bitmap != null && !bitmap.isRecycled()) {
+            ImageView image = new ImageView(this);
+            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            image.setImageBitmap(bitmap);
+            mediaPreview.addView(image, new FrameLayout.LayoutParams(-1, -1));
+            relatedBackPreviewImage = image;
+        }
+
+        LinearLayout destination = new LinearLayout(this);
+        destination.setOrientation(LinearLayout.VERTICAL);
+        destination.setPadding(dp(16), dp(15), dp(16), dp(30));
+        FrameLayout.LayoutParams destinationParams = new FrameLayout.LayoutParams(-1, -1);
+        destinationParams.topMargin = shell.getPaddingTop() + portraitPlayerHeight();
+        preview.addView(destination, destinationParams);
+
+        TextView destinationTitle = new TextView(this);
+        destinationTitle.setText(previous.title == null || previous.title.isEmpty() ? "Previous video" : previous.title);
+        destinationTitle.setTextColor(Color.WHITE);
+        destinationTitle.setTextSize(21);
+        destinationTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        destination.addView(destinationTitle, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView destinationMeta = new TextView(this);
+        StringBuilder previewMeta = new StringBuilder();
+        if (previous.uploader != null && !previous.uploader.isEmpty()) previewMeta.append(previous.uploader);
+        if (previous.views != null && !previous.views.isEmpty()) {
+            if (previewMeta.length() > 0) previewMeta.append("  •  ");
+            previewMeta.append(previous.views).append(" views");
+        }
+        destinationMeta.setText(previewMeta);
+        destinationMeta.setTextColor(Color.rgb(165, 165, 174));
+        destinationMeta.setTextSize(12);
+        destinationMeta.setPadding(0, dp(6), 0, dp(18));
+        destination.addView(destinationMeta, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView destinationRelated = new TextView(this);
+        destinationRelated.setText("Related videos");
+        destinationRelated.setTextColor(Color.WHITE);
+        destinationRelated.setTextSize(18);
+        destinationRelated.setTypeface(null, android.graphics.Typeface.BOLD);
+        destination.addView(destinationRelated, new LinearLayout.LayoutParams(-1, -2));
+
+        preview.setAlpha(0.45f);
+        preview.setScaleX(0.985f);
+        preview.setScaleY(0.985f);
+        preview.setTranslationX(-relatedBackDirection * dp(18));
+        root.addView(preview, 0, new FrameLayout.LayoutParams(-1, -1));
+        relatedBackPreviewLayer = preview;
+        return true;
+    }
+
+    void updateRelatedBackPreview(float progress, boolean fromRight) {
+        if (relatedBackPreviewLayer == null || relatedBackPreviewEntry == null) return;
+        float p = Math.max(0f, Math.min(1f, progress));
+        float eased = 1f - (1f - p) * (1f - p);
+        relatedBackDirection = fromRight ? -1f : 1f;
+
+        shell.animate().cancel();
+        shell.setPivotX(fromRight ? shell.getWidth() : 0f);
+        shell.setPivotY(shell.getHeight() * 0.5f);
+        float travel = Math.max(dp(48), root.getWidth() * 0.24f);
+        shell.setTranslationX(relatedBackDirection * travel * eased);
+        float foregroundScale = 1f - (0.04f * eased);
+        shell.setScaleX(foregroundScale);
+        shell.setScaleY(foregroundScale);
+        shell.setAlpha(1f - (0.05f * eased));
+
+        relatedBackPreviewLayer.animate().cancel();
+        relatedBackPreviewLayer.setAlpha(0.45f + (0.55f * eased));
+        float previewScale = 0.985f + (0.015f * eased);
+        relatedBackPreviewLayer.setScaleX(previewScale);
+        relatedBackPreviewLayer.setScaleY(previewScale);
+        relatedBackPreviewLayer.setTranslationX(-relatedBackDirection * dp(18) * (1f - eased));
+    }
+
+    void cancelRelatedBackPreview() {
+        if (shell != null) {
+            shell.animate().cancel();
+            shell.animate()
+                    .translationX(0f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .alpha(1f)
+                    .setDuration(150L)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+
+        FrameLayout preview = relatedBackPreviewLayer;
+        relatedBackPreviewEntry = null;
+        if (preview == null) return;
+        preview.animate().cancel();
+        preview.animate()
+                .alpha(0f)
+                .translationX(-relatedBackDirection * dp(18))
+                .setDuration(130L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> {
+                    if (relatedBackPreviewLayer == preview) clearRelatedBackPreviewLayer();
+                })
+                .start();
+    }
+
+    void commitRelatedBackPreview() {
+        VideoHistoryEntry expected = relatedBackPreviewEntry;
+        if (expected == null || relatedHistory.peekLast() != expected || shell == null || root == null) {
+            abortRelatedBackPreview();
+            handleBack();
+            return;
+        }
+
+        relatedBackPreviewEntry = null;
+        shell.animate().cancel();
+        shell.animate()
+                .translationX(relatedBackDirection * Math.max(dp(64), root.getWidth() * 0.34f))
+                .scaleX(0.955f)
+                .scaleY(0.955f)
+                .alpha(0.9f)
+                .setDuration(90L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> {
+                    clearRelatedBackPreviewLayer();
+                    boolean restored = restorePreviousRelatedVideo();
+                    resetRelatedBackForeground();
+                    if (!restored) handleBack();
+                })
+                .start();
+    }
+
+    void abortRelatedBackPreview() {
+        relatedBackPreviewEntry = null;
+        clearRelatedBackPreviewLayer();
+        resetRelatedBackForeground();
+    }
+
+    private void clearRelatedBackPreviewLayer() {
+        FrameLayout preview = relatedBackPreviewLayer;
+        if (preview != null) {
+            preview.animate().cancel();
+            if (relatedBackPreviewImage != null) relatedBackPreviewImage.setImageDrawable(null);
+            if (root != null) root.removeView(preview);
+        }
+        relatedBackPreviewLayer = null;
+        relatedBackPreviewImage = null;
+    }
+
+    private void resetRelatedBackForeground() {
+        if (shell == null) return;
+        shell.animate().cancel();
+        shell.setTranslationX(0f);
+        shell.setScaleX(1f);
+        shell.setScaleY(1f);
+        shell.setAlpha(1f);
     }
 
     private void openComments() {
@@ -998,6 +1233,7 @@ public class VideoDetailActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        abortRelatedBackPreview();
         applyOrientation(newConfig.orientation);
     }
 
@@ -1223,6 +1459,7 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        abortRelatedBackPreview();
         if (Build.VERSION.SDK_INT >= 33 && backCallback != null) {
             try {
                 getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backCallback);
@@ -1240,6 +1477,7 @@ public class VideoDetailActivity extends Activity {
                 if (resolver != null) resolver.close();
             }
         }
+        for (VideoHistoryEntry entry : relatedHistory) recycleHistoryPreview(entry);
         relatedHistory.clear();
         requestedRelatedThumbnails.clear();
         io.shutdownNow();

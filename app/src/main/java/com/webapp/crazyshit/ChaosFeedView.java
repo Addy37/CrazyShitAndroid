@@ -731,6 +731,8 @@ public final class ChaosFeedView extends FrameLayout {
         if (commentsDialog != null && commentsDialog.isShowing()) return;
 
         pager.animate().cancel();
+        pager.setScaleX(1f);
+        pager.setScaleY(1f);
         pager.setUserInputEnabled(false);
         commentsDialog = new InlineCommentsDialog(
                 activity,
@@ -754,33 +756,24 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void resizeForComments(int sheetTopOnScreen) {
-        if (pager == null || pager.getHeight() <= 0) return;
-        int[] pagerLocation = new int[2];
-        pager.getLocationOnScreen(pagerLocation);
-        float available = Math.max(0f, sheetTopOnScreen - pagerLocation[1]);
-        float scale = Math.max(0.26f, Math.min(1f, available / pager.getHeight()));
-        pager.animate().cancel();
-        pager.setPivotX(pager.getWidth() / 2f);
-        pager.setPivotY(0f);
-        pager.setScaleX(scale);
-        pager.setScaleY(scale);
+        ChaosHolder holder = holderAt(selectedPosition);
+        if (holder != null) holder.resizeMediaForComments(sheetTopOnScreen);
     }
 
     private void restoreAfterComments() {
         if (pager == null) return;
         pager.animate().cancel();
-        pager.animate()
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(190L)
-                .withEndAction(() -> {
-                    pager.setScaleX(1f);
-                    pager.setScaleY(1f);
-                    pager.setUserInputEnabled(true);
-                    ChaosHolder holder = holderAt(selectedPosition);
-                    if (holder != null) holder.showControlsTemporarily();
-                })
-                .start();
+        pager.setScaleX(1f);
+        pager.setScaleY(1f);
+        ChaosHolder holder = holderAt(selectedPosition);
+        if (holder == null) {
+            pager.setUserInputEnabled(true);
+            return;
+        }
+        holder.restoreMediaAfterComments(() -> {
+            pager.setUserInputEnabled(true);
+            holder.showControlsTemporarily();
+        });
     }
 
     private void preloadReadyComments(NativeContentItem item, int position) {
@@ -860,6 +853,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private final class ChaosHolder extends RecyclerView.ViewHolder {
         final FrameLayout root;
+        final FrameLayout mediaLayer;
         final PlayerView playerView;
         final ImageView poster;
         final ProgressBar loading;
@@ -906,14 +900,18 @@ public final class ChaosFeedView extends FrameLayout {
             root.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
             root.setBackgroundColor(Color.BLACK);
 
+            mediaLayer = new FrameLayout(activity);
+            mediaLayer.setBackgroundColor(Color.BLACK);
+            root.addView(mediaLayer, new FrameLayout.LayoutParams(-1, -1));
+
             poster = new ImageView(activity);
             poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
             poster.setBackgroundColor(Color.BLACK);
             poster.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            root.addView(poster, new FrameLayout.LayoutParams(-1, -1));
+            mediaLayer.addView(poster, new FrameLayout.LayoutParams(-1, -1));
 
             playerView = (PlayerView) LayoutInflater.from(activity)
-                    .inflate(R.layout.view_video_player_texture, root, false);
+                    .inflate(R.layout.view_video_player_texture, mediaLayer, false);
             playerView.setUseController(false);
             playerView.setControllerAutoShow(false);
             playerView.hideController();
@@ -921,13 +919,13 @@ public final class ChaosFeedView extends FrameLayout {
             playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
             playerView.setBackgroundColor(Color.BLACK);
             playerView.setContentDescription("Play or pause video");
-            root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
+            mediaLayer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
             loading = new ProgressBar(activity);
             loading.setContentDescription("Loading video");
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(44), dp(44));
             lp.gravity = Gravity.CENTER;
-            root.addView(loading, lp);
+            mediaLayer.addView(loading, lp);
 
             failure = new TextView(activity);
             failure.setTextColor(Color.WHITE);
@@ -937,7 +935,7 @@ public final class ChaosFeedView extends FrameLayout {
             failure.setPadding(dp(28), dp(28), dp(28), dp(28));
             failure.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
             failure.setVisibility(View.GONE);
-            root.addView(failure, new FrameLayout.LayoutParams(-1, -1));
+            mediaLayer.addView(failure, new FrameLayout.LayoutParams(-1, -1));
 
             lower = new LinearLayout(activity);
             lower.setOrientation(LinearLayout.HORIZONTAL);
@@ -1145,6 +1143,9 @@ public final class ChaosFeedView extends FrameLayout {
             pauseAndRecord();
             releasePlayer();
             root.removeCallbacks(skipFailedClipRunnable);
+            mediaLayer.animate().cancel();
+            mediaLayer.setScaleX(1f);
+            mediaLayer.setScaleY(1f);
             item = next;
             stream = null;
             lastAttemptedStream = null;
@@ -1195,6 +1196,33 @@ public final class ChaosFeedView extends FrameLayout {
                         .into(poster);
             }
             syncOrientationChrome();
+        }
+
+        void resizeMediaForComments(int sheetTopOnScreen) {
+            if (root.getHeight() <= 0 || mediaLayer.getWidth() <= 0) return;
+            int[] rootLocation = new int[2];
+            root.getLocationOnScreen(rootLocation);
+            float available = Math.max(0f, sheetTopOnScreen - rootLocation[1]);
+            float scale = Math.max(0.26f, Math.min(1f, available / root.getHeight()));
+            mediaLayer.animate().cancel();
+            mediaLayer.setPivotX(mediaLayer.getWidth() / 2f);
+            mediaLayer.setPivotY(0f);
+            mediaLayer.setScaleX(scale);
+            mediaLayer.setScaleY(scale);
+        }
+
+        void restoreMediaAfterComments(Runnable endAction) {
+            mediaLayer.animate().cancel();
+            mediaLayer.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(190L)
+                    .withEndAction(() -> {
+                        mediaLayer.setScaleX(1f);
+                        mediaLayer.setScaleY(1f);
+                        if (endAction != null) endAction.run();
+                    })
+                    .start();
         }
 
         void prepare(CrazyShitRepository.StreamInfo nextStream, boolean autoplay) {
