@@ -2,21 +2,27 @@ package com.webapp.crazyshit;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
@@ -54,14 +60,21 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private LinearLayout commentsContainer;
     private TextView headerTitle;
     private TextView sortButton;
+    private EditText composerInput;
+    private TextView composerSend;
+    private TextView replyContext;
     private ScrollView scrollView;
     private NativeCommentsLoader.Token loadToken;
+    private NativeCommentsLoader.Comment replyTarget;
     private BottomSheetBehavior<FrameLayout> behavior;
     private FrameLayout bottomSheet;
     private int sortMode = SORT_SITE;
     private boolean loginRequired;
+    private boolean commentingAvailable;
     private boolean loadingStarted;
     private boolean closeDispatched;
+    private boolean loginLaunched;
+    private boolean posting;
 
     InlineCommentsDialog(
             Activity activity,
@@ -99,6 +112,12 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         LinearLayout shell = new LinearLayout(activity);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackground(roundedTop(Color.rgb(16, 16, 18), 24));
+        shell.setOnWindowFocusChangeListener((view, hasFocus) -> {
+            if (!hasFocus || !loginLaunched || !isShowing()) return;
+            loginLaunched = false;
+            NativeCommentsLoader.invalidate(pageUrl);
+            loadComments(true);
+        });
 
         FrameLayout handleRow = new FrameLayout(activity);
         shell.addView(handleRow, new LinearLayout.LayoutParams(-1, dp(18)));
@@ -158,16 +177,31 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         scrollView.addView(commentsContainer, new ScrollView.LayoutParams(-1, -2));
         showSkeletons();
 
-        shell.addView(buildComposer(), new LinearLayout.LayoutParams(-1, dp(68)));
+        shell.addView(buildComposer(), new LinearLayout.LayoutParams(-1, -2));
         return shell;
     }
 
     private View buildComposer() {
+        LinearLayout composer = new LinearLayout(activity);
+        composer.setOrientation(LinearLayout.VERTICAL);
+        composer.setPadding(dp(12), dp(5), dp(12), dp(9));
+        composer.setBackgroundColor(Color.rgb(20, 20, 23));
+
+        replyContext = new TextView(activity);
+        replyContext.setTextColor(UiPalette.PRIMARY);
+        replyContext.setTextSize(11);
+        replyContext.setGravity(Gravity.CENTER_VERTICAL);
+        replyContext.setPadding(dp(46), 0, dp(8), 0);
+        replyContext.setVisibility(View.GONE);
+        replyContext.setClickable(true);
+        replyContext.setFocusable(true);
+        replyContext.setOnClickListener(v -> cancelReply());
+        composer.addView(replyContext, new LinearLayout.LayoutParams(-1, dp(28)));
+
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(12), dp(8), dp(12), dp(9));
-        row.setBackgroundColor(Color.rgb(20, 20, 23));
+        composer.addView(row, new LinearLayout.LayoutParams(-1, dp(48)));
 
         TextView avatar = new TextView(activity);
         avatar.setText("C");
@@ -179,21 +213,51 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         avatar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         row.addView(avatar, new LinearLayout.LayoutParams(dp(36), dp(36)));
 
-        TextView input = new TextView(activity);
-        input.setText("Add comment…");
-        input.setTextColor(Color.rgb(157, 157, 166));
-        input.setTextSize(13);
-        input.setGravity(Gravity.CENTER_VERTICAL);
-        input.setPadding(dp(14), 0, dp(12), 0);
-        input.setBackground(roundRect(Color.rgb(34, 34, 38), 20));
-        input.setContentDescription("Open the website to add a comment");
-        input.setClickable(true);
-        input.setFocusable(true);
-        input.setOnClickListener(v -> openWebsite());
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        composerInput = new EditText(activity);
+        composerInput.setHint("Add comment…");
+        composerInput.setHintTextColor(Color.rgb(157, 157, 166));
+        composerInput.setTextColor(Color.WHITE);
+        composerInput.setTextSize(13);
+        composerInput.setGravity(Gravity.CENTER_VERTICAL);
+        composerInput.setPadding(dp(14), 0, dp(12), 0);
+        composerInput.setSingleLine(false);
+        composerInput.setMinLines(1);
+        composerInput.setMaxLines(3);
+        composerInput.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        composerInput.setImeOptions(EditorInfo.IME_ACTION_SEND);
+        composerInput.setBackground(roundRect(Color.rgb(34, 34, 38), 20));
+        composerInput.setContentDescription("Add a comment");
+        composerInput.setOnFocusChangeListener((view, hasFocus) -> {
+            if (!hasFocus || !loginRequired) return;
+            composerInput.clearFocus();
+            openLogin();
+        });
+        composerInput.setOnEditorActionListener((view, actionId, event) -> {
+            if (actionId != EditorInfo.IME_ACTION_SEND) return false;
+            submitComposer();
+            return true;
+        });
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(0, dp(44), 1f);
         inputParams.setMargins(dp(10), 0, 0, 0);
-        row.addView(input, inputParams);
-        return row;
+        row.addView(composerInput, inputParams);
+
+        composerSend = new TextView(activity);
+        composerSend.setText("↑");
+        composerSend.setTextColor(Color.rgb(24, 24, 26));
+        composerSend.setTextSize(22);
+        composerSend.setTypeface(null, android.graphics.Typeface.BOLD);
+        composerSend.setGravity(Gravity.CENTER);
+        composerSend.setBackground(circle(UiPalette.PRIMARY));
+        composerSend.setContentDescription("Post comment");
+        composerSend.setClickable(true);
+        composerSend.setFocusable(true);
+        composerSend.setOnClickListener(v -> submitComposer());
+        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(38), dp(38));
+        sendParams.setMargins(dp(8), 0, 0, 0);
+        row.addView(composerSend, sendParams);
+        return composer;
     }
 
     private TextView headerAction(String text, String description) {
@@ -214,7 +278,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         window.setDimAmount(0.18f);
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setNavigationBarColor(Color.BLACK);
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         window.getDecorView().setSystemUiVisibility(0);
     }
 
@@ -276,6 +340,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         if (closeDispatched) return;
         closeDispatched = true;
         if (loadToken != null) loadToken.cancel();
+        hideKeyboard();
         if (resizeListener != null) resizeListener.onSheetClosed();
     }
 
@@ -292,7 +357,9 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             public void onLoaded(NativeCommentsLoader.Payload payload) {
                 loadedComments.clear();
                 loadedComments.addAll(payload.comments);
-                loginRequired = payload.loginRequired;
+                loginRequired = payload.loginRequired && !payload.canComment;
+                commentingAvailable = payload.canComment;
+                updateComposerState();
                 renderComments();
             }
 
@@ -371,8 +438,12 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         }
 
         if (loadedComments.isEmpty() && !loginRequired) {
-            showError("No comments were found on this page.");
-            return;
+            if (commentingAvailable) {
+                commentsContainer.addView(message("No comments yet. Start the conversation."), rowParams(0));
+            } else {
+                showError("No comments were found on this page.");
+                return;
+            }
         }
         if (loadedComments.isEmpty()) {
             commentsContainer.addView(message("Log in to load the full comment section."), rowParams(0));
@@ -427,6 +498,13 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         content.addView(actions, actionParams);
 
         TextView reply = smallAction("Reply");
+        reply.setContentDescription("Reply to " + author);
+        reply.setClickable(true);
+        reply.setFocusable(true);
+        reply.setOnClickListener(v -> {
+            if (loginRequired) openLogin();
+            else startReply(item);
+        });
         actions.addView(reply, new LinearLayout.LayoutParams(-2, -1));
 
         if (!item.score.isEmpty() && item.score.length() <= 28) {
@@ -617,10 +695,131 @@ final class InlineCommentsDialog extends BottomSheetDialog {
 
     private void openLogin() {
         NativeCommentsLoader.invalidate(pageUrl);
-        dismiss();
+        posting = false;
+        setComposerEnabled(true);
+        if (composerInput != null) composerInput.clearFocus();
+        hideKeyboard();
+        loginLaunched = true;
         Intent intent = new Intent(activity, LoginActivity.class);
         intent.putExtra(LoginActivity.EXTRA_RETURN_URL, pageUrl);
         activity.startActivity(intent);
+    }
+
+    private void startReply(NativeCommentsLoader.Comment item) {
+        if (posting || item == null || composerInput == null) return;
+        if (loginRequired) {
+            openLogin();
+            return;
+        }
+        replyTarget = item;
+        updateComposerState();
+        composerInput.requestFocus();
+        composerInput.setSelection(composerInput.length());
+        InputMethodManager keyboard = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (keyboard != null) keyboard.showSoftInput(composerInput, InputMethodManager.SHOW_IMPLICIT);
+    }
+
+    private void cancelReply() {
+        replyTarget = null;
+        updateComposerState();
+    }
+
+    private void submitComposer() {
+        if (posting || composerInput == null || activity.isFinishing() || activity.isDestroyed()) return;
+        if (loginRequired) {
+            openLogin();
+            return;
+        }
+        String message = composerInput.getText() == null
+                ? ""
+                : composerInput.getText().toString().trim();
+        if (message.isEmpty()) {
+            composerInput.setError("Write something first.");
+            return;
+        }
+        if (message.length() > 2400) {
+            composerInput.setError("Keep the comment under 2,400 characters.");
+            return;
+        }
+
+        NativeCommentsLoader.Comment submittedReply = replyTarget;
+        posting = true;
+        setComposerEnabled(false);
+
+        NativeCommentPoster.post(activity, pageUrl, message, submittedReply, new NativeCommentPoster.Callback() {
+            @Override
+            public void onPosted() {
+                posting = false;
+                if (composerInput != null) composerInput.setText("");
+                replyTarget = null;
+                setComposerEnabled(true);
+                updateComposerState();
+                hideKeyboard();
+                Toast.makeText(activity,
+                        submittedReply == null ? "Comment posted." : "Reply posted.",
+                        Toast.LENGTH_SHORT).show();
+                NativeCommentsLoader.invalidate(pageUrl);
+                if (isShowing()) loadComments(true);
+            }
+
+            @Override
+            public void onLoginRequired() {
+                posting = false;
+                loginRequired = true;
+                setComposerEnabled(true);
+                updateComposerState();
+                openLogin();
+            }
+
+            @Override
+            public void onError(String message) {
+                posting = false;
+                setComposerEnabled(true);
+                if (!isShowing() || composerInput == null) {
+                    Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                composerInput.setError(message);
+            }
+        });
+    }
+
+    private String displayAuthor(NativeCommentsLoader.Comment item) {
+        if (item == null || item.author == null || item.author.isEmpty()) return "this comment";
+        return item.author;
+    }
+
+    private void updateComposerState() {
+        if (composerInput == null || composerSend == null || replyContext == null) return;
+        if (replyTarget == null) {
+            replyContext.setVisibility(View.GONE);
+        } else {
+            replyContext.setText("Replying to " + displayAuthor(replyTarget) + "  ×");
+            replyContext.setContentDescription("Cancel reply to " + displayAuthor(replyTarget));
+            replyContext.setVisibility(View.VISIBLE);
+        }
+        String hint = loginRequired
+                ? "Log in to comment"
+                : replyTarget == null ? "Add comment…" : "Reply to " + displayAuthor(replyTarget) + "…";
+        composerInput.setHint(hint);
+        composerInput.setContentDescription(hint);
+        composerSend.setContentDescription(replyTarget == null ? "Post comment" : "Post reply");
+    }
+
+    private void setComposerEnabled(boolean enabled) {
+        if (composerInput != null) composerInput.setEnabled(enabled);
+        if (composerSend == null) return;
+        composerSend.setEnabled(enabled);
+        composerSend.setAlpha(enabled ? 1f : 0.52f);
+        composerSend.setText(enabled ? "↑" : "…");
+    }
+
+    private void hideKeyboard() {
+        View focused = getCurrentFocus();
+        if (focused == null) focused = composerInput;
+        if (focused == null) return;
+        InputMethodManager keyboard = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (keyboard != null) keyboard.hideSoftInputFromWindow(focused.getWindowToken(), 0);
     }
 
     private void openWebsite() {

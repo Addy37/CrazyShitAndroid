@@ -32,6 +32,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -878,6 +879,8 @@ public final class ChaosFeedView extends FrameLayout {
         boolean everStarted;
         boolean retryAttempted;
         boolean failurePending;
+        boolean horizontalVideo;
+        float videoAspectRatio;
         float restoreSpeed = 1f;
 
         private final Runnable hideControlsRunnable = this::hideControlsNow;
@@ -1146,6 +1149,7 @@ public final class ChaosFeedView extends FrameLayout {
             mediaLayer.animate().cancel();
             mediaLayer.setScaleX(1f);
             mediaLayer.setScaleY(1f);
+            mediaLayer.setTranslationY(0f);
             item = next;
             stream = null;
             lastAttemptedStream = null;
@@ -1158,6 +1162,8 @@ public final class ChaosFeedView extends FrameLayout {
             scrubbing = false;
             retryAttempted = false;
             failurePending = false;
+            horizontalVideo = false;
+            videoAspectRatio = 0f;
             seekBar.setProgress(0);
             seekBar.setEnabled(false);
             seekBar.setAlpha(1f);
@@ -1200,15 +1206,24 @@ public final class ChaosFeedView extends FrameLayout {
 
         void resizeMediaForComments(int sheetTopOnScreen) {
             if (root.getHeight() <= 0 || mediaLayer.getWidth() <= 0) return;
+            mediaLayer.animate().cancel();
+            mediaLayer.setScaleX(1f);
+            mediaLayer.setScaleY(1f);
+            if (!horizontalVideo || videoAspectRatio <= 1f) {
+                mediaLayer.setTranslationY(0f);
+                return;
+            }
+
             int[] rootLocation = new int[2];
             root.getLocationOnScreen(rootLocation);
             float available = Math.max(0f, sheetTopOnScreen - rootLocation[1]);
-            float scale = Math.max(0.26f, Math.min(1f, available / root.getHeight()));
-            mediaLayer.animate().cancel();
-            mediaLayer.setPivotX(mediaLayer.getWidth() / 2f);
-            mediaLayer.setPivotY(0f);
-            mediaLayer.setScaleX(scale);
-            mediaLayer.setScaleY(scale);
+            float renderedVideoHeight = Math.min(
+                    root.getHeight(),
+                    mediaLayer.getWidth() / videoAspectRatio
+            );
+            float currentTop = (root.getHeight() - renderedVideoHeight) / 2f;
+            float targetTop = Math.max(dp(8), (available - renderedVideoHeight) / 2f);
+            mediaLayer.setTranslationY(Math.min(0f, targetTop - currentTop));
         }
 
         void restoreMediaAfterComments(Runnable endAction) {
@@ -1216,10 +1231,12 @@ public final class ChaosFeedView extends FrameLayout {
             mediaLayer.animate()
                     .scaleX(1f)
                     .scaleY(1f)
+                    .translationY(0f)
                     .setDuration(190L)
                     .withEndAction(() -> {
                         mediaLayer.setScaleX(1f);
                         mediaLayer.setScaleY(1f);
+                        mediaLayer.setTranslationY(0f);
                         if (endAction != null) endAction.run();
                     })
                     .start();
@@ -1308,6 +1325,15 @@ public final class ChaosFeedView extends FrameLayout {
             player.setPlayWhenReady(autoplay);
             if (autoplay) everStarted = true;
             player.addListener(new Player.Listener() {
+                @Override
+                public void onVideoSizeChanged(VideoSize videoSize) {
+                    if (player != createdPlayer || videoSize.width <= 0 || videoSize.height <= 0) return;
+                    float width = videoSize.width * Math.max(0.01f, videoSize.pixelWidthHeightRatio);
+                    float height = videoSize.height;
+                    videoAspectRatio = width / Math.max(1f, height);
+                    horizontalVideo = videoAspectRatio > 1.1f;
+                }
+
                 @Override
                 public void onPlaybackStateChanged(int state) {
                     if (player != createdPlayer) return;

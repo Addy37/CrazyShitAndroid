@@ -49,10 +49,12 @@ final class NativeCommentsLoader {
     static final class Payload {
         final ArrayList<Comment> comments;
         final boolean loginRequired;
+        final boolean canComment;
 
-        Payload(ArrayList<Comment> comments, boolean loginRequired) {
+        Payload(ArrayList<Comment> comments, boolean loginRequired, boolean canComment) {
             this.comments = comments;
             this.loginRequired = loginRequired;
+            this.canComment = canComment;
         }
     }
 
@@ -163,6 +165,7 @@ final class NativeCommentsLoader {
                 WebSettings settings = webView.getSettings();
                 settings.setJavaScriptEnabled(true);
                 settings.setDomStorageEnabled(true);
+                settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
                 settings.setLoadsImagesAutomatically(false);
                 settings.setBlockNetworkImage(true);
                 settings.setMediaPlaybackRequiresUserGesture(true);
@@ -218,10 +221,12 @@ final class NativeCommentsLoader {
                     if (object != null) {
                         JSONArray array = object.optJSONArray("comments");
                         boolean loginRequired = object.optBoolean("loginRequired", false);
-                        if ((array != null && array.length() > 0) || loginRequired) {
+                        boolean canComment = object.optBoolean("canComment", false);
+                        if ((array != null && array.length() > 0) || loginRequired || canComment) {
                             Payload payload = new Payload(
                                     parseComments(array == null ? new JSONArray() : array),
-                                    loginRequired
+                                    loginRequired,
+                                    canComment
                             );
                             complete(payload);
                             return;

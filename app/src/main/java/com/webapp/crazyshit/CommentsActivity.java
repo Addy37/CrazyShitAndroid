@@ -57,7 +57,8 @@ public class CommentsActivity extends Activity {
             "(() => {" +
             "const clean=s=>(s||'').replace(/\\s+/g,' ').trim();" +
             "const pageText=clean(document.body?document.body.innerText:'');" +
-            "const loginRequired=/please\\s+(?:log\\s*in|login)\\s+to\\s+view\\s+all\\s+comments/i.test(pageText);" +
+            "const loginRequired=/please\\s+(?:log\\s*in|login)\\s+to\\s+view\\s+all\\s+comments|(?:log\\s*in|login)\\s+to\\s+comment/i.test(pageText);" +
+            "const canComment=!!document.querySelector('textarea,[contenteditable=true],input[name*=comment],input[name*=reply],form[action*=comment]');" +
             "const sig=e=>((e&&e.id)||'')+' '+((e&&typeof e.className==='string')?e.className:'');" +
             "const commentish=e=>{" +
             "if(!e)return false;" +
@@ -104,7 +105,7 @@ public class CommentsActivity extends Activity {
             "let key=(author+'|'+text).toLowerCase();if(seen.has(key))continue;seen.add(key);" +
             "out.push({author:author,time:time,text:text,avatar:avatar,score:score,depth:depth});if(out.length>=100)break;" +
             "}" +
-            "return JSON.stringify({loginRequired:loginRequired,comments:out});" +
+            "return JSON.stringify({loginRequired:loginRequired,canComment:canComment,comments:out});" +
             "})()";
 
     private String pageUrl;
