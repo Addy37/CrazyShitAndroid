@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, v2.8.1-chaos-fast-start ]
   pull_request:
   workflow_dispatch:
 
