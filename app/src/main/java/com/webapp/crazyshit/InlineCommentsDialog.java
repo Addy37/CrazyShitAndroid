@@ -108,16 +108,19 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         }
     }
 
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus || !loginLaunched || !isShowing()) return;
+        loginLaunched = false;
+        NativeCommentsLoader.invalidate(pageUrl);
+        loadComments(true);
+    }
+
     private View buildContent() {
         LinearLayout shell = new LinearLayout(activity);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackground(roundedTop(Color.rgb(16, 16, 18), 24));
-        shell.setOnWindowFocusChangeListener((view, hasFocus) -> {
-            if (!hasFocus || !loginLaunched || !isShowing()) return;
-            loginLaunched = false;
-            NativeCommentsLoader.invalidate(pageUrl);
-            loadComments(true);
-        });
 
         FrameLayout handleRow = new FrameLayout(activity);
         shell.addView(handleRow, new LinearLayout.LayoutParams(-1, dp(18)));
