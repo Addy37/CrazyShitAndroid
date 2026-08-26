@@ -9,7 +9,9 @@ import android.view.Gravity;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.RenderProcessGoneDetail;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -61,7 +63,7 @@ final class NativeCommentPoster {
         final NativeCommentsLoader.Comment replyTo;
         final Callback callback;
         final Runnable hardTimeout = () -> completeError(
-                "CrazyShit did not finish the comment request. Your text was kept. [CS13 timeout]"
+                "CrazyShit did not finish the comment request. Your text was kept. [CS14 timeout]"
         );
 
         WebView webView;
@@ -71,8 +73,10 @@ final class NativeCommentPoster {
         boolean replyActionTried;
         boolean submissionAttempted;
         boolean verifyScheduled;
+        boolean confirmationReloaded;
         boolean finished;
         String lastDiagnostic = "";
+        String lastNetworkDiagnostic = "";
 
         Request(
                 Activity activity,
@@ -104,8 +108,8 @@ final class NativeCommentPoster {
                 settings.setJavaScriptEnabled(true);
                 settings.setDomStorageEnabled(true);
                 settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-                settings.setLoadsImagesAutomatically(false);
-                settings.setBlockNetworkImage(true);
+                settings.setLoadsImagesAutomatically(true);
+                settings.setBlockNetworkImage(false);
                 settings.setMediaPlaybackRequiresUserGesture(true);
                 settings.setJavaScriptCanOpenWindowsAutomatically(false);
                 settings.setSupportMultipleWindows(false);
@@ -114,7 +118,7 @@ final class NativeCommentPoster {
                 try {
                     CookieManager cookies = CookieManager.getInstance();
                     cookies.setAcceptCookie(true);
-                    cookies.setAcceptThirdPartyCookies(webView, false);
+                    cookies.setAcceptThirdPartyCookies(webView, true);
                     cookies.flush();
                 } catch (Exception ignored) {
                 }
@@ -154,13 +158,43 @@ final class NativeCommentPoster {
                     }
 
                     @Override
+                    public void onReceivedError(
+                            WebView view,
+                            WebResourceRequest request,
+                            WebResourceError error
+                    ) {
+                        if (!submissionAttempted || request == null || error == null) return;
+                        if (!request.isForMainFrame()
+                                && "GET".equalsIgnoreCase(request.getMethod())) return;
+                        noteNetworkDiagnostic(
+                                "CS14 WebView " + error.getErrorCode() + " "
+                                        + safeTarget(request.getUrl())
+                        );
+                    }
+
+                    @Override
+                    public void onReceivedHttpError(
+                            WebView view,
+                            WebResourceRequest request,
+                            WebResourceResponse response
+                    ) {
+                        if (!submissionAttempted || request == null || response == null) return;
+                        if (!request.isForMainFrame()
+                                && "GET".equalsIgnoreCase(request.getMethod())) return;
+                        noteNetworkDiagnostic(
+                                "CS14 HTTP " + response.getStatusCode() + " "
+                                        + safeTarget(request.getUrl())
+                        );
+                    }
+
+                    @Override
                     public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
                         completeError("The comment service stopped unexpectedly. Try again.");
                         return true;
                     }
                 });
 
-                webView.postDelayed(hardTimeout, 30000L);
+                webView.postDelayed(hardTimeout, 35000L);
                 webView.loadUrl(url);
             } catch (Exception e) {
                 completeError("Comments couldn't connect to the website.");
@@ -220,20 +254,20 @@ final class NativeCommentPoster {
                     String diagnostic = result == null
                             ? ""
                             : clean(result.optString("diagnostic", ""));
-                    if (!diagnostic.isEmpty()) lastDiagnostic = diagnostic;
+                    noteDiagnostic(diagnostic);
                     if ("login".equals(nextState)) {
                         completeLoginRequired();
                     } else if ("missing".equals(nextState)) {
                         submissionAttempted = false;
                         String error = result == null ? "" : clean(result.optString("message", ""));
                         completeError(error.isEmpty()
-                                ? "CrazyShit did not expose a posting control. Your text was kept. [CS13 no-control]"
+                                ? "CrazyShit did not expose a posting control. Your text was kept. [CS14 no-control]"
                                 : error);
                     }
                 });
             } catch (Exception e) {
                 // A normal form submit can replace the JavaScript page before this callback returns.
-                lastDiagnostic = "CS13 page navigation";
+                lastDiagnostic = "CS14 page navigation";
             }
         }
 
@@ -248,7 +282,7 @@ final class NativeCommentPoster {
                     String diagnostic = result == null
                             ? ""
                             : clean(result.optString("diagnostic", ""));
-                    if (!diagnostic.isEmpty()) lastDiagnostic = diagnostic;
+                    noteDiagnostic(diagnostic);
                     if ("success".equals(nextState)) {
                         completePosted();
                         return;
@@ -267,6 +301,15 @@ final class NativeCommentPoster {
                     verifyAttempts++;
                     if (verifyAttempts < MAX_VERIFY_ATTEMPTS && webView != null) {
                         scheduleVerify(650L);
+                    } else if (!confirmationReloaded && webView != null) {
+                        confirmationReloaded = true;
+                        verifyAttempts = 0;
+                        lastDiagnostic = "CS14 final page recheck";
+                        try {
+                            webView.loadUrl(url);
+                        } catch (Exception e) {
+                            completeError(unconfirmedMessage());
+                        }
                     } else {
                         completeError(unconfirmedMessage());
                     }
@@ -275,6 +318,15 @@ final class NativeCommentPoster {
                 verifyAttempts++;
                 if (verifyAttempts < MAX_VERIFY_ATTEMPTS && webView != null) {
                     scheduleVerify(650L);
+                } else if (!confirmationReloaded && webView != null) {
+                    confirmationReloaded = true;
+                    verifyAttempts = 0;
+                    lastDiagnostic = "CS14 final page recheck";
+                    try {
+                        webView.loadUrl(url);
+                    } catch (Exception ignored) {
+                        completeError(unconfirmedMessage());
+                    }
                 } else {
                     completeError(unconfirmedMessage());
                 }
@@ -287,9 +339,26 @@ final class NativeCommentPoster {
             webView.postDelayed(this::verifySubmission, delayMs);
         }
 
+        void noteDiagnostic(String diagnostic) {
+            diagnostic = clean(diagnostic);
+            if (diagnostic.isEmpty()) return;
+            lastDiagnostic = diagnostic;
+            if (diagnostic.contains(" HTTP ")
+                    || diagnostic.contains(" xhr ")
+                    || diagnostic.contains(" fetch ")
+                    || diagnostic.contains("WebView")) {
+                lastNetworkDiagnostic = diagnostic;
+            }
+        }
+
+        void noteNetworkDiagnostic(String diagnostic) {
+            noteDiagnostic(diagnostic);
+        }
+
         String unconfirmedMessage() {
-            String diagnostic = clean(lastDiagnostic);
-            if (diagnostic.isEmpty()) diagnostic = "CS13 no response";
+            String diagnostic = clean(lastNetworkDiagnostic);
+            if (diagnostic.isEmpty()) diagnostic = clean(lastDiagnostic);
+            if (diagnostic.isEmpty()) diagnostic = "CS14 no response";
             return "CrazyShit did not confirm the comment. Your text was kept. [" + diagnostic + "]";
         }
 
@@ -364,8 +433,10 @@ final class NativeCommentPoster {
                 "const author=" + author + ",targetText=" + text + ",message=" + body + ";" +
                 commonScript() +
                 "let root=findRoot(author,targetText),replying=!!targetText,field=findField(root,replying);" +
-                "if(!field)return JSON.stringify({state:needsLogin()?'login':'missing',message:'CrazyShit did not expose its comment field. Your text was kept. [CS13 no-field]'});" +
+                "if(!field)return JSON.stringify({state:needsLogin()?'login':'missing',message:'CrazyShit did not expose its comment field. Your text was kept. [CS14 no-field]'});" +
                 "let form=field.form||field.closest('form'),needle=message.toLowerCase();" +
+                "const safeTarget=raw=>{try{let u=new URL(raw||location.href,location.href),path=(u.pathname||'/').slice(0,72);return u.protocol+'//'+u.host+path;}catch(ignore){return 'unknown';}};" +
+                "const upgradeTarget=raw=>{try{let u=new URL(raw||location.href,location.href),host=u.hostname.toLowerCase();if(u.protocol==='http:'&&(host==='crazyshit.com'||host.endsWith('.crazyshit.com')))u.protocol='https:';return u.href;}catch(ignore){return raw;}};" +
                 "if(field.matches('textarea,input')){" +
                 "let proto=field.matches('textarea')?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;" +
                 "let setter=Object.getOwnPropertyDescriptor(proto,'value');" +
@@ -379,12 +450,12 @@ final class NativeCommentPoster {
                 "let controls=[...scope.querySelectorAll('button,input[type=submit],input[type=button],[role=button],a')].filter(e=>e!==field&&!e.disabled);" +
                 "let submit=controls.find(e=>{let t=actionText(e);return replying?(t==='reply'||t.includes('post reply')||t.includes('send reply')):(t.includes('post')||t.includes('add comment')||t.includes('send')||t.includes('submit'));});" +
                 "if(!submit&&form)submit=controls.find(e=>e.matches('button[type=submit],button:not([type]),input[type=submit]'))||null;" +
-                "if(!submit&&!form)return JSON.stringify({state:'missing',message:'CrazyShit did not expose its posting control. Your text was kept. [CS13 no-control]'});" +
-                "window.__csNativePostResult={state:'sending',armed:true,submitSeen:false,requestSeen:false,diagnostic:'CS13 control found'};" +
+                "if(!submit&&!form)return JSON.stringify({state:'missing',message:'CrazyShit did not expose its posting control. Your text was kept. [CS14 no-control]'});" +
+                "window.__csNativePostResult={state:'sending',armed:true,submitSeen:false,requestSeen:false,diagnostic:'CS14 control found'};" +
                 "try{sessionStorage.setItem('__csNativePostAttempt',String(Date.now()));}catch(ignore){}" +
                 "const setResult=(state,diagnostic,error)=>{let active=window.__csNativePostResult||{};active.state=state;active.diagnostic=diagnostic;if(error)active.message=error;window.__csNativePostResult=active;};" +
                 "const inspectResponse=(raw,status,url,type)=>{" +
-                "let active=window.__csNativePostResult;if(!active||!active.armed)return;active.requestSeen=true;" +
+                "let active=window.__csNativePostResult;if(!active||!active.armed)return;active.requestSeen=true;let target=safeTarget(url);" +
                 "let doc=null;try{doc=new DOMParser().parseFromString(raw||'','text/html');}catch(ignore){}" +
                 "let responseText=clean(doc&&doc.body?doc.body.innerText:(raw||''));" +
                 "let login=(url||'').toLowerCase().includes('/login')||/log\\s*in\\s+to\\s+comment|login\\s+to\\s+comment/i.test(responseText);" +
@@ -393,28 +464,29 @@ final class NativeCommentPoster {
                 "let explicit=/comment\\s+(?:was\\s+)?(?:posted|submitted|received|queued|added)|thanks\\s+for\\s+(?:your\\s+)?comment|awaiting\\s+moderation|pending\\s+(?:approval|moderation)/i.test(responseText)||/\"(?:success|status)\"\\s*:\\s*(?:true|\"success\"|\"ok\")/i.test(raw||'');" +
                 "let rendered=false;if(doc&&needle){let rows=[...doc.querySelectorAll('[data-comment-id],[id*=comment],.comment,.comment-item,.comment_text,.comment-text')].filter(e=>!e.closest('form'));rendered=rows.some(e=>clean(e.innerText||e.textContent).toLowerCase().includes(needle));}" +
                 "let jsonEcho=(type||'').toLowerCase().includes('json')&&needle&&(raw||'').toLowerCase().includes(needle);" +
-                "if(login){setResult('login','CS13 login response');return;}" +
-                "if(status>=400||rejected||errors.length){let reason=errors[0]||(status>=400?'CrazyShit returned HTTP '+status+'. Your text was kept.':'CrazyShit rejected the comment. Your text was kept.');setResult('error','CS13 rejected '+status,reason);return;}" +
-                "if((status>=200&&status<400)&&(explicit||rendered||jsonEcho)){setResult('success','CS13 response accepted');return;}" +
-                "active.state='response';active.diagnostic='CS13 HTTP '+status+' unconfirmed';" +
+                "if(login){setResult('login','CS14 login response');return;}" +
+                "if(status===0){active.state='response';active.diagnostic='CS14 HTTP 0 '+target;return;}" +
+                "if(status>=400||rejected||errors.length){let reason=errors[0]||(status>=400?'CrazyShit returned HTTP '+status+'. Your text was kept.':'CrazyShit rejected the comment. Your text was kept.');setResult('error','CS14 rejected '+status+' '+target,reason);return;}" +
+                "if((status>=200&&status<400)&&(explicit||rendered||jsonEcho)){setResult('success','CS14 response accepted '+target);return;}" +
+                "active.state='response';active.diagnostic='CS14 HTTP '+status+' '+target+' unconfirmed';" +
                 "};" +
                 "const inspectDom=()=>{let active=window.__csNativePostResult;if(!active||!active.armed||active.state==='success'||active.state==='error'||active.state==='login')return;" +
                 "let page=clean(document.body?document.body.innerText:''),posted=/comment\\s+(?:was\\s+)?(?:posted|submitted|received|queued|added)|thanks\\s+for\\s+(?:your\\s+)?comment|awaiting\\s+moderation|pending\\s+(?:approval|moderation)/i.test(page);" +
                 "let rows=[...document.querySelectorAll('[data-comment-id],[id*=comment],.comment,.comment-item,.comment_text,.comment-text')].filter(e=>!e.closest('form')),rendered=needle&&rows.some(e=>clean(e.innerText||e.textContent).toLowerCase().includes(needle));" +
-                "if(posted||rendered){setResult('success','CS13 page confirmed');return;}" +
-                "if(needsLogin()){setResult('login','CS13 login page');return;}" +
-                "if(active.submitSeen||active.requestSeen){let errors=[...document.querySelectorAll('.error,.errors,.alert-danger,.validation-error,[role=alert]')].filter(visible).map(e=>clean(e.innerText||e.textContent)).filter(t=>t&&t.length<260);if(errors.length)setResult('error','CS13 page error',errors[0]);}" +
+                "if(posted||rendered){setResult('success','CS14 page confirmed');return;}" +
+                "if(needsLogin()){setResult('login','CS14 login page');return;}" +
+                "if(active.submitSeen||active.requestSeen){let errors=[...document.querySelectorAll('.error,.errors,.alert-danger,.validation-error,[role=alert]')].filter(visible).map(e=>clean(e.innerText||e.textContent)).filter(t=>t&&t.length<260);if(errors.length)setResult('error','CS14 page error',errors[0]);}" +
                 "};" +
-                "if(window.fetch&&!window.__csNativeFetchWrapped){window.__csNativeFetchWrapped=true;let originalFetch=window.fetch;window.fetch=function(input,init){let method=((init&&init.method)||(input&&input.method)||'GET').toUpperCase(),requestUrl=(typeof input==='string'?input:((input&&input.url)||''));let promise=originalFetch.apply(this,arguments);return promise.then(response=>{let active=window.__csNativePostResult;if(active&&active.armed&&method!=='GET'){active.requestSeen=true;active.diagnostic='CS13 fetch '+method;response.clone().text().then(raw=>inspectResponse(raw,response.status,response.url||requestUrl,response.headers.get('content-type')||'')).catch(()=>{});}return response;});};}" +
-                "if(window.XMLHttpRequest&&!window.__csNativeXhrWrapped){window.__csNativeXhrWrapped=true;let originalOpen=XMLHttpRequest.prototype.open,originalSend=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(method,url){this.__csMethod=(method||'GET').toUpperCase();this.__csUrl=url||'';return originalOpen.apply(this,arguments);};XMLHttpRequest.prototype.send=function(){let xhr=this,active=window.__csNativePostResult;if(active&&active.armed&&xhr.__csMethod!=='GET'){active.requestSeen=true;active.diagnostic='CS13 xhr '+xhr.__csMethod;xhr.addEventListener('loadend',()=>{let raw='';try{raw=typeof xhr.responseText==='string'?xhr.responseText:'';}catch(ignore){}let type='';try{type=xhr.getResponseHeader('content-type')||'';}catch(ignore){}inspectResponse(raw,xhr.status,xhr.responseURL||xhr.__csUrl,type);},{once:true});}return originalSend.apply(this,arguments);};}" +
-                "if(form)form.addEventListener('submit',()=>{let active=window.__csNativePostResult;if(active){active.submitSeen=true;active.diagnostic='CS13 submit event';}},{capture:true,once:true});" +
+                "if(window.fetch&&!window.__csNativeFetchWrapped){window.__csNativeFetchWrapped=true;let originalFetch=window.fetch;window.fetch=function(input,init){let method=((init&&init.method)||(input&&input.method)||'GET').toUpperCase(),requestUrl=(typeof input==='string'?input:((input&&input.url)||'')),upgradedUrl=upgradeTarget(requestUrl),actualInput=input;try{if(typeof input==='string')actualInput=upgradedUrl;else if(window.URL&&input instanceof URL)actualInput=new URL(upgradedUrl);else if(input&&input.url&&upgradedUrl!==input.url)actualInput=new Request(upgradedUrl,input);}catch(ignore){}let promise=originalFetch.call(this,actualInput,init);return promise.then(response=>{let active=window.__csNativePostResult;if(active&&active.armed&&method!=='GET'){active.requestSeen=true;active.diagnostic='CS14 fetch '+method+' '+safeTarget(upgradedUrl);response.clone().text().then(raw=>inspectResponse(raw,response.status,response.url||upgradedUrl,response.headers.get('content-type')||'')).catch(()=>{});}return response;},error=>{let active=window.__csNativePostResult;if(active&&active.armed&&method!=='GET'){active.requestSeen=true;active.state='response';active.diagnostic='CS14 fetch failed '+safeTarget(upgradedUrl);}throw error;});};}" +
+                "if(window.XMLHttpRequest&&!window.__csNativeXhrWrapped){window.__csNativeXhrWrapped=true;let originalOpen=XMLHttpRequest.prototype.open,originalSend=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(method,url){this.__csMethod=(method||'GET').toUpperCase();this.__csUrl=upgradeTarget(url||'');let args=[...arguments];args[1]=this.__csUrl;return originalOpen.apply(this,args);};XMLHttpRequest.prototype.send=function(){let xhr=this,active=window.__csNativePostResult;if(active&&active.armed&&xhr.__csMethod!=='GET'){active.requestSeen=true;active.diagnostic='CS14 xhr '+xhr.__csMethod+' '+safeTarget(xhr.__csUrl);xhr.addEventListener('error',()=>{xhr.__csFailure='network';},{once:true});xhr.addEventListener('abort',()=>{xhr.__csFailure='aborted';},{once:true});xhr.addEventListener('timeout',()=>{xhr.__csFailure='timeout';},{once:true});xhr.addEventListener('loadend',()=>{let raw='';try{raw=typeof xhr.responseText==='string'?xhr.responseText:'';}catch(ignore){}let type='';try{type=xhr.getResponseHeader('content-type')||'';}catch(ignore){}inspectResponse(raw,xhr.status,xhr.responseURL||xhr.__csUrl,type);if(xhr.status===0&&xhr.__csFailure){let result=window.__csNativePostResult;if(result)result.diagnostic='CS14 xhr '+xhr.__csFailure+' '+safeTarget(xhr.__csUrl);}},{once:true});}return originalSend.apply(this,arguments);};}" +
+                "if(form)form.addEventListener('submit',()=>{let active=window.__csNativePostResult;if(active){active.submitSeen=true;active.diagnostic='CS14 submit event';}},{capture:true,once:true});" +
                 "try{let observer=new MutationObserver(inspectDom);observer.observe(document.body,{subtree:true,childList:true,characterData:true});}catch(ignore){}" +
                 "field.focus();" +
                 "try{if(submit)submit.click();else if(form&&form.requestSubmit)form.requestSubmit();else if(form)form.submit();else throw new Error('no control');}" +
-                "catch(error){return JSON.stringify({state:'missing',message:'CrazyShit could not activate its posting control. Your text was kept. [CS13 click-failed]'});}" +
-                "if(window.__csNativePostResult&&!window.__csNativePostResult.submitSeen&&!window.__csNativePostResult.requestSeen)window.__csNativePostResult.diagnostic='CS13 site control clicked';" +
+                "catch(error){return JSON.stringify({state:'missing',message:'CrazyShit could not activate its posting control. Your text was kept. [CS14 click-failed]'});}" +
+                "if(window.__csNativePostResult&&!window.__csNativePostResult.submitSeen&&!window.__csNativePostResult.requestSeen)window.__csNativePostResult.diagnostic='CS14 site control clicked';" +
                 "setTimeout(inspectDom,120);setTimeout(inspectDom,600);setTimeout(inspectDom,1500);" +
-                "return JSON.stringify({state:'submitted',diagnostic:'CS13 site control clicked'});" +
+                "return JSON.stringify({state:'submitted',diagnostic:'CS14 site control clicked'});" +
                 "})()";
     }
 
@@ -427,14 +499,14 @@ final class NativeCommentPoster {
                 "let rows=[...document.querySelectorAll('[data-comment-id],[id*=comment],.comment,.comment-item,.comment_text,.comment-text')].filter(e=>!e.closest('form'));" +
                 "let rendered=needle&&rows.some(e=>clean(e.innerText||e.textContent).toLowerCase().includes(needle));" +
                 "let posted=/comment\\s+(?:was\\s+)?(?:posted|submitted|received|queued|added)|thanks\\s+for\\s+(?:your\\s+)?comment|awaiting\\s+moderation|pending\\s+(?:approval|moderation)/i.test(page);" +
-                "if(posted||rendered){try{sessionStorage.removeItem('__csNativePostAttempt');}catch(ignore){}return JSON.stringify({state:'success',diagnostic:'CS13 page confirmed'});}" +
+                "if(posted||rendered){try{sessionStorage.removeItem('__csNativePostAttempt');}catch(ignore){}return JSON.stringify({state:'success',diagnostic:'CS14 page confirmed'});}" +
                 "let login=/log\\s*in\\s+to\\s+comment|login\\s+to\\s+comment/i.test(page)||!!document.querySelector('form[action*=login] input[type=password]');" +
-                "if(login)return JSON.stringify({state:'login',diagnostic:'CS13 login page'});" +
+                "if(login)return JSON.stringify({state:'login',diagnostic:'CS14 login page'});" +
                 "if(result&&(result.state==='success'||result.state==='login'||result.state==='error'))return JSON.stringify(result);" +
                 "let attempted=false;try{attempted=!!sessionStorage.getItem('__csNativePostAttempt');}catch(ignore){}" +
-                "if(attempted||result){let errors=[...document.querySelectorAll('.error,.errors,.alert-danger,.validation-error,[role=alert]')].filter(visible).map(e=>clean(e.innerText||e.textContent)).filter(t=>t&&t.length<260);if(errors.length)return JSON.stringify({state:'error',message:errors[0],diagnostic:'CS13 page error'});}" +
+                "if(attempted||result){let errors=[...document.querySelectorAll('.error,.errors,.alert-danger,.validation-error,[role=alert]')].filter(visible).map(e=>clean(e.innerText||e.textContent)).filter(t=>t&&t.length<260);if(errors.length)return JSON.stringify({state:'error',message:errors[0],diagnostic:'CS14 page error'});}" +
                 "if(result)return JSON.stringify(result);" +
-                "return JSON.stringify({state:'wait',diagnostic:attempted?'CS13 navigated, no confirmation':'CS13 no response'});" +
+                "return JSON.stringify({state:'wait',diagnostic:attempted?'CS14 navigated, no confirmation':'CS14 no response'});" +
                 "})()";
     }
 
@@ -471,6 +543,16 @@ final class NativeCommentPoster {
         String host = uri == null ? null : uri.getHost();
         return host != null && (host.equalsIgnoreCase("crazyshit.com")
                 || host.toLowerCase(Locale.ROOT).endsWith(".crazyshit.com"));
+    }
+
+    private static String safeTarget(Uri uri) {
+        if (uri == null) return "unknown";
+        String scheme = clean(uri.getScheme());
+        String host = clean(uri.getHost());
+        String path = clean(uri.getPath());
+        if (scheme.isEmpty() || host.isEmpty()) return "unknown";
+        if (path.length() > 72) path = path.substring(0, 72);
+        return scheme + "://" + host + path;
     }
 
     private static String clean(String value) {
