@@ -5,24 +5,20 @@ on:
     branches: [ main ]
     paths:
       - BETA_VERSION
-  push:
-    branches: [ v2.8.1-chaos-fast-start ]
-    paths:
-      - BETA_VERSION
 
 permissions:
   contents: write
 
 jobs:
   beta:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out v2 pull request head
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Resolve beta version
         run: |
@@ -114,7 +110,7 @@ jobs:
           gh release create "v${VERSION}" \
             "$APK_NAME" \
             SHA256SUMS-BETA.txt \
-            --target "${{ github.event.pull_request.head.sha || github.sha }}" \
+            --target "${{ github.event.pull_request.head.sha }}" \
             --title "CrazyShit Jeremy v2 ${VERSION}" \
             --notes "Persistently signed v2 beta. Future v2 beta updates can install directly over this build and can be downloaded from inside the app." \
             --prerelease
