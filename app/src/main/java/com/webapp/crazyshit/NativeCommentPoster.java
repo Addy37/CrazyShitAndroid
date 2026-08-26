@@ -52,8 +52,8 @@ final class NativeCommentPoster {
     }
 
     private static final class Request {
-        private static final int MAX_PREPARE_ATTEMPTS = 6;
-        private static final int MAX_VERIFY_ATTEMPTS = 4;
+        private static final int MAX_PREPARE_ATTEMPTS = 8;
+        private static final int MAX_VERIFY_ATTEMPTS = 12;
 
         final Activity activity;
         final String url;
@@ -67,7 +67,6 @@ final class NativeCommentPoster {
         int prepareAttempts;
         int verifyAttempts;
         boolean replyActionTried;
-        boolean replyFallback;
         boolean submissionAttempted;
         boolean finished;
 
@@ -151,7 +150,7 @@ final class NativeCommentPoster {
                     }
                 });
 
-                webView.postDelayed(hardTimeout, 20000L);
+                webView.postDelayed(hardTimeout, 25000L);
                 webView.loadUrl(url);
             } catch (Exception e) {
                 completeError("Comments couldn't connect to the website.");
@@ -177,14 +176,14 @@ final class NativeCommentPoster {
                         return;
                     }
                     if ("reply-clicked".equals(state)) replyActionTried = true;
-                    if ("reply-fallback".equals(state)) {
-                        replyActionTried = true;
-                        replyFallback = true;
+                    if ("reply-missing".equals(state)) {
+                        completeError("CrazyShit didn't expose a reply form for this comment.");
+                        return;
                     }
                     prepareAttempts++;
                     if (prepareAttempts < MAX_PREPARE_ATTEMPTS && webView != null) {
-                        long delay = "reply-fallback".equals(state)
-                                ? 80L
+                        long delay = "reply-clicked".equals(state)
+                                ? 250L
                                 : prepareAttempts < 3 ? 650L : 1050L;
                         webView.postDelayed(this::prepareSubmission, delay);
                     } else {
@@ -202,24 +201,24 @@ final class NativeCommentPoster {
             if (finished || submissionAttempted || webView == null) return;
             submissionAttempted = true;
             try {
-                webView.evaluateJavascript(submitScript(message, replyTo, replyFallback), raw -> {
+                webView.evaluateJavascript(submitScript(message, replyTo), raw -> {
                     if (finished) return;
                     String state = state(raw);
                     if ("login".equals(state)) {
                         completeLoginRequired();
                     } else if ("submitted".equals(state)) {
-                        if (webView != null) webView.postDelayed(this::verifySubmission, 850L);
+                        if (webView != null) webView.postDelayed(this::verifySubmission, 350L);
                     } else if ("missing".equals(state)) {
                         submissionAttempted = false;
-                        completeError("The website rejected the comment form before it was sent.");
-                    } else if (webView != null) {
-                        // A standard form submit can navigate before evaluateJavascript returns.
-                        webView.postDelayed(this::verifySubmission, 900L);
+                        completeError("CrazyShit didn't expose a valid comment form. Your text was kept.");
+                    } else {
+                        submissionAttempted = false;
+                        completeError("CrazyShit didn't start the comment request. Your text was kept.");
                     }
                 });
             } catch (Exception e) {
-                // A normal form navigation can destroy the JavaScript context before its callback runs.
-                if (webView != null) webView.postDelayed(this::verifySubmission, 900L);
+                submissionAttempted = false;
+                completeError("The comment request couldn't start. Your text was kept.");
             }
         }
 
@@ -240,23 +239,24 @@ final class NativeCommentPoster {
                     }
                     if ("error".equals(nextState)) {
                         String error = clean(result.optString("message", ""));
-                        completeError(error.isEmpty() ? "The website rejected the comment." : error);
+                        completeError(error.isEmpty()
+                                ? "CrazyShit rejected the comment. Your text was kept."
+                                : error);
                         return;
                     }
                     verifyAttempts++;
                     if (verifyAttempts < MAX_VERIFY_ATTEMPTS && webView != null) {
-                        webView.postDelayed(this::verifySubmission, 850L);
+                        webView.postDelayed(this::verifySubmission, 650L);
                     } else {
-                        // Some successful posts are queued for moderation and do not render immediately.
-                        completePosted();
+                        completeError("CrazyShit didn't confirm the comment. Your text was kept so you can retry.");
                     }
                 });
             } catch (Exception e) {
                 verifyAttempts++;
                 if (verifyAttempts < MAX_VERIFY_ATTEMPTS && webView != null) {
-                    webView.postDelayed(this::verifySubmission, 850L);
+                    webView.postDelayed(this::verifySubmission, 650L);
                 } else {
-                    completePosted();
+                    completeError("CrazyShit didn't confirm the comment. Your text was kept so you can retry.");
                 }
             }
         }
@@ -309,13 +309,13 @@ final class NativeCommentPoster {
         return "(() => {" +
                 "const author=" + author + ",targetText=" + text + ",replyTried=" + replyActionTried + ";" +
                 commonScript() +
-                "let root=findRoot(author,targetText);" +
+                "let root=findRoot(author,targetText),replying=!!targetText;" +
                 "if(targetText&&!replyTried){" +
                 "let reply=findReply(root);" +
                 "if(reply){reply.click();return JSON.stringify({state:'reply-clicked'});}" +
-                "return JSON.stringify({state:'reply-fallback'});" +
+                "return JSON.stringify({state:'reply-missing'});" +
                 "}" +
-                "let field=findField(root);" +
+                "let field=findField(root,replying);" +
                 "if(field)return JSON.stringify({state:'ready'});" +
                 "return JSON.stringify({state:needsLogin()?'login':'wait'});" +
                 "})()";
@@ -323,8 +323,7 @@ final class NativeCommentPoster {
 
     private static String submitScript(
             String message,
-            NativeCommentsLoader.Comment replyTo,
-            boolean replyFallback
+            NativeCommentsLoader.Comment replyTo
     ) {
         String author = JSONObject.quote(replyTo == null ? "" : clean(replyTo.author));
         String text = JSONObject.quote(replyTo == null ? "" : clean(replyTo.text));
@@ -332,42 +331,57 @@ final class NativeCommentPoster {
         return "(() => {" +
                 "const author=" + author + ",targetText=" + text + ",message=" + body + ";" +
                 commonScript() +
-                "let root=findRoot(author,targetText),field=findField(root);" +
+                "let root=findRoot(author,targetText),replying=!!targetText,field=findField(root,replying);" +
                 "if(!field)return JSON.stringify({state:needsLogin()?'login':'missing'});" +
-                "let value=message;" +
-                "if(targetText&&" + replyFallback + "&&author){" +
-                "let handle=author.startsWith('@')?author:'@'+author;value=handle+' '+message;" +
-                "}" +
-                "if(field.matches('textarea,input'))field.value=value;else field.textContent=value;" +
-                "field.dispatchEvent(new Event('input',{bubbles:true}));" +
+                "let form=field.form||field.closest('form');" +
+                "if(!form)return JSON.stringify({state:'missing'});" +
+                "if(field.matches('textarea,input')){" +
+                "let proto=field.matches('textarea')?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;" +
+                "let setter=Object.getOwnPropertyDescriptor(proto,'value');" +
+                "if(setter&&setter.set)setter.set.call(field,message);else field.value=message;" +
+                "}else field.textContent=message;" +
+                "try{field.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:message}));}" +
+                "catch(ignore){field.dispatchEvent(new Event('input',{bubbles:true}));}" +
                 "field.dispatchEvent(new Event('change',{bubbles:true}));" +
-                "let form=field.closest('form'),scope=form||(root||field.parentElement||document);" +
-                "let submit=[...scope.querySelectorAll('button,input[type=submit],[role=button]')].find(e=>{" +
-                "let t=actionText(e);return visible(e)&&(t.includes('post')||t.includes('reply')||t.includes('comment')||t.includes('send')||t.includes('submit'));" +
-                "});" +
-                "if(submit){submit.click();return JSON.stringify({state:'submitted'});}" +
-                "if(form){if(form.requestSubmit)form.requestSubmit();else form.submit();return JSON.stringify({state:'submitted'});}" +
-                "return JSON.stringify({state:'missing'});" +
+                "let buttons=[...form.querySelectorAll('button,input[type=submit]')].filter(e=>!e.disabled);" +
+                "let submit=buttons.find(e=>{let t=actionText(e);return t.includes(replying?'reply':'post')||t.includes('comment')||t.includes('send')||t.includes('submit');})||buttons[0]||null;" +
+                "let data=new FormData(form);" +
+                "if(field.name&&!data.has(field.name))data.append(field.name,message);" +
+                "if(submit&&submit.name&&!data.has(submit.name))data.append(submit.name,submit.value||clean(submit.textContent)||'submit');" +
+                "let action=(submit&&submit.getAttribute('formaction'))||form.action||location.href;" +
+                "let method=((submit&&submit.getAttribute('formmethod'))||form.method||'post').toUpperCase();" +
+                "let target;try{target=new URL(action,location.href);}catch(ignore){return JSON.stringify({state:'missing'});}" +
+                "if(target.origin!==location.origin)return JSON.stringify({state:'missing'});" +
+                "window.__csNativePostResult={state:'sending'};" +
+                "(async()=>{try{" +
+                "let options={method:method,credentials:'include',redirect:'follow',referrer:location.href};" +
+                "if(method==='GET'){for(let pair of data.entries()){if(typeof pair[1]==='string')target.searchParams.append(pair[0],pair[1]);}}" +
+                "else{let encoding=(form.enctype||'').toLowerCase();" +
+                "if(encoding.includes('application/x-www-form-urlencoded')){let encoded=new URLSearchParams();for(let pair of data.entries()){if(typeof pair[1]==='string')encoded.append(pair[0],pair[1]);}options.body=encoded;options.headers={'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'};}" +
+                "else options.body=data;}" +
+                "let response=await fetch(target.toString(),options),raw=await response.text();" +
+                "let doc;try{doc=new DOMParser().parseFromString(raw,'text/html');}catch(ignore){doc=null;}" +
+                "let responseText=clean(doc&&doc.body?doc.body.innerText:raw),lower=responseText.toLowerCase(),needle=message.toLowerCase();" +
+                "let login=(response.url||'').toLowerCase().includes('/login')||/log\\s*in\\s+to\\s+comment|login\\s+to\\s+comment/i.test(responseText);" +
+                "let error='';if(doc){let nodes=[...doc.querySelectorAll('.error,.errors,.alert-danger,.validation-error,[aria-invalid=true]')];error=nodes.map(e=>clean(e.innerText||e.textContent)).find(t=>t&&t.length<280)||'';}" +
+                "let rejected=/comment\\s+(?:could\\s+not|was\\s+not|failed)|unable\\s+to\\s+(?:post|submit)|invalid\\s+comment|comment\\s+is\\s+required/i.test(responseText);" +
+                "let explicit=/comment\\s+(?:was\\s+)?(?:posted|submitted|received|queued|added)|thanks\\s+for\\s+(?:your\\s+)?comment/i.test(responseText)||/\"(?:success|status)\"\\s*:\\s*(?:true|\"success\"|\"ok\")/i.test(raw);" +
+                "let rendered=false;if(doc&&needle){let commentRoots=[...doc.querySelectorAll('[data-comment-id],[id*=comment],.comment,.comment-item,.comment_text,.comment-text')].filter(e=>!e.closest('form'));rendered=commentRoots.some(e=>clean(e.innerText||e.textContent).toLowerCase().includes(needle));}" +
+                "let accepted=response.ok&&!login&&!error&&!rejected&&(explicit||rendered||response.redirected||response.status===201||response.status===204);" +
+                "if(accepted){window.__csNativePostResult={state:'success'};return;}" +
+                "if(login){window.__csNativePostResult={state:'login'};return;}" +
+                "let reason=error||(response.ok?'CrazyShit did not confirm the comment. Your text was kept so you can retry.':'CrazyShit returned HTTP '+response.status+'. Your text was kept.');" +
+                "window.__csNativePostResult={state:'error',message:reason};" +
+                "}catch(error){window.__csNativePostResult={state:'error',message:'The comment request failed. Your text was kept so you can retry.'};}})();" +
+                "return JSON.stringify({state:'submitted'});" +
                 "})()";
     }
 
     private static String verifyScript(String message) {
         return "(() => {" +
-                "const clean=s=>(s||'').replace(/\\s+/g,' ').trim();" +
-                "const visible=e=>!!e&&e.getClientRects().length>0&&getComputedStyle(e).visibility!=='hidden';" +
-                "const body=clean(document.body?document.body.innerText:'');" +
-                "const needle=" + JSONObject.quote(message.toLowerCase(Locale.ROOT)) + ";" +
-                "let fields=[...document.querySelectorAll('textarea,[contenteditable=true],input[type=text],input:not([type])')].filter(e=>{if(!visible(e))return false;let f=e.closest('form'),s=((e.name||'')+' '+(e.id||'')+' '+(typeof e.className==='string'?e.className:'')+' '+(e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||'')+' '+(f?((f.action||'')+' '+(f.id||'')+' '+(typeof f.className==='string'?f.className:'')):'')).toLowerCase();return s.includes('comment')||s.includes('reply');});" +
-                "let stillEditing=fields.some(e=>clean(e.matches('textarea,input')?e.value:e.textContent).toLowerCase()===needle);" +
-                "let posted=/comment\\s+(?:was\\s+)?(?:posted|submitted|received|queued)|thanks\\s+for\\s+(?:your\\s+)?comment/i.test(body);" +
-                "let roots=[...document.querySelectorAll('[data-comment-id],[id*=comment],.comment,.comment-item,.comment_text,.comment-text')].filter(e=>!e.closest('form'));" +
-                "let rendered=needle&&roots.some(e=>clean(e.innerText||e.textContent).toLowerCase().includes(needle));" +
-                "if(posted||(!stillEditing&&rendered))return JSON.stringify({state:'success'});" +
-                "const login=!fields.length&&(/log\\s*in\\s+to\\s+comment|login\\s+to\\s+comment/i.test(body)||!!document.querySelector('form[action*=login] input[type=password]'));" +
-                "if(login)return JSON.stringify({state:'login'});" +
-                "let errors=[...document.querySelectorAll('.error,.errors,.alert-danger,.validation-error,[class*=error]')].filter(visible).map(e=>clean(e.innerText||e.textContent)).filter(t=>t&&t.length<280);" +
-                "if(errors.length)return JSON.stringify({state:'error',message:errors[0]});" +
-                "return JSON.stringify({state:'wait'});" +
+                "let result=window.__csNativePostResult;" +
+                "if(!result)return JSON.stringify({state:'wait'});" +
+                "return JSON.stringify(result);" +
                 "})()";
     }
 
@@ -379,7 +393,8 @@ final class NativeCommentPoster {
                 "const roots=()=>[...document.querySelectorAll('[data-comment-id],[id*=comment],div,li,article,section')].filter(commentish);" +
                 "const findRoot=(a,t)=>{if(!t)return null;let needle=t.slice(0,100).toLowerCase(),who=(a||'').toLowerCase(),all=roots();let matches=all.filter(e=>{let v=clean(e.innerText||e.textContent).toLowerCase();return v.includes(needle)&&(!who||v.includes(who));});if(!matches.length)matches=all.filter(e=>clean(e.innerText||e.textContent).toLowerCase().includes(needle));matches.sort((x,y)=>clean(x.innerText||x.textContent).length-clean(y.innerText||y.textContent).length);return matches[0]||null;};" +
                 "const findReply=root=>{if(!root)return null;let scope=root.parentElement||root;return [...scope.querySelectorAll('a,button,[role=button],input[type=button]')].find(e=>{let t=actionText(e);return t==='reply'||t.startsWith('reply ');})||null;};" +
-                "const findField=root=>{let fields=[...document.querySelectorAll('textarea,[contenteditable=true],input[type=text],input:not([type])')].filter(visible);if(root){let nested=fields.find(e=>root.contains(e));if(nested)return nested;}return fields.find(e=>{let f=e.closest('form'),s=((e.name||'')+' '+(e.id||'')+' '+(typeof e.className==='string'?e.className:'')+' '+(e.getAttribute('placeholder')||'')+' '+(e.getAttribute('aria-label')||'')+' '+(f?((f.action||'')+' '+(f.id||'')+' '+(typeof f.className==='string'?f.className:'')):'')).toLowerCase();return s.includes('comment')||s.includes('reply');})||null;};" +
+                "const fieldMeta=e=>{let f=e&&e.closest('form');return (((e&&e.name)||'')+' '+((e&&e.id)||'')+' '+((e&&typeof e.className==='string')?e.className:'')+' '+((e&&e.getAttribute('placeholder'))||'')+' '+((e&&e.getAttribute('aria-label'))||'')+' '+(f?((f.action||'')+' '+(f.id||'')+' '+(typeof f.className==='string'?f.className:'')):'')).toLowerCase();};" +
+                "const findField=(root,replying)=>{let fields=[...document.querySelectorAll('textarea,[contenteditable=true],input[type=text],input:not([type])')].filter(visible);if(root){let nested=fields.filter(e=>root.contains(e));let exact=nested.find(e=>fieldMeta(e).includes(replying?'reply':'comment'));if(exact)return exact;if(replying&&nested.length)return nested[0];}let tagged=fields.filter(e=>{let s=fieldMeta(e);return s.includes(replying?'reply':'comment');});if(tagged.length)return tagged[tagged.length-1];return replying?null:(fields.length===1?fields[0]:null);};" +
                 "const needsLogin=()=>{let body=clean(document.body?document.body.innerText:'');return /log\\s*in\\s+to\\s+comment|login\\s+to\\s+comment/i.test(body)||!!document.querySelector('form[action*=login] input[type=password]');};";
     }
 
