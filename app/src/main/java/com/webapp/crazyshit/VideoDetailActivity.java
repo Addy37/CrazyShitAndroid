@@ -95,8 +95,7 @@ public class VideoDetailActivity extends Activity {
     private LinearLayout relatedContainer;
     private TextView titleView;
     private TextView metaView;
-    private TextView backButton;
-    private TextView menuButton;
+    private PlayerTopChrome playerChrome;
     private ProgressBar loading;
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
@@ -269,7 +268,7 @@ public class VideoDetailActivity extends Activity {
         shell.addView(playerContainer, new LinearLayout.LayoutParams(-1, portraitPlayerHeight()));
 
         playerView = (PlayerView) getLayoutInflater().inflate(
-                R.layout.view_video_player_texture,
+                R.layout.view_polished_video_player_texture,
                 playerContainer,
                 false
         );
@@ -282,27 +281,21 @@ public class VideoDetailActivity extends Activity {
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        backButton = overlayButton("‹", 34);
-        backButton.setContentDescription("Back");
-        backButton.setOnClickListener(v -> {
-            haptic(v);
-            handleBack();
-        });
-        FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(dp(46), dp(46));
-        bp.gravity = Gravity.TOP | Gravity.START;
-        bp.setMargins(dp(8), dp(8), 0, 0);
-        playerContainer.addView(backButton, bp);
-
-        menuButton = overlayButton("⋮", 26);
-        menuButton.setContentDescription("Video menu");
-        menuButton.setOnClickListener(v -> {
-            haptic(v);
-            showPlayerMenu(menuButton);
-        });
-        FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(dp(46), dp(46));
-        mp.gravity = Gravity.TOP | Gravity.END;
-        mp.setMargins(0, dp(8), dp(8), 0);
-        playerContainer.addView(menuButton, mp);
+        playerChrome = PlayerTopChrome.create(
+                this,
+                title,
+                v -> {
+                    haptic(v);
+                    handleBack();
+                },
+                v -> {
+                    haptic(v);
+                    showPlayerMenu(v);
+                }
+        );
+        FrameLayout.LayoutParams chromeParams = new FrameLayout.LayoutParams(-1, dp(72));
+        chromeParams.gravity = Gravity.TOP;
+        playerContainer.addView(playerChrome.root, chromeParams);
 
         playerView.setControllerVisibilityListener(
                 (PlayerView.ControllerVisibilityListener) visibility ->
@@ -372,27 +365,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void setOverlayChromeVisible(boolean visible, boolean animate) {
-        setOverlayViewVisible(backButton, visible, animate);
-        setOverlayViewVisible(menuButton, visible, animate);
-    }
-
-    private void setOverlayViewVisible(View view, boolean visible, boolean animate) {
-        if (view == null) return;
-        view.animate().cancel();
-        if (visible) {
-            view.setVisibility(View.VISIBLE);
-            if (animate) {
-                view.setAlpha(0f);
-                view.animate().alpha(1f).setDuration(120L).start();
-            } else {
-                view.setAlpha(1f);
-            }
-        } else if (animate) {
-            view.animate().alpha(0f).setDuration(140L).withEndAction(() -> view.setVisibility(View.GONE)).start();
-        } else {
-            view.setAlpha(0f);
-            view.setVisibility(View.GONE);
-        }
+        if (playerChrome != null) playerChrome.setVisible(visible, animate);
     }
 
     private void applyDetailsBackground() {
@@ -528,19 +501,6 @@ public class VideoDetailActivity extends Activity {
         return bg;
     }
 
-    private TextView overlayButton(String label, int size) {
-        TextView view = new TextView(this);
-        view.setText(label);
-        view.setTextSize(size);
-        view.setTextColor(Color.WHITE);
-        view.setGravity(Gravity.CENTER);
-        view.setBackground(rounded(Color.argb(165, 10, 10, 12), dp(18)));
-        view.setClickable(true);
-        view.setFocusable(true);
-        view.setElevation(dp(8));
-        return view;
-    }
-
     private void buildPlayer(long startPosition) {
         releasePlayer();
         failureShown = false;
@@ -605,6 +565,7 @@ public class VideoDetailActivity extends Activity {
 
     private void updateMetadataUi() {
         if (titleView != null) titleView.setText(title);
+        if (playerChrome != null) playerChrome.setTitle(title);
         if (metaView != null) {
             ArrayList<String> parts = new ArrayList<>();
             if (!views.isEmpty()) parts.add(views + " views");

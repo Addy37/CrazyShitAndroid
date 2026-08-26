@@ -23,6 +23,8 @@ public final class SplashActivity extends Activity {
     private long splashStartedAt;
     private boolean leaving;
     private boolean handingOff;
+    private boolean chaosHandoff;
+    private String launchAction;
     private View wordmark;
     private View glow;
     private View sweep;
@@ -31,6 +33,9 @@ public final class SplashActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         splashStartedAt = SystemClock.uptimeMillis();
+        launchAction = getIntent() == null ? null : getIntent().getAction();
+        chaosHandoff = !AppShortcuts.isShortcutAction(launchAction)
+                || AppShortcuts.isChaosAction(launchAction);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         setContentView(R.layout.activity_splash);
@@ -38,8 +43,10 @@ public final class SplashActivity extends Activity {
         // The visual intro and native app startup are now one continuous handoff. Metadata begins
         // loading here; NativeMainActivity keeps this same wordmark visible until the selected
         // Chaos player has actually rendered a frame.
-        ChaosStartupHandoff.begin();
-        ChaosStartupPreloader.start(this);
+        if (chaosHandoff) {
+            ChaosStartupHandoff.begin();
+            ChaosStartupPreloader.start(this);
+        }
         animateSplash();
         handler.postDelayed(readinessRunnable, MIN_SPLASH_MS);
     }
@@ -134,7 +141,7 @@ public final class SplashActivity extends Activity {
         if (leaving) return;
         long elapsed = SystemClock.uptimeMillis() - splashStartedAt;
         boolean minimumPlayed = elapsed >= MIN_SPLASH_MS;
-        boolean ready = ChaosStartupPreloader.isReady();
+        boolean ready = !chaosHandoff || ChaosStartupPreloader.isReady();
         boolean timedOut = elapsed >= MAX_SPLASH_MS;
 
         if (minimumPlayed && (ready || timedOut)) {
@@ -156,7 +163,13 @@ public final class SplashActivity extends Activity {
         if (sweep != null) sweep.animate().cancel();
 
         Intent intent = new Intent(this, NativeMainActivity.class);
-        intent.putExtra(ChaosStartupOverlayController.EXTRA_STARTUP_HANDOFF, true);
+        if (chaosHandoff) {
+            intent.putExtra(ChaosStartupOverlayController.EXTRA_STARTUP_HANDOFF, true);
+        }
+        if (AppShortcuts.isShortcutAction(launchAction)) {
+            intent.setAction(launchAction);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        }
         startActivity(intent);
         // NativeMainActivity immediately draws the same black + wordmark composition, so a system
         // activity transition would only introduce a flash between two intentionally identical views.
@@ -175,7 +188,7 @@ public final class SplashActivity extends Activity {
         if (wordmark != null) wordmark.animate().cancel();
         if (glow != null) glow.animate().cancel();
         if (sweep != null) sweep.animate().cancel();
-        if (!handingOff) ChaosStartupHandoff.finish();
+        if (chaosHandoff && !handingOff) ChaosStartupHandoff.finish();
         super.onDestroy();
     }
 }

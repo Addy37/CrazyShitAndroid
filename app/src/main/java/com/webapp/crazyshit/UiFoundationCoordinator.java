@@ -50,6 +50,7 @@ final class UiFoundationCoordinator {
             StableBottomNavigationController.attach(main);
             ChaosCompletedReplayController.attachSoon(main);
             openChaosOnFreshLaunch(main);
+            GestureGuideDialog.maybeShow(main);
         } else if (activity instanceof NativeFeedBrowserActivity) {
             NativeFeedBrowserActivity browser = (NativeFeedBrowserActivity) activity;
             FeedViewStyleController.attachBrowser(browser);
@@ -112,6 +113,12 @@ final class UiFoundationCoordinator {
         if (main == null || main.isFinishing()) return;
         Boolean fresh = FRESH_MAIN.get(main);
         if (!Boolean.TRUE.equals(fresh)) return;
+        if (main.getIntent() != null
+                && (AppShortcuts.isShortcutAction(main.getIntent().getAction())
+                || main.getIntent().getBooleanExtra(AppShortcuts.EXTRA_SHORTCUT_ROUTED, false))) {
+            FRESH_MAIN.put(main, false);
+            return;
+        }
         if (!main.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
                 .getBoolean("age_warning_accepted", false)) {
             return;

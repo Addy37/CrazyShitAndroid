@@ -158,7 +158,10 @@ final class LandscapeMoreDialog {
                                 }),
                         new Action(R.drawable.ic_more_update, "Check for updates",
                                 "Download and install app updates",
-                                () -> invokeBoolean(activity, "checkForUpdates", true))
+                                () -> invokeBoolean(activity, "checkForUpdates", true)),
+                        new Action(R.drawable.ic_more_help, "Gesture guide",
+                                "Player and Chaos controls",
+                                () -> GestureGuideDialog.show(activity))
                 )
         );
 

@@ -100,8 +100,21 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             showAgeWarning();
         } else {
             showHome();
+            dispatchLauncherShortcut();
         }
         checkForUpdates(false);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (!getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean("age_warning_accepted", false)) {
+            return;
+        }
+        showHome();
+        dispatchLauncherShortcut();
     }
 
     private void buildUi() {
@@ -767,6 +780,31 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         LandscapeMoreDialog.show(this);
     }
 
+    private void dispatchLauncherShortcut() {
+        Intent launchIntent = getIntent();
+        String action = launchIntent == null ? null : launchIntent.getAction();
+        if (!AppShortcuts.isShortcutAction(action)) return;
+        if (launchIntent.getBooleanExtra(AppShortcuts.EXTRA_SHORTCUT_ROUTED, false)) return;
+
+        launchIntent.putExtra(AppShortcuts.EXTRA_SHORTCUT_ROUTED, true);
+        AppShortcuts.reportUsed(this, action);
+        if (AppShortcuts.ACTION_CHAOS.equals(action)) {
+            showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, false);
+            return;
+        }
+        if (AppShortcuts.ACTION_SEARCH.equals(action)) {
+            overlayRoot.post(this::showSearchDialog);
+            return;
+        }
+
+        int startTab = AppShortcuts.ACTION_WATCH_LATER.equals(action)
+                ? FavoritesActivity.START_WATCH_LATER
+                : FavoritesActivity.START_CONTINUE;
+        Intent library = new Intent(this, FavoritesActivity.class);
+        library.putExtra(FavoritesActivity.EXTRA_START_TAB, startTab);
+        overlayRoot.post(() -> startActivityForResult(library, FAVORITES_REQUEST));
+    }
+
     private void showNativeEmpty(String text) {
         emptyView.setText(text);
         emptyView.setVisibility(View.VISIBLE);
@@ -788,6 +826,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                             .putBoolean("age_warning_accepted", true)
                             .apply();
                     showHome();
+                    dispatchLauncherShortcut();
                 })
                 .show();
     }

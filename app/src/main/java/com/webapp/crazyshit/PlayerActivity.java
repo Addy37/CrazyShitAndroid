@@ -27,7 +27,6 @@ import android.view.WindowManager;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -63,10 +62,10 @@ public class PlayerActivity extends Activity {
     private ExoPlayer player;
     private PlayerView playerView;
     private FrameLayout videoSurface;
-    private TextView menuButton;
+    private View menuButton;
     private TextView titleView;
     private TextView gestureLabel;
-    private LinearLayout topBar;
+    private PlayerTopChrome playerChrome;
 
     private String mediaUrl;
     private String pageUrl;
@@ -122,51 +121,43 @@ public class PlayerActivity extends Activity {
         videoSurface.setPivotY(0f);
         root.addView(videoSurface, new FrameLayout.LayoutParams(-1, -1));
 
-        playerView = new PlayerView(this);
+        playerView = (PlayerView) getLayoutInflater().inflate(
+                R.layout.view_polished_video_player_texture,
+                videoSurface,
+                false
+        );
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setUseController(true);
-        playerView.setControllerAutoShow(true);
-        playerView.setControllerHideOnTouch(false);
+        playerView.setControllerAutoShow(false);
+        playerView.setControllerHideOnTouch(true);
+        playerView.setControllerShowTimeoutMs(2600);
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         playerView.setKeepScreenOn(true);
         playerView.setResizeMode(resizeMode);
         videoSurface.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        topBar = new LinearLayout(this);
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setPadding(dp(8), dp(8), dp(8), dp(8));
-        topBar.setBackground(rounded(Color.argb(185, 12, 12, 14), dp(22)));
-        FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, dp(60));
+        playerChrome = PlayerTopChrome.create(
+                this,
+                title,
+                v -> {
+                    haptic(v);
+                    handleBackNavigation();
+                },
+                v -> {
+                    haptic(v);
+                    showPlayerMenu();
+                }
+        );
+        titleView = playerChrome.title;
+        menuButton = playerChrome.menu;
+        FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, dp(72));
         topParams.gravity = Gravity.TOP;
-        topParams.setMargins(dp(10), dp(10), dp(10), 0);
-        videoSurface.addView(topBar, topParams);
-
-        TextView backButton = topButton("‹", "Back or minimize");
-        backButton.setTextSize(34);
-        backButton.setOnClickListener(v -> {
-            haptic(v);
-            handleBackNavigation();
-        });
-        topBar.addView(backButton, new LinearLayout.LayoutParams(dp(48), dp(48)));
-
-        titleView = new TextView(this);
-        titleView.setText(title);
-        titleView.setTextColor(Color.WHITE);
-        titleView.setTextSize(15);
-        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
-        titleView.setSingleLine(true);
-        titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        titleView.setPadding(dp(8), 0, dp(8), 0);
-        topBar.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        menuButton = topButton("⋮", "Player menu");
-        menuButton.setTextSize(28);
-        menuButton.setOnClickListener(v -> {
-            haptic(v);
-            showPlayerMenu();
-        });
-        topBar.addView(menuButton, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        videoSurface.addView(playerChrome.root, topParams);
+        playerView.setControllerVisibilityListener(
+                (PlayerView.ControllerVisibilityListener) visibility ->
+                        playerChrome.setVisible(visibility == View.VISIBLE, true)
+        );
+        playerChrome.setVisible(false, false);
 
         gestureLabel = new TextView(this);
         gestureLabel.setTextColor(Color.WHITE);
@@ -183,18 +174,7 @@ public class PlayerActivity extends Activity {
 
         setContentView(root);
         configureGestures();
-    }
-
-    private TextView topButton(String label, String description) {
-        TextView button = new TextView(this);
-        button.setText(label);
-        button.setTextColor(Color.WHITE);
-        button.setGravity(Gravity.CENTER);
-        button.setContentDescription(description);
-        button.setBackground(rounded(Color.argb(110, 255, 255, 255), dp(18)));
-        button.setClickable(true);
-        button.setFocusable(true);
-        return button;
+        playerView.post(playerView::showController);
     }
 
     private void buildPlayer() {
@@ -284,10 +264,10 @@ public class PlayerActivity extends Activity {
                         if (dragMinimize) return true;
                         if (playerView.isControllerFullyVisible()) {
                             playerView.hideController();
-                            topBar.setVisibility(View.GONE);
+                            playerChrome.setVisible(false, true);
                         } else {
                             playerView.showController();
-                            topBar.setVisibility(View.VISIBLE);
+                            playerChrome.setVisible(true, true);
                         }
                         return true;
                     }
@@ -350,7 +330,7 @@ public class PlayerActivity extends Activity {
                                             .getBoolean("swipe_down_minimize", true)) {
                                 dragMinimize = true;
                                 playerView.hideController();
-                                topBar.setVisibility(View.GONE);
+                                playerChrome.setVisible(false, true);
                             }
                         }
                         if (!moved) return true;
@@ -439,8 +419,8 @@ public class PlayerActivity extends Activity {
                     .setDuration(180L)
                     .withEndAction(() -> {
                         dragMinimize = false;
-                        topBar.setVisibility(View.VISIBLE);
                         playerView.showController();
+                        playerChrome.setVisible(true, true);
                     })
                     .start();
         }
@@ -675,7 +655,12 @@ public class PlayerActivity extends Activity {
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         resetMinimizeTransform();
-        if (topBar != null) topBar.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
+        if (playerChrome != null) {
+            if (isInPictureInPictureMode) playerChrome.setVisible(false, false);
+            else if (playerView != null && playerView.isControllerFullyVisible()) {
+                playerChrome.setVisible(true, false);
+            }
+        }
         if (gestureLabel != null) gestureLabel.setVisibility(View.GONE);
         if (playerView != null) playerView.setUseController(!isInPictureInPictureMode);
     }

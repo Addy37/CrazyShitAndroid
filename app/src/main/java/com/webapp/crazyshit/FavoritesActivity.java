@@ -47,6 +47,9 @@ import java.util.Set;
  */
 public class FavoritesActivity extends Activity {
     public static final String EXTRA_SELECTED_URL = "selected_url";
+    public static final String EXTRA_START_TAB = "start_tab";
+    public static final int START_CONTINUE = 0;
+    public static final int START_WATCH_LATER = 2;
 
     private static final int TAB_CONTINUE = 0;
     private static final int TAB_HISTORY = 1;
@@ -75,6 +78,10 @@ public class FavoritesActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        tab = getIntent() == null
+                ? TAB_CONTINUE
+                : getIntent().getIntExtra(EXTRA_START_TAB, TAB_CONTINUE);
+        if (tab < TAB_CONTINUE || tab > TAB_WATCH_LATER) tab = TAB_CONTINUE;
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
         thumbnailResolvers = new RenderedThumbnailResolver[] {
@@ -152,6 +159,7 @@ public class FavoritesActivity extends Activity {
                 updateTabs();
             }
         });
+        pager.setCurrentItem(tab, false);
         root.addView(pager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         setContentView(root);

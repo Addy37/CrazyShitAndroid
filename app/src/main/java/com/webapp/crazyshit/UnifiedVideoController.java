@@ -88,6 +88,7 @@ final class UnifiedVideoController {
     private static final int MINI_VIDEO_H_DP = 74;
     private static final int MINI_PAD_X_DP = 4;
     private static final int MINI_PAD_TOP_DP = 4;
+    private static final int CONTROL_TIMEOUT_MS = 2600;
 
     static boolean routeLegacyDetail(NativeMainActivity host, VideoDetailActivity launched) {
         if (host == null || launched == null || launched.isFinishing()) return false;
@@ -174,8 +175,7 @@ final class UnifiedVideoController {
     private LinearLayout relatedContainer;
     private SwipeMinimizeFrameLayout playerContainer;
     private PlayerView playerView;
-    private TextView backButton;
-    private TextView menuButton;
+    private PlayerTopChrome playerChrome;
     private TextView titleView;
     private TextView metaView;
     private TextView commentsTitle;
@@ -372,7 +372,7 @@ final class UnifiedVideoController {
         });
 
         playerView = (PlayerView) activity.getLayoutInflater().inflate(
-                R.layout.view_video_player_texture,
+                R.layout.view_polished_video_player_texture,
                 playerContainer,
                 false
         );
@@ -380,31 +380,31 @@ final class UnifiedVideoController {
         playerView.setUseController(true);
         playerView.setControllerAutoShow(false);
         playerView.setControllerHideOnTouch(true);
+        playerView.setControllerShowTimeoutMs(CONTROL_TIMEOUT_MS);
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        backButton = overlayButton("‹", 34);
-        backButton.setContentDescription("Back");
-        backButton.setOnClickListener(v -> {
-            haptic(v);
-            handleBack();
-        });
-        FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(dp(46), dp(46));
-        bp.gravity = Gravity.TOP | Gravity.START;
-        bp.setMargins(dp(8), dp(8), 0, 0);
-        playerContainer.addView(backButton, bp);
-
-        menuButton = overlayButton("⋮", 26);
-        menuButton.setContentDescription("Video menu");
-        menuButton.setOnClickListener(v -> {
-            haptic(v);
-            showPlayerMenu(menuButton);
-        });
-        FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(dp(46), dp(46));
-        mp.gravity = Gravity.TOP | Gravity.END;
-        mp.setMargins(0, dp(8), dp(8), 0);
-        playerContainer.addView(menuButton, mp);
+        playerChrome = PlayerTopChrome.create(
+                activity,
+                title,
+                v -> {
+                    haptic(v);
+                    handleBack();
+                },
+                v -> {
+                    haptic(v);
+                    showPlayerMenu(v);
+                }
+        );
+        FrameLayout.LayoutParams chromeParams = new FrameLayout.LayoutParams(-1, dp(72));
+        chromeParams.gravity = Gravity.TOP;
+        playerContainer.addView(playerChrome.root, chromeParams);
+        playerView.setControllerVisibilityListener(
+                (PlayerView.ControllerVisibilityListener) visibility ->
+                        playerChrome.setVisible(visibility == View.VISIBLE, true)
+        );
+        playerChrome.setVisible(false, false);
 
         root.addView(playerContainer, new FrameLayout.LayoutParams(-1, portraitPlayerHeight()));
     }
@@ -470,6 +470,7 @@ final class UnifiedVideoController {
                     .setDuration(210L)
                     .setInterpolator(new DecelerateInterpolator(1.35f))
                     .start();
+            playerView.post(playerView::showController);
         }
         registerBack();
         activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -590,6 +591,7 @@ final class UnifiedVideoController {
                     state = State.FULL;
                     setChromeAlpha(1f);
                     setFullPlayerMode();
+                    playerView.showController();
                     registerBack();
                 })
                 .start();
@@ -601,8 +603,7 @@ final class UnifiedVideoController {
         playerView.setControllerHideOnTouch(true);
         playerView.setOnClickListener(null);
         playerContainer.setSwipeEnabled(!isLandscape() && swipeEnabled());
-        backButton.setVisibility(View.VISIBLE);
-        menuButton.setVisibility(View.VISIBLE);
+        playerChrome.setVisible(playerView.isControllerFullyVisible(), false);
         playerContainer.setBackgroundColor(Color.BLACK);
         if (isLandscape()) setSystemBars(true); else setSystemBars(false);
     }
@@ -613,8 +614,7 @@ final class UnifiedVideoController {
         playerView.setUseController(false);
         playerView.setOnClickListener(v -> expandFromMini());
         playerContainer.setSwipeEnabled(false);
-        backButton.setVisibility(View.GONE);
-        menuButton.setVisibility(View.GONE);
+        playerChrome.setVisible(false, false);
         playerContainer.setBackground(rounded(Color.BLACK, dp(10)));
     }
 
@@ -667,6 +667,7 @@ final class UnifiedVideoController {
 
     private void updateMetadataUi() {
         titleView.setText(title);
+        playerChrome.setTitle(title);
         miniTitle.setText(title);
         ArrayList<String> parts = new ArrayList<>();
         if (!views.isEmpty()) parts.add(views + " views");
@@ -1197,19 +1198,6 @@ final class UnifiedVideoController {
         return button;
     }
 
-    private TextView overlayButton(String label, int size) {
-        TextView view = new TextView(activity);
-        view.setText(label);
-        view.setTextSize(size);
-        view.setTextColor(Color.WHITE);
-        view.setGravity(Gravity.CENTER);
-        view.setBackground(rounded(Color.argb(165, 10, 10, 12), dp(18)));
-        view.setClickable(true);
-        view.setFocusable(true);
-        view.setElevation(dp(8));
-        return view;
-    }
-
     private TextView miniButton(String text, String description) {
         TextView view = new TextView(activity);
         view.setText(text);
@@ -1254,9 +1242,7 @@ final class UnifiedVideoController {
     }
 
     private void setChromeAlpha(float alpha) {
-        float a = clamp(alpha);
-        backButton.setAlpha(a);
-        menuButton.setAlpha(a);
+        if (playerChrome != null) playerChrome.setChromeAlpha(clamp(alpha));
     }
 
     private void setSystemBars(boolean fullscreen) {
