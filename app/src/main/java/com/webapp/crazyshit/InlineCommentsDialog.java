@@ -104,6 +104,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         shell.addView(handleRow, new LinearLayout.LayoutParams(-1, dp(18)));
         View handle = new View(activity);
         handle.setBackground(roundRect(Color.rgb(91, 91, 98), 3));
+        handle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         FrameLayout.LayoutParams handleParams = new FrameLayout.LayoutParams(dp(38), dp(4));
         handleParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         handleParams.topMargin = dp(7);
@@ -135,12 +136,12 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         sortButton = headerAction("⇅", "Sort comments");
         sortButton.setVisibility(View.GONE);
         sortButton.setOnClickListener(this::showSortMenu);
-        headerActions.addView(sortButton, new LinearLayout.LayoutParams(dp(44), -1));
+        headerActions.addView(sortButton, new LinearLayout.LayoutParams(dp(48), -1));
 
         TextView close = headerAction("×", "Close comments");
         close.setTextSize(27);
         close.setOnClickListener(v -> dismiss());
-        headerActions.addView(close, new LinearLayout.LayoutParams(dp(44), -1));
+        headerActions.addView(close, new LinearLayout.LayoutParams(dp(48), -1));
 
         View divider = new View(activity);
         divider.setBackgroundColor(Color.rgb(38, 38, 42));
@@ -157,7 +158,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         scrollView.addView(commentsContainer, new ScrollView.LayoutParams(-1, -2));
         showSkeletons();
 
-        shell.addView(buildComposer(), new LinearLayout.LayoutParams(-1, dp(62)));
+        shell.addView(buildComposer(), new LinearLayout.LayoutParams(-1, dp(68)));
         return shell;
     }
 
@@ -175,6 +176,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         avatar.setTypeface(null, android.graphics.Typeface.BOLD);
         avatar.setGravity(Gravity.CENTER);
         avatar.setBackground(circle(UiPalette.PRIMARY));
+        avatar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         row.addView(avatar, new LinearLayout.LayoutParams(dp(36), dp(36)));
 
         TextView input = new TextView(activity);
@@ -184,10 +186,11 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         input.setGravity(Gravity.CENTER_VERTICAL);
         input.setPadding(dp(14), 0, dp(12), 0);
         input.setBackground(roundRect(Color.rgb(34, 34, 38), 20));
+        input.setContentDescription("Open the website to add a comment");
         input.setClickable(true);
         input.setFocusable(true);
         input.setOnClickListener(v -> openWebsite());
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(0, dp(38), 1f);
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
         inputParams.setMargins(dp(10), 0, 0, 0);
         row.addView(input, inputParams);
         return row;
@@ -440,6 +443,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
             ImageView image = new ImageView(activity);
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             image.setBackground(circle(Color.rgb(43, 43, 48)));
+            image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             try {
                 Glide.with(image).load(item.avatar).circleCrop().into(image);
             } catch (Exception ignored) {
@@ -455,6 +459,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         fallback.setTypeface(null, android.graphics.Typeface.BOLD);
         fallback.setGravity(Gravity.CENTER);
         fallback.setBackground(circle(Color.rgb(183, 181, 80)));
+        fallback.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         return fallback;
     }
 
@@ -515,15 +520,15 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         LinearLayout actions = new LinearLayout(activity);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.CENTER);
-        panel.addView(actions, new LinearLayout.LayoutParams(-1, dp(44)));
+        panel.addView(actions, new LinearLayout.LayoutParams(-1, dp(52)));
 
         TextView retry = actionPill("Retry");
         retry.setOnClickListener(v -> loadComments(true));
-        actions.addView(retry, new LinearLayout.LayoutParams(dp(112), dp(38)));
+        actions.addView(retry, new LinearLayout.LayoutParams(dp(112), dp(48)));
 
         TextView web = actionPill("Website");
         web.setOnClickListener(v -> openWebsite());
-        LinearLayout.LayoutParams webParams = new LinearLayout.LayoutParams(dp(112), dp(38));
+        LinearLayout.LayoutParams webParams = new LinearLayout.LayoutParams(dp(112), dp(48));
         webParams.setMargins(dp(10), 0, 0, 0);
         actions.addView(web, webParams);
         commentsContainer.addView(panel, new LinearLayout.LayoutParams(-1, -2));
