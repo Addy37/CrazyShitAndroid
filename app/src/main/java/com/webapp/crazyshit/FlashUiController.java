@@ -142,7 +142,7 @@ final class FlashUiController {
             nav.setClipToPadding(false);
             nav.setPadding(dp(activity, 4), 0, dp(activity, 4), 0);
             nav.setItemIconSize(dp(activity, 21));
-            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(32, 255, 90, 31)));
+            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(32, 251, 245, 6)));
 
             if (nav.getParent() instanceof ViewGroup) {
                 ((ViewGroup) nav.getParent()).setClipChildren(false);
@@ -177,7 +177,7 @@ final class FlashUiController {
             GradientDrawable bg = new GradientDrawable();
             bg.setShape(GradientDrawable.RECTANGLE);
             bg.setCornerRadius(dp(activity, 2));
-            bg.setColor(Color.rgb(255, 90, 31));
+            bg.setColor(UiPalette.PRIMARY);
             indicator.setBackground(bg);
             indicator.setClickable(false);
             indicator.setFocusable(false);
@@ -227,7 +227,7 @@ final class FlashUiController {
             if (overlayRoot == null || chaosFab != null) return;
             ImageView fab = new ImageView(activity);
             fab.setImageResource(R.drawable.ic_nav_chaos);
-            fab.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+            fab.setImageTintList(ColorStateList.valueOf(UiPalette.ON_PRIMARY));
             fab.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             fab.setPadding(dp(activity, 14), dp(activity, 14), dp(activity, 14), dp(activity, 14));
             fab.setBackground(chaosFabBackground(activity, false));
@@ -483,8 +483,8 @@ final class FlashUiController {
     private static GradientDrawable chaosFabBackground(NativeMainActivity activity, boolean selected) {
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(selected ? Color.rgb(255, 90, 31) : Color.rgb(232, 77, 24));
-        bg.setStroke(dp(activity, 1), selected ? Color.rgb(255, 154, 112) : Color.rgb(255, 112, 60));
+        bg.setColor(selected ? UiPalette.PRIMARY : UiPalette.PRIMARY_DIM);
+        bg.setStroke(dp(activity, 1), selected ? Color.rgb(255, 253, 140) : UiPalette.PRIMARY);
         return bg;
     }
 

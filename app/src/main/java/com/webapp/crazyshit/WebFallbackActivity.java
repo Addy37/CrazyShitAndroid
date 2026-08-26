@@ -125,7 +125,7 @@ public final class WebFallbackActivity extends Activity {
 
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
-        progress.getProgressDrawable().setTint(Color.rgb(255, 90, 31));
+        progress.getProgressDrawable().setTint(UiPalette.PRIMARY);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(-1, dp(3));
         progressParams.gravity = Gravity.TOP;
         webContainer.addView(progress, progressParams);

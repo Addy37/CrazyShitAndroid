@@ -248,7 +248,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.root.setBackgroundColor(Color.rgb(13, 13, 15));
 
         page.refresh = new SwipeRefreshLayout(activity);
-        page.refresh.setColorSchemeColors(Color.rgb(255, 90, 31));
+        page.refresh.setColorSchemeColors(UiPalette.PRIMARY);
         page.root.addView(page.refresh, new FrameLayout.LayoutParams(-1, -1));
 
         page.recycler = new RecyclerView(activity);

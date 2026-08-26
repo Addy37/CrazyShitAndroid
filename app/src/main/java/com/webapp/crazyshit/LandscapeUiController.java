@@ -42,8 +42,8 @@ final class LandscapeUiController {
     private static final int NAV_MORE = 5;
 
     private static final int RAIL_WIDTH_DP = 68;
-    private static final int LANDSCAPE_TOP_BAR_DP = 52;
-    private static final int PORTRAIT_TOP_BAR_DP = 70;
+    private static final int LANDSCAPE_TOP_BAR_DP = 50;
+    private static final int PORTRAIT_TOP_BAR_DP = 56;
 
     private static final Map<NativeMainActivity, State> STATES = new WeakHashMap<>();
 
@@ -240,7 +240,7 @@ final class LandscapeUiController {
     }
 
     private static void updateRailSelection(NativeMainActivity activity, State state, int selected) {
-        int active = Color.rgb(255, 112, 60);
+        int active = UiPalette.PRIMARY;
         int inactive = Color.rgb(165, 165, 176);
         for (Map.Entry<Integer, TextView> entry : state.railButtons.entrySet()) {
             boolean checked = entry.getKey() == selected;
@@ -258,7 +258,7 @@ final class LandscapeUiController {
         GradientDrawable background = new GradientDrawable();
         background.setShape(GradientDrawable.RECTANGLE);
         background.setCornerRadius(dp(activity, 18));
-        background.setColor(selected ? Color.argb(95, 255, 90, 31) : Color.TRANSPARENT);
+        background.setColor(selected ? Color.argb(72, 251, 245, 6) : Color.TRANSPARENT);
         return background;
     }
 
@@ -284,33 +284,34 @@ final class LandscapeUiController {
         if (!(topBar instanceof LinearLayout)) return;
         LinearLayout bar = (LinearLayout) topBar;
         bar.setPadding(
-                dp(activity, landscape ? 8 : 14),
-                dp(activity, landscape ? 0 : 7),
-                dp(activity, landscape ? 6 : 10),
-                dp(activity, landscape ? 0 : 7)
+                dp(activity, landscape ? 8 : 10),
+                0,
+                dp(activity, landscape ? 6 : 4),
+                0
         );
 
         if (bar.getChildCount() > 0 && bar.getChildAt(0) instanceof ImageView) {
             ImageView icon = (ImageView) bar.getChildAt(0);
             setVisibility(icon, landscape ? View.GONE : View.VISIBLE);
-            setSize(icon, dp(activity, 52), dp(activity, 52));
+            setSize(icon, dp(activity, 40), dp(activity, 40));
         }
 
         if (bar.getChildCount() > 1 && bar.getChildAt(1) instanceof LinearLayout) {
             LinearLayout labels = (LinearLayout) bar.getChildAt(1);
-            labels.setPadding(dp(activity, landscape ? 8 : 10), 0, dp(activity, 8), 0);
+            labels.setPadding(dp(activity, landscape ? 8 : 9), 0, dp(activity, 8), 0);
             if (labels.getChildCount() > 0 && labels.getChildAt(0) instanceof TextView) {
-                ((TextView) labels.getChildAt(0)).setTextSize(landscape ? 18 : 19);
+                ((TextView) labels.getChildAt(0)).setTextSize(18);
             }
             if (labels.getChildCount() > 1 && labels.getChildAt(1) instanceof TextView) {
                 TextView subtitle = (TextView) labels.getChildAt(1);
+                subtitle.setTextSize(11);
                 setVisibility(subtitle, landscape ? View.GONE : View.VISIBLE);
             }
         }
 
         if (bar.getChildCount() > 2 && bar.getChildAt(bar.getChildCount() - 1) instanceof ImageView) {
             ImageView search = (ImageView) bar.getChildAt(bar.getChildCount() - 1);
-            int size = dp(activity, landscape ? 44 : 52);
+            int size = dp(activity, landscape ? 44 : 48);
             setSize(search, size, size);
             int pad = dp(activity, landscape ? 10 : 12);
             search.setPadding(pad, pad, pad, pad);

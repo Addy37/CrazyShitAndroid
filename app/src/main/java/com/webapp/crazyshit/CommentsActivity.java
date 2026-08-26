@@ -209,7 +209,7 @@ public class CommentsActivity extends Activity {
 
         actionView = new TextView(this);
         actionView.setText("WEB");
-        actionView.setTextColor(Color.rgb(255, 112, 60));
+        actionView.setTextColor(UiPalette.PRIMARY);
         actionView.setTextSize(12);
         actionView.setTypeface(null, android.graphics.Typeface.BOLD);
         actionView.setGravity(Gravity.CENTER);
@@ -233,7 +233,7 @@ public class CommentsActivity extends Activity {
 
         sortView = new TextView(this);
         sortView.setText("Site order ▾");
-        sortView.setTextColor(Color.rgb(255, 112, 60));
+        sortView.setTextColor(UiPalette.PRIMARY);
         sortView.setTextSize(12);
         sortView.setTypeface(null, android.graphics.Typeface.BOLD);
         sortView.setGravity(Gravity.CENTER);
@@ -532,8 +532,8 @@ public class CommentsActivity extends Activity {
 
     private View loginCard() {
         MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(Color.rgb(35, 25, 22));
-        card.setStrokeColor(Color.rgb(110, 53, 32));
+        card.setCardBackgroundColor(Color.rgb(35, 34, 8));
+        card.setStrokeColor(Color.rgb(90, 87, 10));
         card.setStrokeWidth(dp(1));
         card.setRadius(dp(16));
         card.setClickable(true);
@@ -547,7 +547,7 @@ public class CommentsActivity extends Activity {
 
         TextView title = new TextView(this);
         title.setText("Log in to load all comments");
-        title.setTextColor(Color.rgb(255, 112, 60));
+        title.setTextColor(UiPalette.PRIMARY);
         title.setTextSize(15);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         body.addView(title);
@@ -566,7 +566,7 @@ public class CommentsActivity extends Activity {
         button.setTextSize(12);
         button.setTypeface(null, android.graphics.Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
-        button.setBackgroundColor(Color.rgb(108, 48, 30));
+        button.setBackgroundColor(Color.rgb(80, 78, 5));
         button.setPadding(dp(12), dp(10), dp(12), dp(10));
         body.addView(button, new LinearLayout.LayoutParams(-1, -2));
         return card;
@@ -608,7 +608,7 @@ public class CommentsActivity extends Activity {
 
         TextView name = new TextView(this);
         name.setText(author.isEmpty() ? "Comment" : author);
-        name.setTextColor(Color.rgb(255, 112, 60));
+        name.setTextColor(UiPalette.PRIMARY);
         name.setTextSize(13);
         name.setTypeface(null, android.graphics.Typeface.BOLD);
         identity.addView(name);

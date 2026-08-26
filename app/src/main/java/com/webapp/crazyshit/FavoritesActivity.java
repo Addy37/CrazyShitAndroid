@@ -119,7 +119,7 @@ public class FavoritesActivity extends Activity {
         heading.addView(subtitle);
         header.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        clearAction = text("CLEAR", 12, Color.rgb(255, 112, 60));
+        clearAction = text("CLEAR", 12, UiPalette.PRIMARY);
         clearAction.setTypeface(null, android.graphics.Typeface.BOLD);
         clearAction.setGravity(Gravity.CENTER);
         clearAction.setPadding(dp(10), dp(10), dp(10), dp(10));

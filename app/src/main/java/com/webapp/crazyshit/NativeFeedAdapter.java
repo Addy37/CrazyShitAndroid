@@ -52,7 +52,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long MIN_FEED_PROGRESS_MS = 5_000L;
-    private static final int SECTION_ACCENT = Color.rgb(244, 183, 28);
+    private static final int SECTION_ACCENT = UiPalette.PRIMARY;
     private static final int APP_BG = Color.rgb(13, 13, 15);
 
     public interface Listener {
@@ -435,7 +435,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         mediaFrame.addView(progressTrack, trackParams);
 
         View progressFill = new View(parent.getContext());
-        progressFill.setBackgroundColor(Color.rgb(255, 90, 31));
+        progressFill.setBackgroundColor(UiPalette.PRIMARY);
         progressFill.setPivotX(0f);
         progressFill.setScaleX(0f);
         progressTrack.addView(progressFill, new FrameLayout.LayoutParams(-1, -1));
@@ -499,7 +499,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         metaRow.addView(info, new LinearLayout.LayoutParams(0, -2, 1f));
 
         TextView comments = new TextView(parent.getContext());
-        comments.setTextColor(Color.rgb(255, 112, 60));
+        comments.setTextColor(UiPalette.PRIMARY);
         comments.setTextSize(infoSize);
         comments.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         comments.setPadding(dp(parent, 7), dp(parent, 3), 0, dp(parent, 3));
@@ -618,13 +618,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             holder.watchBadge.setText("✓ Watched");
             holder.watchBadge.setBackground(rounded(Color.argb(220, 23, 23, 27), dp(holder.watchBadge, 12)));
             holder.watchBadge.setVisibility(View.VISIBLE);
-            holder.card.setStrokeColor(Color.rgb(79, 61, 55));
+            holder.card.setStrokeColor(Color.rgb(72, 70, 20));
             return;
         }
 
         if (history.positionMs < MIN_FEED_PROGRESS_MS) return;
         holder.watchBadge.setText("Continue  " + formatTime(history.positionMs));
-        holder.watchBadge.setBackground(rounded(Color.argb(230, 133, 47, 17), dp(holder.watchBadge, 12)));
+        holder.watchBadge.setBackground(rounded(Color.argb(230, 72, 70, 5), dp(holder.watchBadge, 12)));
         holder.watchBadge.setVisibility(View.VISIBLE);
 
         if (history.durationMs > 0L) {

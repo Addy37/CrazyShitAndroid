@@ -543,7 +543,7 @@ public final class NativeMiniPlayer {
         card.setCardBackgroundColor(Color.rgb(24, 24, 28));
         card.setRadius(dp(18));
         card.setCardElevation(dp(15));
-        card.setStrokeColor(Color.rgb(82, 52, 43));
+        card.setStrokeColor(Color.rgb(70, 68, 18));
         card.setStrokeWidth(dp(1));
         card.setVisibility(View.GONE);
 
@@ -596,7 +596,7 @@ public final class NativeMiniPlayer {
         content.addView(track, trackParams);
 
         progressFill = new View(activity);
-        progressFill.setBackgroundColor(Color.rgb(255, 90, 31));
+        progressFill.setBackgroundColor(UiPalette.PRIMARY);
         progressFill.setScaleX(0f);
         progressFill.setPivotX(0f);
         FrameLayout.LayoutParams fillParams = new FrameLayout.LayoutParams(-1, dp(3));

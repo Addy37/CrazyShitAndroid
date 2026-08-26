@@ -27,7 +27,7 @@ import java.util.WeakHashMap;
  * hierarchy scan every few hundred milliseconds.
  */
 final class UiPolishController {
-    private static final int ORANGE = Color.rgb(255, 90, 31);
+    private static final int PRIMARY = UiPalette.PRIMARY;
     private static final int MUTED = Color.rgb(166, 166, 176);
 
     private static final Map<NativeMainActivity, State> STATES = new WeakHashMap<>();
@@ -145,7 +145,7 @@ final class UiPolishController {
             polishCard(activity, (MaterialCardView) view);
         }
         if (view instanceof ProgressBar) {
-            ((ProgressBar) view).setIndeterminateTintList(ColorStateList.valueOf(ORANGE));
+            ((ProgressBar) view).setIndeterminateTintList(ColorStateList.valueOf(PRIMARY));
         }
 
         if (!(view instanceof ViewGroup)) return;
@@ -174,11 +174,11 @@ final class UiPolishController {
                 new int[] { android.R.attr.state_checked },
                 new int[] {}
         };
-        int[] colors = new int[] { ORANGE, MUTED };
+        int[] colors = new int[] { PRIMARY, MUTED };
         ColorStateList tint = new ColorStateList(states, colors);
         nav.setItemIconTintList(tint);
         nav.setItemTextColor(tint);
-        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(48, 255, 90, 31)));
+        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(48, 251, 245, 6)));
 
         // The floating navigation layer draws its own moving indicator.
         try {
@@ -194,7 +194,7 @@ final class UiPolishController {
 
         float maxRadius = dp(activity, 16);
         if (card.getRadius() > maxRadius) card.setRadius(maxRadius);
-        card.setRippleColor(ColorStateList.valueOf(Color.argb(52, 255, 90, 31)));
+        card.setRippleColor(ColorStateList.valueOf(Color.argb(52, 251, 245, 6)));
 
         if (!card.isClickable()) return;
         card.setOnTouchListener((v, event) -> {

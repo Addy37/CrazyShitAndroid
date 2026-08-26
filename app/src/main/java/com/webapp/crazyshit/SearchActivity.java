@@ -214,10 +214,10 @@ public final class SearchActivity extends Activity {
 
         Button go = new Button(this);
         go.setText("Search");
-        go.setTextColor(Color.WHITE);
+        go.setTextColor(UiPalette.ON_PRIMARY);
         go.setTextSize(13f);
         go.setAllCaps(false);
-        go.setBackground(rounded(Color.rgb(255, 90, 31), dp(14)));
+        go.setBackground(rounded(UiPalette.PRIMARY, dp(14)));
         go.setOnClickListener(v -> {
             haptic(v);
             runSearch();
@@ -268,9 +268,9 @@ public final class SearchActivity extends Activity {
     private void refreshFilterStyles() {
         for (TextView chip : filterViews) {
             boolean selected = chip.getTag() == filter;
-            chip.setTextColor(selected ? Color.WHITE : Color.rgb(188, 188, 198));
+            chip.setTextColor(selected ? UiPalette.ON_PRIMARY : Color.rgb(188, 188, 198));
             chip.setBackground(rounded(
-                    selected ? Color.rgb(255, 90, 31) : Color.rgb(31, 31, 36),
+                    selected ? UiPalette.PRIMARY : Color.rgb(31, 31, 36),
                     dp(18)
             ));
         }

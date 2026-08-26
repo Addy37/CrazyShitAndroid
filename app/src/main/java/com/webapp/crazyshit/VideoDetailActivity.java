@@ -342,7 +342,7 @@ public class VideoDetailActivity extends Activity {
         if (!oledEnabled()) {
             detailsScroll.setBackground(new GradientDrawable(
                     GradientDrawable.Orientation.TOP_BOTTOM,
-                    new int[] {Color.rgb(31, 18, 14), Color.rgb(16, 16, 19), Color.rgb(13, 13, 15)}
+                    new int[] {Color.rgb(31, 30, 9), Color.rgb(16, 16, 19), Color.rgb(13, 13, 15)}
             ));
             return;
         }
@@ -354,7 +354,7 @@ public class VideoDetailActivity extends Activity {
         }
         detailsScroll.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[] {Color.rgb(8, 3, 1), Color.rgb(2, 1, 0), Color.BLACK, Color.BLACK}
+                new int[] {Color.rgb(8, 8, 1), Color.rgb(2, 2, 0), Color.BLACK, Color.BLACK}
         ));
     }
 
@@ -664,7 +664,7 @@ public class VideoDetailActivity extends Activity {
         if (!clean(item.comments).isEmpty()) {
             TextView commentCount = new TextView(this);
             commentCount.setText(item.comments + " comments");
-            commentCount.setTextColor(Color.rgb(255, 112, 60));
+            commentCount.setTextColor(UiPalette.PRIMARY);
             commentCount.setTextSize(11);
             commentCount.setPadding(0, dp(5), 0, 0);
             copy.addView(commentCount);

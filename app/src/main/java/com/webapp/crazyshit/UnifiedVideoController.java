@@ -293,7 +293,7 @@ final class UnifiedVideoController {
         miniCard.setCardBackgroundColor(Color.rgb(24, 24, 28));
         miniCard.setRadius(dp(18));
         miniCard.setCardElevation(dp(15));
-        miniCard.setStrokeColor(Color.rgb(67, 49, 44));
+        miniCard.setStrokeColor(Color.rgb(68, 66, 19));
         miniCard.setStrokeWidth(dp(1));
         miniCard.setVisibility(View.INVISIBLE);
 
@@ -334,7 +334,7 @@ final class UnifiedVideoController {
         content.addView(track, trackParams);
 
         miniProgressFill = new View(activity);
-        miniProgressFill.setBackgroundColor(Color.rgb(255, 90, 31));
+        miniProgressFill.setBackgroundColor(UiPalette.PRIMARY);
         miniProgressFill.setScaleX(0f);
         miniProgressFill.setPivotX(0f);
         FrameLayout.LayoutParams fillParams = new FrameLayout.LayoutParams(-1, dp(3));
@@ -843,7 +843,7 @@ final class UnifiedVideoController {
         if (!clean(item.comments).isEmpty()) {
             TextView count = new TextView(activity);
             count.setText(item.comments + " comments");
-            count.setTextColor(Color.rgb(255, 112, 60));
+            count.setTextColor(UiPalette.PRIMARY);
             count.setTextSize(11);
             count.setPadding(0, dp(5), 0, 0);
             copy.addView(count);

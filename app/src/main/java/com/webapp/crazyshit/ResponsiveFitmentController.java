@@ -107,7 +107,7 @@ final class ResponsiveFitmentController {
         if (nav == null || nav.getLayoutParams() == null) return;
 
         ViewGroup.LayoutParams raw = nav.getLayoutParams();
-        raw.height = dp(activity, landscape ? 56 : 62);
+        raw.height = dp(activity, landscape ? 56 : 60);
         if (raw instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) raw;
             int side = dp(activity, landscape ? 8 : 10);
@@ -115,7 +115,7 @@ final class ResponsiveFitmentController {
                     side,
                     dp(activity, 2),
                     side,
-                    dp(activity, landscape ? 3 : 5)
+                    dp(activity, landscape ? 3 : 6)
             );
         }
         nav.setMinimumHeight(0);

@@ -782,9 +782,9 @@ public final class ChaosFeedView extends FrameLayout {
             seekBar.setMax(1000);
             seekBar.setProgress(0);
             seekBar.setPadding(0, 0, 0, 0);
-            seekBar.setProgressTintList(ColorStateList.valueOf(Color.rgb(255, 90, 31)));
+            seekBar.setProgressTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
             seekBar.setProgressBackgroundTintList(ColorStateList.valueOf(Color.argb(150, 210, 210, 215)));
-            seekBar.setThumbTintList(ColorStateList.valueOf(Color.rgb(255, 90, 31)));
+            seekBar.setThumbTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
             FrameLayout.LayoutParams seekParams = new FrameLayout.LayoutParams(-1, dp(30));
             seekParams.gravity = Gravity.BOTTOM;
             seekParams.setMargins(dp(8), 0, dp(8), dp(1));
