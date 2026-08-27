@@ -71,6 +71,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
     private RenderedThumbnailResolver[] thumbnailResolvers;
+    private Context appContext;
     private int resolverCursor;
 
     GlobalSearchAdapter(Listener listener) {
@@ -82,6 +83,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         entries.clear();
         if (next != null) entries.addAll(next);
         notifyDataSetChanged();
+        preloadDirectThumbnails();
     }
 
     void close() {
@@ -91,6 +93,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             }
         }
         thumbnailResolvers = null;
+        appContext = null;
         requestedThumbnails.clear();
     }
 
@@ -128,7 +131,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         card.setRadius(dp(parent, 14));
         card.setStrokeWidth(dp(parent, 1));
         card.setStrokeColor(Color.rgb(51, 51, 58));
-        RecyclerView.LayoutParams cardParams = new RecyclerView.LayoutParams(-1, dp(parent, landscape ? 96 : 108));
+        RecyclerView.LayoutParams cardParams = new RecyclerView.LayoutParams(-1, dp(parent, landscape ? 112 : 124));
         cardParams.setMargins(dp(parent, 10), dp(parent, 5), dp(parent, 10), dp(parent, 5));
         card.setLayoutParams(cardParams);
 
@@ -160,7 +163,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         TextView meta = new TextView(parent.getContext());
         meta.setTextColor(Color.rgb(174, 174, 184));
         meta.setTextSize(landscape ? 12f : 12.5f);
-        meta.setMaxLines(2);
+        meta.setMaxLines(3);
         meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
         metaParams.topMargin = dp(parent, 5);
@@ -204,7 +207,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         ResultHolder result = (ResultHolder) holder;
         NativeContentItem item = entry.item;
         if (item == null) return;
-        ensureResolvers(result.image.getContext());
+        ensureContext(result.image.getContext());
         result.boundUrl = item.url == null ? "" : item.url;
         result.title.setText(item.title);
         result.meta.setText(metaText(item, entry.source));
@@ -215,34 +218,51 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     private String metaText(NativeContentItem item, int source) {
-        if (source == SOURCE_LIBRARY) return "Library";
-        if (item.isSeries()) return "Series";
-        if (item.isCategory()) return "Category";
-        StringBuilder meta = new StringBuilder("Video");
+        StringBuilder meta;
+        if (source == SOURCE_LIBRARY) {
+            meta = new StringBuilder("Library");
+        } else if (item.isSeries()) {
+            meta = new StringBuilder("Series");
+        } else if (item.isCategory()) {
+            meta = new StringBuilder("Category");
+        } else {
+            meta = new StringBuilder("Video");
+        }
         if (item.views != null && !item.views.trim().isEmpty()) {
             meta.append("  •  ").append(item.views.trim()).append(" views");
         }
         if (item.uploader != null && !item.uploader.trim().isEmpty()) {
             meta.append("  •  ").append(item.uploader.trim());
         }
+        if (item.description != null && !item.description.trim().isEmpty()) {
+            meta.append('\n').append(item.description.trim());
+        }
         return meta.toString();
     }
 
-    /** Search intentionally shares the exact media-thumbnail resolver used by NativeFeedAdapter. */
-    private void ensureResolvers(Context context) {
-        if (thumbnailResolvers != null || context == null) return;
-        Context app = context.getApplicationContext();
+    private void ensureContext(Context context) {
+        if (appContext != null || context == null) return;
+        appContext = context.getApplicationContext();
+        preloadDirectThumbnails();
+    }
+
+    /** Search only starts rendered-page fallback workers for results without direct artwork. */
+    private void ensureResolvers() {
+        if (thumbnailResolvers != null || appContext == null) return;
         thumbnailResolvers = new RenderedThumbnailResolver[] {
-                new RenderedThumbnailResolver(app, this::setResolvedThumbnail),
-                new RenderedThumbnailResolver(app, this::setResolvedThumbnail)
+                new RenderedThumbnailResolver(appContext, this::setResolvedThumbnail),
+                new RenderedThumbnailResolver(appContext, this::setResolvedThumbnail),
+                new RenderedThumbnailResolver(appContext, this::setResolvedThumbnail)
         };
     }
 
     private void requestThumbnail(NativeContentItem item) {
         if (item == null || item.isSection() || item.isSeries() || item.isCategory()) return;
         if (item.url == null || item.url.isEmpty()) return;
+        if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) return;
         if (resolvedThumbnails.containsKey(item.url)) return;
         if (!requestedThumbnails.add(item.url)) return;
+        ensureResolvers();
         if (thumbnailResolvers == null || thumbnailResolvers.length == 0) {
             requestedThumbnails.remove(item.url);
             return;
@@ -290,8 +310,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             return;
         }
 
-        String imageUrl = resolvedThumbnails.get(item.url);
-        if (imageUrl == null || imageUrl.isEmpty()) imageUrl = item.imageUrl;
+        String imageUrl = item.imageUrl;
+        if (imageUrl == null || imageUrl.isEmpty()) imageUrl = resolvedThumbnails.get(item.url);
         if (imageUrl == null || imageUrl.isEmpty()) return;
 
         Object source = imageUrl.startsWith("file://")
@@ -305,6 +325,25 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 36)))
                 .into(image);
+    }
+
+    private void preloadDirectThumbnails() {
+        if (appContext == null) return;
+        int loaded = 0;
+        for (Entry entry : entries) {
+            if (entry.section || entry.item == null) continue;
+            NativeContentItem item = entry.item;
+            if (item.imageUrl == null || item.imageUrl.trim().isEmpty()) continue;
+            Object source = item.imageUrl.startsWith("file://")
+                    ? item.imageUrl
+                    : withSiteHeaders(item.imageUrl, item.url);
+            Glide.with(appContext)
+                    .load(source)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                    .dontAnimate()
+                    .preload(480, 270);
+            if (++loaded >= 18) break;
+        }
     }
 
     private GlideUrl withSiteHeaders(String imageUrl, String pageUrl) {

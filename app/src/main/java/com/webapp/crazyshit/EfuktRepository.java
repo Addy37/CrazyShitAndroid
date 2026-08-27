@@ -12,6 +12,7 @@ import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,7 +68,17 @@ public final class EfuktRepository {
     public List<NativeContentItem> fetchSeriesFeed(Context context, String seriesUrl, int page)
             throws IOException {
         if (page > 1) return new ArrayList<>();
-        Document doc = fetchDocument(context, seriesUrl);
+        return parseVideoFeed(fetchDocument(context, seriesUrl));
+    }
+
+    public List<NativeContentItem> search(Context context, String query) throws IOException {
+        String value = query == null ? "" : query.trim();
+        if (value.length() < 2) return new ArrayList<>();
+        String encoded = URLEncoder.encode(value, "UTF-8");
+        return parseVideoFeed(fetchDocument(context, BASE + "search/" + encoded + "/"));
+    }
+
+    private List<NativeContentItem> parseVideoFeed(Document doc) {
         LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
 
         for (Element link : doc.select("a[href]")) {
@@ -84,6 +95,7 @@ public final class EfuktRepository {
             );
             if (title.length() < 2) continue;
             String image = findImage(link, scope, doc.location());
+            String description = findDescription(scope, title);
             NativeContentItem candidate = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA,
                     title,
@@ -91,7 +103,8 @@ public final class EfuktRepository {
                     image,
                     "",
                     "EFukt",
-                    ""
+                    "",
+                    description
             );
             NativeContentItem old = items.get(url);
             items.put(url, old == null ? candidate : old.merge(candidate));
@@ -150,12 +163,13 @@ public final class EfuktRepository {
                     titleFromSeriesUrl(url)
             );
             String image = findImage(link, scope, doc.location());
+            String description = findDescription(scope, title);
             Draft draft = items.get(url);
             if (draft == null) {
                 draft = new Draft(url);
                 items.put(url, draft);
             }
-            draft.absorb(title, image);
+            draft.absorb(title, image, description);
         }
 
         ArrayList<NativeContentItem> result = new ArrayList<>();
@@ -169,7 +183,8 @@ public final class EfuktRepository {
                     item.image,
                     "",
                     "EFukt",
-                    ""
+                    "",
+                    item.description
             ));
         }
         return result;
@@ -237,6 +252,25 @@ public final class EfuktRepository {
         if (scope == null) return "";
         Element heading = scope.selectFirst("h1,h2,h3,h4,h5,.title");
         return heading == null ? "" : clean(heading.text());
+    }
+
+    private String findDescription(Element scope, String title) {
+        if (scope == null) return "";
+        String normalizedTitle = clean(title).toLowerCase(Locale.US);
+        for (Element element : scope.select(
+                "[itemprop=description],.description,.excerpt,.summary,.caption,p"
+        )) {
+            String value = clean(element.text());
+            if (value.length() < 12 || value.length() > 900) continue;
+            String lower = value.toLowerCase(Locale.US);
+            if (lower.equals(normalizedTitle) || looksLikeNavigation(value)) continue;
+            if (lower.matches("^(views?|comments?|posted|added|date)\\b.*")) continue;
+            if (!normalizedTitle.isEmpty() && lower.startsWith(normalizedTitle)) {
+                value = clean(value.substring(Math.min(value.length(), title.length())));
+            }
+            if (value.length() >= 12) return value;
+        }
+        return "";
     }
 
     private String findImage(Element link, Element scope, String documentUrl) {
@@ -423,14 +457,18 @@ public final class EfuktRepository {
         final String url;
         String title = "";
         String image = "";
+        String description = "";
 
         Draft(String url) {
             this.url = url;
         }
 
-        void absorb(String nextTitle, String nextImage) {
+        void absorb(String nextTitle, String nextImage, String nextDescription) {
             if (title.isEmpty() && nextTitle != null && !nextTitle.isEmpty()) title = nextTitle;
             if (image.isEmpty() && nextImage != null && !nextImage.isEmpty()) image = nextImage;
+            if (description.isEmpty() && nextDescription != null && !nextDescription.isEmpty()) {
+                description = nextDescription;
+            }
         }
     }
 }

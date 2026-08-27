@@ -9,6 +9,7 @@ import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -85,9 +86,17 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
         View shade = new View(parent.getContext());
         shade.setBackgroundColor(Color.argb(118, 0, 0, 0));
-        FrameLayout.LayoutParams shadeParams = new FrameLayout.LayoutParams(-1, dp(parent, 52));
+        FrameLayout.LayoutParams shadeParams = new FrameLayout.LayoutParams(-1, dp(parent, 82));
         shadeParams.gravity = Gravity.BOTTOM;
         frame.addView(shade, shadeParams);
+
+        LinearLayout copy = new LinearLayout(parent.getContext());
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.CENTER_VERTICAL);
+        copy.setPadding(dp(parent, 11), dp(parent, 6), dp(parent, 11), dp(parent, 7));
+        FrameLayout.LayoutParams copyParams = new FrameLayout.LayoutParams(-1, dp(parent, 82));
+        copyParams.gravity = Gravity.BOTTOM;
+        frame.addView(copy, copyParams);
 
         TextView title = new TextView(parent.getContext());
         title.setTextColor(Color.WHITE);
@@ -96,18 +105,28 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         title.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         title.setMaxLines(2);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        title.setPadding(dp(parent, 11), dp(parent, 6), dp(parent, 11), dp(parent, 7));
-        FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(-1, dp(parent, 52));
-        titleParams.gravity = Gravity.BOTTOM;
-        frame.addView(title, titleParams);
+        copy.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
-        return new Holder(card, image, title);
+        TextView description = new TextView(parent.getContext());
+        description.setTextColor(Color.rgb(210, 210, 218));
+        description.setTextSize(11f);
+        description.setMaxLines(2);
+        description.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        description.setVisibility(View.GONE);
+        LinearLayout.LayoutParams descriptionParams = new LinearLayout.LayoutParams(-1, -2);
+        descriptionParams.topMargin = dp(parent, 3);
+        copy.addView(description, descriptionParams);
+
+        return new Holder(card, image, title, description);
     }
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
         holder.title.setText(item.title);
+        boolean hasDescription = item.description != null && !item.description.trim().isEmpty();
+        holder.description.setText(hasDescription ? item.description.trim() : "");
+        holder.description.setVisibility(hasDescription ? View.VISIBLE : View.GONE);
         holder.card.setContentDescription(item.title);
         holder.card.setOnClickListener(v -> listener.onOpen(item));
         loadImage(holder, item);
@@ -197,12 +216,14 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         final MaterialCardView card;
         final ImageView image;
         final TextView title;
+        final TextView description;
 
-        Holder(MaterialCardView card, ImageView image, TextView title) {
+        Holder(MaterialCardView card, ImageView image, TextView title, TextView description) {
             super(card);
             this.card = card;
             this.image = image;
             this.title = title;
+            this.description = description;
         }
     }
 }
