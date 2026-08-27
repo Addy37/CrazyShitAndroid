@@ -104,7 +104,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         shell.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         refresh = new SwipeRefreshLayout(this);
-        refresh.setColorSchemeColors(Color.rgb(255, 90, 31));
+        refresh.setColorSchemeColors(UiPalette.PRIMARY);
         refresh.setOnRefreshListener(this::reload);
         body.addView(refresh, new FrameLayout.LayoutParams(-1, -1));
 
@@ -132,11 +132,13 @@ public final class NativeFeedBrowserActivity extends Activity {
             @Override
             public void onComments(NativeContentItem item) {
                 if (item == null || item.isSection() || memeMode) return;
-                Intent intent = new Intent(NativeFeedBrowserActivity.this, CommentsActivity.class);
-                intent.putExtra(CommentsActivity.EXTRA_PAGE_URL, item.url);
-                intent.putExtra(CommentsActivity.EXTRA_TITLE, item.title);
-                intent.putExtra(CommentsActivity.EXTRA_COUNT, item.comments);
-                startActivity(intent);
+                new InlineCommentsDialog(
+                        NativeFeedBrowserActivity.this,
+                        item.url,
+                        item.title,
+                        item.comments,
+                        null
+                ).show();
             }
         });
         recycler.setAdapter(adapter);
@@ -276,24 +278,16 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void showItemMenu(NativeContentItem item, View anchor) {
-        PopupMenu menu = new PopupMenu(this, anchor);
         if (!memeMode) {
-            boolean saved = FavoriteStore.contains(this, item.url);
-            menu.getMenu().add(Menu.NONE, 1, 0, saved ? "Remove from Watch Later" : "Save to Watch Later");
+            showVideoItemMenu(item);
+            return;
         }
+        PopupMenu menu = new PopupMenu(this, anchor);
         menu.getMenu().add(Menu.NONE, 2, 1, "Share");
         menu.getMenu().add(Menu.NONE, 3, 2, "Open website page");
         menu.setOnMenuItemClickListener(clicked -> {
-            if (clicked.getItemId() == 1) {
-                if (FavoriteStore.contains(this, item.url)) FavoriteStore.remove(this, item.url);
-                else FavoriteStore.add(this, item.title, item.url);
-                return true;
-            }
             if (clicked.getItemId() == 2) {
-                Intent share = new Intent(Intent.ACTION_SEND);
-                share.setType("text/plain");
-                share.putExtra(Intent.EXTRA_TEXT, item.url);
-                startActivity(Intent.createChooser(share, "Share"));
+                shareItem(item);
                 return true;
             }
             if (clicked.getItemId() == 3) {
@@ -303,6 +297,81 @@ public final class NativeFeedBrowserActivity extends Activity {
             return false;
         });
         menu.show();
+    }
+
+    private void showVideoItemMenu(NativeContentItem item) {
+        String saveTitle = FavoriteStore.contains(this, item.url)
+                ? "Remove from Watch Later"
+                : "Save to Watch Later";
+        ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
+        if (item.comments != null && !item.comments.isEmpty()) {
+            actions.add(VideoActionSheet.action(
+                    R.drawable.ic_action_comments,
+                    "Comments",
+                    item.comments + " ready to view",
+                    () -> new InlineCommentsDialog(
+                            this,
+                            item.url,
+                            item.title,
+                            item.comments,
+                            null
+                    ).show()
+            ));
+        }
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_share,
+                "Share",
+                "Send the CrazyShit page",
+                () -> shareItem(item)
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_more_website,
+                "Open website page",
+                "Use the compatibility browser",
+                () -> openWebsite(item.url)
+        ));
+
+        VideoActionSheet.show(
+                this,
+                item.title,
+                VideoActionSheet.section(
+                        "SAVE",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_download,
+                                "Download",
+                                "Save this video for offline playback",
+                                () -> VideoDownloadStore.downloadPage(this, item)
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_library,
+                                saveTitle,
+                                "Keep this video in your library",
+                                () -> toggleWatchLater(item)
+                        )
+                ),
+                VideoActionSheet.section(
+                        "ACTIONS",
+                        actions.toArray(new VideoActionSheet.Action[0])
+                )
+        );
+    }
+
+    private void toggleWatchLater(NativeContentItem item) {
+        if (FavoriteStore.contains(this, item.url)) {
+            FavoriteStore.remove(this, item.url);
+            Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+        } else {
+            FavoriteStore.add(this, item.title, item.url);
+            Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void shareItem(NativeContentItem item) {
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_TEXT, item.url);
+        share.putExtra(Intent.EXTRA_SUBJECT, item.title);
+        startActivity(Intent.createChooser(share, "Share"));
     }
 
     private void showOptions(View anchor) {

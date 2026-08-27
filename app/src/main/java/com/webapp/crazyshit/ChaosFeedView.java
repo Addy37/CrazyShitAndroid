@@ -2,6 +2,8 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
@@ -30,9 +32,9 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
-import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -71,7 +73,6 @@ import java.util.concurrent.Executors;
 public final class ChaosFeedView extends FrameLayout {
     public interface Host {
         void openDetails(NativeContentItem item);
-        void openComments(NativeContentItem item);
     }
 
     private static final String PREFS = "chaos_feed";
@@ -81,6 +82,8 @@ public final class ChaosFeedView extends FrameLayout {
     private static final int MAX_RECENT = 500;
     private static final int MAX_HIDDEN = 600;
     private static final int LOAD_AHEAD_AT = 5;
+    private static final long STREAM_RETRY_DELAY_MS = 450L;
+    private static final long FAILED_CLIP_SKIP_DELAY_MS = 1200L;
     private static final String SITE = "https://crazyshit.com/";
 
     private final Activity activity;
@@ -95,6 +98,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Map<String, CrazyShitRepository.StreamInfo> streamCache = new HashMap<>();
     private final Set<String> resolving = new HashSet<>();
     private final Set<String> unplayable = new HashSet<>();
+    private final Set<String> resolveRetried = new HashSet<>();
     private final Random random = new Random();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
 
@@ -102,6 +106,7 @@ public final class ChaosFeedView extends FrameLayout {
     private ChaosAdapter adapter;
     private TextView empty;
     private ProgressBar initialProgress;
+    private InlineCommentsDialog commentsDialog;
     private boolean active;
     private boolean hostResumed = true;
     private boolean poolLoading;
@@ -193,6 +198,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onConfigurationChanged() {
+        if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         syncVisibleChrome();
     }
 
@@ -206,6 +212,7 @@ public final class ChaosFeedView extends FrameLayout {
     streamCache.clear();
     resolving.clear();
     unplayable.clear();
+    resolveRetried.clear();
     // Keep sessionUrls so Refresh cannot immediately deal the same clips back again.
     items.clear();
     adapter.notifyDataSetChanged();
@@ -217,6 +224,7 @@ public final class ChaosFeedView extends FrameLayout {
 }
 
     public void close() {
+        if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         pauseAll();
         releaseVisiblePlayers();
         io.shutdownNow();
@@ -336,16 +344,35 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void resolveAhead(int position) {
-        for (int offset = 0; offset <= 3; offset++) {
+        int ahead = ChaosPreloadPolicy.aheadCount(activity);
+        for (int offset = 0; offset <= ahead; offset++) {
             resolveAt(position + offset);
         }
-        if (position > 0) resolveAt(position - 1);
+        if (ahead > 0 && position > 0) resolveAt(position - 1);
+    }
+
+    private boolean shouldResolvePosition(int position) {
+        if (position == selectedPosition) return true;
+        if (!ChaosPreloadPolicy.allowsLookAhead(activity)) return false;
+        return position >= selectedPosition - 1 && position <= selectedPosition + 3;
     }
 
     private void resolveAt(int position) {
         if (position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
-        if (streamCache.containsKey(item.url) || unplayable.contains(item.url) || !resolving.add(item.url)) {
+        if (streamCache.containsKey(item.url)) {
+            prepareVisible(position);
+            return;
+        }
+        if (unplayable.contains(item.url)) {
+            if (shouldRetryResolution(item, position)) {
+                unplayable.remove(item.url);
+            } else {
+                prepareVisible(position);
+                return;
+            }
+        }
+        if (!resolving.add(item.url)) {
             prepareVisible(position);
             return;
         }
@@ -360,8 +387,13 @@ public final class ChaosFeedView extends FrameLayout {
             activity.runOnUiThread(() -> {
                 resolving.remove(item.url);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (shouldRetryResolution(item, position)) {
+                        scheduleResolutionRetry(item, position);
+                        return;
+                    }
                     unplayable.add(item.url);
                 } else {
+                    unplayable.remove(item.url);
                     streamCache.put(item.url, resolved);
                 }
                 prepareVisible(position);
@@ -370,15 +402,44 @@ public final class ChaosFeedView extends FrameLayout {
         });
     }
 
+    private boolean shouldRetryResolution(NativeContentItem item, int position) {
+        if (item == null || item.url == null || item.url.isEmpty()) return false;
+        if (!active || !hostResumed || position != selectedPosition) return false;
+        if (position < 0 || position >= items.size()) return false;
+        if (!item.url.equals(items.get(position).url)) return false;
+        return resolveRetried.add(item.url);
+    }
+
+    private void scheduleResolutionRetry(NativeContentItem item, int position) {
+        ChaosHolder holder = holderAt(position);
+        if (holder != null && holder.isBoundTo(item.url, position)) {
+            holder.noteResolutionRetry();
+            holder.showRetrying();
+        }
+        pager.postDelayed(() -> {
+            if (position < 0 || position >= items.size()) return;
+            if (!item.url.equals(items.get(position).url)) return;
+            if ((!active || !hostResumed || position != selectedPosition)
+                    && !ChaosPreloadPolicy.allowsLookAhead(activity)) {
+                resolveRetried.remove(item.url);
+                unplayable.add(item.url);
+                return;
+            }
+            unplayable.remove(item.url);
+            resolveAt(position);
+        }, STREAM_RETRY_DELAY_MS);
+    }
+
     private void prepareVisible(int position) {
         ChaosHolder holder = holderAt(position);
         if (holder == null || position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
         CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
         if (stream != null) {
+            holder.noteResolutionRetryIfNeeded(resolveRetried.contains(item.url));
             holder.prepare(stream, active && hostResumed && position == selectedPosition);
         } else if (unplayable.contains(item.url)) {
-            holder.showPlaybackFailure();
+            holder.showResolutionFailureAndSkip(resolveRetried.contains(item.url));
         }
     }
 
@@ -521,6 +582,7 @@ public final class ChaosFeedView extends FrameLayout {
         streamCache.remove(item.url);
         unplayable.remove(item.url);
         resolving.remove(item.url);
+        resolveRetried.remove(item.url);
         items.remove(index);
         adapter.notifyDataSetChanged();
         Toast.makeText(activity, "Won't show this clip again.", Toast.LENGTH_SHORT).show();
@@ -563,6 +625,89 @@ public final class ChaosFeedView extends FrameLayout {
         activity.startActivity(Intent.createChooser(share, "Share"));
     }
 
+    private void retryPlayback(ChaosHolder holder, PlaybackException originalError) {
+        if (holder == null || holder.item == null || holder.item.url.isEmpty()) return;
+        NativeContentItem retryItem = holder.item;
+        String pageUrl = retryItem.url;
+        int position = holder.boundPosition;
+
+        holder.showRetrying();
+        holder.releasePlayer();
+        streamCache.remove(pageUrl);
+        unplayable.remove(pageUrl);
+        resolveRetried.add(pageUrl);
+        resolving.add(pageUrl);
+
+        io.execute(() -> {
+            CrazyShitRepository.StreamInfo refreshed = null;
+            try {
+                refreshed = repository.resolvePlayable(activity, pageUrl);
+            } catch (Exception ignored) {
+            }
+            CrazyShitRepository.StreamInfo resolved = refreshed;
+            activity.runOnUiThread(() -> {
+                resolving.remove(pageUrl);
+                boolean valid = resolved != null
+                        && resolved.mediaUrl != null
+                        && !resolved.mediaUrl.isEmpty();
+                if (valid) {
+                    unplayable.remove(pageUrl);
+                    streamCache.put(pageUrl, resolved);
+                } else {
+                    unplayable.add(pageUrl);
+                }
+
+                if (!holder.isBoundTo(pageUrl, position)) {
+                    prepareVisible(position);
+                    return;
+                }
+                if (!valid) {
+                    holder.showPlayerFailureAndSkip(originalError, "Fresh stream lookup failed");
+                    return;
+                }
+                holder.prepare(resolved, active && hostResumed && position == selectedPosition);
+            });
+        });
+    }
+
+    private void showPlaybackReport(ChaosHolder holder) {
+        if (holder == null || holder.item == null) return;
+        String report = ChaosPlaybackDiagnostics.build(
+                holder.item,
+                holder.diagnosticStream(),
+                holder.lastPlaybackError,
+                holder.lastFailureStage,
+                holder.retryAttempted
+        );
+        new AlertDialog.Builder(activity)
+                .setTitle("Playback report")
+                .setMessage(report)
+                .setPositiveButton("Copy", (dialog, which) -> copyPlaybackReport(report))
+                .setNeutralButton("Share", (dialog, which) -> sharePlaybackReport(report))
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void copyPlaybackReport(String report) {
+        ClipboardManager clipboard = (ClipboardManager) activity.getSystemService(
+                Context.CLIPBOARD_SERVICE
+        );
+        if (clipboard == null) {
+            Toast.makeText(activity, "Clipboard isn't available.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clipboard.setPrimaryClip(ClipData.newPlainText("CrazyShit playback report", report));
+        Toast.makeText(activity, "Playback report copied.", Toast.LENGTH_SHORT).show();
+    }
+
+    private void sharePlaybackReport(String report) {
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_SUBJECT, "CrazyShit playback report");
+        share.putExtra(Intent.EXTRA_TEXT, report);
+        activity.startActivity(Intent.createChooser(share, "Share playback report"));
+    }
+
     private void toggleSaved(NativeContentItem item, TextView button) {
         if (item == null) return;
         if (FavoriteStore.contains(activity, item.url)) {
@@ -577,7 +722,73 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void updateSaveButton(NativeContentItem item, TextView button) {
         if (button == null || item == null) return;
-        button.setText(FavoriteStore.contains(activity, item.url) ? "★\nSaved" : "☆\nSave");
+        boolean saved = FavoriteStore.contains(activity, item.url);
+        button.setText(saved ? "★\nSaved" : "☆\nSave");
+        button.setContentDescription(saved ? "Remove from Watch Later" : "Save to Watch Later");
+    }
+
+    private void openInlineComments(NativeContentItem item) {
+        if (item == null || item.url == null || item.url.isEmpty()) return;
+        if (commentsDialog != null && commentsDialog.isShowing()) return;
+
+        pager.animate().cancel();
+        pager.setScaleX(1f);
+        pager.setScaleY(1f);
+        pager.setUserInputEnabled(false);
+        commentsDialog = new InlineCommentsDialog(
+                activity,
+                item.url,
+                item.title,
+                item.comments,
+                new InlineCommentsDialog.ResizeListener() {
+                    @Override
+                    public void onSheetTopChanged(int topOnScreen) {
+                        resizeForComments(topOnScreen);
+                    }
+
+                    @Override
+                    public void onSheetClosed() {
+                        commentsDialog = null;
+                        restoreAfterComments();
+                    }
+                }
+        );
+        commentsDialog.show();
+    }
+
+    private void resizeForComments(int sheetTopOnScreen) {
+        ChaosHolder holder = holderAt(selectedPosition);
+        if (holder != null) holder.resizeMediaForComments(sheetTopOnScreen);
+    }
+
+    private void restoreAfterComments() {
+        if (pager == null) return;
+        pager.animate().cancel();
+        pager.setScaleX(1f);
+        pager.setScaleY(1f);
+        ChaosHolder holder = holderAt(selectedPosition);
+        if (holder == null) {
+            pager.setUserInputEnabled(true);
+            return;
+        }
+        holder.restoreMediaAfterComments(() -> {
+            pager.setUserInputEnabled(true);
+            holder.showControlsTemporarily();
+        });
+    }
+
+    private void preloadReadyComments(NativeContentItem item, int position) {
+        if (item == null || position != selectedPosition || !active || !hostResumed) return;
+        if (!ChaosPreloadPolicy.allowsCommentPreload(activity)) return;
+        String url = item.url;
+        pager.postDelayed(() -> {
+            if (!active || !hostResumed || position != selectedPosition) return;
+            if (!ChaosPreloadPolicy.allowsCommentPreload(activity)) return;
+            if (selectedPosition < 0 || selectedPosition >= items.size()) return;
+            NativeContentItem selected = items.get(selectedPosition);
+            if (selected == null || !url.equals(selected.url)) return;
+            NativeCommentsLoader.preload(activity, url);
+        }, 850L);
     }
 
     private void haptic(View view) {
@@ -628,7 +839,7 @@ public final class ChaosFeedView extends FrameLayout {
             CrazyShitRepository.StreamInfo stream = streamCache.get(items.get(position).url);
             if (stream != null) {
                 holder.prepare(stream, active && hostResumed && position == selectedPosition);
-            } else {
+            } else if (shouldResolvePosition(position)) {
                 resolveAt(position);
             }
         }
@@ -643,6 +854,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private final class ChaosHolder extends RecyclerView.ViewHolder {
         final FrameLayout root;
+        final FrameLayout mediaLayer;
         final PlayerView playerView;
         final ImageView poster;
         final ProgressBar loading;
@@ -657,15 +869,26 @@ public final class ChaosFeedView extends FrameLayout {
         ExoPlayer player;
         NativeContentItem item;
         CrazyShitRepository.StreamInfo stream;
+        CrazyShitRepository.StreamInfo lastAttemptedStream;
+        PlaybackException lastPlaybackError;
+        String lastFailureStage = "";
         int boundPosition = -1;
         boolean controlsVisible = true;
         boolean speedBoosting;
         boolean scrubbing;
         boolean everStarted;
+        boolean retryAttempted;
+        boolean failurePending;
+        boolean horizontalVideo;
+        float videoAspectRatio;
         float restoreSpeed = 1f;
 
         private final Runnable hideControlsRunnable = this::hideControlsNow;
         private final Runnable hideSeekBarRunnable = this::hideSeekBarNow;
+        private final Runnable skipFailedClipRunnable = () -> {
+            if (!failurePending || boundPosition != selectedPosition) return;
+            requestAutoAdvance(boundPosition);
+        };
         private final Runnable progressRunnable = new Runnable() {
             @Override
             public void run() {
@@ -680,25 +903,32 @@ public final class ChaosFeedView extends FrameLayout {
             root.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
             root.setBackgroundColor(Color.BLACK);
 
+            mediaLayer = new FrameLayout(activity);
+            mediaLayer.setBackgroundColor(Color.BLACK);
+            root.addView(mediaLayer, new FrameLayout.LayoutParams(-1, -1));
+
             poster = new ImageView(activity);
             poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
             poster.setBackgroundColor(Color.BLACK);
-            root.addView(poster, new FrameLayout.LayoutParams(-1, -1));
+            poster.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            mediaLayer.addView(poster, new FrameLayout.LayoutParams(-1, -1));
 
             playerView = (PlayerView) LayoutInflater.from(activity)
-                    .inflate(R.layout.view_video_player_texture, root, false);
+                    .inflate(R.layout.view_video_player_texture, mediaLayer, false);
             playerView.setUseController(false);
             playerView.setControllerAutoShow(false);
             playerView.hideController();
             playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
             playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
             playerView.setBackgroundColor(Color.BLACK);
-            root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
+            playerView.setContentDescription("Play or pause video");
+            mediaLayer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
             loading = new ProgressBar(activity);
+            loading.setContentDescription("Loading video");
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(44), dp(44));
             lp.gravity = Gravity.CENTER;
-            root.addView(loading, lp);
+            mediaLayer.addView(loading, lp);
 
             failure = new TextView(activity);
             failure.setTextColor(Color.WHITE);
@@ -706,8 +936,9 @@ public final class ChaosFeedView extends FrameLayout {
             failure.setGravity(Gravity.CENTER);
             failure.setText("Couldn't play this one\nSwipe up for the next video");
             failure.setPadding(dp(28), dp(28), dp(28), dp(28));
+            failure.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
             failure.setVisibility(View.GONE);
-            root.addView(failure, new FrameLayout.LayoutParams(-1, -1));
+            mediaLayer.addView(failure, new FrameLayout.LayoutParams(-1, -1));
 
             lower = new LinearLayout(activity);
             lower.setOrientation(LinearLayout.HORIZONTAL);
@@ -746,19 +977,19 @@ public final class ChaosFeedView extends FrameLayout {
             actions.setBackgroundColor(Color.TRANSPARENT);
             lower.addView(actions, new LinearLayout.LayoutParams(dp(82), -2));
 
-            save = actionButton("☆\nSave");
+            save = actionButton("☆\nSave", "Save to Watch Later");
             actions.addView(save, actionParams());
 
-            TextView comments = actionButton("💬\nComments");
+            TextView comments = actionButton("💬\nComments", "Open comments");
             actions.addView(comments, actionParams());
 
-            TextView share = actionButton("↗\nShare");
+            TextView share = actionButton("↗\nShare", "Share video");
             actions.addView(share, actionParams());
 
-            TextView more = actionButton("⋯\nMore");
+            TextView more = actionButton("⋯\nMore", "More video actions");
             actions.addView(more, actionParams());
 
-            mute = actionButton(chaosMuted ? "🔇" : "🔊");
+            mute = actionButton(chaosMuted ? "🔇" : "🔊", chaosMuted ? "Unmute video" : "Mute video");
             mute.setTextSize(20);
             FrameLayout.LayoutParams muteParams = new FrameLayout.LayoutParams(dp(52), dp(52));
             muteParams.gravity = Gravity.TOP | Gravity.END;
@@ -781,11 +1012,12 @@ public final class ChaosFeedView extends FrameLayout {
             seekBar = new SeekBar(activity);
             seekBar.setMax(1000);
             seekBar.setProgress(0);
-            seekBar.setPadding(0, 0, 0, 0);
-            seekBar.setProgressTintList(ColorStateList.valueOf(Color.rgb(255, 90, 31)));
+            seekBar.setPadding(0, dp(18), 0, 0);
+            seekBar.setContentDescription("Video progress");
+            seekBar.setProgressTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
             seekBar.setProgressBackgroundTintList(ColorStateList.valueOf(Color.argb(150, 210, 210, 215)));
-            seekBar.setThumbTintList(ColorStateList.valueOf(Color.rgb(255, 90, 31)));
-            FrameLayout.LayoutParams seekParams = new FrameLayout.LayoutParams(-1, dp(30));
+            seekBar.setThumbTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+            FrameLayout.LayoutParams seekParams = new FrameLayout.LayoutParams(-1, dp(48));
             seekParams.gravity = Gravity.BOTTOM;
             seekParams.setMargins(dp(8), 0, dp(8), dp(1));
             root.addView(seekBar, seekParams);
@@ -850,7 +1082,7 @@ public final class ChaosFeedView extends FrameLayout {
             });
             comments.setOnClickListener(v -> {
                 haptic(v);
-                if (item != null) host.openComments(item);
+                if (item != null) openInlineComments(item);
             });
             share.setOnClickListener(v -> {
                 haptic(v);
@@ -889,9 +1121,10 @@ public final class ChaosFeedView extends FrameLayout {
             });
         }
 
-        private TextView actionButton(String value) {
+        private TextView actionButton(String value, String description) {
             TextView button = new TextView(activity);
             button.setText(value);
+            button.setContentDescription(description);
             button.setTextColor(Color.WHITE);
             button.setTextSize(10);
             button.setGravity(Gravity.CENTER);
@@ -912,13 +1145,25 @@ public final class ChaosFeedView extends FrameLayout {
         void bind(NativeContentItem next, int position) {
             pauseAndRecord();
             releasePlayer();
+            root.removeCallbacks(skipFailedClipRunnable);
+            mediaLayer.animate().cancel();
+            mediaLayer.setScaleX(1f);
+            mediaLayer.setScaleY(1f);
+            mediaLayer.setTranslationY(0f);
             item = next;
             stream = null;
+            lastAttemptedStream = null;
+            lastPlaybackError = null;
+            lastFailureStage = "";
             boundPosition = position;
             everStarted = false;
             controlsVisible = true;
             speedBoosting = false;
             scrubbing = false;
+            retryAttempted = false;
+            failurePending = false;
+            horizontalVideo = false;
+            videoAspectRatio = 0f;
             seekBar.setProgress(0);
             seekBar.setEnabled(false);
             seekBar.setAlpha(1f);
@@ -940,6 +1185,7 @@ public final class ChaosFeedView extends FrameLayout {
             updateSaveButton(next, save);
             loading.setVisibility(View.VISIBLE);
             failure.setText("Couldn't play this one\nSwipe up for the next video");
+            failure.setContentDescription("Couldn't play this video");
             failure.setVisibility(View.GONE);
             poster.setVisibility(View.VISIBLE);
             Glide.with(poster).clear(poster);
@@ -958,9 +1204,59 @@ public final class ChaosFeedView extends FrameLayout {
             syncOrientationChrome();
         }
 
+        void resizeMediaForComments(int sheetTopOnScreen) {
+            if (root.getHeight() <= 0 || mediaLayer.getWidth() <= 0) return;
+            mediaLayer.animate().cancel();
+            mediaLayer.setScaleX(1f);
+            mediaLayer.setScaleY(1f);
+            if (!horizontalVideo || videoAspectRatio <= 1f) {
+                mediaLayer.setTranslationY(0f);
+                return;
+            }
+
+            int[] rootLocation = new int[2];
+            root.getLocationOnScreen(rootLocation);
+            float available = Math.max(0f, sheetTopOnScreen - rootLocation[1]);
+            float renderedVideoHeight = Math.min(
+                    root.getHeight(),
+                    mediaLayer.getWidth() / videoAspectRatio
+            );
+            float currentTop = (root.getHeight() - renderedVideoHeight) / 2f;
+            float targetTop = Math.max(dp(8), (available - renderedVideoHeight) / 2f);
+            mediaLayer.setTranslationY(Math.min(0f, targetTop - currentTop));
+        }
+
+        void restoreMediaAfterComments(Runnable endAction) {
+            mediaLayer.animate().cancel();
+            mediaLayer.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .translationY(0f)
+                    .setDuration(190L)
+                    .withEndAction(() -> {
+                        mediaLayer.setScaleX(1f);
+                        mediaLayer.setScaleY(1f);
+                        mediaLayer.setTranslationY(0f);
+                        if (endAction != null) endAction.run();
+                    })
+                    .start();
+        }
+
         void prepare(CrazyShitRepository.StreamInfo nextStream, boolean autoplay) {
             if (item == null || nextStream == null || nextStream.mediaUrl == null || nextStream.mediaUrl.isEmpty()) return;
             if (stream != null && stream.mediaUrl.equals(nextStream.mediaUrl) && player != null) {
+                PlaybackException currentError = player.getPlayerError();
+                if (currentError != null) {
+                    lastPlaybackError = currentError;
+                    lastFailureStage = "Player stopped before ready";
+                    if (!retryAttempted) {
+                        retryAttempted = true;
+                        retryPlayback(this, currentError);
+                    } else {
+                        showPlayerFailureAndSkip(currentError, lastFailureStage);
+                    }
+                    return;
+                }
                 loading.setVisibility(View.GONE);
                 applyMuteState();
                 if (autoplay) {
@@ -971,11 +1267,14 @@ public final class ChaosFeedView extends FrameLayout {
                     player.pause();
                     stopProgressUpdates();
                 }
+                maybeCompleteStartupHandoff();
+                preloadReadyComments(item, boundPosition);
                 return;
             }
 
             releasePlayer();
             stream = nextStream;
+            lastAttemptedStream = nextStream;
             DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory();
             try {
                 http.setUserAgent(WebSettings.getDefaultUserAgent(activity));
@@ -1012,6 +1311,7 @@ public final class ChaosFeedView extends FrameLayout {
             player = new ExoPlayer.Builder(activity)
                     .setMediaSourceFactory(sourceFactory)
                     .build();
+            ExoPlayer createdPlayer = player;
             player.setRepeatMode(Player.REPEAT_MODE_OFF);
             player.setVolume(chaosMuted ? 0f : 1f);
             playerView.setPlayer(player);
@@ -1026,19 +1326,34 @@ public final class ChaosFeedView extends FrameLayout {
             if (autoplay) everStarted = true;
             player.addListener(new Player.Listener() {
                 @Override
+                public void onVideoSizeChanged(VideoSize videoSize) {
+                    if (player != createdPlayer || videoSize.width <= 0 || videoSize.height <= 0) return;
+                    float width = videoSize.width * Math.max(0.01f, videoSize.pixelWidthHeightRatio);
+                    float height = videoSize.height;
+                    videoAspectRatio = width / Math.max(1f, height);
+                    horizontalVideo = videoAspectRatio > 1.1f;
+                }
+
+                @Override
                 public void onPlaybackStateChanged(int state) {
+                    if (player != createdPlayer) return;
                     if (state == Player.STATE_READY) {
+                        failurePending = false;
+                        root.removeCallbacks(skipFailedClipRunnable);
                         loading.setVisibility(View.GONE);
+                        failure.setVisibility(View.GONE);
                         poster.setVisibility(View.GONE);
                         updateProgress();
                         if (player != null && player.isPlaying()) startProgressUpdates();
+                        maybeCompleteStartupHandoff();
+                        preloadReadyComments(item, boundPosition);
                     } else if (state == Player.STATE_ENDED) {
                         loading.setVisibility(View.GONE);
                         stopProgressUpdates();
                         seekBar.setProgress(1000);
-                        if (item != null && player != null) {
+                        if (item != null) {
                             try {
-                                long duration = Math.max(0L, player.getDuration());
+                                long duration = Math.max(0L, createdPlayer.getDuration());
                                 PlaybackHistoryStore.record(
                                         activity,
                                         item.title,
@@ -1056,6 +1371,7 @@ public final class ChaosFeedView extends FrameLayout {
 
                 @Override
                 public void onIsPlayingChanged(boolean isPlaying) {
+                    if (player != createdPlayer) return;
                     if (isPlaying) {
                         everStarted = true;
                         startProgressUpdates();
@@ -1069,12 +1385,49 @@ public final class ChaosFeedView extends FrameLayout {
 
                 @Override
                 public void onPlayerError(PlaybackException error) {
+                    if (player != createdPlayer) return;
                     loading.setVisibility(View.GONE);
                     stopProgressUpdates();
-                    showPlaybackFailure(error);
+                    lastPlaybackError = error;
+                    lastFailureStage = "Player error";
+                    if (!retryAttempted) {
+                        retryAttempted = true;
+                        root.post(() -> retryPlayback(ChaosHolder.this, error));
+                    } else {
+                        showPlayerFailureAndSkip(error, lastFailureStage);
+                    }
                 }
             });
-            player.prepare();
+            createdPlayer.prepare();
+        }
+
+        private void maybeCompleteStartupHandoff() {
+            if (!ChaosStartupHandoff.isWaiting() || player == null) return;
+            if (!active || !hostResumed || boundPosition != selectedPosition) return;
+            if (player.getPlaybackState() != Player.STATE_READY) return;
+            ChaosStartupHandoff.markFirstChaosPlayerReady();
+        }
+
+        private boolean isBoundTo(String pageUrl, int position) {
+            return item != null
+                    && pageUrl != null
+                    && pageUrl.equals(item.url)
+                    && boundPosition == position;
+        }
+
+        private void noteResolutionRetry() {
+            retryAttempted = true;
+            lastFailureStage = "Stream resolution retry";
+        }
+
+        private void noteResolutionRetryIfNeeded(boolean retried) {
+            if (!retried) return;
+            retryAttempted = true;
+            if (lastFailureStage.isEmpty()) lastFailureStage = "Stream resolution retry";
+        }
+
+        private CrazyShitRepository.StreamInfo diagnosticStream() {
+            return stream != null ? stream : lastAttemptedStream;
         }
 
         private void putHeaderIfMissing(Map<String, String> headers, String name, String value) {
@@ -1090,52 +1443,116 @@ public final class ChaosFeedView extends FrameLayout {
             String savedLabel = FavoriteStore.contains(activity, item.url)
                     ? "Remove from Watch Later"
                     : "Save to Watch Later";
-            String[] options = new String[] {
-                    "Not interested",
-                    "Replay",
-                    savedLabel,
-                    "Comments",
-                    "Share",
-                    "Open details"
-            };
-            new AlertDialog.Builder(activity)
-                    .setTitle("Chaos")
-                    .setItems(options, (dialog, which) -> {
-                        if (item == null) return;
-                        switch (which) {
-                            case 0:
-                                hideFromChaos(item);
-                                break;
-                            case 1:
-                                if (player != null) {
-                                    player.seekTo(0L);
-                                    everStarted = true;
-                                    player.play();
-                                    showControlsTemporarily();
-                                }
-                                break;
-                            case 2:
-                                toggleSaved(item, save);
-                                break;
-                            case 3:
-                                host.openComments(item);
-                                break;
-                            case 4:
-                                share(item);
-                                break;
-                            case 5:
-                                pauseAndRecord();
-                                host.openDetails(item);
-                                break;
-                            default:
-                                break;
-                        }
-                    })
-                    .show();
+            VideoActionSheet.show(
+                    activity,
+                    item.title,
+                    VideoActionSheet.section(
+                            "PLAYBACK",
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_replay,
+                                    "Replay",
+                                    "Play this Chaos clip from the beginning",
+                                    this::replayCurrentVideo
+                            )
+                    ),
+                    VideoActionSheet.section(
+                            "SAVE",
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_download,
+                                    "Download",
+                                    "Save this video for offline playback",
+                                    this::downloadCurrentVideo
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_more_library,
+                                    savedLabel,
+                                    "Keep this video in your library",
+                                    () -> toggleSaved(item, save)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_comments,
+                                    "Comments",
+                                    "Read and reply without leaving Chaos",
+                                    () -> openInlineComments(item)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_share,
+                                    "Share",
+                                    "Send the CrazyShit page",
+                                    () -> share(item)
+                            )
+                    ),
+                    VideoActionSheet.section(
+                            "OTHER",
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_hide,
+                                    "Not interested",
+                                    "Hide this clip from your Chaos feed",
+                                    () -> hideFromChaos(item)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_report,
+                                    "Report playback problem",
+                                    "Copy diagnostics or open an issue",
+                                    () -> showPlaybackReport(this)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_more_website,
+                                    "Open details",
+                                    "View the full video page",
+                                    this::openCurrentDetails
+                            )
+                    )
+            );
+        }
+
+        private void replayCurrentVideo() {
+            if (player == null) return;
+            player.seekTo(0L);
+            everStarted = true;
+            player.play();
+            showControlsTemporarily();
+        }
+
+        private void downloadCurrentVideo() {
+            if (item == null) return;
+            if (stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty()) {
+                VideoDownloadStore.downloadPage(activity, item);
+                return;
+            }
+            String userAgent = "";
+            String cookies = "";
+            try {
+                userAgent = WebSettings.getDefaultUserAgent(activity);
+            } catch (Exception ignored) {
+            }
+            try {
+                cookies = CookieManager.getInstance().getCookie(stream.mediaUrl);
+                if ((cookies == null || cookies.isEmpty()) && stream.pageUrl != null) {
+                    cookies = CookieManager.getInstance().getCookie(stream.pageUrl);
+                }
+            } catch (Exception ignored) {
+            }
+            VideoDownloadStore.downloadKnown(
+                    activity,
+                    item.title,
+                    stream.pageUrl == null || stream.pageUrl.isEmpty() ? item.url : stream.pageUrl,
+                    item.imageUrl,
+                    stream.mediaUrl,
+                    userAgent,
+                    cookies
+            );
+        }
+
+        private void openCurrentDetails() {
+            if (item == null) return;
+            pauseAndRecord();
+            host.openDetails(item);
         }
 
         void applyMuteState() {
             mute.setText(chaosMuted ? "🔇" : "🔊");
+            mute.setContentDescription(chaosMuted ? "Unmute video" : "Mute video");
             if (player != null) player.setVolume(chaosMuted ? 0f : 1f);
         }
 
@@ -1265,45 +1682,39 @@ public final class ChaosFeedView extends FrameLayout {
             seekBar.setProgress(progress);
         }
 
-        void showPlaybackFailure() {
-            showPlaybackFailure(null);
+        void showRetrying() {
+            failurePending = false;
+            root.removeCallbacks(skipFailedClipRunnable);
+            loading.setVisibility(View.VISIBLE);
+            failure.setText("Trying another link…");
+            failure.setContentDescription("Playback failed. Trying another link.");
+            failure.setVisibility(View.VISIBLE);
+            poster.setVisibility(View.VISIBLE);
         }
 
-        private void showPlaybackFailure(PlaybackException error) {
+        void showResolutionFailureAndSkip(boolean retried) {
+            retryAttempted = retryAttempted || retried;
+            lastFailureStage = "Stream resolution failed";
+            lastPlaybackError = null;
+            showFinalFailure();
+        }
+
+        void showPlayerFailureAndSkip(PlaybackException error, String stage) {
+            lastPlaybackError = error;
+            lastFailureStage = stage == null ? "Player error" : stage;
+            showFinalFailure();
+        }
+
+        private void showFinalFailure() {
             loading.setVisibility(View.GONE);
-            StringBuilder message = new StringBuilder("Couldn't play this one\nSwipe up for the next video");
-            if (error != null) {
-                message.append("\n\nMedia3 code ").append(error.errorCode);
-                Throwable cursor = error;
-                while (cursor != null) {
-                    if (cursor instanceof HttpDataSource.InvalidResponseCodeException) {
-                        message.append(" • HTTP ")
-                                .append(((HttpDataSource.InvalidResponseCodeException) cursor).responseCode);
-                        break;
-                    }
-                    cursor = cursor.getCause();
-                }
-
-                Throwable rootCause = error;
-                while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
-                    rootCause = rootCause.getCause();
-                }
-                if (rootCause != error) {
-                    String causeName = rootCause.getClass().getSimpleName();
-                    if (causeName != null && !causeName.isEmpty()) message.append("\n").append(causeName);
-                }
-
-                String detail = error.getMessage();
-                if (detail != null) {
-                    detail = detail.replaceAll("\\s+", " ").trim();
-                    if (detail.length() > 110) detail = detail.substring(0, 110) + "…";
-                    if (!detail.isEmpty()) message.append("\n").append(detail);
-                }
-            }
-            failure.setText(message.toString());
+            failurePending = true;
+            failure.setText("Couldn't play this one\nMoving to the next video…");
+            failure.setContentDescription("Couldn't play this video. Moving to the next video.");
             failure.setVisibility(View.VISIBLE);
             poster.setVisibility(View.VISIBLE);
             showControlsPersistent();
+            root.removeCallbacks(skipFailedClipRunnable);
+            root.postDelayed(skipFailedClipRunnable, FAILED_CLIP_SKIP_DELAY_MS);
         }
 
         void pauseAndRecord() {
@@ -1324,6 +1735,8 @@ public final class ChaosFeedView extends FrameLayout {
         void releasePlayer() {
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(hideSeekBarRunnable);
+            root.removeCallbacks(skipFailedClipRunnable);
+            failurePending = false;
             stopProgressUpdates();
             restorePlaybackSpeed();
             if (scrubbing) {

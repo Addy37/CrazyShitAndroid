@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -82,6 +83,10 @@ public class SettingsActivity extends Activity {
                 "Resume unfinished videos close to where you stopped.",
                 "remember_video_position",
                 true);
+        addAction(root,
+                "Chaos preloading",
+                ChaosPreloadPolicy.summary(this),
+                this::showChaosPreloadChoices);
 
         addSection(root, "Appearance");
         addSwitch(root,
@@ -184,6 +189,11 @@ public class SettingsActivity extends Activity {
 
         MaterialSwitch toggle = new MaterialSwitch(this);
         toggle.setChecked(prefs.getBoolean(key, defaultValue));
+        toggle.setContentDescription(title);
+        toggle.setMinWidth(dp(48));
+        toggle.setMinimumWidth(dp(48));
+        toggle.setMinHeight(dp(48));
+        toggle.setMinimumHeight(dp(48));
         toggle.setOnCheckedChangeListener((button, checked) -> {
             prefs.edit().putBoolean(key, checked).apply();
             haptic(button);
@@ -204,6 +214,8 @@ public class SettingsActivity extends Activity {
         row.setPadding(dp(16), dp(14), dp(16), dp(14));
         row.setClickable(true);
         row.setFocusable(true);
+        row.setContentDescription(title + ". " + subtitle);
+        row.setMinimumHeight(dp(48));
         row.setOnClickListener(v -> {
             haptic(v);
             action.run();
@@ -218,9 +230,27 @@ public class SettingsActivity extends Activity {
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
         TextView chevron = text("›", 28, Color.rgb(184, 184, 192));
+        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         row.addView(chevron);
         card.addView(row);
         root.addView(card, cardParams());
+    }
+
+    private void showChaosPreloadChoices() {
+        String[] choices = {
+                "Full",
+                "Wi-Fi / unmetered only",
+                "Minimal"
+        };
+        new AlertDialog.Builder(this)
+                .setTitle("Chaos preloading")
+                .setSingleChoiceItems(choices, ChaosPreloadPolicy.selectedIndex(this), (dialog, which) -> {
+                    ChaosPreloadPolicy.setMode(this, ChaosPreloadPolicy.modeForIndex(which));
+                    dialog.dismiss();
+                    recreate();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private MaterialCardView card() {

@@ -322,20 +322,20 @@ final class OledImmersiveUiController {
         }
         bg.setCornerRadius(dp(activity, 30));
         nav.setBackground(bg);
-        nav.setElevation(dp(activity, oled(activity) ? 8 : 12));
-        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 255, 90, 31)));
+        nav.setElevation(dp(activity, oled(activity) ? 4 : 6));
+        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 251, 245, 6)));
         try {
             nav.setItemActiveIndicatorEnabled(true);
-            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(Color.argb(52, 255, 90, 31)));
+            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(Color.argb(50, 251, 245, 6)));
         } catch (Throwable ignored) {
         }
 
         ViewGroup.LayoutParams raw = nav.getLayoutParams();
         if (raw != null) {
-            raw.height = dp(activity, 70);
+            raw.height = dp(activity, 60);
             if (raw instanceof ViewGroup.MarginLayoutParams) {
                 ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) raw;
-                margins.setMargins(dp(activity, 10), dp(activity, 3), dp(activity, 10), dp(activity, 8));
+                margins.setMargins(dp(activity, 10), dp(activity, 2), dp(activity, 10), dp(activity, 6));
             }
             nav.setLayoutParams(raw);
         }
@@ -347,13 +347,12 @@ final class OledImmersiveUiController {
         top.animate().cancel();
         ViewGroup.LayoutParams raw = top.getLayoutParams();
         if (raw != null) {
-            int expanded = activity instanceof NativeFeedBrowserActivity ? 64 : 70;
-            raw.height = dp(activity, expanded);
+            raw.height = dp(activity, 56);
             top.setLayoutParams(raw);
         }
         if (state.headerTitle != null) {
             state.headerTitle.animate().cancel();
-            state.headerTitle.setTextSize(activity instanceof NativeFeedBrowserActivity ? 20f : 19f);
+            state.headerTitle.setTextSize(activity instanceof NativeFeedBrowserActivity ? 19f : 18f);
             state.headerTitle.setTranslationY(0f);
             state.headerTitle.setScaleX(1f);
             state.headerTitle.setScaleY(1f);
@@ -365,6 +364,7 @@ final class OledImmersiveUiController {
             state.headerSubtitle.setScaleX(1f);
             state.headerSubtitle.setScaleY(1f);
             state.headerSubtitle.setTranslationY(0f);
+            state.headerSubtitle.setTextSize(11f);
         }
         ImageView icon = firstImage(top);
         if (icon != null) {
@@ -373,6 +373,14 @@ final class OledImmersiveUiController {
             icon.setScaleY(1f);
             icon.setAlpha(1f);
             icon.setTranslationY(0f);
+            if (activity instanceof NativeMainActivity) {
+                ViewGroup.LayoutParams iconParams = icon.getLayoutParams();
+                if (iconParams != null) {
+                    iconParams.width = dp(activity, 40);
+                    iconParams.height = dp(activity, 40);
+                    icon.setLayoutParams(iconParams);
+                }
+            }
         }
     }
 

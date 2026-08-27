@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -15,7 +16,9 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
+import android.view.TextureView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
@@ -25,7 +28,6 @@ import android.webkit.WebSettings;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -51,10 +53,13 @@ import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 import com.google.android.material.card.MaterialCardView;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -67,6 +72,8 @@ public class VideoDetailActivity extends Activity {
 
     private static final String SITE = "https://crazyshit.com/";
     private static final int CONTROL_TIMEOUT_MS = 2600;
+    private static final int RELATED_HISTORY_LIMIT = 24;
+    private static final int RELATED_THUMBNAIL_WORKERS = 4;
     private static final String THUMB_UA =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -74,6 +81,9 @@ public class VideoDetailActivity extends Activity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final Map<String, ImageView> relatedImages = new LinkedHashMap<>();
+    private final Map<String, String> resolvedRelatedThumbnails = new LinkedHashMap<>();
+    private final Set<String> requestedRelatedThumbnails = new HashSet<>();
+    private final ArrayDeque<VideoHistoryEntry> relatedHistory = new ArrayDeque<>();
 
     private FrameLayout root;
     private LinearLayout shell;
@@ -84,12 +94,15 @@ public class VideoDetailActivity extends Activity {
     private LinearLayout relatedContainer;
     private TextView titleView;
     private TextView metaView;
-    private TextView backButton;
-    private TextView menuButton;
+    private TextView playerTitleView;
     private ProgressBar loading;
     private ExoPlayer player;
-    private RenderedThumbnailResolver thumbnailResolver;
+    private RenderedThumbnailResolver[] thumbnailResolvers;
     private OnBackInvokedCallback backCallback;
+    private FrameLayout relatedBackPreviewLayer;
+    private ImageView relatedBackPreviewImage;
+    private VideoHistoryEntry relatedBackPreviewEntry;
+    private float relatedBackDirection = 1f;
 
     private String mediaUrl;
     private String pageUrl;
@@ -104,6 +117,46 @@ public class VideoDetailActivity extends Activity {
     private boolean failureShown;
     private boolean minimizing;
     private boolean entrancePlayed;
+    private int thumbnailResolverCursor;
+    private int relatedLoadGeneration;
+    private int relatedPlayGeneration;
+
+    private static final class VideoHistoryEntry {
+        final String mediaUrl;
+        final String pageUrl;
+        final String title;
+        final String views;
+        final String uploader;
+        final String comments;
+        final String userAgent;
+        final String cookies;
+        final long positionMs;
+        final Bitmap previewBitmap;
+
+        VideoHistoryEntry(
+                String mediaUrl,
+                String pageUrl,
+                String title,
+                String views,
+                String uploader,
+                String comments,
+                String userAgent,
+                String cookies,
+                long positionMs,
+                Bitmap previewBitmap
+        ) {
+            this.mediaUrl = mediaUrl;
+            this.pageUrl = pageUrl;
+            this.title = title;
+            this.views = views;
+            this.uploader = uploader;
+            this.comments = comments;
+            this.userAgent = userAgent;
+            this.cookies = cookies;
+            this.positionMs = positionMs;
+            this.previewBitmap = previewBitmap;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle state) {
@@ -136,7 +189,10 @@ public class VideoDetailActivity extends Activity {
 
         buildUi();
         buildPlayer(requestedStartPosition);
-        thumbnailResolver = new RenderedThumbnailResolver(this, this::onThumbnailResolved);
+        thumbnailResolvers = new RenderedThumbnailResolver[RELATED_THUMBNAIL_WORKERS];
+        for (int i = 0; i < thumbnailResolvers.length; i++) {
+            thumbnailResolvers[i] = new RenderedThumbnailResolver(this, this::onThumbnailResolved);
+        }
         configureBackHandling();
         applyOrientation(getResources().getConfiguration().orientation);
         loadRelated();
@@ -211,7 +267,7 @@ public class VideoDetailActivity extends Activity {
         shell.addView(playerContainer, new LinearLayout.LayoutParams(-1, portraitPlayerHeight()));
 
         playerView = (PlayerView) getLayoutInflater().inflate(
-                R.layout.view_video_player_texture,
+                R.layout.view_polished_video_player_texture,
                 playerContainer,
                 false
         );
@@ -224,33 +280,18 @@ public class VideoDetailActivity extends Activity {
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        backButton = overlayButton("‹", 34);
-        backButton.setContentDescription("Back");
-        backButton.setOnClickListener(v -> {
+        View playerBack = playerView.findViewById(R.id.player_back);
+        playerTitleView = playerView.findViewById(R.id.player_title);
+        View playerMenu = playerView.findViewById(R.id.player_menu);
+        playerTitleView.setText(title);
+        playerBack.setOnClickListener(v -> {
             haptic(v);
             handleBack();
         });
-        FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(dp(46), dp(46));
-        bp.gravity = Gravity.TOP | Gravity.START;
-        bp.setMargins(dp(8), dp(8), 0, 0);
-        playerContainer.addView(backButton, bp);
-
-        menuButton = overlayButton("⋮", 26);
-        menuButton.setContentDescription("Video menu");
-        menuButton.setOnClickListener(v -> {
+        playerMenu.setOnClickListener(v -> {
             haptic(v);
-            showPlayerMenu(menuButton);
+            showPlayerMenu();
         });
-        FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(dp(46), dp(46));
-        mp.gravity = Gravity.TOP | Gravity.END;
-        mp.setMargins(0, dp(8), dp(8), 0);
-        playerContainer.addView(menuButton, mp);
-
-        playerView.setControllerVisibilityListener(
-                (PlayerView.ControllerVisibilityListener) visibility ->
-                        setOverlayChromeVisible(visibility == View.VISIBLE, true)
-        );
-        setOverlayChromeVisible(false, false);
         playerView.hideController();
 
         detailsScroll = new ScrollView(this);
@@ -313,36 +354,12 @@ public class VideoDetailActivity extends Activity {
         return params;
     }
 
-    private void setOverlayChromeVisible(boolean visible, boolean animate) {
-        setOverlayViewVisible(backButton, visible, animate);
-        setOverlayViewVisible(menuButton, visible, animate);
-    }
-
-    private void setOverlayViewVisible(View view, boolean visible, boolean animate) {
-        if (view == null) return;
-        view.animate().cancel();
-        if (visible) {
-            view.setVisibility(View.VISIBLE);
-            if (animate) {
-                view.setAlpha(0f);
-                view.animate().alpha(1f).setDuration(120L).start();
-            } else {
-                view.setAlpha(1f);
-            }
-        } else if (animate) {
-            view.animate().alpha(0f).setDuration(140L).withEndAction(() -> view.setVisibility(View.GONE)).start();
-        } else {
-            view.setAlpha(0f);
-            view.setVisibility(View.GONE);
-        }
-    }
-
     private void applyDetailsBackground() {
         if (detailsScroll == null) return;
         if (!oledEnabled()) {
             detailsScroll.setBackground(new GradientDrawable(
                     GradientDrawable.Orientation.TOP_BOTTOM,
-                    new int[] {Color.rgb(31, 18, 14), Color.rgb(16, 16, 19), Color.rgb(13, 13, 15)}
+                    new int[] {Color.rgb(31, 30, 9), Color.rgb(16, 16, 19), Color.rgb(13, 13, 15)}
             ));
             return;
         }
@@ -354,7 +371,7 @@ public class VideoDetailActivity extends Activity {
         }
         detailsScroll.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[] {Color.rgb(8, 3, 1), Color.rgb(2, 1, 0), Color.BLACK, Color.BLACK}
+                new int[] {Color.rgb(8, 8, 1), Color.rgb(2, 2, 0), Color.BLACK, Color.BLACK}
         ));
     }
 
@@ -470,19 +487,6 @@ public class VideoDetailActivity extends Activity {
         return bg;
     }
 
-    private TextView overlayButton(String label, int size) {
-        TextView view = new TextView(this);
-        view.setText(label);
-        view.setTextSize(size);
-        view.setTextColor(Color.WHITE);
-        view.setGravity(Gravity.CENTER);
-        view.setBackground(rounded(Color.argb(165, 10, 10, 12), dp(18)));
-        view.setClickable(true);
-        view.setFocusable(true);
-        view.setElevation(dp(8));
-        return view;
-    }
-
     private void buildPlayer(long startPosition) {
         releasePlayer();
         failureShown = false;
@@ -526,7 +530,16 @@ public class VideoDetailActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
-                if (playbackState == Player.STATE_ENDED) savePlaybackState(true);
+                if (playbackState == Player.STATE_READY) {
+                    String readyPageUrl = pageUrl;
+                    playerView.postDelayed(() -> {
+                        if (readyPageUrl.equals(pageUrl)) {
+                            NativeCommentsLoader.preload(VideoDetailActivity.this, readyPageUrl);
+                        }
+                    }, 650L);
+                } else if (playbackState == Player.STATE_ENDED) {
+                    savePlaybackState(true);
+                }
             }
 
             @Override
@@ -538,6 +551,7 @@ public class VideoDetailActivity extends Activity {
 
     private void updateMetadataUi() {
         if (titleView != null) titleView.setText(title);
+        if (playerTitleView != null) playerTitleView.setText(title);
         if (metaView != null) {
             ArrayList<String> parts = new ArrayList<>();
             if (!views.isEmpty()) parts.add(views + " views");
@@ -548,6 +562,7 @@ public class VideoDetailActivity extends Activity {
 
     private void loadRelated() {
         if (relatedContainer == null) return;
+        final int requestGeneration = ++relatedLoadGeneration;
         relatedContainer.removeAllViews();
         TextView loadingText = new TextView(this);
         loadingText.setText("Loading related videos…");
@@ -578,14 +593,24 @@ public class VideoDetailActivity extends Activity {
                 result.add(item);
                 if (result.size() >= 12) break;
             }
-            runOnUiThread(() -> renderRelated(result));
+            runOnUiThread(() -> {
+                if (isFinishing() || requestGeneration != relatedLoadGeneration) return;
+                if (!excludeUrl.equals(pageUrl)) return;
+                renderRelated(result);
+            });
         });
+    }
+
+    void renderContextRelated(List<NativeContentItem> items) {
+        if (isFinishing() || items == null || items.isEmpty()) return;
+        relatedLoadGeneration++;
+        renderRelated(items);
     }
 
     private void renderRelated(List<NativeContentItem> items) {
         if (relatedContainer == null) return;
         relatedContainer.removeAllViews();
-        relatedImages.clear();
+        clearRelatedImageTargets();
         if (items == null || items.isEmpty()) {
             TextView empty = new TextView(this);
             empty.setText("No related videos could be loaded right now.");
@@ -664,22 +689,55 @@ public class VideoDetailActivity extends Activity {
         if (!clean(item.comments).isEmpty()) {
             TextView commentCount = new TextView(this);
             commentCount.setText(item.comments + " comments");
-            commentCount.setTextColor(Color.rgb(255, 112, 60));
+            commentCount.setTextColor(UiPalette.PRIMARY);
             commentCount.setTextSize(11);
             commentCount.setPadding(0, dp(5), 0, 0);
             copy.addView(commentCount);
         }
 
         relatedImages.put(item.url, image);
-        if (!clean(item.imageUrl).isEmpty()) loadImage(image, item.imageUrl, item.url);
-        if (thumbnailResolver != null) thumbnailResolver.request(item.url);
+        String resolvedThumbnail = resolvedRelatedThumbnails.get(item.url);
+        if (!clean(resolvedThumbnail).isEmpty()) {
+            loadImage(image, resolvedThumbnail, item.url);
+        } else if (!clean(item.imageUrl).isEmpty()) {
+            loadImage(image, item.imageUrl, item.url);
+        }
+        requestRelatedThumbnail(item.url);
         return card;
     }
 
+    private void requestRelatedThumbnail(String page) {
+        if (page == null || page.isEmpty() || thumbnailResolvers == null || thumbnailResolvers.length == 0) {
+            return;
+        }
+        if (resolvedRelatedThumbnails.containsKey(page)) return;
+        if (!requestedRelatedThumbnails.add(page)) return;
+        RenderedThumbnailResolver resolver =
+                thumbnailResolvers[thumbnailResolverCursor++ % thumbnailResolvers.length];
+        resolver.request(page);
+    }
+
     private void onThumbnailResolved(String page, String imageUrl) {
+        if (page == null || page.isEmpty()) return;
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            requestedRelatedThumbnails.remove(page);
+            return;
+        }
+        resolvedRelatedThumbnails.put(page, imageUrl);
         ImageView target = relatedImages.get(page);
-        if (target == null || imageUrl == null || imageUrl.isEmpty()) return;
+        if (target == null) return;
         loadImage(target, imageUrl, page);
+    }
+
+    private void clearRelatedImageTargets() {
+        for (ImageView image : relatedImages.values()) {
+            if (image == null) continue;
+            try {
+                Glide.with(image).clear(image);
+            } catch (Exception ignored) {
+            }
+        }
+        relatedImages.clear();
     }
 
     private void loadImage(ImageView view, String imageUrl, String referer) {
@@ -714,6 +772,7 @@ public class VideoDetailActivity extends Activity {
     private void playRelated(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
         loading.setVisibility(View.VISIBLE);
+        final int requestGeneration = ++relatedPlayGeneration;
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
@@ -722,11 +781,13 @@ public class VideoDetailActivity extends Activity {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
             runOnUiThread(() -> {
+                if (isFinishing() || requestGeneration != relatedPlayGeneration) return;
                 loading.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     openWebsite(item.url);
                     return;
                 }
+                pushCurrentVideo();
                 savePlaybackState(false);
                 mediaUrl = resolved.mediaUrl;
                 pageUrl = item.url;
@@ -745,14 +806,280 @@ public class VideoDetailActivity extends Activity {
         });
     }
 
+    private void pushCurrentVideo() {
+        if (mediaUrl == null || mediaUrl.isEmpty()) return;
+        long position = player == null ? 0L : Math.max(0L, player.getCurrentPosition());
+        relatedHistory.addLast(new VideoHistoryEntry(
+                mediaUrl,
+                pageUrl,
+                title,
+                views,
+                uploader,
+                comments,
+                userAgent,
+                cookies,
+                position,
+                captureRelatedBackPreview()
+        ));
+        while (relatedHistory.size() > RELATED_HISTORY_LIMIT) {
+            recycleHistoryPreview(relatedHistory.removeFirst());
+        }
+    }
+
+    private boolean restorePreviousRelatedVideo() {
+        VideoHistoryEntry previous = relatedHistory.pollLast();
+        if (previous == null) return false;
+
+        relatedPlayGeneration++;
+        savePlaybackState(false);
+        loading.setVisibility(View.GONE);
+        mediaUrl = previous.mediaUrl;
+        pageUrl = previous.pageUrl;
+        title = previous.title;
+        views = previous.views;
+        uploader = previous.uploader;
+        comments = previous.comments;
+        userAgent = previous.userAgent;
+        cookies = previous.cookies;
+        requestedStartPosition = previous.positionMs;
+        updateMetadataUi();
+        buildPlayer(previous.positionMs);
+        if (detailsScroll != null) detailsScroll.smoothScrollTo(0, 0);
+        loadRelated();
+        recycleHistoryPreview(previous);
+        return true;
+    }
+
+    private Bitmap captureRelatedBackPreview() {
+        TextureView texture = findTextureView(playerView);
+        if (texture == null || !texture.isAvailable() || texture.getWidth() <= 0 || texture.getHeight() <= 0) {
+            return null;
+        }
+        int targetWidth = Math.min(texture.getWidth(), 480);
+        int targetHeight = Math.max(1, Math.round(texture.getHeight() * (targetWidth / (float) texture.getWidth())));
+        Bitmap frame = null;
+        try {
+            frame = texture.getBitmap(targetWidth, targetHeight);
+            if (frame == null) return null;
+            Bitmap compact = frame.copy(Bitmap.Config.RGB_565, false);
+            if (compact == null) return frame;
+            frame.recycle();
+            return compact;
+        } catch (Throwable ignored) {
+            if (frame != null && !frame.isRecycled()) frame.recycle();
+            return null;
+        }
+    }
+
+    private TextureView findTextureView(View candidate) {
+        if (candidate instanceof TextureView) return (TextureView) candidate;
+        if (!(candidate instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) candidate;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            TextureView texture = findTextureView(group.getChildAt(i));
+            if (texture != null) return texture;
+        }
+        return null;
+    }
+
+    private void recycleHistoryPreview(VideoHistoryEntry entry) {
+        if (entry == null || entry.previewBitmap == null || entry.previewBitmap.isRecycled()) return;
+        entry.previewBitmap.recycle();
+    }
+
+    boolean canPreviewRelatedBack() {
+        return !minimizing
+                && root != null
+                && shell != null
+                && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE
+                && !relatedHistory.isEmpty();
+    }
+
+    boolean startRelatedBackPreview(boolean fromRight) {
+        if (!canPreviewRelatedBack()) return false;
+        VideoHistoryEntry previous = relatedHistory.peekLast();
+        if (previous == null) return false;
+
+        clearRelatedBackPreviewLayer();
+        resetRelatedBackForeground();
+        relatedBackPreviewEntry = previous;
+        relatedBackDirection = fromRight ? -1f : 1f;
+
+        FrameLayout preview = new FrameLayout(this);
+        preview.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
+        preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+
+        FrameLayout mediaPreview = new FrameLayout(this);
+        mediaPreview.setBackgroundColor(Color.BLACK);
+        FrameLayout.LayoutParams mediaParams = new FrameLayout.LayoutParams(-1, portraitPlayerHeight());
+        mediaParams.topMargin = shell.getPaddingTop();
+        preview.addView(mediaPreview, mediaParams);
+
+        Bitmap bitmap = previous.previewBitmap;
+        if (bitmap != null && !bitmap.isRecycled()) {
+            ImageView image = new ImageView(this);
+            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            image.setImageBitmap(bitmap);
+            mediaPreview.addView(image, new FrameLayout.LayoutParams(-1, -1));
+            relatedBackPreviewImage = image;
+        }
+
+        LinearLayout destination = new LinearLayout(this);
+        destination.setOrientation(LinearLayout.VERTICAL);
+        destination.setPadding(dp(16), dp(15), dp(16), dp(30));
+        FrameLayout.LayoutParams destinationParams = new FrameLayout.LayoutParams(-1, -1);
+        destinationParams.topMargin = shell.getPaddingTop() + portraitPlayerHeight();
+        preview.addView(destination, destinationParams);
+
+        TextView destinationTitle = new TextView(this);
+        destinationTitle.setText(previous.title == null || previous.title.isEmpty() ? "Previous video" : previous.title);
+        destinationTitle.setTextColor(Color.WHITE);
+        destinationTitle.setTextSize(21);
+        destinationTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        destination.addView(destinationTitle, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView destinationMeta = new TextView(this);
+        StringBuilder previewMeta = new StringBuilder();
+        if (previous.uploader != null && !previous.uploader.isEmpty()) previewMeta.append(previous.uploader);
+        if (previous.views != null && !previous.views.isEmpty()) {
+            if (previewMeta.length() > 0) previewMeta.append("  •  ");
+            previewMeta.append(previous.views).append(" views");
+        }
+        destinationMeta.setText(previewMeta);
+        destinationMeta.setTextColor(Color.rgb(165, 165, 174));
+        destinationMeta.setTextSize(12);
+        destinationMeta.setPadding(0, dp(6), 0, dp(18));
+        destination.addView(destinationMeta, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView destinationRelated = new TextView(this);
+        destinationRelated.setText("Related videos");
+        destinationRelated.setTextColor(Color.WHITE);
+        destinationRelated.setTextSize(18);
+        destinationRelated.setTypeface(null, android.graphics.Typeface.BOLD);
+        destination.addView(destinationRelated, new LinearLayout.LayoutParams(-1, -2));
+
+        preview.setAlpha(0.45f);
+        preview.setScaleX(0.985f);
+        preview.setScaleY(0.985f);
+        preview.setTranslationX(-relatedBackDirection * dp(18));
+        root.addView(preview, 0, new FrameLayout.LayoutParams(-1, -1));
+        relatedBackPreviewLayer = preview;
+        return true;
+    }
+
+    void updateRelatedBackPreview(float progress, boolean fromRight) {
+        if (relatedBackPreviewLayer == null || relatedBackPreviewEntry == null) return;
+        float p = Math.max(0f, Math.min(1f, progress));
+        float eased = 1f - (1f - p) * (1f - p);
+        relatedBackDirection = fromRight ? -1f : 1f;
+
+        shell.animate().cancel();
+        shell.setPivotX(fromRight ? shell.getWidth() : 0f);
+        shell.setPivotY(shell.getHeight() * 0.5f);
+        float travel = Math.max(dp(48), root.getWidth() * 0.24f);
+        shell.setTranslationX(relatedBackDirection * travel * eased);
+        float foregroundScale = 1f - (0.04f * eased);
+        shell.setScaleX(foregroundScale);
+        shell.setScaleY(foregroundScale);
+        shell.setAlpha(1f - (0.05f * eased));
+
+        relatedBackPreviewLayer.animate().cancel();
+        relatedBackPreviewLayer.setAlpha(0.45f + (0.55f * eased));
+        float previewScale = 0.985f + (0.015f * eased);
+        relatedBackPreviewLayer.setScaleX(previewScale);
+        relatedBackPreviewLayer.setScaleY(previewScale);
+        relatedBackPreviewLayer.setTranslationX(-relatedBackDirection * dp(18) * (1f - eased));
+    }
+
+    void cancelRelatedBackPreview() {
+        if (shell != null) {
+            shell.animate().cancel();
+            shell.animate()
+                    .translationX(0f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .alpha(1f)
+                    .setDuration(150L)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+
+        FrameLayout preview = relatedBackPreviewLayer;
+        relatedBackPreviewEntry = null;
+        if (preview == null) return;
+        preview.animate().cancel();
+        preview.animate()
+                .alpha(0f)
+                .translationX(-relatedBackDirection * dp(18))
+                .setDuration(130L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> {
+                    if (relatedBackPreviewLayer == preview) clearRelatedBackPreviewLayer();
+                })
+                .start();
+    }
+
+    void commitRelatedBackPreview() {
+        VideoHistoryEntry expected = relatedBackPreviewEntry;
+        if (expected == null || relatedHistory.peekLast() != expected || shell == null || root == null) {
+            abortRelatedBackPreview();
+            handleBack();
+            return;
+        }
+
+        relatedBackPreviewEntry = null;
+        shell.animate().cancel();
+        shell.animate()
+                .translationX(relatedBackDirection * Math.max(dp(64), root.getWidth() * 0.34f))
+                .scaleX(0.955f)
+                .scaleY(0.955f)
+                .alpha(0.9f)
+                .setDuration(90L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> {
+                    clearRelatedBackPreviewLayer();
+                    boolean restored = restorePreviousRelatedVideo();
+                    resetRelatedBackForeground();
+                    if (!restored) handleBack();
+                })
+                .start();
+    }
+
+    void abortRelatedBackPreview() {
+        relatedBackPreviewEntry = null;
+        clearRelatedBackPreviewLayer();
+        resetRelatedBackForeground();
+    }
+
+    private void clearRelatedBackPreviewLayer() {
+        FrameLayout preview = relatedBackPreviewLayer;
+        if (preview != null) {
+            preview.animate().cancel();
+            if (relatedBackPreviewImage != null) relatedBackPreviewImage.setImageDrawable(null);
+            if (root != null) root.removeView(preview);
+        }
+        relatedBackPreviewLayer = null;
+        relatedBackPreviewImage = null;
+    }
+
+    private void resetRelatedBackForeground() {
+        if (shell == null) return;
+        shell.animate().cancel();
+        shell.setTranslationX(0f);
+        shell.setScaleX(1f);
+        shell.setScaleY(1f);
+        shell.setAlpha(1f);
+    }
+
     private void openComments() {
         if (pageUrl.isEmpty()) return;
-        savePlaybackState(false);
-        Intent intent = new Intent(this, CommentsActivity.class);
-        intent.putExtra(CommentsActivity.EXTRA_PAGE_URL, pageUrl);
-        intent.putExtra(CommentsActivity.EXTRA_TITLE, title);
-        intent.putExtra(CommentsActivity.EXTRA_COUNT, comments);
-        startActivity(intent);
+        new InlineCommentsDialog(
+                this,
+                pageUrl,
+                title,
+                comments,
+                null
+        ).show();
     }
 
     private void toggleWatchLater() {
@@ -775,33 +1102,99 @@ public class VideoDetailActivity extends Activity {
         startActivity(Intent.createChooser(share, "Share video"));
     }
 
-    private void showPlayerMenu(View anchor) {
-        PopupMenu menu = new PopupMenu(this, anchor);
-        menu.getMenu().add(0, 1, 0, "Playback speed");
-        menu.getMenu().add(0, 2, 1, "Fit / Fill / Zoom");
-        menu.getMenu().add(0, 3, 2, "Comments");
-        menu.getMenu().add(0, 4, 3, "Watch Later");
-        menu.getMenu().add(0, 5, 4, "Share");
-        menu.getMenu().add(0, 6, 5, "Open webpage");
+    private void showPlayerMenu() {
+        String saveTitle = FavoriteStore.contains(this, pageUrl)
+                ? "Remove from Watch Later"
+                : "Save to Watch Later";
+        ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_comments,
+                "Comments",
+                "Read and reply without leaving the video",
+                this::openComments
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_share,
+                "Share",
+                "Send the CrazyShit page",
+                this::sharePage
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_more_website,
+                "Open webpage",
+                "View this video on the site",
+                () -> openWebsite(pageUrl)
+        ));
         if (getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE) {
-            menu.getMenu().add(0, 8, 6, "Minimize");
-            menu.getMenu().add(0, 7, 7, "Fullscreen");
+            actions.add(VideoActionSheet.action(
+                    R.drawable.ic_action_minimize,
+                    "Minimize",
+                    "Keep playing while you browse",
+                    this::minimizeFromMenu
+            ));
+            actions.add(VideoActionSheet.action(
+                    R.drawable.ic_action_fullscreen,
+                    "Fullscreen",
+                    "Rotate the player to landscape",
+                    () -> setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+            ));
         }
-        menu.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == 1) showSpeedMenu();
-            else if (item.getItemId() == 2) showResizeMenu();
-            else if (item.getItemId() == 3) openComments();
-            else if (item.getItemId() == 4) toggleWatchLater();
-            else if (item.getItemId() == 5) sharePage();
-            else if (item.getItemId() == 6) openWebsite(pageUrl);
-            else if (item.getItemId() == 7) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-            else if (item.getItemId() == 8) {
-                minimizing = true;
-                minimizeToFeed();
-            }
-            return true;
-        });
-        menu.show();
+
+        VideoActionSheet.show(
+                this,
+                title,
+                VideoActionSheet.section(
+                        "PLAYBACK",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_speed,
+                                "Playback speed",
+                                "Choose from 0.5× to 2×",
+                                this::showSpeedMenu
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_view_style,
+                                "Fit / Fill / Zoom",
+                                "Choose how the video fills the player",
+                                this::showResizeMenu
+                        )
+                ),
+                VideoActionSheet.section(
+                        "SAVE",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_download,
+                                "Download",
+                                "Save this video for offline playback",
+                                this::downloadCurrentVideo
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_library,
+                                saveTitle,
+                                "Keep this video in your library",
+                                this::toggleWatchLater
+                        )
+                ),
+                VideoActionSheet.section(
+                        "ACTIONS",
+                        actions.toArray(new VideoActionSheet.Action[0])
+                )
+        );
+    }
+
+    private void downloadCurrentVideo() {
+        VideoDownloadStore.downloadKnown(
+                this,
+                title,
+                pageUrl,
+                "",
+                mediaUrl,
+                userAgent,
+                cookies
+        );
+    }
+
+    private void minimizeFromMenu() {
+        minimizing = true;
+        minimizeToFeed();
     }
 
     private void showSpeedMenu() {
@@ -853,6 +1246,7 @@ public class VideoDetailActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        abortRelatedBackPreview();
         applyOrientation(newConfig.orientation);
     }
 
@@ -925,6 +1319,7 @@ public class VideoDetailActivity extends Activity {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             return;
         }
+        if (restorePreviousRelatedVideo()) return;
         if (getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("minimize_on_back", true)) {
             minimizing = true;
             minimizeToFeed();
@@ -1077,6 +1472,7 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        abortRelatedBackPreview();
         if (Build.VERSION.SDK_INT >= 33 && backCallback != null) {
             try {
                 getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backCallback);
@@ -1084,9 +1480,19 @@ public class VideoDetailActivity extends Activity {
             }
             backCallback = null;
         }
+        relatedPlayGeneration++;
+        relatedLoadGeneration++;
         savePlaybackState(false);
         releasePlayer();
-        if (thumbnailResolver != null) thumbnailResolver.close();
+        clearRelatedImageTargets();
+        if (thumbnailResolvers != null) {
+            for (RenderedThumbnailResolver resolver : thumbnailResolvers) {
+                if (resolver != null) resolver.close();
+            }
+        }
+        for (VideoHistoryEntry entry : relatedHistory) recycleHistoryPreview(entry);
+        relatedHistory.clear();
+        requestedRelatedThumbnails.clear();
         io.shutdownNow();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         super.onDestroy();

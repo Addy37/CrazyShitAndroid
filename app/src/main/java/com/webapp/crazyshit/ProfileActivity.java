@@ -124,7 +124,7 @@ public final class ProfileActivity extends Activity {
 
         signIn = textButton("SIGN IN", "Sign in");
         signIn.setTextSize(12);
-        signIn.setTextColor(Color.rgb(255, 112, 60));
+        signIn.setTextColor(UiPalette.PRIMARY);
         signIn.setTypeface(null, android.graphics.Typeface.BOLD);
         signIn.setVisibility(View.GONE);
         signIn.setOnClickListener(v -> startActivityForResult(new Intent(this, LoginActivity.class), LOGIN_REQUEST));
@@ -139,7 +139,7 @@ public final class ProfileActivity extends Activity {
 
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
-        progress.getProgressDrawable().setTint(Color.rgb(255, 90, 31));
+        progress.getProgressDrawable().setTint(UiPalette.PRIMARY);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(-1, dp(3));
         pp.gravity = Gravity.TOP;
         browser.addView(progress, pp);

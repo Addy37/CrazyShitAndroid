@@ -36,6 +36,8 @@ public final class CrazyShitApplication extends Application {
         }
         migration.apply();
 
+        AppShortcuts.publish(this);
+
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(Activity activity, Bundle savedInstanceState) {

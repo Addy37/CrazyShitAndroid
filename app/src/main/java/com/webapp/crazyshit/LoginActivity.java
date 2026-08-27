@@ -112,7 +112,7 @@ public final class LoginActivity extends Activity {
 
         TextView cancel = new TextView(this);
         cancel.setText("CANCEL");
-        cancel.setTextColor(Color.rgb(255, 112, 60));
+        cancel.setTextColor(UiPalette.PRIMARY);
         cancel.setTextSize(12);
         cancel.setTypeface(null, android.graphics.Typeface.BOLD);
         cancel.setGravity(Gravity.CENTER);
@@ -140,7 +140,7 @@ public final class LoginActivity extends Activity {
 
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
-        progress.getProgressDrawable().setTint(Color.rgb(255, 90, 31));
+        progress.getProgressDrawable().setTint(UiPalette.PRIMARY);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(-1, dp(3));
         pp.gravity = Gravity.TOP;
         browser.addView(progress, pp);

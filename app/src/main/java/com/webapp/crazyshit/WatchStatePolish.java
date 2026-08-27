@@ -131,7 +131,7 @@ final class WatchStatePolish {
         badge.setText(time.isEmpty() ? "Continue" : "Continue · " + time);
         badge.setTextSize(9.5f);
         badge.setPadding(dp(badge, 7), dp(badge, 3), dp(badge, 7), dp(badge, 3));
-        badge.setBackground(rounded(Color.argb(205, 105, 39, 18), dp(badge, 11)));
+        badge.setBackground(rounded(Color.argb(205, 77, 75, 6), dp(badge, 11)));
         styleMediaFrame(badge, true);
     }
 

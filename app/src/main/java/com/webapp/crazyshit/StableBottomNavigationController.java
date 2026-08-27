@@ -130,7 +130,7 @@ final class StableBottomNavigationController {
             if (nav == null || shell == null || nav.getParent() != null) return;
             shell.addView(nav, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    dp(62)
+                    dp(60)
             ));
         }
 
@@ -143,16 +143,16 @@ final class StableBottomNavigationController {
             bg.setStroke(dp(1), oled ? Color.rgb(31, 31, 35) : Color.rgb(48, 48, 55));
             bg.setCornerRadius(dp(30));
             nav.setBackground(bg);
-            nav.setElevation(dp(oled ? 8 : 11));
+            nav.setElevation(dp(oled ? 4 : 6));
             nav.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
-            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 255, 90, 31)));
+            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 251, 245, 6)));
 
             int[][] states = new int[][] {
                     new int[] {android.R.attr.state_checked},
                     new int[] {}
             };
-            int active = Color.rgb(255, 98, 42);
-            int inactive = Color.rgb(174, 174, 184);
+            int active = UiPalette.PRIMARY;
+            int inactive = Color.rgb(168, 168, 178);
             ColorStateList colors = new ColorStateList(states, new int[] {active, inactive});
             nav.setItemIconTintList(colors);
             nav.setItemTextColor(colors);
@@ -160,14 +160,14 @@ final class StableBottomNavigationController {
             try {
                 nav.setItemActiveIndicatorEnabled(true);
                 nav.setItemActiveIndicatorColor(
-                        ColorStateList.valueOf(Color.argb(52, 255, 90, 31))
+                        ColorStateList.valueOf(Color.argb(50, 251, 245, 6))
                 );
             } catch (Throwable ignored) {
             }
 
             try {
-                nav.setItemIconSize(dp(25));
-                nav.setItemPaddingTop(dp(5));
+                nav.setItemIconSize(dp(23));
+                nav.setItemPaddingTop(dp(4));
                 nav.setItemPaddingBottom(dp(4));
             } catch (Throwable ignored) {
             }
@@ -180,16 +180,16 @@ final class StableBottomNavigationController {
 
             ViewGroup.LayoutParams raw = nav.getLayoutParams();
             boolean changed = false;
-            int wantedHeight = dp(62);
+            int wantedHeight = dp(60);
             if (raw.height != wantedHeight) {
                 raw.height = wantedHeight;
                 changed = true;
             }
             if (raw instanceof ViewGroup.MarginLayoutParams) {
                 ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) raw;
-                int side = dp(8);
+                int side = dp(10);
                 int top = dp(2);
-                int bottom = dp(5);
+                int bottom = dp(6);
                 if (margins.leftMargin != side || margins.topMargin != top ||
                         margins.rightMargin != side || margins.bottomMargin != bottom) {
                     margins.setMargins(side, top, side, bottom);

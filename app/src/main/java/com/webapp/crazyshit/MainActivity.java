@@ -868,7 +868,7 @@ public class MainActivity extends Activity {
         title.setPadding(dp(6), 0, dp(6), dp(4));
         content.addView(title);
 
-        TextView subtitle = sheetText("Quick controls", 13, Color.rgb(255, 122, 69));
+        TextView subtitle = sheetText("Quick controls", 13, UiPalette.PRIMARY);
         subtitle.setPadding(dp(6), 0, dp(6), dp(8));
         content.addView(subtitle);
 
