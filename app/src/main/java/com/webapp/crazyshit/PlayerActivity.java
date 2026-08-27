@@ -27,7 +27,6 @@ import android.view.WindowManager;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.FrameLayout;
-import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,6 +37,7 @@ import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
@@ -65,7 +65,6 @@ public class PlayerActivity extends Activity {
     private View menuButton;
     private TextView titleView;
     private TextView gestureLabel;
-    private PlayerTopChrome playerChrome;
 
     private String mediaUrl;
     private String pageUrl;
@@ -136,28 +135,18 @@ public class PlayerActivity extends Activity {
         playerView.setResizeMode(resizeMode);
         videoSurface.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        playerChrome = PlayerTopChrome.create(
-                this,
-                title,
-                v -> {
-                    haptic(v);
-                    handleBackNavigation();
-                },
-                v -> {
-                    haptic(v);
-                    showPlayerMenu();
-                }
-        );
-        titleView = playerChrome.title;
-        menuButton = playerChrome.menu;
-        FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, dp(72));
-        topParams.gravity = Gravity.TOP;
-        videoSurface.addView(playerChrome.root, topParams);
-        playerView.setControllerVisibilityListener(
-                (PlayerView.ControllerVisibilityListener) visibility ->
-                        playerChrome.setVisible(visibility == View.VISIBLE, true)
-        );
-        playerChrome.setVisible(false, false);
+        View backButton = playerView.findViewById(R.id.player_back);
+        titleView = playerView.findViewById(R.id.player_title);
+        menuButton = playerView.findViewById(R.id.player_menu);
+        titleView.setText(title);
+        backButton.setOnClickListener(v -> {
+            haptic(v);
+            handleBackNavigation();
+        });
+        menuButton.setOnClickListener(v -> {
+            haptic(v);
+            showPlayerMenu();
+        });
 
         gestureLabel = new TextView(this);
         gestureLabel.setTextColor(Color.WHITE);
@@ -195,8 +184,10 @@ public class PlayerActivity extends Activity {
         if (cookies != null && !cookies.isEmpty()) headers.put("Cookie", cookies);
         if (!headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
 
+        DefaultDataSource.Factory dataSourceFactory =
+                new DefaultDataSource.Factory(this, httpFactory);
         DefaultMediaSourceFactory mediaSourceFactory =
-                new DefaultMediaSourceFactory(this).setDataSourceFactory(httpFactory);
+                new DefaultMediaSourceFactory(this).setDataSourceFactory(dataSourceFactory);
 
         player = new ExoPlayer.Builder(this)
                 .setMediaSourceFactory(mediaSourceFactory)
@@ -264,10 +255,8 @@ public class PlayerActivity extends Activity {
                         if (dragMinimize) return true;
                         if (playerView.isControllerFullyVisible()) {
                             playerView.hideController();
-                            playerChrome.setVisible(false, true);
                         } else {
                             playerView.showController();
-                            playerChrome.setVisible(true, true);
                         }
                         return true;
                     }
@@ -330,7 +319,6 @@ public class PlayerActivity extends Activity {
                                             .getBoolean("swipe_down_minimize", true)) {
                                 dragMinimize = true;
                                 playerView.hideController();
-                                playerChrome.setVisible(false, true);
                             }
                         }
                         if (!moved) return true;
@@ -420,57 +408,94 @@ public class PlayerActivity extends Activity {
                     .withEndAction(() -> {
                         dragMinimize = false;
                         playerView.showController();
-                        playerChrome.setVisible(true, true);
                     })
                     .start();
         }
     }
 
     private void showPlayerMenu() {
-        PopupMenu menu = new PopupMenu(this, menuButton);
-        menu.getMenu().add(0, 1, 0, "Restart video");
-        menu.getMenu().add(0, 2, 1, "Playback speed");
-        menu.getMenu().add(0, 5, 2, "Fit / Fill / Zoom");
-        menu.getMenu().add(0, 6, 3, qualityLabel()).setEnabled(false);
-        menu.getMenu().add(0, 7, 4,
-                FavoriteStore.contains(this, pageUrl) ? "Remove from Watch Later" : "Save to Watch Later");
-        menu.getMenu().add(0, 8, 5, "Minimize to browser");
-        menu.getMenu().add(0, 3, 6, "Share page");
-        menu.getMenu().add(0, 4, 7, "Open normal page");
+        String saveTitle = FavoriteStore.contains(this, pageUrl)
+                ? "Remove from Watch Later"
+                : "Save to Watch Later";
+        VideoActionSheet.show(
+                this,
+                title,
+                VideoActionSheet.section(
+                        "PLAYBACK",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_replay,
+                                "Restart video",
+                                "Play again from the beginning",
+                                this::restartVideo
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_speed,
+                                "Playback speed",
+                                "Choose from 0.5× to 2×",
+                                this::showSpeedMenu
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_view_style,
+                                "Fit / Fill / Zoom",
+                                qualityLabel(),
+                                this::showResizeMenu
+                        )
+                ),
+                VideoActionSheet.section(
+                        "SAVE",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_download,
+                                "Download",
+                                "Save this video for offline playback",
+                                this::downloadCurrentVideo
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_library,
+                                saveTitle,
+                                "Keep this video in your library",
+                                this::toggleWatchLater
+                        )
+                ),
+                VideoActionSheet.section(
+                        "ACTIONS",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_minimize,
+                                "Minimize to browser",
+                                "Keep playing while you browse",
+                                this::minimizeToBrowser
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_share,
+                                "Share",
+                                "Send the CrazyShit page",
+                                this::sharePage
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_website,
+                                "Open normal page",
+                                "Return to the website view",
+                                this::returnToWebPage
+                        )
+                )
+        );
+    }
 
-        menu.setOnMenuItemClickListener(item -> {
-            switch (item.getItemId()) {
-                case 1:
-                    if (player != null) {
-                        player.seekTo(0L);
-                        player.play();
-                    }
-                    return true;
-                case 2:
-                    showSpeedMenu();
-                    return true;
-                case 3:
-                    sharePage();
-                    return true;
-                case 4:
-                    returnToWebPage();
-                    return true;
-                case 5:
-                    showResizeMenu();
-                    return true;
-                case 7:
-                    toggleWatchLater();
-                    return true;
-                case 8:
-                    minimizing = true;
-                    recordHistory(false);
-                    minimizeToBrowser();
-                    return true;
-                default:
-                    return false;
-            }
-        });
-        menu.show();
+    private void restartVideo() {
+        if (player == null) return;
+        player.seekTo(0L);
+        player.play();
+    }
+
+    private void downloadCurrentVideo() {
+        VideoDownloadStore.downloadKnown(
+                this,
+                title,
+                pageUrl,
+                "",
+                mediaUrl,
+                userAgent,
+                cookies
+        );
     }
 
     private String qualityLabel() {
@@ -655,12 +680,6 @@ public class PlayerActivity extends Activity {
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         resetMinimizeTransform();
-        if (playerChrome != null) {
-            if (isInPictureInPictureMode) playerChrome.setVisible(false, false);
-            else if (playerView != null && playerView.isControllerFullyVisible()) {
-                playerChrome.setVisible(true, false);
-            }
-        }
         if (gestureLabel != null) gestureLabel.setVisibility(View.GONE);
         if (playerView != null) playerView.setUseController(!isInPictureInPictureMode);
     }

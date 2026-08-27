@@ -55,6 +55,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".DownloadedActivity"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
             android:name=".SearchActivity"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"

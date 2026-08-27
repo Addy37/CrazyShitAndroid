@@ -25,7 +25,6 @@ import android.webkit.WebSettings;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -175,7 +174,7 @@ final class UnifiedVideoController {
     private LinearLayout relatedContainer;
     private SwipeMinimizeFrameLayout playerContainer;
     private PlayerView playerView;
-    private PlayerTopChrome playerChrome;
+    private TextView playerTitleView;
     private TextView titleView;
     private TextView metaView;
     private TextView commentsTitle;
@@ -385,26 +384,18 @@ final class UnifiedVideoController {
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        playerChrome = PlayerTopChrome.create(
-                activity,
-                title,
-                v -> {
-                    haptic(v);
-                    handleBack();
-                },
-                v -> {
-                    haptic(v);
-                    showPlayerMenu(v);
-                }
-        );
-        FrameLayout.LayoutParams chromeParams = new FrameLayout.LayoutParams(-1, dp(72));
-        chromeParams.gravity = Gravity.TOP;
-        playerContainer.addView(playerChrome.root, chromeParams);
-        playerView.setControllerVisibilityListener(
-                (PlayerView.ControllerVisibilityListener) visibility ->
-                        playerChrome.setVisible(visibility == View.VISIBLE, true)
-        );
-        playerChrome.setVisible(false, false);
+        View playerBack = playerView.findViewById(R.id.player_back);
+        playerTitleView = playerView.findViewById(R.id.player_title);
+        View playerMenu = playerView.findViewById(R.id.player_menu);
+        playerTitleView.setText(title);
+        playerBack.setOnClickListener(v -> {
+            haptic(v);
+            handleBack();
+        });
+        playerMenu.setOnClickListener(v -> {
+            haptic(v);
+            showPlayerMenu();
+        });
 
         root.addView(playerContainer, new FrameLayout.LayoutParams(-1, portraitPlayerHeight()));
     }
@@ -603,7 +594,6 @@ final class UnifiedVideoController {
         playerView.setControllerHideOnTouch(true);
         playerView.setOnClickListener(null);
         playerContainer.setSwipeEnabled(!isLandscape() && swipeEnabled());
-        playerChrome.setVisible(playerView.isControllerFullyVisible(), false);
         playerContainer.setBackgroundColor(Color.BLACK);
         if (isLandscape()) setSystemBars(true); else setSystemBars(false);
     }
@@ -614,7 +604,6 @@ final class UnifiedVideoController {
         playerView.setUseController(false);
         playerView.setOnClickListener(v -> expandFromMini());
         playerContainer.setSwipeEnabled(false);
-        playerChrome.setVisible(false, false);
         playerContainer.setBackground(rounded(Color.BLACK, dp(10)));
     }
 
@@ -667,7 +656,7 @@ final class UnifiedVideoController {
 
     private void updateMetadataUi() {
         titleView.setText(title);
-        playerChrome.setTitle(title);
+        playerTitleView.setText(title);
         miniTitle.setText(title);
         ArrayList<String> parts = new ArrayList<>();
         if (!views.isEmpty()) parts.add(views + " views");
@@ -958,30 +947,96 @@ final class UnifiedVideoController {
         activity.startActivity(Intent.createChooser(share, "Share video"));
     }
 
-    private void showPlayerMenu(View anchor) {
-        PopupMenu menu = new PopupMenu(activity, anchor);
-        menu.getMenu().add(0, 1, 0, "Playback speed");
-        menu.getMenu().add(0, 2, 1, "Fit / Fill / Zoom");
-        menu.getMenu().add(0, 3, 2, "Comments");
-        menu.getMenu().add(0, 4, 3, "Watch Later");
-        menu.getMenu().add(0, 5, 4, "Share");
-        menu.getMenu().add(0, 6, 5, "Open webpage");
+    private void showPlayerMenu() {
+        String saveTitle = FavoriteStore.contains(activity, pageUrl)
+                ? "Remove from Watch Later"
+                : "Save to Watch Later";
+        ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_comments,
+                "Comments",
+                "Read and reply without leaving the video",
+                this::openComments
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_share,
+                "Share",
+                "Send the CrazyShit page",
+                this::sharePage
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_more_website,
+                "Open webpage",
+                "View this video on the site",
+                () -> openWebsite(pageUrl)
+        ));
         if (!isLandscape()) {
-            menu.getMenu().add(0, 8, 6, "Minimize");
-            menu.getMenu().add(0, 7, 7, "Fullscreen");
+            actions.add(VideoActionSheet.action(
+                    R.drawable.ic_action_minimize,
+                    "Minimize",
+                    "Keep playing while you browse",
+                    this::minimizeToMini
+            ));
+            actions.add(VideoActionSheet.action(
+                    R.drawable.ic_action_fullscreen,
+                    "Fullscreen",
+                    "Rotate the player to landscape",
+                    () -> activity.setRequestedOrientation(
+                            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    )
+            ));
         }
-        menu.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == 1) showSpeedMenu();
-            else if (item.getItemId() == 2) showResizeMenu();
-            else if (item.getItemId() == 3) openComments();
-            else if (item.getItemId() == 4) toggleWatchLater();
-            else if (item.getItemId() == 5) sharePage();
-            else if (item.getItemId() == 6) openWebsite(pageUrl);
-            else if (item.getItemId() == 7) activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-            else if (item.getItemId() == 8) minimizeToMini();
-            return true;
-        });
-        menu.show();
+
+        VideoActionSheet.show(
+                activity,
+                title,
+                VideoActionSheet.section(
+                        "PLAYBACK",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_speed,
+                                "Playback speed",
+                                "Choose from 0.5× to 2×",
+                                this::showSpeedMenu
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_view_style,
+                                "Fit / Fill / Zoom",
+                                "Choose how the video fills the player",
+                                this::showResizeMenu
+                        )
+                ),
+                VideoActionSheet.section(
+                        "SAVE",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_download,
+                                "Download",
+                                "Save this video for offline playback",
+                                this::downloadCurrentVideo
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_library,
+                                saveTitle,
+                                "Keep this video in your library",
+                                this::toggleWatchLater
+                        )
+                ),
+                VideoActionSheet.section(
+                        "ACTIONS",
+                        actions.toArray(new VideoActionSheet.Action[0])
+                )
+        );
+    }
+
+    private void downloadCurrentVideo() {
+        VideoDownloadStore.downloadKnown(
+                activity,
+                title,
+                pageUrl,
+                "",
+                mediaUrl,
+                userAgent,
+                cookies
+        );
     }
 
     private void showSpeedMenu() {
@@ -1242,7 +1297,7 @@ final class UnifiedVideoController {
     }
 
     private void setChromeAlpha(float alpha) {
-        if (playerChrome != null) playerChrome.setChromeAlpha(clamp(alpha));
+        // The title bar now lives inside Media3's controller and shares its single animation.
     }
 
     private void setSystemBars(boolean fullscreen) {

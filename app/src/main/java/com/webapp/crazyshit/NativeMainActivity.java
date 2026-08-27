@@ -20,7 +20,6 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -706,44 +705,72 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showItemMenu(NativeContentItem item, View anchor) {
-        PopupMenu menu = new PopupMenu(this, anchor);
-        boolean saved = FavoriteStore.contains(this, item.url);
-        menu.getMenu().add(0, 1, 0, saved ? "Remove from Watch Later" : "Save to Watch Later");
+        String saveTitle = FavoriteStore.contains(this, item.url)
+                ? "Remove from Watch Later"
+                : "Save to Watch Later";
+        ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
         if (item.comments != null && !item.comments.isEmpty()) {
-            menu.getMenu().add(0, 4, 1, "View comments");
+            actions.add(VideoActionSheet.action(
+                    R.drawable.ic_action_comments,
+                    "Comments",
+                    item.comments + " ready to view",
+                    () -> openComments(item)
+            ));
         }
-        menu.getMenu().add(0, 2, 2, "Share");
-        menu.getMenu().add(0, 3, 3, "Open website page");
-        menu.setOnMenuItemClickListener(clicked -> {
-            if (clicked.getItemId() == 1) {
-                if (FavoriteStore.contains(this, item.url)) {
-                    FavoriteStore.remove(this, item.url);
-                    Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
-                } else {
-                    FavoriteStore.add(this, item.title, item.url);
-                    Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
-                }
-                return true;
-            }
-            if (clicked.getItemId() == 4) {
-                openComments(item);
-                return true;
-            }
-            if (clicked.getItemId() == 2) {
-                Intent share = new Intent(Intent.ACTION_SEND);
-                share.setType("text/plain");
-                share.putExtra(Intent.EXTRA_TEXT, item.url);
-                share.putExtra(Intent.EXTRA_SUBJECT, item.title);
-                startActivity(Intent.createChooser(share, "Share"));
-                return true;
-            }
-            if (clicked.getItemId() == 3) {
-                openFallback(item.url);
-                return true;
-            }
-            return false;
-        });
-        menu.show();
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_share,
+                "Share",
+                "Send the CrazyShit page",
+                () -> shareItem(item)
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_more_website,
+                "Open website page",
+                "Use the compatibility browser",
+                () -> openFallback(item.url)
+        ));
+
+        VideoActionSheet.show(
+                this,
+                item.title,
+                VideoActionSheet.section(
+                        "SAVE",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_download,
+                                "Download",
+                                "Save this video for offline playback",
+                                () -> VideoDownloadStore.downloadPage(this, item)
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_library,
+                                saveTitle,
+                                "Keep this video in your library",
+                                () -> toggleWatchLater(item)
+                        )
+                ),
+                VideoActionSheet.section(
+                        "ACTIONS",
+                        actions.toArray(new VideoActionSheet.Action[0])
+                )
+        );
+    }
+
+    private void toggleWatchLater(NativeContentItem item) {
+        if (FavoriteStore.contains(this, item.url)) {
+            FavoriteStore.remove(this, item.url);
+            Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+        } else {
+            FavoriteStore.add(this, item.title, item.url);
+            Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void shareItem(NativeContentItem item) {
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_TEXT, item.url);
+        share.putExtra(Intent.EXTRA_SUBJECT, item.title);
+        startActivity(Intent.createChooser(share, "Share"));
     }
 
     private void showSearchDialog() {

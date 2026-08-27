@@ -112,6 +112,23 @@ final class LandscapeMoreDialog {
                 activity,
                 dialog,
                 content,
+                "LIBRARY",
+                actions(
+                        new Action(
+                                R.drawable.ic_action_download,
+                                "Downloads",
+                                "Saved videos and active downloads",
+                                () -> activity.startActivity(
+                                        new Intent(activity, DownloadedActivity.class)
+                                )
+                        )
+                )
+        );
+
+        addSection(
+                activity,
+                dialog,
+                content,
                 "BROWSE",
                 actions(
                         new Action(R.drawable.ic_nav_trending, "Trending", "The classic Trending feed",

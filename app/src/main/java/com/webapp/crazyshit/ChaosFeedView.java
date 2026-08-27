@@ -1443,52 +1443,111 @@ public final class ChaosFeedView extends FrameLayout {
             String savedLabel = FavoriteStore.contains(activity, item.url)
                     ? "Remove from Watch Later"
                     : "Save to Watch Later";
-            String[] options = new String[] {
-                    "Not interested",
-                    "Replay",
-                    savedLabel,
-                    "Comments",
-                    "Share",
-                    "Report playback problem",
-                    "Open details"
-            };
-            new AlertDialog.Builder(activity)
-                    .setTitle("Chaos")
-                    .setItems(options, (dialog, which) -> {
-                        if (item == null) return;
-                        switch (which) {
-                            case 0:
-                                hideFromChaos(item);
-                                break;
-                            case 1:
-                                if (player != null) {
-                                    player.seekTo(0L);
-                                    everStarted = true;
-                                    player.play();
-                                    showControlsTemporarily();
-                                }
-                                break;
-                            case 2:
-                                toggleSaved(item, save);
-                                break;
-                            case 3:
-                                openInlineComments(item);
-                                break;
-                            case 4:
-                                share(item);
-                                break;
-                            case 5:
-                                showPlaybackReport(this);
-                                break;
-                            case 6:
-                                pauseAndRecord();
-                                host.openDetails(item);
-                                break;
-                            default:
-                                break;
-                        }
-                    })
-                    .show();
+            VideoActionSheet.show(
+                    activity,
+                    item.title,
+                    VideoActionSheet.section(
+                            "PLAYBACK",
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_replay,
+                                    "Replay",
+                                    "Play this Chaos clip from the beginning",
+                                    this::replayCurrentVideo
+                            )
+                    ),
+                    VideoActionSheet.section(
+                            "SAVE",
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_download,
+                                    "Download",
+                                    "Save this video for offline playback",
+                                    this::downloadCurrentVideo
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_more_library,
+                                    savedLabel,
+                                    "Keep this video in your library",
+                                    () -> toggleSaved(item, save)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_comments,
+                                    "Comments",
+                                    "Read and reply without leaving Chaos",
+                                    () -> openInlineComments(item)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_share,
+                                    "Share",
+                                    "Send the CrazyShit page",
+                                    () -> share(item)
+                            )
+                    ),
+                    VideoActionSheet.section(
+                            "OTHER",
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_hide,
+                                    "Not interested",
+                                    "Hide this clip from your Chaos feed",
+                                    () -> hideFromChaos(item)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_action_report,
+                                    "Report playback problem",
+                                    "Copy diagnostics or open an issue",
+                                    () -> showPlaybackReport(this)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_more_website,
+                                    "Open details",
+                                    "View the full video page",
+                                    this::openCurrentDetails
+                            )
+                    )
+            );
+        }
+
+        private void replayCurrentVideo() {
+            if (player == null) return;
+            player.seekTo(0L);
+            everStarted = true;
+            player.play();
+            showControlsTemporarily();
+        }
+
+        private void downloadCurrentVideo() {
+            if (item == null) return;
+            if (stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty()) {
+                VideoDownloadStore.downloadPage(activity, item);
+                return;
+            }
+            String userAgent = "";
+            String cookies = "";
+            try {
+                userAgent = WebSettings.getDefaultUserAgent(activity);
+            } catch (Exception ignored) {
+            }
+            try {
+                cookies = CookieManager.getInstance().getCookie(stream.mediaUrl);
+                if ((cookies == null || cookies.isEmpty()) && stream.pageUrl != null) {
+                    cookies = CookieManager.getInstance().getCookie(stream.pageUrl);
+                }
+            } catch (Exception ignored) {
+            }
+            VideoDownloadStore.downloadKnown(
+                    activity,
+                    item.title,
+                    stream.pageUrl == null || stream.pageUrl.isEmpty() ? item.url : stream.pageUrl,
+                    item.imageUrl,
+                    stream.mediaUrl,
+                    userAgent,
+                    cookies
+            );
+        }
+
+        private void openCurrentDetails() {
+            if (item == null) return;
+            pauseAndRecord();
+            host.openDetails(item);
         }
 
         void applyMuteState() {
