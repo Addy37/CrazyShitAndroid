@@ -1,5 +1,7 @@
 # CrazyShit for Android
 
+[![Latest APK downloads](https://img.shields.io/github/downloads/Addy37/CrazyShitAndroid/latest/CrazyShit.apk?label=latest%20APK%20downloads&labelColor=0D0D0F&color=FBF506)](https://github.com/Addy37/CrazyShitAndroid/releases/latest)
+
 A native-first Android client for [CrazyShit.com](https://crazyshit.com/).
 
 > **Independent project:** This app is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
