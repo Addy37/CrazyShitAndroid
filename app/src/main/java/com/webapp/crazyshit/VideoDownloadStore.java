@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
@@ -20,12 +21,14 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Resolves, queues, tracks and opens native video downloads. */
 final class VideoDownloadStore {
@@ -34,6 +37,7 @@ final class VideoDownloadStore {
     private static final String KEY_PREFIX = "entry_";
     private static final ExecutorService RESOLVER = Executors.newFixedThreadPool(2);
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final AtomicInteger CUSTOM_ID_SEQUENCE = new AtomicInteger();
 
     private VideoDownloadStore() {
     }
@@ -124,14 +128,50 @@ final class VideoDownloadStore {
             remove(context, existing);
         }
 
+        String mime = mimeType(mediaUrl);
+        String fileName = fileName(title, pageUrl.isEmpty() ? mediaUrl : pageUrl, mime);
+        Map<String, String> requestHeaders = requestHeaders(mediaUrl, pageUrl, userAgent, cookies);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            long id = nextCustomId();
+            try {
+                saveMetadata(context, new Entry(
+                        id,
+                        title,
+                        pageUrl,
+                        imageUrl,
+                        mediaUrl,
+                        mime,
+                        System.currentTimeMillis(),
+                        DownloadManager.STATUS_PENDING,
+                        0L,
+                        -1L,
+                        "",
+                        0
+                ));
+                AcceleratedDownloadService.start(
+                        context,
+                        id,
+                        title,
+                        fileName,
+                        mediaUrl,
+                        mime,
+                        requestHeaders
+                );
+                toast(context, "Fast download started in Downloads.");
+            } catch (Exception ignored) {
+                removeMetadata(context, id);
+                toast(context, "Couldn't start the download.");
+            }
+            return;
+        }
+
         DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
         if (manager == null) {
             toast(context, "Android's download service isn't available.");
             return;
         }
 
-        String mime = mimeType(mediaUrl);
-        String fileName = fileName(title, pageUrl.isEmpty() ? mediaUrl : pageUrl, mime);
         try {
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(mediaUrl));
             request.setTitle(title);
@@ -142,29 +182,12 @@ final class VideoDownloadStore {
             request.setNotificationVisibility(
                     DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
             );
-            request.setDestinationInExternalFilesDir(
-                    context,
-                    Environment.DIRECTORY_MOVIES,
-                    "CrazyShit/" + fileName
+            request.setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_DOWNLOADS,
+                    fileName
             );
-            Map<String, String> streamHeaders = ShitShowPlayableResolver.playbackHeaders(mediaUrl);
-            for (Map.Entry<String, String> header : streamHeaders.entrySet()) {
+            for (Map.Entry<String, String> header : requestHeaders.entrySet()) {
                 addHeader(request, header.getKey(), header.getValue());
-            }
-            addHeaderIfMissing(request, streamHeaders, "User-Agent", userAgent);
-            addHeaderIfMissing(request, streamHeaders, "Cookie", cookies);
-            addHeaderIfMissing(request, streamHeaders, "Referer", pageUrl);
-            try {
-                Uri page = Uri.parse(pageUrl);
-                if (page.getScheme() != null && page.getHost() != null) {
-                    addHeaderIfMissing(
-                            request,
-                            streamHeaders,
-                            "Origin",
-                            page.getScheme() + "://" + page.getHost()
-                    );
-                }
-            } catch (Exception ignored) {
             }
 
             long id = manager.enqueue(request);
@@ -182,7 +205,7 @@ final class VideoDownloadStore {
                     "",
                     0
             ));
-            toast(context, "Download started. Open More, then Downloads to track it.");
+            toast(context, "Download started in Downloads.");
         } catch (Exception ignored) {
             toast(context, "Couldn't start the download.");
         }
@@ -195,26 +218,31 @@ final class VideoDownloadStore {
         if (rawIds == null || rawIds.isEmpty()) return Collections.emptyList();
 
         ArrayList<Long> ids = new ArrayList<>();
+        ArrayList<Entry> custom = new ArrayList<>();
         HashMap<Long, Entry> metadata = new HashMap<>();
         for (String rawId : new HashSet<>(rawIds)) {
             try {
                 long id = Long.parseLong(rawId);
                 Entry entry = metadata(prefs.getString(KEY_PREFIX + id, ""));
                 if (entry != null) {
-                    ids.add(id);
                     metadata.put(id, entry);
+                    if (id < 0L) custom.add(entry);
+                    else ids.add(id);
                 }
             } catch (Exception ignored) {
             }
         }
-        if (ids.isEmpty()) return Collections.emptyList();
+        if (ids.isEmpty()) {
+            custom.sort(Comparator.comparingLong((Entry item) -> item.createdAt).reversed());
+            return custom;
+        }
 
         long[] filter = new long[ids.size()];
         for (int i = 0; i < ids.size(); i++) filter[i] = ids.get(i);
         DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
         if (manager == null) return new ArrayList<>(metadata.values());
 
-        ArrayList<Entry> result = new ArrayList<>();
+        ArrayList<Entry> result = new ArrayList<>(custom);
         HashSet<Long> found = new HashSet<>();
         try (Cursor cursor = manager.query(new DownloadManager.Query().setFilterById(filter))) {
             if (cursor != null) {
@@ -239,12 +267,16 @@ final class VideoDownloadStore {
                 }
             }
         } catch (Exception ignored) {
-            result.addAll(metadata.values());
-            found.addAll(metadata.keySet());
+            for (Entry entry : metadata.values()) {
+                if (entry.id >= 0L) result.add(entry);
+            }
+            for (Long id : metadata.keySet()) {
+                if (id >= 0L) found.add(id);
+            }
         }
 
         for (Long id : metadata.keySet()) {
-            if (!found.contains(id)) removeMetadata(context, id);
+            if (id >= 0L && !found.contains(id)) removeMetadata(context, id);
         }
         result.sort(Comparator.comparingLong((Entry item) -> item.createdAt).reversed());
         return result;
@@ -257,7 +289,7 @@ final class VideoDownloadStore {
             return;
         }
         DownloadManager manager = (DownloadManager) activity.getSystemService(Context.DOWNLOAD_SERVICE);
-        Uri uri = manager == null ? null : manager.getUriForDownloadedFile(entry.id);
+        Uri uri = entry.id < 0L || manager == null ? null : manager.getUriForDownloadedFile(entry.id);
         if (uri == null && !entry.localUri.isEmpty()) uri = Uri.parse(entry.localUri);
         if (uri == null) {
             toast(activity, "The downloaded file is no longer available.");
@@ -273,10 +305,20 @@ final class VideoDownloadStore {
 
     static synchronized void remove(Context context, Entry entry) {
         if (context == null || entry == null) return;
-        DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
-        try {
-            if (manager != null) manager.remove(entry.id);
-        } catch (Exception ignored) {
+        if (entry.id < 0L) {
+            AcceleratedDownloadService.cancel(context, entry.id);
+            if (!entry.localUri.isEmpty()) {
+                try {
+                    context.getContentResolver().delete(Uri.parse(entry.localUri), null, null);
+                } catch (Exception ignored) {
+                }
+            }
+        } else {
+            DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
+            try {
+                if (manager != null) manager.remove(entry.id);
+            } catch (Exception ignored) {
+            }
         }
         removeMetadata(context, entry.id);
     }
@@ -324,6 +366,11 @@ final class VideoDownloadStore {
         json.put("media", entry.mediaUrl);
         json.put("mime", entry.mimeType);
         json.put("created", entry.createdAt);
+        json.put("status", entry.status);
+        json.put("downloaded", entry.downloadedBytes);
+        json.put("total", entry.totalBytes);
+        json.put("local", entry.localUri);
+        json.put("reason", entry.reason);
         prefs.edit()
                 .putStringSet(KEY_IDS, ids)
                 .putString(KEY_PREFIX + entry.id, json.toString())
@@ -342,11 +389,11 @@ final class VideoDownloadStore {
                     json.optString("media", ""),
                     json.optString("mime", "video/mp4"),
                     json.optLong("created", 0L),
-                    DownloadManager.STATUS_PENDING,
-                    0L,
-                    -1L,
-                    "",
-                    0
+                    json.optInt("status", DownloadManager.STATUS_PENDING),
+                    json.optLong("downloaded", 0L),
+                    json.optLong("total", -1L),
+                    json.optString("local", ""),
+                    json.optInt("reason", 0)
             );
         } catch (Exception ignored) {
             return null;
@@ -369,18 +416,65 @@ final class VideoDownloadStore {
         if (!cleanName.isEmpty() && !clean.isEmpty()) request.addRequestHeader(cleanName, clean);
     }
 
-    private static void addHeaderIfMissing(
-            DownloadManager.Request request,
-            Map<String, String> headers,
-            String name,
-            String value
+    private static Map<String, String> requestHeaders(
+            String mediaUrl,
+            String pageUrl,
+            String userAgent,
+            String cookies
     ) {
-        if (headers != null) {
-            for (String existing : headers.keySet()) {
-                if (name.equalsIgnoreCase(safe(existing))) return;
+        LinkedHashMap<String, String> headers = new LinkedHashMap<>(
+                ShitShowPlayableResolver.playbackHeaders(mediaUrl)
+        );
+        putHeaderIfMissing(headers, "User-Agent", userAgent);
+        putHeaderIfMissing(headers, "Cookie", cookies);
+        putHeaderIfMissing(headers, "Referer", pageUrl);
+        try {
+            Uri page = Uri.parse(pageUrl);
+            if (page.getScheme() != null && page.getHost() != null) {
+                putHeaderIfMissing(
+                        headers,
+                        "Origin",
+                        page.getScheme() + "://" + page.getHost()
+                );
             }
+        } catch (Exception ignored) {
         }
-        addHeader(request, name, value);
+        return headers;
+    }
+
+    private static void putHeaderIfMissing(Map<String, String> headers, String name, String value) {
+        for (String existing : headers.keySet()) {
+            if (name.equalsIgnoreCase(safe(existing))) return;
+        }
+        String clean = safe(value).replace("\r", "").replace("\n", "");
+        if (!clean.isEmpty()) headers.put(name, clean);
+    }
+
+    private static long nextCustomId() {
+        long base = System.currentTimeMillis() * 1_000L;
+        return -(base + CUSTOM_ID_SEQUENCE.incrementAndGet() % 1_000);
+    }
+
+    static synchronized Entry entry(Context context, long id) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return metadata(prefs.getString(KEY_PREFIX + id, ""));
+    }
+
+    static synchronized void updateCustom(
+            Context context,
+            long id,
+            int status,
+            long downloaded,
+            long total,
+            String localUri,
+            int reason
+    ) {
+        Entry current = entry(context, id);
+        if (current == null) return;
+        try {
+            saveMetadata(context, current.withState(status, downloaded, total, localUri, reason));
+        } catch (Exception ignored) {
+        }
     }
 
     private static String cookiesFor(String mediaUrl, String pageUrl) {
