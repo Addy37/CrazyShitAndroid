@@ -76,6 +76,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
     private final Set<String> failedDirectThumbnails = new HashSet<>();
+    private final Map<String, RenderedThumbnailResolver> thumbnailJobs = new HashMap<>();
     private RenderedThumbnailResolver[] thumbnailResolvers;
     private Context appContext;
     private int resolverCursor;
@@ -102,6 +103,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         appContext = null;
         requestedThumbnails.clear();
         failedDirectThumbnails.clear();
+        thumbnailJobs.clear();
     }
 
     @Override
@@ -221,9 +223,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         result.card.setContentDescription(item.title);
         result.card.setOnClickListener(v -> listener.onOpen(item));
         loadImage(result.image, item);
-        if (item.imageUrl == null || item.imageUrl.trim().isEmpty()) {
-            requestRenderedThumbnail(item);
-        }
+        requestRenderedThumbnail(item);
     }
 
     private String metaText(NativeContentItem item, int source) {
@@ -266,18 +266,31 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     private void requestRenderedThumbnail(NativeContentItem item) {
+        requestRenderedThumbnail(item, "");
+    }
+
+    private void requestRenderedThumbnail(NativeContentItem item, String rejectedUrl) {
         if (item == null || item.isSection() || item.isSeries() || item.isCategory()) return;
         if (item.url == null || item.url.isEmpty()) return;
-        if (resolvedThumbnails.containsKey(item.url)) return;
-        if (!requestedThumbnails.add(item.url)) return;
+        String rejected = rejectedUrl == null ? "" : rejectedUrl;
+        if (rejected.isEmpty() && failedDirectThumbnails.contains(item.url)) rejected = item.imageUrl;
+        if (resolvedThumbnails.containsKey(item.url) && rejected.isEmpty()) return;
         ensureResolvers();
         if (thumbnailResolvers == null || thumbnailResolvers.length == 0) {
             requestedThumbnails.remove(item.url);
             return;
         }
-        RenderedThumbnailResolver resolver =
-                thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
-        resolver.request(item.url);
+        RenderedThumbnailResolver resolver = thumbnailJobs.get(item.url);
+        if (resolver == null) {
+            resolver = thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
+            thumbnailJobs.put(item.url, resolver);
+        }
+        if (!rejected.isEmpty()) {
+            requestedThumbnails.add(item.url);
+            resolver.request(item.url, rejected);
+        } else if (requestedThumbnails.add(item.url)) {
+            resolver.request(item.url);
+        }
     }
 
     private void setResolvedThumbnail(String pageUrl, String thumbnailUrl) {
@@ -318,9 +331,11 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             return;
         }
 
-        boolean usingDirect = item.imageUrl != null && !item.imageUrl.isEmpty() &&
+        String resolved = resolvedThumbnails.get(item.url);
+        boolean usingDirect = (resolved == null || resolved.isEmpty()) &&
+                item.imageUrl != null && !item.imageUrl.isEmpty() &&
                 !failedDirectThumbnails.contains(item.url);
-        String imageUrl = usingDirect ? item.imageUrl : resolvedThumbnails.get(item.url);
+        String imageUrl = usingDirect ? item.imageUrl : resolved;
         if (imageUrl == null || imageUrl.isEmpty()) return;
 
         Object source = imageUrl.startsWith("file://")
@@ -333,38 +348,36 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 .centerCrop()
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 36)));
-        if (usingDirect) {
-            request.listener(new RequestListener<Drawable>() {
-                @Override
-                public boolean onLoadFailed(
-                        GlideException error,
-                        Object model,
-                        Target<Drawable> target,
-                        boolean firstResource
-                ) {
-                    failedDirectThumbnails.add(item.url);
-                    image.post(() -> {
-                        if (resolvedThumbnails.containsKey(item.url)) {
-                            notifyThumbnailChanged(item.url);
-                        } else {
-                            requestRenderedThumbnail(item);
-                        }
-                    });
-                    return false;
-                }
+        final String attemptedUrl = imageUrl;
+        request.listener(new RequestListener<Drawable>() {
+            @Override
+            public boolean onLoadFailed(
+                    GlideException error,
+                    Object model,
+                    Target<Drawable> target,
+                    boolean firstResource
+            ) {
+                if (sameUrl(attemptedUrl, item.imageUrl)) failedDirectThumbnails.add(item.url);
+                String alternate = resolvedThumbnails.get(item.url);
+                if (sameUrl(alternate, attemptedUrl)) resolvedThumbnails.remove(item.url);
+                image.post(() -> {
+                    requestRenderedThumbnail(item, attemptedUrl);
+                    notifyThumbnailChanged(item.url);
+                });
+                return false;
+            }
 
-                @Override
-                public boolean onResourceReady(
-                        Drawable resource,
-                        Object model,
-                        Target<Drawable> target,
-                        DataSource dataSource,
-                        boolean firstResource
-                ) {
-                    return false;
-                }
-            });
-        }
+            @Override
+            public boolean onResourceReady(
+                    Drawable resource,
+                    Object model,
+                    Target<Drawable> target,
+                    DataSource dataSource,
+                    boolean firstResource
+            ) {
+                return false;
+            }
+        });
         request.into(image);
     }
 
@@ -375,6 +388,12 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 notifyItemChanged(i, "thumbnail");
             }
         }
+    }
+
+    private boolean sameUrl(String first, String second) {
+        if (first == null || second == null) return false;
+        return first.trim().replace("&amp;", "&")
+                .equals(second.trim().replace("&amp;", "&"));
     }
 
     private void preloadDirectThumbnails() {

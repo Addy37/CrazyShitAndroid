@@ -12,6 +12,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import org.json.JSONArray;
 import org.json.JSONTokener;
 
 import java.io.File;
@@ -19,8 +20,10 @@ import java.io.FileOutputStream;
 import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -34,9 +37,11 @@ final class RenderedThumbnailResolver {
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
     private static final String THUMB_JS =
-            "(() => {" +
+            "((blocked) => {" +
             "const abs=u=>{try{return u?new URL(u,document.baseURI).href:''}catch(e){return ''}};" +
-            "const good=u=>{u=abs(u);return /^https?:\\/\\//i.test(u)?u:''};" +
+            "const clean=u=>(u||'').replace(/&amp;/g,'&').trim();" +
+            "const rejected=new Set((blocked||[]).map(clean));" +
+            "const good=u=>{u=abs(u);return /^https?:\\/\\//i.test(u)&&!rejected.has(clean(u))?u:''};" +
             "let v=document.querySelector('video');" +
             "if(v){let x=good(v.poster||v.getAttribute('poster'));if(x)return x;}" +
             "for(const s of ['meta[property=\\\"og:image\\\"]','meta[property=\\\"og:image:secure_url\\\"]','meta[name=\\\"twitter:image\\\"]','meta[name=\\\"twitter:image:src\\\"]']){" +
@@ -49,7 +54,7 @@ final class RenderedThumbnailResolver {
             "for(const i of imgs){let x=good(i.currentSrc||i.src||i.getAttribute('data-src')||i.getAttribute('data-original'));if(x)return x;}" +
             "for(const e of document.querySelectorAll('*')){let bg='';try{bg=getComputedStyle(e).backgroundImage||''}catch(err){};let m=bg.match(/url\\([\\\"']?([^\\\"')]+)[\\\"']?\\)/i);if(m){let x=good(m[1]);if(x)return x;}}" +
             "return '';" +
-            "})()";
+            "})(%s)";
 
     private final Context context;
     private final Callback callback;
@@ -57,6 +62,7 @@ final class RenderedThumbnailResolver {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final ArrayDeque<String> queue = new ArrayDeque<>();
     private final Map<String, Boolean> pending = new HashMap<>();
+    private final Map<String, Set<String>> rejectedUrls = new HashMap<>();
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final SharedPreferences cachePrefs;
 
@@ -74,10 +80,20 @@ final class RenderedThumbnailResolver {
     }
 
     void request(String pageUrl) {
+        request(pageUrl, "");
+    }
+
+    void request(String pageUrl, String rejectedUrl) {
         if (closed || pageUrl == null || pageUrl.isEmpty()) return;
 
+        if (isUsable(rejectedUrl)) {
+            synchronized (rejectedUrls) {
+                rejectedUrls.computeIfAbsent(pageUrl, key -> new HashSet<>()).add(cleanUrl(rejectedUrl));
+            }
+        }
+
         String cached = cachedResult(pageUrl);
-        if (isUsable(cached)) {
+        if (isUsable(cached) && !isRejected(pageUrl, cached)) {
             if (callback != null) main.post(() -> {
                 if (!closed) callback.onResolved(pageUrl, cached);
             });
@@ -103,6 +119,9 @@ final class RenderedThumbnailResolver {
         queue.clear();
         synchronized (pending) {
             pending.clear();
+        }
+        synchronized (rejectedUrls) {
+            rejectedUrls.clear();
         }
         main.removeCallbacksAndMessages(null);
         io.shutdownNow();
@@ -177,7 +196,7 @@ final class RenderedThumbnailResolver {
             final String resolved = staticThumbnail;
             main.post(() -> {
                 if (closed || !busy || currentPage == null || !page.equals(currentPage)) return;
-                if (isUsable(resolved)) {
+                if (isUsable(resolved) && !isRejected(page, resolved)) {
                     finish(page, resolved);
                 } else {
                     loadRenderedPage(page);
@@ -200,7 +219,8 @@ final class RenderedThumbnailResolver {
         if (closed || !busy || webView == null || currentPage == null) return;
         final String page = currentPage;
         try {
-            webView.evaluateJavascript(THUMB_JS, raw -> {
+            String script = String.format(Locale.US, THUMB_JS, rejectedJson(page));
+            webView.evaluateJavascript(script, raw -> {
                 if (closed) return;
                 String resolved = decodeJsString(raw);
                 if (isUsable(resolved)) {
@@ -282,6 +302,7 @@ final class RenderedThumbnailResolver {
 
     private void finish(String page, String result) {
         if (closed) return;
+        if (page != null && isRejected(page, result)) result = "";
         if (page != null && isUsable(result)) {
             if (result.startsWith("http://") || result.startsWith("https://")) {
                 try {
@@ -323,6 +344,29 @@ final class RenderedThumbnailResolver {
         if (value == null || value.trim().isEmpty()) return false;
         String lower = value.trim().toLowerCase(Locale.US);
         return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("file://");
+    }
+
+    private boolean isRejected(String pageUrl, String imageUrl) {
+        if (pageUrl == null || imageUrl == null || imageUrl.trim().isEmpty()) return false;
+        synchronized (rejectedUrls) {
+            Set<String> urls = rejectedUrls.get(pageUrl);
+            return urls != null && urls.contains(cleanUrl(imageUrl));
+        }
+    }
+
+    private String rejectedJson(String pageUrl) {
+        JSONArray values = new JSONArray();
+        synchronized (rejectedUrls) {
+            Set<String> urls = rejectedUrls.get(pageUrl);
+            if (urls != null) {
+                for (String url : urls) values.put(url);
+            }
+        }
+        return values.toString();
+    }
+
+    private String cleanUrl(String value) {
+        return value == null ? "" : value.trim().replace("&amp;", "&");
     }
 
     private String sha256(String value) throws Exception {

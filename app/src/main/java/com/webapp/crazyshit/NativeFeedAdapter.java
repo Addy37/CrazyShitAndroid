@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,9 +26,13 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
@@ -66,6 +71,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private final Listener listener;
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
+    private final Set<String> failedDirectThumbnails = new HashSet<>();
+    private final Map<String, RenderedThumbnailResolver> thumbnailJobs = new HashMap<>();
     private final RenderedThumbnailResolver[] thumbnailResolvers;
     private final Map<String, PlaybackHistoryStore.Item> playbackByUrl = new HashMap<>();
     private final SharedPreferences playbackPrefs;
@@ -116,6 +123,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             if (resolver != null) resolver.close();
         }
         requestedThumbnails.clear();
+        failedDirectThumbnails.clear();
+        thumbnailJobs.clear();
     }
 
     public boolean isSectionAt(int position) {
@@ -215,12 +224,28 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private void requestThumbnail(NativeContentItem item) {
+        requestThumbnail(item, "");
+    }
+
+    private void requestThumbnail(NativeContentItem item, String rejectedUrl) {
         if (closed || item == null || item.isSection() || item.url == null || item.url.isEmpty()) return;
-        if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) return;
-        if (resolvedThumbnails.containsKey(item.url)) return;
-        if (!requestedThumbnails.add(item.url)) return;
-        RenderedThumbnailResolver resolver = thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
-        resolver.request(item.url);
+        if ((rejectedUrl == null || rejectedUrl.isEmpty()) && item.isMeme() &&
+                item.imageUrl != null && !item.imageUrl.trim().isEmpty() &&
+                !failedDirectThumbnails.contains(item.url)) return;
+        String rejected = rejectedUrl == null ? "" : rejectedUrl;
+        if (rejected.isEmpty() && failedDirectThumbnails.contains(item.url)) rejected = item.imageUrl;
+        if (resolvedThumbnails.containsKey(item.url) && rejected.isEmpty()) return;
+        RenderedThumbnailResolver resolver = thumbnailJobs.get(item.url);
+        if (resolver == null) {
+            resolver = thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
+            thumbnailJobs.put(item.url, resolver);
+        }
+        if (!rejected.isEmpty()) {
+            requestedThumbnails.add(item.url);
+            resolver.request(item.url, rejected);
+        } else if (requestedThumbnails.add(item.url)) {
+            resolver.request(item.url);
+        }
     }
 
     @Override
@@ -672,8 +697,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void loadThumbnail(Holder holder, NativeContentItem item) {
         if (holder.image == null || item == null || item.isSection()) return;
-        String imageUrl = item.imageUrl;
-        if (imageUrl == null || imageUrl.isEmpty()) imageUrl = resolvedThumbnails.get(item.url);
+        String resolved = resolvedThumbnails.get(item.url);
+        boolean usingDirect = (resolved == null || resolved.isEmpty()) &&
+                item.imageUrl != null && !item.imageUrl.isEmpty() &&
+                !failedDirectThumbnails.contains(item.url);
+        String imageUrl = usingDirect ? item.imageUrl : resolved;
 
         if (imageUrl == null || imageUrl.isEmpty()) {
             Glide.with(holder.image).clear(holder.image);
@@ -682,14 +710,59 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         }
 
         Object source = imageUrl.startsWith("file://") ? imageUrl : withSiteHeaders(imageUrl, item.url);
-        com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request = Glide.with(holder.image)
+        com.bumptech.glide.RequestBuilder<Drawable> request = Glide.with(holder.image)
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
                 .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
                 .error(new ColorDrawable(Color.rgb(20, 20, 23)));
         if (item.isMeme()) request.fitCenter(); else request.centerCrop();
+        final String attemptedUrl = imageUrl;
+        request.listener(new RequestListener<Drawable>() {
+            @Override
+            public boolean onLoadFailed(
+                    GlideException error,
+                    Object model,
+                    Target<Drawable> target,
+                    boolean firstResource
+            ) {
+                if (sameUrl(attemptedUrl, item.imageUrl)) failedDirectThumbnails.add(item.url);
+                String alternate = resolvedThumbnails.get(item.url);
+                if (sameUrl(alternate, attemptedUrl)) resolvedThumbnails.remove(item.url);
+                holder.image.post(() -> {
+                    requestThumbnail(item, attemptedUrl);
+                    notifyThumbnailChanged(item.url);
+                });
+                return false;
+            }
+
+            @Override
+            public boolean onResourceReady(
+                    Drawable resource,
+                    Object model,
+                    Target<Drawable> target,
+                    DataSource dataSource,
+                    boolean firstResource
+            ) {
+                return false;
+            }
+        });
         request.into(holder.image);
+    }
+
+    private void notifyThumbnailChanged(String pageUrl) {
+        for (int i = 0; i < items.size(); i++) {
+            if (pageUrl.equals(items.get(i).url)) {
+                notifyItemChanged(i, "thumbnail");
+                return;
+            }
+        }
+    }
+
+    private boolean sameUrl(String first, String second) {
+        if (first == null || second == null) return false;
+        return first.trim().replace("&amp;", "&")
+                .equals(second.trim().replace("&amp;", "&"));
     }
 
     private void preloadDirectThumbnail(NativeContentItem item) {
