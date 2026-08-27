@@ -69,6 +69,8 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_UPLOADER = "uploader";
     public static final String EXTRA_COMMENTS = "comments";
     public static final String EXTRA_REOPEN_DETAIL = "reopen_detail";
+    public static final String EXTRA_RELATED_FEED_URL = "related_feed_url";
+    public static final String EXTRA_SOURCE = "content_source";
 
     private static final String SITE = "https://crazyshit.com/";
     private static final int CONTROL_TIMEOUT_MS = 2600;
@@ -80,6 +82,7 @@ public class VideoDetailActivity extends Activity {
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final CrazyShitRepository repository = new CrazyShitRepository();
+    private final EfuktRepository efuktRepository = new EfuktRepository();
     private final Map<String, ImageView> relatedImages = new LinkedHashMap<>();
     private final Map<String, String> resolvedRelatedThumbnails = new LinkedHashMap<>();
     private final Set<String> requestedRelatedThumbnails = new HashSet<>();
@@ -112,6 +115,8 @@ public class VideoDetailActivity extends Activity {
     private String comments;
     private String userAgent;
     private String cookies;
+    private String relatedFeedUrl;
+    private String source;
     private long requestedStartPosition;
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
     private boolean failureShown;
@@ -173,6 +178,8 @@ public class VideoDetailActivity extends Activity {
         comments = clean(getIntent().getStringExtra(EXTRA_COMMENTS));
         userAgent = clean(getIntent().getStringExtra(PlayerActivity.EXTRA_USER_AGENT));
         cookies = clean(getIntent().getStringExtra(PlayerActivity.EXTRA_COOKIES));
+        relatedFeedUrl = clean(getIntent().getStringExtra(EXTRA_RELATED_FEED_URL));
+        source = clean(getIntent().getStringExtra(EXTRA_SOURCE));
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -322,7 +329,9 @@ public class VideoDetailActivity extends Activity {
         actions.setGravity(Gravity.CENTER_VERTICAL);
         actions.setPadding(0, 0, 0, dp(3));
         detailsColumn.addView(actions, new LinearLayout.LayoutParams(-1, -2));
-        actions.addView(actionButton(comments.isEmpty() ? "💬 Comments" : "💬 " + comments, this::openComments), actionParams());
+        if (!isEfukt()) {
+            actions.addView(actionButton(comments.isEmpty() ? "💬 Comments" : "💬 " + comments, this::openComments), actionParams());
+        }
         actions.addView(actionButton("♡ Later", this::toggleWatchLater), actionParams());
         actions.addView(actionButton("↗ Share", this::sharePage), actionParams());
 
@@ -533,7 +542,7 @@ public class VideoDetailActivity extends Activity {
                 if (playbackState == Player.STATE_READY) {
                     String readyPageUrl = pageUrl;
                     playerView.postDelayed(() -> {
-                        if (readyPageUrl.equals(pageUrl)) {
+                        if (!isEfukt() && readyPageUrl.equals(pageUrl)) {
                             NativeCommentsLoader.preload(VideoDetailActivity.this, readyPageUrl);
                         }
                     }, 650L);
@@ -574,19 +583,30 @@ public class VideoDetailActivity extends Activity {
         final String excludeUrl = pageUrl;
         io.execute(() -> {
             LinkedHashMap<String, NativeContentItem> merged = new LinkedHashMap<>();
-            try {
-                List<NativeContentItem> home = repository.fetchFeed(this, CrazyShitRepository.HOME, 1);
-                for (NativeContentItem item : home) {
-                    if (!item.url.equals(excludeUrl)) merged.put(item.url, item);
+            if (isEfukt()) {
+                try {
+                    String feed = relatedFeedUrl.isEmpty() ? EfuktRepository.SERIES : relatedFeedUrl;
+                    List<NativeContentItem> series = efuktRepository.fetchSeriesFeed(this, feed, 1);
+                    for (NativeContentItem item : series) {
+                        if (!item.url.equals(excludeUrl)) merged.put(item.url, item);
+                    }
+                } catch (Exception ignored) {
                 }
-            } catch (Exception ignored) {
-            }
-            try {
-                List<NativeContentItem> trending = repository.fetchFeed(this, CrazyShitRepository.TRENDING, 1);
-                for (NativeContentItem item : trending) {
-                    if (!item.url.equals(excludeUrl)) merged.putIfAbsent(item.url, item);
+            } else {
+                try {
+                    List<NativeContentItem> home = repository.fetchFeed(this, CrazyShitRepository.HOME, 1);
+                    for (NativeContentItem item : home) {
+                        if (!item.url.equals(excludeUrl)) merged.put(item.url, item);
+                    }
+                } catch (Exception ignored) {
                 }
-            } catch (Exception ignored) {
+                try {
+                    List<NativeContentItem> trending = repository.fetchFeed(this, CrazyShitRepository.TRENDING, 1);
+                    for (NativeContentItem item : trending) {
+                        if (!item.url.equals(excludeUrl)) merged.putIfAbsent(item.url, item);
+                    }
+                } catch (Exception ignored) {
+                }
             }
             ArrayList<NativeContentItem> result = new ArrayList<>();
             for (NativeContentItem item : merged.values()) {
@@ -776,7 +796,7 @@ public class VideoDetailActivity extends Activity {
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = repository.resolvePlayable(this, item.url);
+                stream = PlayableSourceRouter.resolve(this, item.url);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
@@ -1072,7 +1092,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void openComments() {
-        if (pageUrl.isEmpty()) return;
+        if (pageUrl.isEmpty() || isEfukt()) return;
         new InlineCommentsDialog(
                 this,
                 pageUrl,
@@ -1107,12 +1127,14 @@ public class VideoDetailActivity extends Activity {
                 ? "Remove from Watch Later"
                 : "Save to Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
-        actions.add(VideoActionSheet.action(
-                R.drawable.ic_action_comments,
-                "Comments",
-                "Read and reply without leaving the video",
-                this::openComments
-        ));
+        if (!isEfukt()) {
+            actions.add(VideoActionSheet.action(
+                    R.drawable.ic_action_comments,
+                    "Comments",
+                    "Read and reply without leaving the video",
+                    this::openComments
+            ));
+        }
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_action_share,
                 "Share",
@@ -1190,6 +1212,10 @@ public class VideoDetailActivity extends Activity {
                 userAgent,
                 cookies
         );
+    }
+
+    private boolean isEfukt() {
+        return NativeFeedBrowserActivity.SOURCE_EFUKT.equals(source) || EfuktRepository.isEfuktUrl(pageUrl);
     }
 
     private void minimizeFromMenu() {

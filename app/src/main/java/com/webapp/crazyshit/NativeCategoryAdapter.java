@@ -6,6 +6,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -15,6 +16,8 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
@@ -112,21 +115,49 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
     private void loadImage(Holder holder, NativeContentItem item) {
         byte[] embedded = EmbeddedBrowseArtwork.get(holder.image.getContext(), item.url);
-        if (embedded == null || embedded.length < 512) {
+        if (embedded != null && embedded.length >= 512) {
+            Glide.with(holder.image)
+                    .load(embedded)
+                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .skipMemoryCache(false)
+                    .dontAnimate()
+                    .centerCrop()
+                    .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
+                    .error(new ColorDrawable(Color.rgb(31, 31, 35)))
+                    .into(holder.image);
+            return;
+        }
+
+        if (item.imageUrl == null || item.imageUrl.trim().isEmpty()) {
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(31, 31, 35)));
             return;
         }
-
         Glide.with(holder.image)
-                .load(embedded)
-                .diskCacheStrategy(DiskCacheStrategy.NONE)
-                .skipMemoryCache(false)
+                .load(remoteImage(item))
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
                 .centerCrop()
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 35)))
                 .into(holder.image);
+    }
+
+    private GlideUrl remoteImage(NativeContentItem item) {
+        String referer = item.url == null || item.url.isEmpty() ? EfuktRepository.BASE : item.url;
+        LazyHeaders.Builder headers = new LazyHeaders.Builder()
+                .addHeader("User-Agent", EfuktRepository.USER_AGENT)
+                .addHeader("Referer", referer)
+                .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
+        try {
+            String cookies = CookieManager.getInstance().getCookie(item.imageUrl);
+            if ((cookies == null || cookies.isEmpty()) && !referer.isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie(referer);
+            }
+            if (cookies != null && !cookies.isEmpty()) headers.addHeader("Cookie", cookies);
+        } catch (Exception ignored) {
+        }
+        return new GlideUrl(item.imageUrl, headers.build());
     }
 
     @Override

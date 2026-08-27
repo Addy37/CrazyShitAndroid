@@ -54,7 +54,7 @@ final class VideoDownloadStore {
         RESOLVER.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = new CrazyShitRepository().resolvePlayable(context, pageUrl);
+                stream = PlayableSourceRouter.resolve(context, pageUrl);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;

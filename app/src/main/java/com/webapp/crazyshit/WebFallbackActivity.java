@@ -255,8 +255,10 @@ public final class WebFallbackActivity extends Activity {
 
     private boolean isSameSite(Uri uri) {
         String host = uri == null ? null : uri.getHost();
-        return host != null &&
-                (host.equalsIgnoreCase("crazyshit.com") || host.toLowerCase().endsWith(".crazyshit.com"));
+        if (host == null) return false;
+        String lower = host.toLowerCase(java.util.Locale.US);
+        return lower.equals("crazyshit.com") || lower.endsWith(".crazyshit.com") ||
+                lower.equals("efukt.com") || lower.endsWith(".efukt.com");
     }
 
     private String currentUrl() {

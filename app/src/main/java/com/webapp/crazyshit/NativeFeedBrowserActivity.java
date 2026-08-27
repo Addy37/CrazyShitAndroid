@@ -34,9 +34,13 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_TITLE = "browser_title";
     public static final String EXTRA_BASE_URL = "browser_base_url";
     public static final String EXTRA_MEME_MODE = "browser_meme_mode";
+    public static final String EXTRA_SOURCE = "browser_source";
+    public static final String SOURCE_CRAZYSHIT = "crazyshit";
+    public static final String SOURCE_EFUKT = "efukt";
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final CrazyShitRepository repository = new CrazyShitRepository();
+    private final EfuktRepository efuktRepository = new EfuktRepository();
     private final MemeRepository memeRepository = new MemeRepository();
 
     private NativeFeedAdapter adapter;
@@ -46,6 +50,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private TextView empty;
     private String title;
     private String baseUrl;
+    private String source;
     private boolean memeMode;
     private boolean loading;
     private boolean endReached;
@@ -53,10 +58,21 @@ public final class NativeFeedBrowserActivity extends Activity {
     private int generation;
 
     public static Intent create(Activity activity, String title, String baseUrl, boolean memeMode) {
+        return create(activity, title, baseUrl, memeMode, SOURCE_CRAZYSHIT);
+    }
+
+    public static Intent create(
+            Activity activity,
+            String title,
+            String baseUrl,
+            boolean memeMode,
+            String source
+    ) {
         Intent intent = new Intent(activity, NativeFeedBrowserActivity.class);
         intent.putExtra(EXTRA_TITLE, title);
         intent.putExtra(EXTRA_BASE_URL, baseUrl);
         intent.putExtra(EXTRA_MEME_MODE, memeMode);
+        intent.putExtra(EXTRA_SOURCE, source);
         return intent;
     }
 
@@ -66,6 +82,8 @@ public final class NativeFeedBrowserActivity extends Activity {
         title = value(getIntent().getStringExtra(EXTRA_TITLE), "Browse");
         baseUrl = value(getIntent().getStringExtra(EXTRA_BASE_URL), CrazyShitRepository.HOME);
         memeMode = getIntent().getBooleanExtra(EXTRA_MEME_MODE, false);
+        source = value(getIntent().getStringExtra(EXTRA_SOURCE), SOURCE_CRAZYSHIT);
+        if (EfuktRepository.isEfuktUrl(baseUrl)) source = SOURCE_EFUKT;
         buildUi();
         load(false);
     }
@@ -131,7 +149,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
             @Override
             public void onComments(NativeContentItem item) {
-                if (item == null || item.isSection() || memeMode) return;
+                if (item == null || item.isSection() || memeMode || isEfukt()) return;
                 new InlineCommentsDialog(
                         NativeFeedBrowserActivity.this,
                         item.url,
@@ -194,9 +212,14 @@ public final class NativeFeedBrowserActivity extends Activity {
 
         io.execute(() -> {
             try {
-                List<NativeContentItem> result = memeMode
-                        ? memeRepository.fetch(this, requestPage)
-                        : repository.fetchFeed(this, baseUrl, requestPage);
+                List<NativeContentItem> result;
+                if (memeMode) {
+                    result = memeRepository.fetch(this, requestPage);
+                } else if (isEfukt()) {
+                    result = efuktRepository.fetchSeriesFeed(this, baseUrl, requestPage);
+                } else {
+                    result = repository.fetchFeed(this, baseUrl, requestPage);
+                }
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     loading = false;
@@ -204,7 +227,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     refresh.setRefreshing(false);
                     if (append) adapter.append(result); else adapter.replace(result);
                     if (!result.isEmpty()) currentPage = requestPage;
-                    if (result.isEmpty()) endReached = true;
+                    if (result.isEmpty() || isEfukt()) endReached = true;
                     empty.setVisibility(View.GONE);
                     if (adapter.getItemCount() == 0) {
                         empty.setText("Couldn't render this feed natively.\nTap to open the website.");
@@ -234,7 +257,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = repository.resolvePlayable(this, item.url);
+                stream = PlayableSourceRouter.resolve(this, item.url);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
@@ -252,6 +275,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                 intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
                 intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
+                intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, baseUrl);
+                intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 try {
                     intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, WebSettings.getDefaultUserAgent(this));
                 } catch (Exception ignored) {
@@ -459,6 +484,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         Intent intent = new Intent(this, WebFallbackActivity.class);
         intent.putExtra(WebFallbackActivity.EXTRA_URL, url);
         startActivity(intent);
+    }
+
+    private boolean isEfukt() {
+        return SOURCE_EFUKT.equals(source) || EfuktRepository.isEfuktUrl(baseUrl);
     }
 
     @Override
