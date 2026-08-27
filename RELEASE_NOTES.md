@@ -1,48 +1,58 @@
-# CrazyShit v2.8.0
+# CrazyShit v2.8.1
 
-CrazyShit 2.8 is the Chaos + Foundation release. It keeps the OLED look of 2.7.2 while making Chaos the center of the app, adding native Shit Show playback, stabilizing navigation, and simplifying the UI code underneath it.
+CrazyShit 2.8.1 is the fast-start and interface release. It keeps the playback, Chaos mixing, navigation, and replay behavior from 2.8.0 while improving startup, comments, related videos, player controls, menus, and downloads.
 
-## Chaos is now the main experience
+## Faster startup
 
-- Fresh app launches open directly to Chaos
-- Chaos pulls randomized videos from Home, Trending, Videos, User Uploads, and all currently exposed site categories
-- Regular source pages are sampled instead of dumping entire feeds into one batch, keeping the mix broad and unpredictable
-- Shit Show is now a first-class Chaos source using the site's embedded story data and rendered playback context
-- Shit Show and regular content are mixed at roughly a 50/50 target while both are available, so Shit Show normally appears about every other swipe
-- Session repeat protection remembers up to 500 watched URLs and avoids already offered clips
-- Completed Chaos videos restart from the beginning when you swipe back to them, while partially watched clips keep their position
+- Replaces the old circular splash artwork with the transparent CrazyShit wordmark
+- Uses an OLED-black splash with restrained yellow glow and light effects
+- Keeps the splash visible until the first real Chaos player reaches a ready state
+- Fades directly into the first Chaos video and hides the loading spinner during the handoff when possible
+- Retains a hard timeout so a slow or failed stream cannot trap the app on the splash
+- Starts Chaos from a small prepared batch while the wider feed continues loading
 
-## Shit Show playback
+## Updated interface
 
-- Shit Show stories are harvested from the site's JavaScript-driven story data instead of being treated like a normal HTML feed
-- Story permalinks are resolved on demand immediately before playback
-- The app forwards the rendered WebView media request context into Media3, including the request headers/referrer/cookies needed by Shit Show streams
-- Extensionless video endpoints are identified correctly as playable media
-- Native title, views, save, comments, share, progress, swipe, and auto-advance UI remain available around Shit Show clips
+- Reworks the adaptive launcher icon colors and Android mask fit
+- Changes the app accent color from orange to the yellow used by the CrazyShit logo
+- Refines the floating bottom navigation pill and top header sizing
+- Redesigns More as a native bottom sheet with clearer Library, Account, Settings, browse, display, and app sections
+- Adds launcher shortcuts for Chaos, Continue Watching, Search, and Watch Later
 
-## Navigation and UI stability
+## Comments and related videos
 
-- The top feed header is permanently static, removing the old slow-scroll/collapsing-header glitch
-- The preferred Material/OLED floating bottom navigation remains the portrait design
-- The old Flash navigation polling and duplicate floating Chaos button path are disabled
-- One navigation owner now keeps portrait height, margins, item transforms, and active-state geometry stable through tab changes and resume
-- Horizontal mode keeps the existing left navigation rail with a clean portrait/horizontal handoff
-- Portrait video controls and compact progress behavior remain intact
+- Opens comments in an in-place bottom sheet instead of a separate screen
+- Keeps portrait Chaos videos in place while moving horizontal videos upward to make room for comments
+- Keeps the surrounding Chaos interface at full size during the comments handoff
+- Improves related-video thumbnail loading and caching
+- Preserves the related-video history stack so Back returns through each previously opened video
+- Adds Android predictive-back support to related-video navigation
 
-## Foundation cleanup
+Comment posting still depends on the website accepting the signed-in session and request. Comment viewing remains available when the site exposes the thread.
 
-- Native UI lifecycle ordering is centralized through the foundation coordinator
-- Several old compatibility/polish ownership paths were removed or detached after their behavior moved into the views/controllers that actually own it
-- Chaos filtering, portrait chrome, source mixing, playback resolution, and replay behavior now live closer to the Chaos feed itself
-- Responsive geometry remains the final layout authority instead of multiple controllers continuously fighting over the same views
-- Pull-request builds include the 2.8 compatibility regression guard, Android lint audit, and hard APK compilation gate
+## Player and menu polish
 
-## Existing features retained
+- Replaces the old popup player menu with a consistent native action sheet
+- Refreshes play, pause, seek, timeline, title, fullscreen, speed, comments, save, share, and download controls
+- Reduces control-show and control-hide stutter
+- Adds playback retry handling and shareable playback reports for failed clips
+- Keeps Picture-in-Picture, mini-player, gestures, resume position, fullscreen rotation, and completed-video replay behavior
 
-- OLED Black remains the default visual theme
-- Home, Series, Categories, More, Search, Continue Watching, History, and Watch Later remain available
-- Cards, Grid, Posters, embedded Series/Category artwork, related videos, comments, save, and share remain intact
-- Stable application ID and signing identity are unchanged, so 2.8.0 installs as an update over 2.7.2
+## Downloads
+
+- Adds Download actions to Chaos and regular video menus
+- Adds a Downloads section under More for progress, retry, playback, and removal
+- Saves new downloads in the device's public Downloads folder
+- Uses up to four parallel byte-range transfers when the media host supports them
+- Falls back to one reliable transfer when parallel ranges are unavailable
+- Keeps active downloads running through an Android foreground service
+
+## Existing behavior retained
+
+- Chaos source mixing and frequency remain unchanged
+- Shit Show playback remains unchanged
+- Home, Series, Categories, Search, Continue Watching, History, and Watch Later remain available
+- Stable application ID and signing identity remain unchanged, so 2.8.1 installs over 2.8.0
 
 ## Project status
 
