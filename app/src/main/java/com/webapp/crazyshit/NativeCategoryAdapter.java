@@ -27,6 +27,9 @@ import java.util.Map;
 
 /** Visual browser cards used by Categories and Series. */
 public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCategoryAdapter.Holder> {
+    private static final int COMPACT_COPY_HEIGHT_DP = 52;
+    private static final int DESCRIPTION_COPY_HEIGHT_DP = 132;
+
     public interface Listener {
         void onOpen(NativeContentItem item);
     }
@@ -85,8 +88,11 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
         View shade = new View(parent.getContext());
-        shade.setBackgroundColor(Color.argb(118, 0, 0, 0));
-        FrameLayout.LayoutParams shadeParams = new FrameLayout.LayoutParams(-1, dp(parent, 82));
+        shade.setBackgroundColor(Color.argb(170, 0, 0, 0));
+        FrameLayout.LayoutParams shadeParams = new FrameLayout.LayoutParams(
+                -1,
+                dp(parent, COMPACT_COPY_HEIGHT_DP)
+        );
         shadeParams.gravity = Gravity.BOTTOM;
         frame.addView(shade, shadeParams);
 
@@ -94,7 +100,10 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setGravity(Gravity.CENTER_VERTICAL);
         copy.setPadding(dp(parent, 11), dp(parent, 6), dp(parent, 11), dp(parent, 7));
-        FrameLayout.LayoutParams copyParams = new FrameLayout.LayoutParams(-1, dp(parent, 82));
+        FrameLayout.LayoutParams copyParams = new FrameLayout.LayoutParams(
+                -1,
+                dp(parent, COMPACT_COPY_HEIGHT_DP)
+        );
         copyParams.gravity = Gravity.BOTTOM;
         frame.addView(copy, copyParams);
 
@@ -110,14 +119,14 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         TextView description = new TextView(parent.getContext());
         description.setTextColor(Color.rgb(210, 210, 218));
         description.setTextSize(11f);
-        description.setMaxLines(2);
+        description.setMaxLines(5);
         description.setEllipsize(android.text.TextUtils.TruncateAt.END);
         description.setVisibility(View.GONE);
         LinearLayout.LayoutParams descriptionParams = new LinearLayout.LayoutParams(-1, -2);
         descriptionParams.topMargin = dp(parent, 3);
         copy.addView(description, descriptionParams);
 
-        return new Holder(card, image, title, description);
+        return new Holder(card, image, shade, copy, title, description);
     }
 
     @Override
@@ -127,7 +136,10 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         boolean hasDescription = item.description != null && !item.description.trim().isEmpty();
         holder.description.setText(hasDescription ? item.description.trim() : "");
         holder.description.setVisibility(hasDescription ? View.VISIBLE : View.GONE);
-        holder.card.setContentDescription(item.title);
+        resizeForDescription(holder, hasDescription);
+        holder.card.setContentDescription(hasDescription
+                ? item.title + ". " + item.description.trim()
+                : item.title);
         holder.card.setOnClickListener(v -> listener.onOpen(item));
         loadImage(holder, item);
     }
@@ -160,6 +172,24 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 35)))
                 .into(holder.image);
+    }
+
+    private void resizeForDescription(Holder holder, boolean hasDescription) {
+        int copyHeight = hasDescription ? DESCRIPTION_COPY_HEIGHT_DP : COMPACT_COPY_HEIGHT_DP;
+        RecyclerView.LayoutParams cardParams = (RecyclerView.LayoutParams) holder.card.getLayoutParams();
+        cardParams.height = dp(
+                holder.card,
+                hasDescription ? responsiveDescriptionHeightDp(holder.card) : responsiveHeightDp(holder.card)
+        );
+        holder.card.setLayoutParams(cardParams);
+
+        FrameLayout.LayoutParams shadeParams = (FrameLayout.LayoutParams) holder.shade.getLayoutParams();
+        shadeParams.height = dp(holder.card, copyHeight);
+        holder.shade.setLayoutParams(shadeParams);
+
+        FrameLayout.LayoutParams copyParams = (FrameLayout.LayoutParams) holder.copy.getLayoutParams();
+        copyParams.height = dp(holder.card, copyHeight);
+        holder.copy.setLayoutParams(copyParams);
     }
 
     private GlideUrl remoteImage(NativeContentItem item) {
@@ -208,6 +238,10 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         return Math.max(136, Math.min(180, Math.round(cardWidth * 0.72f)));
     }
 
+    private static int responsiveDescriptionHeightDp(View parent) {
+        return Math.max(218, Math.min(260, responsiveHeightDp(parent) + 78));
+    }
+
     private static int dp(View view, int value) {
         return Math.round(value * view.getResources().getDisplayMetrics().density);
     }
@@ -215,13 +249,24 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     static final class Holder extends RecyclerView.ViewHolder {
         final MaterialCardView card;
         final ImageView image;
+        final View shade;
+        final LinearLayout copy;
         final TextView title;
         final TextView description;
 
-        Holder(MaterialCardView card, ImageView image, TextView title, TextView description) {
+        Holder(
+                MaterialCardView card,
+                ImageView image,
+                View shade,
+                LinearLayout copy,
+                TextView title,
+                TextView description
+        ) {
             super(card);
             this.card = card;
             this.image = image;
+            this.shade = shade;
+            this.copy = copy;
             this.title = title;
             this.description = description;
         }

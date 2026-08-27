@@ -42,6 +42,7 @@ public final class SearchActivity extends Activity {
     private enum Filter {
         ALL,
         VIDEOS,
+        EFUKT,
         SERIES,
         CATEGORIES,
         LIBRARY
@@ -50,7 +51,7 @@ public final class SearchActivity extends Activity {
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final BrowseRepository browseRepository = new BrowseRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
-    private final ExecutorService io = Executors.newFixedThreadPool(5);
+    private final ExecutorService io = Executors.newFixedThreadPool(6);
 
     private EditText input;
     private ProgressBar progress;
@@ -60,7 +61,10 @@ public final class SearchActivity extends Activity {
     private final List<TextView> filterViews = new ArrayList<>();
 
     private List<NativeContentItem> videos = new ArrayList<>();
+    private List<NativeContentItem> crazyVideos = new ArrayList<>();
+    private List<NativeContentItem> efuktVideos = new ArrayList<>();
     private List<NativeContentItem> series = new ArrayList<>();
+    private List<NativeContentItem> efuktSeries = new ArrayList<>();
     private List<NativeContentItem> categories = new ArrayList<>();
     private List<NativeContentItem> library = new ArrayList<>();
     private Filter filter = Filter.ALL;
@@ -241,6 +245,7 @@ public final class SearchActivity extends Activity {
 
         addFilter(row, "All", Filter.ALL);
         addFilter(row, "Videos", Filter.VIDEOS);
+        addFilter(row, "EFukt", Filter.EFUKT);
         addFilter(row, "Series", Filter.SERIES);
         addFilter(row, "Categories", Filter.CATEGORIES);
         addFilter(row, "Library", Filter.LIBRARY);
@@ -296,8 +301,11 @@ public final class SearchActivity extends Activity {
         CompletableFuture<List<NativeContentItem>> efuktVideos = CompletableFuture.supplyAsync(
                 () -> fetchEfuktVideos(query), io
         );
-        CompletableFuture<List<NativeContentItem>> foundSeries = CompletableFuture.supplyAsync(
-                () -> fetchSeriesMatches(query), io
+        CompletableFuture<List<NativeContentItem>> crazySeries = CompletableFuture.supplyAsync(
+                () -> fetchCrazySeriesMatches(query), io
+        );
+        CompletableFuture<List<NativeContentItem>> efuktSeries = CompletableFuture.supplyAsync(
+                () -> fetchEfuktSeriesMatches(query), io
         );
         CompletableFuture<List<NativeContentItem>> foundCategories = CompletableFuture.supplyAsync(
                 () -> fetchCategoryMatches(query), io
@@ -307,11 +315,14 @@ public final class SearchActivity extends Activity {
         );
 
         CompletableFuture.allOf(
-                crazyVideos, efuktVideos, foundSeries, foundCategories, foundLibrary
+                crazyVideos, efuktVideos, crazySeries, efuktSeries, foundCategories, foundLibrary
         ).whenComplete((ignored, error) -> runOnUiThread(() -> {
             if (requestGeneration != generation || isFinishing()) return;
-            videos = combine(crazyVideos.join(), efuktVideos.join());
-            series = foundSeries.join();
+            SearchActivity.this.crazyVideos = crazyVideos.join();
+            SearchActivity.this.efuktVideos = efuktVideos.join();
+            SearchActivity.this.efuktSeries = efuktSeries.join();
+            videos = interleave(SearchActivity.this.crazyVideos, SearchActivity.this.efuktVideos);
+            series = interleave(crazySeries.join(), SearchActivity.this.efuktSeries);
             categories = foundCategories.join();
             library = foundLibrary.join();
             progress.setVisibility(View.GONE);
@@ -335,17 +346,20 @@ public final class SearchActivity extends Activity {
         }
     }
 
-    private List<NativeContentItem> fetchSeriesMatches(String query) {
-        ArrayList<NativeContentItem> result = new ArrayList<>();
+    private List<NativeContentItem> fetchCrazySeriesMatches(String query) {
         try {
-            result.addAll(matchCatalog(browseRepository.fetchSeries(this), query));
+            return matchCatalog(browseRepository.fetchSeries(this), query);
         } catch (Exception ignored) {
+            return new ArrayList<>();
         }
+    }
+
+    private List<NativeContentItem> fetchEfuktSeriesMatches(String query) {
         try {
-            result.addAll(matchCatalog(efuktRepository.fetchSeries(this), query));
+            return matchCatalog(efuktRepository.fetchSeries(this), query);
         } catch (Exception ignored) {
+            return new ArrayList<>();
         }
-        return combine(result, new ArrayList<>());
     }
 
     private List<NativeContentItem> fetchCategoryMatches(String query) {
@@ -356,24 +370,28 @@ public final class SearchActivity extends Activity {
         }
     }
 
-    private List<NativeContentItem> combine(
+    private List<NativeContentItem> interleave(
             List<NativeContentItem> first,
             List<NativeContentItem> second
     ) {
         LinkedHashMap<String, NativeContentItem> result = new LinkedHashMap<>();
-        if (first != null) {
-            for (NativeContentItem item : first) {
-                if (item != null && item.url != null && !item.url.isEmpty()) result.put(item.url, item);
-            }
-        }
-        if (second != null) {
-            for (NativeContentItem item : second) {
-                if (item == null || item.url == null || item.url.isEmpty()) continue;
-                NativeContentItem old = result.get(item.url);
-                result.put(item.url, old == null ? item : old.merge(item));
-            }
+        int firstSize = first == null ? 0 : first.size();
+        int secondSize = second == null ? 0 : second.size();
+        int count = Math.max(firstSize, secondSize);
+        for (int i = 0; i < count; i++) {
+            if (i < firstSize) addUnique(result, first.get(i));
+            if (i < secondSize) addUnique(result, second.get(i));
         }
         return new ArrayList<>(result.values());
+    }
+
+    private void addUnique(
+            LinkedHashMap<String, NativeContentItem> result,
+            NativeContentItem item
+    ) {
+        if (item == null || item.url == null || item.url.isEmpty()) return;
+        NativeContentItem old = result.get(item.url);
+        result.put(item.url, old == null ? item : old.merge(item));
     }
 
     private List<NativeContentItem> matchCatalog(List<NativeContentItem> source, String query) {
@@ -429,8 +447,10 @@ public final class SearchActivity extends Activity {
     private void renderResults() {
         if (activeQuery.isEmpty()) return;
         ArrayList<GlobalSearchAdapter.Entry> output = new ArrayList<>();
-        if (filter == Filter.ALL || filter == Filter.VIDEOS) appendSection(output, "Videos", videos, GlobalSearchAdapter.SOURCE_REMOTE, 30);
+        if (filter == Filter.ALL || filter == Filter.VIDEOS) appendSection(output, "Videos  •  CrazyShit + EFukt", videos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
+        if (filter == Filter.EFUKT) appendSection(output, "EFukt Videos", efuktVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.ALL || filter == Filter.SERIES) appendSection(output, "Series", series, GlobalSearchAdapter.SOURCE_REMOTE, 20);
+        if (filter == Filter.EFUKT) appendSection(output, "EFukt Series", efuktSeries, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.ALL || filter == Filter.CATEGORIES) appendSection(output, "Categories", categories, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.ALL || filter == Filter.LIBRARY) appendSection(output, "Your Library", library, GlobalSearchAdapter.SOURCE_LIBRARY, 30);
         adapter.replace(output);

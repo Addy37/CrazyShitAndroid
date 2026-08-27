@@ -30,7 +30,7 @@ public final class EfuktRepository {
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
     private static final Pattern VIDEO_PAGE = Pattern.compile(
-            "(?i)^https?://(?:www\\.)?efukt\\.com/\\d+_[^?#]+\\.html(?:[?#].*)?$"
+            "(?i)^https?://(?:www\\.)?efukt\\.com/(?:[^/?#]+/)*\\d+_[^/?#]+\\.html(?:[?#].*)?$"
     );
     private static final Pattern MEDIA_IN_SCRIPT = Pattern.compile(
             "(?i)(?:file|src|video_url|contentUrl)\\s*[:=]\\s*['\\\"]([^'\\\"]+?\\.(?:mp4|m3u8|mpd|webm|m4v)(?:\\?[^'\\\"]*)?)['\\\"]"

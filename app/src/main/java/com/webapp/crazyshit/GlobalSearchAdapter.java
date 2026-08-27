@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,9 +17,13 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
@@ -70,6 +75,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private final Listener listener;
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
+    private final Set<String> failedDirectThumbnails = new HashSet<>();
     private RenderedThumbnailResolver[] thumbnailResolvers;
     private Context appContext;
     private int resolverCursor;
@@ -95,6 +101,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         thumbnailResolvers = null;
         appContext = null;
         requestedThumbnails.clear();
+        failedDirectThumbnails.clear();
     }
 
     @Override
@@ -214,7 +221,9 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         result.card.setContentDescription(item.title);
         result.card.setOnClickListener(v -> listener.onOpen(item));
         loadImage(result.image, item);
-        requestThumbnail(item);
+        if (item.imageUrl == null || item.imageUrl.trim().isEmpty()) {
+            requestRenderedThumbnail(item);
+        }
     }
 
     private String metaText(NativeContentItem item, int source) {
@@ -246,7 +255,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         preloadDirectThumbnails();
     }
 
-    /** Search only starts rendered-page fallback workers for results without direct artwork. */
+    /** Search starts rendered-page workers only after direct artwork is missing or fails. */
     private void ensureResolvers() {
         if (thumbnailResolvers != null || appContext == null) return;
         thumbnailResolvers = new RenderedThumbnailResolver[] {
@@ -256,10 +265,9 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         };
     }
 
-    private void requestThumbnail(NativeContentItem item) {
+    private void requestRenderedThumbnail(NativeContentItem item) {
         if (item == null || item.isSection() || item.isSeries() || item.isCategory()) return;
         if (item.url == null || item.url.isEmpty()) return;
-        if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) return;
         if (resolvedThumbnails.containsKey(item.url)) return;
         if (!requestedThumbnails.add(item.url)) return;
         ensureResolvers();
@@ -310,21 +318,63 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             return;
         }
 
-        String imageUrl = item.imageUrl;
-        if (imageUrl == null || imageUrl.isEmpty()) imageUrl = resolvedThumbnails.get(item.url);
+        boolean usingDirect = item.imageUrl != null && !item.imageUrl.isEmpty() &&
+                !failedDirectThumbnails.contains(item.url);
+        String imageUrl = usingDirect ? item.imageUrl : resolvedThumbnails.get(item.url);
         if (imageUrl == null || imageUrl.isEmpty()) return;
 
         Object source = imageUrl.startsWith("file://")
                 ? imageUrl
                 : withSiteHeaders(imageUrl, item.url);
-        Glide.with(image)
+        com.bumptech.glide.RequestBuilder<Drawable> request = Glide.with(image)
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
                 .centerCrop()
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
-                .error(new ColorDrawable(Color.rgb(31, 31, 36)))
-                .into(image);
+                .error(new ColorDrawable(Color.rgb(31, 31, 36)));
+        if (usingDirect) {
+            request.listener(new RequestListener<Drawable>() {
+                @Override
+                public boolean onLoadFailed(
+                        GlideException error,
+                        Object model,
+                        Target<Drawable> target,
+                        boolean firstResource
+                ) {
+                    failedDirectThumbnails.add(item.url);
+                    image.post(() -> {
+                        if (resolvedThumbnails.containsKey(item.url)) {
+                            notifyThumbnailChanged(item.url);
+                        } else {
+                            requestRenderedThumbnail(item);
+                        }
+                    });
+                    return false;
+                }
+
+                @Override
+                public boolean onResourceReady(
+                        Drawable resource,
+                        Object model,
+                        Target<Drawable> target,
+                        DataSource dataSource,
+                        boolean firstResource
+                ) {
+                    return false;
+                }
+            });
+        }
+        request.into(image);
+    }
+
+    private void notifyThumbnailChanged(String pageUrl) {
+        for (int i = 0; i < entries.size(); i++) {
+            Entry entry = entries.get(i);
+            if (!entry.section && entry.item != null && pageUrl.equals(entry.item.url)) {
+                notifyItemChanged(i, "thumbnail");
+            }
+        }
     }
 
     private void preloadDirectThumbnails() {
