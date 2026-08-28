@@ -20,7 +20,6 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -34,7 +33,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.navigation.NavigationBarView;
 
 import java.util.ArrayList;
@@ -101,8 +99,21 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             showAgeWarning();
         } else {
             showHome();
+            dispatchLauncherShortcut();
         }
         checkForUpdates(false);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (!getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getBoolean("age_warning_accepted", false)) {
+            return;
+        }
+        showHome();
+        dispatchLauncherShortcut();
     }
 
     private void buildUi() {
@@ -136,7 +147,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
         overlayRoot.addView(shell, new FrameLayout.LayoutParams(-1, -1));
 
-        shell.addView(buildTopBar(), new LinearLayout.LayoutParams(-1, dp(70)));
+        shell.addView(buildTopBar(), new LinearLayout.LayoutParams(-1, dp(56)));
 
         FrameLayout content = new FrameLayout(this);
         legacyContent = content;
@@ -175,7 +186,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shell.addView(primaryPager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         swipeRefresh = new SwipeRefreshLayout(this);
-        swipeRefresh.setColorSchemeColors(Color.rgb(255, 90, 31));
+        swipeRefresh.setColorSchemeColors(UiPalette.PRIMARY);
         swipeRefresh.setOnRefreshListener(this::refreshCurrentScreen);
         content.addView(swipeRefresh, new FrameLayout.LayoutParams(-1, -1));
 
@@ -276,10 +287,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         bottomNavigation.post(() -> {
             View chaosItem = bottomNavigation.findViewById(NAV_CHAOS);
             if (chaosItem != null) {
-                chaosItem.setScaleX(1.13f);
-                chaosItem.setScaleY(1.13f);
-                chaosItem.setTranslationY(-dp(2));
-                chaosItem.setElevation(dp(5));
                 chaosItem.setContentDescription("Chaos featured tab");
             }
         });
@@ -292,21 +299,21 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(14), dp(7), dp(10), dp(7));
+        bar.setPadding(dp(10), 0, dp(4), 0);
         bar.setBackgroundColor(Color.rgb(17, 17, 20));
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(R.mipmap.ic_launcher);
         icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        bar.addView(icon, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        bar.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.setPadding(dp(10), 0, dp(8), 0);
+        labels.setPadding(dp(9), 0, dp(8), 0);
 
         headerTitle = new TextView(this);
         headerTitle.setTextColor(Color.WHITE);
-        headerTitle.setTextSize(19);
+        headerTitle.setTextSize(18);
         headerTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         headerTitle.setSingleLine(true);
         labels.addView(headerTitle);
@@ -314,7 +321,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         headerSubtitle = new TextView(this);
         headerSubtitle.setText("CrazyShit");
         headerSubtitle.setTextColor(Color.rgb(168, 168, 178));
-        headerSubtitle.setTextSize(12);
+        headerSubtitle.setTextSize(11);
         labels.addView(headerSubtitle);
         bar.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
@@ -328,7 +335,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             haptic(v);
             showSearchDialog();
         });
-        bar.addView(search, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        bar.addView(search, new LinearLayout.LayoutParams(dp(48), dp(48)));
         return bar;
     }
 
@@ -620,11 +627,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void openComments(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
-        Intent intent = new Intent(this, CommentsActivity.class);
-        intent.putExtra(CommentsActivity.EXTRA_PAGE_URL, item.url);
-        intent.putExtra(CommentsActivity.EXTRA_TITLE, item.title);
-        intent.putExtra(CommentsActivity.EXTRA_COUNT, item.comments);
-        startActivity(intent);
+        new InlineCommentsDialog(
+                this,
+                item.url,
+                item.title,
+                item.comments,
+                null
+        ).show();
     }
 
     private String viewPreferenceKey() {
@@ -696,44 +705,72 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showItemMenu(NativeContentItem item, View anchor) {
-        PopupMenu menu = new PopupMenu(this, anchor);
-        boolean saved = FavoriteStore.contains(this, item.url);
-        menu.getMenu().add(0, 1, 0, saved ? "Remove from Watch Later" : "Save to Watch Later");
+        String saveTitle = FavoriteStore.contains(this, item.url)
+                ? "Remove from Watch Later"
+                : "Save to Watch Later";
+        ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
         if (item.comments != null && !item.comments.isEmpty()) {
-            menu.getMenu().add(0, 4, 1, "View comments");
+            actions.add(VideoActionSheet.action(
+                    R.drawable.ic_action_comments,
+                    "Comments",
+                    item.comments + " ready to view",
+                    () -> openComments(item)
+            ));
         }
-        menu.getMenu().add(0, 2, 2, "Share");
-        menu.getMenu().add(0, 3, 3, "Open website page");
-        menu.setOnMenuItemClickListener(clicked -> {
-            if (clicked.getItemId() == 1) {
-                if (FavoriteStore.contains(this, item.url)) {
-                    FavoriteStore.remove(this, item.url);
-                    Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
-                } else {
-                    FavoriteStore.add(this, item.title, item.url);
-                    Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
-                }
-                return true;
-            }
-            if (clicked.getItemId() == 4) {
-                openComments(item);
-                return true;
-            }
-            if (clicked.getItemId() == 2) {
-                Intent share = new Intent(Intent.ACTION_SEND);
-                share.setType("text/plain");
-                share.putExtra(Intent.EXTRA_TEXT, item.url);
-                share.putExtra(Intent.EXTRA_SUBJECT, item.title);
-                startActivity(Intent.createChooser(share, "Share"));
-                return true;
-            }
-            if (clicked.getItemId() == 3) {
-                openFallback(item.url);
-                return true;
-            }
-            return false;
-        });
-        menu.show();
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_share,
+                "Share",
+                "Send the CrazyShit page",
+                () -> shareItem(item)
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_more_website,
+                "Open website page",
+                "Use the compatibility browser",
+                () -> openFallback(item.url)
+        ));
+
+        VideoActionSheet.show(
+                this,
+                item.title,
+                VideoActionSheet.section(
+                        "SAVE",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_download,
+                                "Download",
+                                "Save this video for offline playback",
+                                () -> VideoDownloadStore.downloadPage(this, item)
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_library,
+                                saveTitle,
+                                "Keep this video in your library",
+                                () -> toggleWatchLater(item)
+                        )
+                ),
+                VideoActionSheet.section(
+                        "ACTIONS",
+                        actions.toArray(new VideoActionSheet.Action[0])
+                )
+        );
+    }
+
+    private void toggleWatchLater(NativeContentItem item) {
+        if (FavoriteStore.contains(this, item.url)) {
+            FavoriteStore.remove(this, item.url);
+            Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
+        } else {
+            FavoriteStore.add(this, item.title, item.url);
+            Toast.makeText(this, "Saved to Watch Later.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void shareItem(NativeContentItem item) {
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_TEXT, item.url);
+        share.putExtra(Intent.EXTRA_SUBJECT, item.title);
+        startActivity(Intent.createChooser(share, "Share"));
     }
 
     private void showSearchDialog() {
@@ -767,87 +804,32 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showMoreSheet() {
-        BottomSheetDialog sheet = new BottomSheetDialog(this);
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(18), dp(14), dp(18), dp(28));
-        content.setBackgroundColor(Color.rgb(18, 18, 21));
+        LandscapeMoreDialog.show(this);
+    }
 
-        TextView title = sheetText("CrazyShit", 22, Color.WHITE);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        content.addView(title);
-        TextView subtitle = sheetText("Native v2 controls", 13, Color.rgb(170, 170, 180));
-        subtitle.setPadding(0, 0, 0, dp(10));
-        content.addView(subtitle);
+    private void dispatchLauncherShortcut() {
+        Intent launchIntent = getIntent();
+        String action = launchIntent == null ? null : launchIntent.getAction();
+        if (!AppShortcuts.isShortcutAction(action)) return;
+        if (launchIntent.getBooleanExtra(AppShortcuts.EXTRA_SHORTCUT_ROUTED, false)) return;
 
-        if (isFeedScreen()) {
-            int mode = currentViewMode();
-            addSheetAction(content, "View style", viewModeLabel(mode) + " • change how posts are displayed", () -> {
-                sheet.dismiss();
-                showViewStyleDialog();
-            });
+        launchIntent.putExtra(AppShortcuts.EXTRA_SHORTCUT_ROUTED, true);
+        AppShortcuts.reportUsed(this, action);
+        if (AppShortcuts.ACTION_CHAOS.equals(action)) {
+            showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, false);
+            return;
         }
-        addSheetAction(content, "Settings", "Playback, privacy, haptics and app options", () -> {
-            startActivity(new Intent(this, SettingsActivity.class));
-            sheet.dismiss();
-        });
-        addSheetAction(content, "Login / account", "Sign in here and return automatically", () -> {
-            startActivity(new Intent(this, LoginActivity.class));
-            sheet.dismiss();
-        });
-        addSheetAction(content, "Library", "Continue, History and Watch Later", () -> {
-            startActivityForResult(new Intent(this, FavoritesActivity.class), FAVORITES_REQUEST);
-            sheet.dismiss();
-        });
-        addSheetAction(content, "Categories", "Browse every CrazyShit category", () -> {
-            showCategoriesPage();
-            sheet.dismiss();
-        });
-        addSheetAction(content, "My profile", "Open the profile for your signed-in account", () -> {
-            startActivity(new Intent(this, ProfileActivity.class));
-            sheet.dismiss();
-        });
-        addSheetAction(content, "Open full website", "Use the compatibility browser", () -> {
-            openFallback(CrazyShitRepository.HOME);
-            sheet.dismiss();
-        });
-        addSheetAction(content, "Check for updates", "Download and install updates inside the app", () -> {
-            checkForUpdates(true);
-            sheet.dismiss();
-        });
+        if (AppShortcuts.ACTION_SEARCH.equals(action)) {
+            overlayRoot.post(this::showSearchDialog);
+            return;
+        }
 
-        sheet.setContentView(content);
-        sheet.show();
-    }
-
-    private void addSheetAction(LinearLayout root, String title, String subtitle, Runnable action) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(dp(14), dp(13), dp(14), dp(13));
-        row.setBackgroundColor(Color.rgb(28, 28, 32));
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setOnClickListener(v -> {
-            haptic(v);
-            action.run();
-        });
-        TextView titleView = sheetText(title, 16, Color.WHITE);
-        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
-        row.addView(titleView);
-        TextView sub = sheetText(subtitle, 12, Color.rgb(170, 170, 180));
-        sub.setPadding(0, dp(3), 0, 0);
-        row.addView(sub);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.setMargins(0, dp(5), 0, dp(5));
-        root.addView(row, params);
-    }
-
-    private TextView sheetText(String value, int size, int color) {
-        TextView view = new TextView(this);
-        view.setText(value);
-        view.setTextSize(size);
-        view.setTextColor(color);
-        return view;
+        int startTab = AppShortcuts.ACTION_WATCH_LATER.equals(action)
+                ? FavoritesActivity.START_WATCH_LATER
+                : FavoritesActivity.START_CONTINUE;
+        Intent library = new Intent(this, FavoritesActivity.class);
+        library.putExtra(FavoritesActivity.EXTRA_START_TAB, startTab);
+        overlayRoot.post(() -> startActivityForResult(library, FAVORITES_REQUEST));
     }
 
     private void showNativeEmpty(String text) {
@@ -871,6 +853,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                             .putBoolean("age_warning_accepted", true)
                             .apply();
                     showHome();
+                    dispatchLauncherShortcut();
                 })
                 .show();
     }

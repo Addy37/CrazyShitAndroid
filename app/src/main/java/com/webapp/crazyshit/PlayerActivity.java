@@ -27,8 +27,6 @@ import android.view.WindowManager;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.FrameLayout;
-import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -39,6 +37,7 @@ import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
@@ -63,10 +62,9 @@ public class PlayerActivity extends Activity {
     private ExoPlayer player;
     private PlayerView playerView;
     private FrameLayout videoSurface;
-    private TextView menuButton;
+    private View menuButton;
     private TextView titleView;
     private TextView gestureLabel;
-    private LinearLayout topBar;
 
     private String mediaUrl;
     private String pageUrl;
@@ -122,51 +120,33 @@ public class PlayerActivity extends Activity {
         videoSurface.setPivotY(0f);
         root.addView(videoSurface, new FrameLayout.LayoutParams(-1, -1));
 
-        playerView = new PlayerView(this);
+        playerView = (PlayerView) getLayoutInflater().inflate(
+                R.layout.view_polished_video_player_texture,
+                videoSurface,
+                false
+        );
         playerView.setBackgroundColor(Color.BLACK);
         playerView.setUseController(true);
-        playerView.setControllerAutoShow(true);
-        playerView.setControllerHideOnTouch(false);
+        playerView.setControllerAutoShow(false);
+        playerView.setControllerHideOnTouch(true);
+        playerView.setControllerShowTimeoutMs(2600);
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         playerView.setKeepScreenOn(true);
         playerView.setResizeMode(resizeMode);
         videoSurface.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        topBar = new LinearLayout(this);
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setPadding(dp(8), dp(8), dp(8), dp(8));
-        topBar.setBackground(rounded(Color.argb(185, 12, 12, 14), dp(22)));
-        FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, dp(60));
-        topParams.gravity = Gravity.TOP;
-        topParams.setMargins(dp(10), dp(10), dp(10), 0);
-        videoSurface.addView(topBar, topParams);
-
-        TextView backButton = topButton("‹", "Back or minimize");
-        backButton.setTextSize(34);
+        View backButton = playerView.findViewById(R.id.player_back);
+        titleView = playerView.findViewById(R.id.player_title);
+        menuButton = playerView.findViewById(R.id.player_menu);
+        titleView.setText(title);
         backButton.setOnClickListener(v -> {
             haptic(v);
             handleBackNavigation();
         });
-        topBar.addView(backButton, new LinearLayout.LayoutParams(dp(48), dp(48)));
-
-        titleView = new TextView(this);
-        titleView.setText(title);
-        titleView.setTextColor(Color.WHITE);
-        titleView.setTextSize(15);
-        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
-        titleView.setSingleLine(true);
-        titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        titleView.setPadding(dp(8), 0, dp(8), 0);
-        topBar.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        menuButton = topButton("⋮", "Player menu");
-        menuButton.setTextSize(28);
         menuButton.setOnClickListener(v -> {
             haptic(v);
             showPlayerMenu();
         });
-        topBar.addView(menuButton, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         gestureLabel = new TextView(this);
         gestureLabel.setTextColor(Color.WHITE);
@@ -183,18 +163,7 @@ public class PlayerActivity extends Activity {
 
         setContentView(root);
         configureGestures();
-    }
-
-    private TextView topButton(String label, String description) {
-        TextView button = new TextView(this);
-        button.setText(label);
-        button.setTextColor(Color.WHITE);
-        button.setGravity(Gravity.CENTER);
-        button.setContentDescription(description);
-        button.setBackground(rounded(Color.argb(110, 255, 255, 255), dp(18)));
-        button.setClickable(true);
-        button.setFocusable(true);
-        return button;
+        playerView.post(playerView::showController);
     }
 
     private void buildPlayer() {
@@ -215,8 +184,10 @@ public class PlayerActivity extends Activity {
         if (cookies != null && !cookies.isEmpty()) headers.put("Cookie", cookies);
         if (!headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
 
+        DefaultDataSource.Factory dataSourceFactory =
+                new DefaultDataSource.Factory(this, httpFactory);
         DefaultMediaSourceFactory mediaSourceFactory =
-                new DefaultMediaSourceFactory(this).setDataSourceFactory(httpFactory);
+                new DefaultMediaSourceFactory(this).setDataSourceFactory(dataSourceFactory);
 
         player = new ExoPlayer.Builder(this)
                 .setMediaSourceFactory(mediaSourceFactory)
@@ -284,10 +255,8 @@ public class PlayerActivity extends Activity {
                         if (dragMinimize) return true;
                         if (playerView.isControllerFullyVisible()) {
                             playerView.hideController();
-                            topBar.setVisibility(View.GONE);
                         } else {
                             playerView.showController();
-                            topBar.setVisibility(View.VISIBLE);
                         }
                         return true;
                     }
@@ -350,7 +319,6 @@ public class PlayerActivity extends Activity {
                                             .getBoolean("swipe_down_minimize", true)) {
                                 dragMinimize = true;
                                 playerView.hideController();
-                                topBar.setVisibility(View.GONE);
                             }
                         }
                         if (!moved) return true;
@@ -439,7 +407,6 @@ public class PlayerActivity extends Activity {
                     .setDuration(180L)
                     .withEndAction(() -> {
                         dragMinimize = false;
-                        topBar.setVisibility(View.VISIBLE);
                         playerView.showController();
                     })
                     .start();
@@ -447,50 +414,88 @@ public class PlayerActivity extends Activity {
     }
 
     private void showPlayerMenu() {
-        PopupMenu menu = new PopupMenu(this, menuButton);
-        menu.getMenu().add(0, 1, 0, "Restart video");
-        menu.getMenu().add(0, 2, 1, "Playback speed");
-        menu.getMenu().add(0, 5, 2, "Fit / Fill / Zoom");
-        menu.getMenu().add(0, 6, 3, qualityLabel()).setEnabled(false);
-        menu.getMenu().add(0, 7, 4,
-                FavoriteStore.contains(this, pageUrl) ? "Remove from Watch Later" : "Save to Watch Later");
-        menu.getMenu().add(0, 8, 5, "Minimize to browser");
-        menu.getMenu().add(0, 3, 6, "Share page");
-        menu.getMenu().add(0, 4, 7, "Open normal page");
+        String saveTitle = FavoriteStore.contains(this, pageUrl)
+                ? "Remove from Watch Later"
+                : "Save to Watch Later";
+        VideoActionSheet.show(
+                this,
+                title,
+                VideoActionSheet.section(
+                        "PLAYBACK",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_replay,
+                                "Restart video",
+                                "Play again from the beginning",
+                                this::restartVideo
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_speed,
+                                "Playback speed",
+                                "Choose from 0.5× to 2×",
+                                this::showSpeedMenu
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_view_style,
+                                "Fit / Fill / Zoom",
+                                qualityLabel(),
+                                this::showResizeMenu
+                        )
+                ),
+                VideoActionSheet.section(
+                        "SAVE",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_download,
+                                "Download",
+                                "Save this video for offline playback",
+                                this::downloadCurrentVideo
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_library,
+                                saveTitle,
+                                "Keep this video in your library",
+                                this::toggleWatchLater
+                        )
+                ),
+                VideoActionSheet.section(
+                        "ACTIONS",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_minimize,
+                                "Minimize to browser",
+                                "Keep playing while you browse",
+                                this::minimizeToBrowser
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_share,
+                                "Share",
+                                "Send the CrazyShit page",
+                                this::sharePage
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_website,
+                                "Open normal page",
+                                "Return to the website view",
+                                this::returnToWebPage
+                        )
+                )
+        );
+    }
 
-        menu.setOnMenuItemClickListener(item -> {
-            switch (item.getItemId()) {
-                case 1:
-                    if (player != null) {
-                        player.seekTo(0L);
-                        player.play();
-                    }
-                    return true;
-                case 2:
-                    showSpeedMenu();
-                    return true;
-                case 3:
-                    sharePage();
-                    return true;
-                case 4:
-                    returnToWebPage();
-                    return true;
-                case 5:
-                    showResizeMenu();
-                    return true;
-                case 7:
-                    toggleWatchLater();
-                    return true;
-                case 8:
-                    minimizing = true;
-                    recordHistory(false);
-                    minimizeToBrowser();
-                    return true;
-                default:
-                    return false;
-            }
-        });
-        menu.show();
+    private void restartVideo() {
+        if (player == null) return;
+        player.seekTo(0L);
+        player.play();
+    }
+
+    private void downloadCurrentVideo() {
+        VideoDownloadStore.downloadKnown(
+                this,
+                title,
+                pageUrl,
+                "",
+                mediaUrl,
+                userAgent,
+                cookies
+        );
     }
 
     private String qualityLabel() {
@@ -675,7 +680,6 @@ public class PlayerActivity extends Activity {
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         resetMinimizeTransform();
-        if (topBar != null) topBar.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
         if (gestureLabel != null) gestureLabel.setVisibility(View.GONE);
         if (playerView != null) playerView.setUseController(!isInPictureInPictureMode);
     }

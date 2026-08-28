@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,9 +26,13 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
@@ -52,7 +57,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long MIN_FEED_PROGRESS_MS = 5_000L;
-    private static final int SECTION_ACCENT = Color.rgb(244, 183, 28);
+    private static final int SECTION_ACCENT = UiPalette.PRIMARY;
     private static final int APP_BG = Color.rgb(13, 13, 15);
 
     public interface Listener {
@@ -66,6 +71,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private final Listener listener;
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
+    private final Set<String> failedDirectThumbnails = new HashSet<>();
+    private final Map<String, RenderedThumbnailResolver> thumbnailJobs = new HashMap<>();
     private final RenderedThumbnailResolver[] thumbnailResolvers;
     private final Map<String, PlaybackHistoryStore.Item> playbackByUrl = new HashMap<>();
     private final SharedPreferences playbackPrefs;
@@ -116,6 +123,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             if (resolver != null) resolver.close();
         }
         requestedThumbnails.clear();
+        failedDirectThumbnails.clear();
+        thumbnailJobs.clear();
     }
 
     public boolean isSectionAt(int position) {
@@ -207,16 +216,36 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void preloadRange(int start, int end) {
         if (closed) return;
-        for (int i = start; i < end; i++) requestThumbnail(items.get(i));
+        for (int i = start; i < end; i++) {
+            NativeContentItem item = items.get(i);
+            preloadDirectThumbnail(item);
+            requestThumbnail(item);
+        }
     }
 
     private void requestThumbnail(NativeContentItem item) {
+        requestThumbnail(item, "");
+    }
+
+    private void requestThumbnail(NativeContentItem item, String rejectedUrl) {
         if (closed || item == null || item.isSection() || item.url == null || item.url.isEmpty()) return;
-        if (item.isMeme() && item.imageUrl != null && !item.imageUrl.isEmpty()) return;
-        if (resolvedThumbnails.containsKey(item.url)) return;
-        if (!requestedThumbnails.add(item.url)) return;
-        RenderedThumbnailResolver resolver = thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
-        resolver.request(item.url);
+        if ((rejectedUrl == null || rejectedUrl.isEmpty()) && item.isMeme() &&
+                item.imageUrl != null && !item.imageUrl.trim().isEmpty() &&
+                !failedDirectThumbnails.contains(item.url)) return;
+        String rejected = rejectedUrl == null ? "" : rejectedUrl;
+        if (rejected.isEmpty() && failedDirectThumbnails.contains(item.url)) rejected = item.imageUrl;
+        if (resolvedThumbnails.containsKey(item.url) && rejected.isEmpty()) return;
+        RenderedThumbnailResolver resolver = thumbnailJobs.get(item.url);
+        if (resolver == null) {
+            resolver = thumbnailResolvers[resolverCursor++ % thumbnailResolvers.length];
+            thumbnailJobs.put(item.url, resolver);
+        }
+        if (!rejected.isEmpty()) {
+            requestedThumbnails.add(item.url);
+            resolver.request(item.url, rejected);
+        } else if (requestedThumbnails.add(item.url)) {
+            resolver.request(item.url);
+        }
     }
 
     @Override
@@ -277,8 +306,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private Holder createListHolder(ViewGroup parent) {
         boolean landscape = isLandscape(parent);
-        int height = landscape ? 88 : 96;
-        int width = landscape ? 124 : 136;
+        int height = landscape ? 106 : 118;
+        int width = landscape ? 150 : 166;
         MaterialCardView card = baseCard(parent, 12, 4, 15, height);
         LinearLayout row = new LinearLayout(parent.getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -292,7 +321,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private Holder createGridHolder(ViewGroup parent) {
         int mediaHeight = responsiveGridMediaHeightDp(parent);
-        int cardHeight = mediaHeight + 104;
+        int cardHeight = mediaHeight + 132;
         MaterialCardView card = baseCard(parent, 6, 5, 14, cardHeight);
         LinearLayout column = new LinearLayout(parent.getContext());
         column.setOrientation(LinearLayout.VERTICAL);
@@ -341,7 +370,9 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         overlay.addView(info, infoParams);
 
         TextView unusedComments = new TextView(parent.getContext());
-        CopyViews copy = new CopyViews(title, info, unusedComments);
+        TextView unusedDescription = new TextView(parent.getContext());
+        unusedDescription.setVisibility(View.GONE);
+        CopyViews copy = new CopyViews(title, info, unusedComments, unusedDescription);
         return new Holder(card, media, copy);
     }
 
@@ -435,7 +466,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         mediaFrame.addView(progressTrack, trackParams);
 
         View progressFill = new View(parent.getContext());
-        progressFill.setBackgroundColor(Color.rgb(255, 90, 31));
+        progressFill.setBackgroundColor(UiPalette.PRIMARY);
         progressFill.setPivotX(0f);
         progressFill.setScaleX(0f);
         progressTrack.addView(progressFill, new FrameLayout.LayoutParams(-1, -1));
@@ -499,13 +530,23 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         metaRow.addView(info, new LinearLayout.LayoutParams(0, -2, 1f));
 
         TextView comments = new TextView(parent.getContext());
-        comments.setTextColor(Color.rgb(255, 112, 60));
+        comments.setTextColor(UiPalette.PRIMARY);
         comments.setTextSize(infoSize);
         comments.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         comments.setPadding(dp(parent, 7), dp(parent, 3), 0, dp(parent, 3));
         metaRow.addView(comments, new LinearLayout.LayoutParams(-2, -2));
 
-        return new CopyViews(title, info, comments);
+        TextView description = new TextView(parent.getContext());
+        description.setTextColor(Color.rgb(198, 198, 206));
+        description.setTextSize(Math.max(10f, infoSize + 0.5f));
+        description.setMaxLines(2);
+        description.setEllipsize(TextUtils.TruncateAt.END);
+        description.setVisibility(View.GONE);
+        LinearLayout.LayoutParams descriptionParams = new LinearLayout.LayoutParams(-1, -2);
+        descriptionParams.topMargin = dp(parent, 4);
+        copy.addView(description, 1, descriptionParams);
+
+        return new CopyViews(title, info, comments, description);
     }
 
     @Override
@@ -537,6 +578,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         boolean meme = item.isMeme();
         holder.title.setText(item.title);
         holder.info.setText(buildInfo(item));
+        boolean showDescription = viewMode != VIEW_POSTERS && item.description != null &&
+                !item.description.trim().isEmpty();
+        holder.description.setVisibility(showDescription ? View.VISIBLE : View.GONE);
+        holder.description.setText(showDescription ? item.description.trim() : "");
         holder.play.setVisibility(meme ? View.GONE : View.VISIBLE);
         holder.image.setScaleType(meme ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
         bindPlaybackState(holder, item);
@@ -618,13 +663,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             holder.watchBadge.setText("✓ Watched");
             holder.watchBadge.setBackground(rounded(Color.argb(220, 23, 23, 27), dp(holder.watchBadge, 12)));
             holder.watchBadge.setVisibility(View.VISIBLE);
-            holder.card.setStrokeColor(Color.rgb(79, 61, 55));
+            holder.card.setStrokeColor(Color.rgb(72, 70, 20));
             return;
         }
 
         if (history.positionMs < MIN_FEED_PROGRESS_MS) return;
         holder.watchBadge.setText("Continue  " + formatTime(history.positionMs));
-        holder.watchBadge.setBackground(rounded(Color.argb(230, 133, 47, 17), dp(holder.watchBadge, 12)));
+        holder.watchBadge.setBackground(rounded(Color.argb(230, 72, 70, 5), dp(holder.watchBadge, 12)));
         holder.watchBadge.setVisibility(View.VISIBLE);
 
         if (history.durationMs > 0L) {
@@ -652,8 +697,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void loadThumbnail(Holder holder, NativeContentItem item) {
         if (holder.image == null || item == null || item.isSection()) return;
-        String imageUrl = resolvedThumbnails.get(item.url);
-        if (imageUrl == null || imageUrl.isEmpty()) imageUrl = item.imageUrl;
+        String resolved = resolvedThumbnails.get(item.url);
+        boolean usingDirect = (resolved == null || resolved.isEmpty()) &&
+                item.imageUrl != null && !item.imageUrl.isEmpty() &&
+                !failedDirectThumbnails.contains(item.url);
+        String imageUrl = usingDirect ? item.imageUrl : resolved;
 
         if (imageUrl == null || imageUrl.isEmpty()) {
             Glide.with(holder.image).clear(holder.image);
@@ -662,14 +710,71 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         }
 
         Object source = imageUrl.startsWith("file://") ? imageUrl : withSiteHeaders(imageUrl, item.url);
-        com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request = Glide.with(holder.image)
+        com.bumptech.glide.RequestBuilder<Drawable> request = Glide.with(holder.image)
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
                 .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
                 .error(new ColorDrawable(Color.rgb(20, 20, 23)));
         if (item.isMeme()) request.fitCenter(); else request.centerCrop();
+        final String attemptedUrl = imageUrl;
+        request.listener(new RequestListener<Drawable>() {
+            @Override
+            public boolean onLoadFailed(
+                    GlideException error,
+                    Object model,
+                    Target<Drawable> target,
+                    boolean firstResource
+            ) {
+                if (sameUrl(attemptedUrl, item.imageUrl)) failedDirectThumbnails.add(item.url);
+                String alternate = resolvedThumbnails.get(item.url);
+                if (sameUrl(alternate, attemptedUrl)) resolvedThumbnails.remove(item.url);
+                holder.image.post(() -> {
+                    requestThumbnail(item, attemptedUrl);
+                    notifyThumbnailChanged(item.url);
+                });
+                return false;
+            }
+
+            @Override
+            public boolean onResourceReady(
+                    Drawable resource,
+                    Object model,
+                    Target<Drawable> target,
+                    DataSource dataSource,
+                    boolean firstResource
+            ) {
+                return false;
+            }
+        });
         request.into(holder.image);
+    }
+
+    private void notifyThumbnailChanged(String pageUrl) {
+        for (int i = 0; i < items.size(); i++) {
+            if (pageUrl.equals(items.get(i).url)) {
+                notifyItemChanged(i, "thumbnail");
+                return;
+            }
+        }
+    }
+
+    private boolean sameUrl(String first, String second) {
+        if (first == null || second == null) return false;
+        return first.trim().replace("&amp;", "&")
+                .equals(second.trim().replace("&amp;", "&"));
+    }
+
+    private void preloadDirectThumbnail(NativeContentItem item) {
+        if (item == null || item.isSection() || item.imageUrl == null || item.imageUrl.isEmpty()) return;
+        Object source = item.imageUrl.startsWith("file://")
+                ? item.imageUrl
+                : withSiteHeaders(item.imageUrl, item.url);
+        Glide.with(context)
+                .load(source)
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                .dontAnimate()
+                .preload(480, 270);
     }
 
     @Override
@@ -716,7 +821,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             String views = viewMode == VIEW_CARDS ? item.views : compactCount(item.views);
             parts.add(views + " views");
         }
-        if (viewMode == VIEW_CARDS && item.uploader != null && !item.uploader.isEmpty()) {
+        if (item.uploader != null && !item.uploader.isEmpty() &&
+                (viewMode == VIEW_CARDS || "EFukt".equalsIgnoreCase(item.uploader))) {
             parts.add(item.uploader);
         }
         if (item.isMeme() && parts.isEmpty()) parts.add("Image");
@@ -808,11 +914,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final TextView title;
         final TextView info;
         final TextView comments;
+        final TextView description;
 
-        CopyViews(TextView title, TextView info, TextView comments) {
+        CopyViews(TextView title, TextView info, TextView comments, TextView description) {
             this.title = title;
             this.info = info;
             this.comments = comments;
+            this.description = description;
         }
     }
 
@@ -827,6 +935,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final TextView title;
         final TextView info;
         final TextView comments;
+        final TextView description;
         final TextView sectionTitle;
 
         Holder(MaterialCardView card, MediaViews media, CopyViews copy) {
@@ -841,6 +950,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.title = copy.title;
             this.info = copy.info;
             this.comments = copy.comments;
+            this.description = copy.description;
             this.sectionTitle = null;
         }
 
@@ -856,6 +966,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.title = null;
             this.info = null;
             this.comments = null;
+            this.description = null;
             this.sectionTitle = sectionTitle;
         }
     }

@@ -1,14 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/splashRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:background="#000000"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <View
+        android:id="@+id/splashGlow"
+        android:layout_width="420dp"
+        android:layout_height="260dp"
+        android:layout_gravity="center"
+        android:alpha="0"
+        android:background="@drawable/splash_orange_glow" />
+
+    <View
+        android:id="@+id/splashSweep"
+        android:layout_width="190dp"
+        android:layout_height="2dp"
+        android:layout_gravity="center"
+        android:alpha="0"
+        android:background="@drawable/splash_light_streak" />
 
     <ImageView
-        android:id="@+id/splashArt"
+        android:id="@+id/splashWordmark"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="320dp"
+        android:layout_gravity="center"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
         android:contentDescription="@null"
         android:scaleType="fitCenter"
-        android:src="@drawable/splash_art" />
+        android:src="@drawable/splash_wordmark_transparent" />
+
 </FrameLayout>

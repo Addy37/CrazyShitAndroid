@@ -4,6 +4,8 @@
 
 CrazyShit for Android is an independent community-made Android client. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
 
+The optional EFukt Series source is also independent and is not affiliated with, endorsed by, sponsored by, or published by EFukt.com.
+
 ## CrazyShit.com
 
 CrazyShit.com owns or administers the website this app opens. The CrazyShit.com footer currently states:
@@ -14,9 +16,15 @@ The website also provides Terms, Privacy, 2257, DMCA, and Contact links in its f
 
 Website: https://crazyshit.com/
 
+## EFukt.com
+
+The optional Series source reads public catalog and video pages from EFukt.com. EFukt.com retains ownership or administration of its website, branding, and hosted content.
+
+Website: https://efukt.com/
+
 ## Content ownership
 
-This repository and APK do not bundle CrazyShit.com videos, images, user uploads, or other website media. The app loads the live website at runtime.
+This repository and APK do not bundle CrazyShit.com or EFukt.com videos, images, user uploads, or other website media. The app loads supported public pages at runtime.
 
 All website content, names, branding, logos, user submissions, and other third-party material remain the property of their respective owners. The MIT License in this repository applies only to the original Android wrapper code.
 

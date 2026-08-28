@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Dialog;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -14,41 +15,34 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
-import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Unified More surface for portrait and landscape.
- *
- * Portrait uses a compact rounded bottom panel. Landscape uses the same grouped content as a
- * right-side panel. The old large equal-weight cards are replaced by shorter grouped rows.
- */
+/** One shared More surface: bottom sheet on phones and a side panel on wide screens. */
 final class LandscapeMoreDialog {
     private static final int FAVORITES_REQUEST = 3002;
     private static final int NAV_MORE = 5;
-    private static final int ORANGE = Color.rgb(255, 90, 31);
 
     private LandscapeMoreDialog() {
     }
 
     static void attachSoon(NativeMainActivity activity) {
         if (activity == null || activity.isFinishing()) return;
-        View decor = activity.getWindow().getDecorView();
-        decor.postDelayed(() -> attach(activity, 0), 120L);
+        activity.getWindow().getDecorView().postDelayed(() -> attach(activity, 0), 120L);
     }
 
     private static void attach(NativeMainActivity activity, int attempt) {
         if (activity == null || activity.isFinishing()) return;
-
         View more = isLandscape(activity)
                 ? findRailMore(activity.findViewById(android.R.id.content))
                 : findPortraitMore(activity);
@@ -75,49 +69,35 @@ final class LandscapeMoreDialog {
         return nav.findViewById(NAV_MORE);
     }
 
-    private static void show(NativeMainActivity activity) {
-        final boolean landscape = isLandscape(activity);
+    static void show(NativeMainActivity activity) {
+        if (activity == null || activity.isFinishing()) return;
+        final boolean sidePanel = isLandscape(activity);
         final CharSequence oldTitle = textValue(activity, "headerTitle");
         final CharSequence oldSubtitle = textValue(activity, "headerSubtitle");
-        setHeader(activity, "More", "Settings, library and account");
+        setHeader(activity, "More", "Library, account and settings");
 
-        Dialog dialog = new Dialog(activity);
+        Dialog dialog = sidePanel ? new Dialog(activity) : new BottomSheetDialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        if (dialog instanceof BottomSheetDialog) {
+            ((BottomSheetDialog) dialog).setDismissWithAnimation(true);
+        }
+
+        int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
+        int panelHeight = sidePanel
+                ? (int) (screenHeight * 0.90f)
+                : Math.min((int) (screenHeight * 0.86f), dp(activity, 680));
 
         LinearLayout panel = new LinearLayout(activity);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(activity, 16), dp(activity, 14), dp(activity, 16), dp(activity, 16));
+        panel.setPadding(dp(activity, 16), sidePanel ? dp(activity, 14) : dp(activity, 8),
+                dp(activity, 16), dp(activity, 16));
         panel.setBackground(panelBackground(activity));
+        panel.setClipToOutline(true);
 
-        LinearLayout header = new LinearLayout(activity);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(activity, 2), 0, 0, dp(activity, 8));
-
-        LinearLayout labels = new LinearLayout(activity);
-        labels.setOrientation(LinearLayout.VERTICAL);
-        TextView title = text(activity, "More", 23, Color.WHITE, true);
-        TextView subtitle = text(
-                activity,
-                "CrazyShit v" + BuildConfig.VERSION_NAME,
-                12,
-                Color.rgb(170, 170, 180),
-                false
-        );
-        subtitle.setPadding(0, dp(activity, 2), 0, 0);
-        labels.addView(title);
-        labels.addView(subtitle);
-        header.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView close = text(activity, "×", 25, Color.rgb(210, 210, 218), false);
-        close.setGravity(Gravity.CENTER);
-        close.setClickable(true);
-        close.setFocusable(true);
-        close.setContentDescription("Close More");
-        close.setBackground(circleBackground(activity, Color.rgb(34, 34, 39)));
-        close.setOnClickListener(v -> dialog.dismiss());
-        header.addView(close, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 40)));
-        panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
+        if (!sidePanel) addDragHandle(activity, panel);
+        addHeader(activity, dialog, panel);
+        addQuickActions(activity, dialog, panel);
 
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(false);
@@ -126,23 +106,22 @@ final class LandscapeMoreDialog {
 
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(0, dp(activity, 2), 0, dp(activity, 4));
+        content.setPadding(0, dp(activity, 3), 0, dp(activity, 4));
 
         addSection(
                 activity,
                 dialog,
                 content,
-                "YOUR STUFF",
+                "LIBRARY",
                 actions(
-                        new Action("◎", "Login / account", "Sign in here and return automatically",
-                                () -> activity.startActivity(new Intent(activity, LoginActivity.class))),
-                        new Action("◉", "My profile", "Open your signed-in profile",
-                                () -> activity.startActivity(new Intent(activity, ProfileActivity.class))),
-                        new Action("▣", "Library", "Continue, History and Watch Later",
-                                () -> activity.startActivityForResult(
-                                        new Intent(activity, FavoritesActivity.class),
-                                        FAVORITES_REQUEST
-                                ))
+                        new Action(
+                                R.drawable.ic_action_download,
+                                "Downloads",
+                                "Saved videos and active downloads",
+                                () -> activity.startActivity(
+                                        new Intent(activity, DownloadedActivity.class)
+                                )
+                        )
                 )
         );
 
@@ -152,26 +131,32 @@ final class LandscapeMoreDialog {
                 content,
                 "BROWSE",
                 actions(
-                        new Action("⚡", "Trending", "Browse the classic Trending feed",
+                        new Action(R.drawable.ic_nav_trending, "Trending", "The classic Trending feed",
                                 () -> activity.startActivity(NativeFeedBrowserActivity.create(
                                         activity,
                                         "Trending",
                                         CrazyShitRepository.TRENDING,
                                         false
                                 ))),
-                        new Action("▧", "Memes", "Browse the classic Memes feed",
+                        new Action(R.drawable.ic_more_memes, "Memes", "The classic Memes feed",
                                 () -> activity.startActivity(NativeFeedBrowserActivity.create(
                                         activity,
                                         "Memes",
                                         MemeRepository.MEMES,
                                         true
-                                ))),
-                        new Action("↗", "Open full website", "Use the compatibility browser",
-                                () -> {
-                                    Intent intent = new Intent(activity, WebFallbackActivity.class);
-                                    intent.putExtra(WebFallbackActivity.EXTRA_URL, CrazyShitRepository.HOME);
-                                    activity.startActivity(intent);
-                                })
+                                )))
+                )
+        );
+
+        addSection(
+                activity,
+                dialog,
+                content,
+                "DISPLAY",
+                actions(
+                        new Action(R.drawable.ic_more_view_style, "View style",
+                                "Cards, List, Grid or Posters",
+                                () -> FeedViewStyleController.showMain(activity))
                 )
         );
 
@@ -181,19 +166,26 @@ final class LandscapeMoreDialog {
                 content,
                 "APP",
                 actions(
-                        new Action("⚙︎", "Settings", "Playback, privacy, haptics and app options",
-                                () -> activity.startActivity(new Intent(activity, SettingsActivity.class))),
-                        new Action("≡", "View style", "Cards, List, Grid or Posters",
-                                () -> FeedViewStyleController.showMain(activity)),
-                        new Action("↻", "Check for updates", "Download and install updates inside the app",
-                                () -> invokeBoolean(activity, "checkForUpdates", true))
+                        new Action(R.drawable.ic_more_website, "Open full website",
+                                "Use the compatibility browser",
+                                () -> {
+                                    Intent intent = new Intent(activity, WebFallbackActivity.class);
+                                    intent.putExtra(WebFallbackActivity.EXTRA_URL, CrazyShitRepository.HOME);
+                                    activity.startActivity(intent);
+                                }),
+                        new Action(R.drawable.ic_more_update, "Check for updates",
+                                "Download and install app updates",
+                                () -> invokeBoolean(activity, "checkForUpdates", true)),
+                        new Action(R.drawable.ic_more_help, "Gesture guide",
+                                "Player and Chaos controls",
+                                () -> GestureGuideDialog.show(activity))
                 )
         );
 
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
         panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        dialog.setContentView(panel);
+        dialog.setContentView(panel, new ViewGroup.LayoutParams(-1, panelHeight));
         dialog.setCanceledOnTouchOutside(true);
         dialog.setOnDismissListener(ignored -> restoreHeader(activity, oldTitle, oldSubtitle));
         dialog.show();
@@ -203,32 +195,151 @@ final class LandscapeMoreDialog {
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
 
-        int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
-        int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
         WindowManager.LayoutParams attrs = window.getAttributes();
-        attrs.dimAmount = 0.52f;
-
-        if (landscape) {
+        attrs.dimAmount = 0.56f;
+        if (sidePanel) {
             attrs.width = Math.min((int) (screenWidth * 0.70f), dp(activity, 430));
-            attrs.height = (int) (screenHeight * 0.90f);
+            attrs.height = panelHeight;
             attrs.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
         } else {
-            attrs.width = Math.max(dp(activity, 280), screenWidth - dp(activity, 16));
-            attrs.height = (int) (screenHeight * 0.84f);
-            attrs.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-            attrs.y = dp(activity, 8);
+            attrs.width = WindowManager.LayoutParams.MATCH_PARENT;
+            attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+            attrs.gravity = Gravity.BOTTOM;
         }
         window.setAttributes(attrs);
 
+        if (dialog instanceof BottomSheetDialog) {
+            View bottomSheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+            if (bottomSheet != null) bottomSheet.setBackgroundColor(Color.TRANSPARENT);
+        }
+
         panel.setAlpha(0f);
-        if (landscape) panel.setTranslationX(dp(activity, 42));
-        else panel.setTranslationY(dp(activity, 28));
+        if (sidePanel) panel.setTranslationX(dp(activity, 36));
+        else panel.setTranslationY(dp(activity, 24));
         panel.animate()
                 .alpha(1f)
                 .translationX(0f)
                 .translationY(0f)
-                .setDuration(220L)
+                .setDuration(200L)
                 .start();
+    }
+
+    private static void addDragHandle(NativeMainActivity activity, LinearLayout panel) {
+        View handle = new View(activity);
+        handle.setBackground(roundedBackground(activity, Color.rgb(91, 91, 101), 2));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 4));
+        params.gravity = Gravity.CENTER_HORIZONTAL;
+        params.setMargins(0, 0, 0, dp(activity, 8));
+        panel.addView(handle, params);
+    }
+
+    private static void addHeader(
+            NativeMainActivity activity,
+            Dialog dialog,
+            LinearLayout panel
+    ) {
+        LinearLayout header = new LinearLayout(activity);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(activity, 2), 0, 0, dp(activity, 10));
+
+        ImageView logo = new ImageView(activity);
+        logo.setImageResource(R.drawable.ic_launcher_legacy);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        header.addView(logo, new LinearLayout.LayoutParams(dp(activity, 42), dp(activity, 42)));
+
+        LinearLayout labels = new LinearLayout(activity);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.setPadding(dp(activity, 10), 0, dp(activity, 8), 0);
+        TextView title = text(activity, "More", 22, Color.WHITE, true);
+        TextView subtitle = text(
+                activity,
+                "CrazyShit " + BuildConfig.VERSION_NAME,
+                11,
+                Color.rgb(166, 166, 176),
+                false
+        );
+        labels.addView(title);
+        labels.addView(subtitle);
+        header.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        ImageView close = iconView(activity, R.drawable.ic_more_close, 40, 10);
+        close.setBackground(circleBackground(Color.rgb(34, 34, 39)));
+        close.setContentDescription("Close More");
+        close.setOnClickListener(v -> dialog.dismiss());
+        header.addView(close, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 40)));
+        panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private static void addQuickActions(
+            NativeMainActivity activity,
+            Dialog dialog,
+            LinearLayout panel
+    ) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+
+        addQuickTile(activity, dialog, row, new Action(
+                R.drawable.ic_more_library,
+                "Library",
+                "Continue, History and Watch Later",
+                () -> activity.startActivityForResult(
+                        new Intent(activity, FavoritesActivity.class),
+                        FAVORITES_REQUEST
+                )
+        ), 0);
+        addQuickTile(activity, dialog, row, new Action(
+                R.drawable.ic_more_account,
+                "Account",
+                "Profile and sign in",
+                () -> activity.startActivity(new Intent(activity, ProfileActivity.class))
+        ), 1);
+        addQuickTile(activity, dialog, row, new Action(
+                R.drawable.ic_more_settings,
+                "Settings",
+                "Playback and app options",
+                () -> activity.startActivity(new Intent(activity, SettingsActivity.class))
+        ), 2);
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(activity, 88));
+        params.setMargins(0, 0, 0, dp(activity, 4));
+        panel.addView(row, params);
+    }
+
+    private static void addQuickTile(
+            NativeMainActivity activity,
+            Dialog dialog,
+            LinearLayout row,
+            Action action,
+            int index
+    ) {
+        LinearLayout tile = new LinearLayout(activity);
+        tile.setOrientation(LinearLayout.VERTICAL);
+        tile.setGravity(Gravity.CENTER);
+        tile.setPadding(dp(activity, 6), dp(activity, 8), dp(activity, 6), dp(activity, 7));
+        tile.setBackground(roundedBackground(activity, Color.rgb(27, 27, 31), 16));
+        tile.setClickable(true);
+        tile.setFocusable(true);
+        tile.setContentDescription(action.title + ". " + action.subtitle);
+        applySelectableForeground(activity, tile);
+
+        ImageView icon = iconView(activity, action.iconRes, 34, 6);
+        icon.setBackground(circleBackground(UiPalette.PRIMARY_CONTAINER));
+        tile.addView(icon, new LinearLayout.LayoutParams(dp(activity, 34), dp(activity, 34)));
+
+        TextView title = text(activity, action.title, 12, Color.WHITE, true);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, dp(activity, 5), 0, 0);
+        tile.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        installPressFeedback(tile);
+        tile.setOnClickListener(v -> runAction(v, dialog, action));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -1, 1f);
+        if (index == 0) params.setMargins(0, 0, dp(activity, 4), 0);
+        else if (index == 1) params.setMargins(dp(activity, 2), 0, dp(activity, 2), 0);
+        else params.setMargins(dp(activity, 4), 0, 0, 0);
+        row.addView(tile, params);
     }
 
     private static void addSection(
@@ -238,9 +349,9 @@ final class LandscapeMoreDialog {
             String label,
             List<Action> actions
     ) {
-        TextView section = text(activity, label, 11, Color.rgb(145, 145, 155), true);
+        TextView section = text(activity, label, 10, Color.rgb(145, 145, 155), true);
         section.setLetterSpacing(0.08f);
-        section.setPadding(dp(activity, 6), dp(activity, 10), dp(activity, 6), dp(activity, 6));
+        section.setPadding(dp(activity, 6), dp(activity, 9), dp(activity, 6), dp(activity, 5));
         parent.addView(section, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout group = new LinearLayout(activity);
@@ -254,14 +365,14 @@ final class LandscapeMoreDialog {
                 View divider = new View(activity);
                 divider.setBackgroundColor(Color.rgb(43, 43, 49));
                 LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(activity, 1));
-                dividerParams.setMargins(dp(activity, 58), 0, dp(activity, 8), 0);
+                dividerParams.setMargins(dp(activity, 56), 0, dp(activity, 8), 0);
                 group.addView(divider, dividerParams);
             }
         }
 
-        LinearLayout.LayoutParams groupParams = new LinearLayout.LayoutParams(-1, -2);
-        groupParams.setMargins(0, 0, 0, dp(activity, 4));
-        parent.addView(group, groupParams);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, 0, 0, dp(activity, 3));
+        parent.addView(group, params);
     }
 
     private static void addActionRow(
@@ -273,52 +384,67 @@ final class LandscapeMoreDialog {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(activity, 8), dp(activity, 8), dp(activity, 8), dp(activity, 8));
+        row.setPadding(dp(activity, 8), dp(activity, 7), dp(activity, 7), dp(activity, 7));
         row.setClickable(true);
         row.setFocusable(true);
+        row.setContentDescription(action.title + ". " + action.subtitle);
         applySelectableForeground(activity, row);
 
-        TextView icon = text(activity, action.icon, 20, ORANGE, true);
-        icon.setGravity(Gravity.CENTER);
-        icon.setBackground(circleBackground(activity, Color.rgb(53, 32, 28)));
-        row.addView(icon, new LinearLayout.LayoutParams(dp(activity, 42), dp(activity, 42)));
+        ImageView icon = iconView(activity, action.iconRes, 40, 9);
+        icon.setBackground(circleBackground(UiPalette.PRIMARY_CONTAINER));
+        row.addView(icon, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 40)));
 
         LinearLayout labels = new LinearLayout(activity);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.setPadding(dp(activity, 12), 0, dp(activity, 8), 0);
-
-        TextView title = text(activity, action.title, 16, Color.WHITE, true);
+        labels.setPadding(dp(activity, 11), 0, dp(activity, 7), 0);
+        TextView title = text(activity, action.title, 15, Color.WHITE, true);
         title.setMaxLines(1);
         labels.addView(title, new LinearLayout.LayoutParams(-1, -2));
-
-        TextView subtitle = text(activity, action.subtitle, 11, Color.rgb(170, 170, 180), false);
-        subtitle.setMaxLines(2);
-        subtitle.setPadding(0, dp(activity, 2), 0, 0);
+        TextView subtitle = text(activity, action.subtitle, 11, Color.rgb(166, 166, 176), false);
+        subtitle.setMaxLines(1);
+        subtitle.setPadding(0, dp(activity, 1), 0, 0);
         labels.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView chevron = text(activity, "›", 25, Color.rgb(120, 120, 132), false);
-        chevron.setGravity(Gravity.CENTER);
-        row.addView(chevron, new LinearLayout.LayoutParams(dp(activity, 28), dp(activity, 42)));
+        ImageView chevron = iconView(activity, R.drawable.ic_more_chevron, 28, 6);
+        chevron.setImageTintList(ColorStateList.valueOf(Color.rgb(116, 116, 128)));
+        row.addView(chevron, new LinearLayout.LayoutParams(dp(activity, 28), dp(activity, 40)));
 
-        row.setOnTouchListener((v, event) -> {
+        installPressFeedback(row);
+        row.setOnClickListener(v -> runAction(v, dialog, action));
+        group.addView(row, new LinearLayout.LayoutParams(-1, dp(activity, 60)));
+    }
+
+    private static void runAction(View view, Dialog dialog, Action action) {
+        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+        dialog.dismiss();
+        action.run.run();
+    }
+
+    private static void installPressFeedback(View view) {
+        view.setOnTouchListener((v, event) -> {
             int touch = event.getActionMasked();
-            if (touch == MotionEvent.ACTION_DOWN) {
-                v.animate().cancel();
-                v.animate().scaleX(0.985f).scaleY(0.985f).setDuration(80L).start();
-            } else if (touch == MotionEvent.ACTION_UP || touch == MotionEvent.ACTION_CANCEL) {
-                v.animate().cancel();
-                v.animate().scaleX(1f).scaleY(1f).setDuration(130L).start();
-            }
+            if (touch == MotionEvent.ACTION_DOWN) v.setAlpha(0.78f);
+            else if (touch == MotionEvent.ACTION_UP || touch == MotionEvent.ACTION_CANCEL) v.setAlpha(1f);
             return false;
         });
-        row.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            dialog.dismiss();
-            action.run.run();
-        });
+    }
 
-        group.addView(row, new LinearLayout.LayoutParams(-1, dp(activity, 68)));
+    private static ImageView iconView(
+            NativeMainActivity activity,
+            int iconRes,
+            int sizeDp,
+            int paddingDp
+    ) {
+        ImageView view = new ImageView(activity);
+        view.setImageResource(iconRes);
+        view.setImageTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+        view.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        view.setPadding(dp(activity, paddingDp), dp(activity, paddingDp),
+                dp(activity, paddingDp), dp(activity, paddingDp));
+        view.setMinimumWidth(dp(activity, sizeDp));
+        view.setMinimumHeight(dp(activity, sizeDp));
+        return view;
     }
 
     private static List<Action> actions(Action... actions) {
@@ -352,24 +478,30 @@ final class LandscapeMoreDialog {
     }
 
     private static GradientDrawable panelBackground(NativeMainActivity activity) {
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.RECTANGLE);
-        background.setCornerRadius(dp(activity, 24));
-        background.setColor(Color.rgb(18, 18, 21));
-        background.setStroke(dp(activity, 1), Color.rgb(51, 51, 58));
+        GradientDrawable background = roundedBackground(activity, Color.rgb(15, 15, 18), 26);
+        background.setStroke(dp(activity, 1), Color.rgb(47, 47, 54));
         return background;
     }
 
     private static GradientDrawable groupBackground(NativeMainActivity activity) {
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.RECTANGLE);
-        background.setCornerRadius(dp(activity, 16));
-        background.setColor(Color.rgb(25, 25, 29));
-        background.setStroke(dp(activity, 1), Color.rgb(45, 45, 52));
+        GradientDrawable background = roundedBackground(activity, Color.rgb(24, 24, 28), 16);
+        background.setStroke(dp(activity, 1), Color.rgb(43, 43, 50));
         return background;
     }
 
-    private static GradientDrawable circleBackground(NativeMainActivity activity, int color) {
+    private static GradientDrawable roundedBackground(
+            NativeMainActivity activity,
+            int color,
+            int radiusDp
+    ) {
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.RECTANGLE);
+        background.setCornerRadius(dp(activity, radiusDp));
+        background.setColor(color);
+        return background;
+    }
+
+    private static GradientDrawable circleBackground(int color) {
         GradientDrawable background = new GradientDrawable();
         background.setShape(GradientDrawable.OVAL);
         background.setColor(color);
@@ -466,13 +598,13 @@ final class LandscapeMoreDialog {
     }
 
     private static final class Action {
-        final String icon;
+        final int iconRes;
         final String title;
         final String subtitle;
         final Runnable run;
 
-        Action(String icon, String title, String subtitle, Runnable run) {
-            this.icon = icon;
+        Action(int iconRes, String title, String subtitle, Runnable run) {
+            this.iconRes = iconRes;
             this.title = title;
             this.subtitle = subtitle;
             this.run = run;

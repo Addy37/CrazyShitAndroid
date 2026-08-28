@@ -6,7 +6,7 @@ CrazyShit for Android is a lightweight Android WebView wrapper with an optional 
 
 ## Website data
 
-The app loads the live website at `https://crazyshit.com/`. CrazyShit.com and services embedded by that website may use cookies, local storage, analytics, advertising, authentication, or other technologies according to their own policies.
+The app loads live pages from `https://crazyshit.com/` and, when you select the EFukt source under Series, `https://efukt.com/`. Those sites and their embedded services may use cookies, local storage, analytics, advertising, authentication, or other technologies according to their own policies.
 
 The wrapper allows normal first-party website cookies so sign-in sessions can persist. Those cookies belong to the website context and are managed by Android WebView. Third-party WebView cookies are disabled.
 
@@ -42,13 +42,13 @@ The wrapper does not send this data to a separate server operated by this projec
 
 ## Permissions
 
-- `INTERNET`: required to load CrazyShit.com and play network media
+- `INTERNET`: required to load CrazyShit.com, optional EFukt.com Series pages, and network media
 - `ACCESS_NETWORK_STATE`: used for normal network-aware behavior
 - Legacy storage permission is declared only for Android versions where it is needed for downloads
 
 ## Third-party policy
 
-This project is not responsible for CrazyShit.com's privacy practices or for third-party services loaded by the website. Review the Privacy and Terms links in the CrazyShit.com footer before using the service.
+This project is not responsible for CrazyShit.com's or EFukt.com's privacy practices or for third-party services loaded by either website. Review each site's Privacy and Terms links before using it.
 
 ## Contact
 

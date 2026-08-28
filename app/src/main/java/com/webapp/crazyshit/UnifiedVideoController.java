@@ -25,7 +25,6 @@ import android.webkit.WebSettings;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -88,6 +87,7 @@ final class UnifiedVideoController {
     private static final int MINI_VIDEO_H_DP = 74;
     private static final int MINI_PAD_X_DP = 4;
     private static final int MINI_PAD_TOP_DP = 4;
+    private static final int CONTROL_TIMEOUT_MS = 2600;
 
     static boolean routeLegacyDetail(NativeMainActivity host, VideoDetailActivity launched) {
         if (host == null || launched == null || launched.isFinishing()) return false;
@@ -174,8 +174,7 @@ final class UnifiedVideoController {
     private LinearLayout relatedContainer;
     private SwipeMinimizeFrameLayout playerContainer;
     private PlayerView playerView;
-    private TextView backButton;
-    private TextView menuButton;
+    private TextView playerTitleView;
     private TextView titleView;
     private TextView metaView;
     private TextView commentsTitle;
@@ -293,7 +292,7 @@ final class UnifiedVideoController {
         miniCard.setCardBackgroundColor(Color.rgb(24, 24, 28));
         miniCard.setRadius(dp(18));
         miniCard.setCardElevation(dp(15));
-        miniCard.setStrokeColor(Color.rgb(67, 49, 44));
+        miniCard.setStrokeColor(Color.rgb(68, 66, 19));
         miniCard.setStrokeWidth(dp(1));
         miniCard.setVisibility(View.INVISIBLE);
 
@@ -334,7 +333,7 @@ final class UnifiedVideoController {
         content.addView(track, trackParams);
 
         miniProgressFill = new View(activity);
-        miniProgressFill.setBackgroundColor(Color.rgb(255, 90, 31));
+        miniProgressFill.setBackgroundColor(UiPalette.PRIMARY);
         miniProgressFill.setScaleX(0f);
         miniProgressFill.setPivotX(0f);
         FrameLayout.LayoutParams fillParams = new FrameLayout.LayoutParams(-1, dp(3));
@@ -372,7 +371,7 @@ final class UnifiedVideoController {
         });
 
         playerView = (PlayerView) activity.getLayoutInflater().inflate(
-                R.layout.view_video_player_texture,
+                R.layout.view_polished_video_player_texture,
                 playerContainer,
                 false
         );
@@ -380,31 +379,23 @@ final class UnifiedVideoController {
         playerView.setUseController(true);
         playerView.setControllerAutoShow(false);
         playerView.setControllerHideOnTouch(true);
+        playerView.setControllerShowTimeoutMs(CONTROL_TIMEOUT_MS);
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        backButton = overlayButton("‹", 34);
-        backButton.setContentDescription("Back");
-        backButton.setOnClickListener(v -> {
+        View playerBack = playerView.findViewById(R.id.player_back);
+        playerTitleView = playerView.findViewById(R.id.player_title);
+        View playerMenu = playerView.findViewById(R.id.player_menu);
+        playerTitleView.setText(title);
+        playerBack.setOnClickListener(v -> {
             haptic(v);
             handleBack();
         });
-        FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(dp(46), dp(46));
-        bp.gravity = Gravity.TOP | Gravity.START;
-        bp.setMargins(dp(8), dp(8), 0, 0);
-        playerContainer.addView(backButton, bp);
-
-        menuButton = overlayButton("⋮", 26);
-        menuButton.setContentDescription("Video menu");
-        menuButton.setOnClickListener(v -> {
+        playerMenu.setOnClickListener(v -> {
             haptic(v);
-            showPlayerMenu(menuButton);
+            showPlayerMenu();
         });
-        FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(dp(46), dp(46));
-        mp.gravity = Gravity.TOP | Gravity.END;
-        mp.setMargins(0, dp(8), dp(8), 0);
-        playerContainer.addView(menuButton, mp);
 
         root.addView(playerContainer, new FrameLayout.LayoutParams(-1, portraitPlayerHeight()));
     }
@@ -470,6 +461,7 @@ final class UnifiedVideoController {
                     .setDuration(210L)
                     .setInterpolator(new DecelerateInterpolator(1.35f))
                     .start();
+            playerView.post(playerView::showController);
         }
         registerBack();
         activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -590,6 +582,7 @@ final class UnifiedVideoController {
                     state = State.FULL;
                     setChromeAlpha(1f);
                     setFullPlayerMode();
+                    playerView.showController();
                     registerBack();
                 })
                 .start();
@@ -601,8 +594,6 @@ final class UnifiedVideoController {
         playerView.setControllerHideOnTouch(true);
         playerView.setOnClickListener(null);
         playerContainer.setSwipeEnabled(!isLandscape() && swipeEnabled());
-        backButton.setVisibility(View.VISIBLE);
-        menuButton.setVisibility(View.VISIBLE);
         playerContainer.setBackgroundColor(Color.BLACK);
         if (isLandscape()) setSystemBars(true); else setSystemBars(false);
     }
@@ -613,8 +604,6 @@ final class UnifiedVideoController {
         playerView.setUseController(false);
         playerView.setOnClickListener(v -> expandFromMini());
         playerContainer.setSwipeEnabled(false);
-        backButton.setVisibility(View.GONE);
-        menuButton.setVisibility(View.GONE);
         playerContainer.setBackground(rounded(Color.BLACK, dp(10)));
     }
 
@@ -667,6 +656,7 @@ final class UnifiedVideoController {
 
     private void updateMetadataUi() {
         titleView.setText(title);
+        playerTitleView.setText(title);
         miniTitle.setText(title);
         ArrayList<String> parts = new ArrayList<>();
         if (!views.isEmpty()) parts.add(views + " views");
@@ -715,7 +705,16 @@ final class UnifiedVideoController {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
-                if (playbackState == Player.STATE_ENDED) savePlaybackState(true);
+                if (playbackState == Player.STATE_READY) {
+                    String readyPageUrl = pageUrl;
+                    playerView.postDelayed(() -> {
+                        if (readyPageUrl.equals(pageUrl)) {
+                            NativeCommentsLoader.preload(activity, readyPageUrl);
+                        }
+                    }, 650L);
+                } else if (playbackState == Player.STATE_ENDED) {
+                    savePlaybackState(true);
+                }
             }
 
             @Override
@@ -843,7 +842,7 @@ final class UnifiedVideoController {
         if (!clean(item.comments).isEmpty()) {
             TextView count = new TextView(activity);
             count.setText(item.comments + " comments");
-            count.setTextColor(Color.rgb(255, 112, 60));
+            count.setTextColor(UiPalette.PRIMARY);
             count.setTextSize(11);
             count.setPadding(0, dp(5), 0, 0);
             copy.addView(count);
@@ -919,12 +918,13 @@ final class UnifiedVideoController {
 
     private void openComments() {
         if (pageUrl.isEmpty()) return;
-        savePlaybackState(false);
-        Intent intent = new Intent(activity, CommentsActivity.class);
-        intent.putExtra(CommentsActivity.EXTRA_PAGE_URL, pageUrl);
-        intent.putExtra(CommentsActivity.EXTRA_TITLE, title);
-        intent.putExtra(CommentsActivity.EXTRA_COUNT, comments);
-        activity.startActivity(intent);
+        new InlineCommentsDialog(
+                activity,
+                pageUrl,
+                title,
+                comments,
+                null
+        ).show();
     }
 
     private void toggleWatchLater() {
@@ -947,30 +947,96 @@ final class UnifiedVideoController {
         activity.startActivity(Intent.createChooser(share, "Share video"));
     }
 
-    private void showPlayerMenu(View anchor) {
-        PopupMenu menu = new PopupMenu(activity, anchor);
-        menu.getMenu().add(0, 1, 0, "Playback speed");
-        menu.getMenu().add(0, 2, 1, "Fit / Fill / Zoom");
-        menu.getMenu().add(0, 3, 2, "Comments");
-        menu.getMenu().add(0, 4, 3, "Watch Later");
-        menu.getMenu().add(0, 5, 4, "Share");
-        menu.getMenu().add(0, 6, 5, "Open webpage");
+    private void showPlayerMenu() {
+        String saveTitle = FavoriteStore.contains(activity, pageUrl)
+                ? "Remove from Watch Later"
+                : "Save to Watch Later";
+        ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_comments,
+                "Comments",
+                "Read and reply without leaving the video",
+                this::openComments
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_share,
+                "Share",
+                "Send the CrazyShit page",
+                this::sharePage
+        ));
+        actions.add(VideoActionSheet.action(
+                R.drawable.ic_more_website,
+                "Open webpage",
+                "View this video on the site",
+                () -> openWebsite(pageUrl)
+        ));
         if (!isLandscape()) {
-            menu.getMenu().add(0, 8, 6, "Minimize");
-            menu.getMenu().add(0, 7, 7, "Fullscreen");
+            actions.add(VideoActionSheet.action(
+                    R.drawable.ic_action_minimize,
+                    "Minimize",
+                    "Keep playing while you browse",
+                    this::minimizeToMini
+            ));
+            actions.add(VideoActionSheet.action(
+                    R.drawable.ic_action_fullscreen,
+                    "Fullscreen",
+                    "Rotate the player to landscape",
+                    () -> activity.setRequestedOrientation(
+                            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    )
+            ));
         }
-        menu.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == 1) showSpeedMenu();
-            else if (item.getItemId() == 2) showResizeMenu();
-            else if (item.getItemId() == 3) openComments();
-            else if (item.getItemId() == 4) toggleWatchLater();
-            else if (item.getItemId() == 5) sharePage();
-            else if (item.getItemId() == 6) openWebsite(pageUrl);
-            else if (item.getItemId() == 7) activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-            else if (item.getItemId() == 8) minimizeToMini();
-            return true;
-        });
-        menu.show();
+
+        VideoActionSheet.show(
+                activity,
+                title,
+                VideoActionSheet.section(
+                        "PLAYBACK",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_speed,
+                                "Playback speed",
+                                "Choose from 0.5× to 2×",
+                                this::showSpeedMenu
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_view_style,
+                                "Fit / Fill / Zoom",
+                                "Choose how the video fills the player",
+                                this::showResizeMenu
+                        )
+                ),
+                VideoActionSheet.section(
+                        "SAVE",
+                        VideoActionSheet.action(
+                                R.drawable.ic_action_download,
+                                "Download",
+                                "Save this video for offline playback",
+                                this::downloadCurrentVideo
+                        ),
+                        VideoActionSheet.action(
+                                R.drawable.ic_more_library,
+                                saveTitle,
+                                "Keep this video in your library",
+                                this::toggleWatchLater
+                        )
+                ),
+                VideoActionSheet.section(
+                        "ACTIONS",
+                        actions.toArray(new VideoActionSheet.Action[0])
+                )
+        );
+    }
+
+    private void downloadCurrentVideo() {
+        VideoDownloadStore.downloadKnown(
+                activity,
+                title,
+                pageUrl,
+                "",
+                mediaUrl,
+                userAgent,
+                cookies
+        );
     }
 
     private void showSpeedMenu() {
@@ -1187,19 +1253,6 @@ final class UnifiedVideoController {
         return button;
     }
 
-    private TextView overlayButton(String label, int size) {
-        TextView view = new TextView(activity);
-        view.setText(label);
-        view.setTextSize(size);
-        view.setTextColor(Color.WHITE);
-        view.setGravity(Gravity.CENTER);
-        view.setBackground(rounded(Color.argb(165, 10, 10, 12), dp(18)));
-        view.setClickable(true);
-        view.setFocusable(true);
-        view.setElevation(dp(8));
-        return view;
-    }
-
     private TextView miniButton(String text, String description) {
         TextView view = new TextView(activity);
         view.setText(text);
@@ -1244,9 +1297,7 @@ final class UnifiedVideoController {
     }
 
     private void setChromeAlpha(float alpha) {
-        float a = clamp(alpha);
-        backButton.setAlpha(a);
-        menuButton.setAlpha(a);
+        // The title bar now lives inside Media3's controller and shares its single animation.
     }
 
     private void setSystemBars(boolean fullscreen) {

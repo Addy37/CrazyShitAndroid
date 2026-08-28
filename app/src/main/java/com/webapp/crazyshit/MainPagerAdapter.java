@@ -2,10 +2,12 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -30,6 +32,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     public static final int PAGE_CATEGORIES = 3;
     public static final int PAGE_COUNT = 4;
     private static final int PAGE_ARRAY_COUNT = 4;
+    private static final int SERIES_SOURCE_CRAZYSHIT = 0;
+    private static final int SERIES_SOURCE_EFUKT = 1;
+    private static final String PREF_SERIES_SOURCE = "native_series_source";
 
     public interface Host {
         void onOpenItem(NativeContentItem item);
@@ -47,6 +52,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final Host host;
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final BrowseRepository browseRepository = new BrowseRepository();
+    private final EfuktRepository efuktRepository = new EfuktRepository();
     private final BrowseArtworkResolver browseArtworkResolver;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
@@ -66,11 +72,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             @Override
             public void openDetails(NativeContentItem item) {
                 host.onOpenItem(item);
-            }
-
-            @Override
-            public void openComments(NativeContentItem item) {
-                host.onOpenComments(item);
             }
         });
         chaosView.setActive(false);
@@ -235,11 +236,109 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         Page page = createPageShell(index, kind, "", "");
         page.browseAdapter = new NativeCategoryAdapter(item -> {
             if (item == null || item.url == null || item.url.isEmpty()) return;
-            activity.startActivity(NativeFeedBrowserActivity.create(activity, item.title, item.url, false));
+            String source = EfuktRepository.isEfuktUrl(item.url)
+                    ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                    : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
+            activity.startActivity(NativeFeedBrowserActivity.create(
+                    activity,
+                    item.title,
+                    item.url,
+                    false,
+                    source
+            ));
         });
         page.recycler.setAdapter(page.browseAdapter);
         page.recycler.setLayoutManager(new GridLayoutManager(activity, 2));
+        if (kind == PageKind.SERIES) {
+            addSeriesSourceSelector(page);
+            page.empty.setOnClickListener(v -> {
+                String url = page.seriesSource == SERIES_SOURCE_EFUKT
+                        ? EfuktRepository.SERIES
+                        : BrowseRepository.SERIES;
+                android.content.Intent intent = new android.content.Intent(activity, WebFallbackActivity.class);
+                intent.putExtra(WebFallbackActivity.EXTRA_URL, url);
+                activity.startActivity(intent);
+            });
+        }
         return page;
+    }
+
+    private void addSeriesSourceSelector(Page page) {
+        page.seriesSource = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .getInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT);
+        if (page.seriesSource != SERIES_SOURCE_EFUKT) page.seriesSource = SERIES_SOURCE_CRAZYSHIT;
+
+        LinearLayout selector = new LinearLayout(activity);
+        selector.setOrientation(LinearLayout.HORIZONTAL);
+        selector.setGravity(Gravity.CENTER);
+        selector.setPadding(dp(12), dp(8), dp(12), dp(8));
+        selector.setBackgroundColor(Color.rgb(17, 17, 20));
+
+        page.crazyShitSource = seriesSourceButton("CrazyShit");
+        page.efuktSource = seriesSourceButton("EFukt");
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(0, dp(40), 1f);
+        buttonParams.setMarginEnd(dp(5));
+        selector.addView(page.crazyShitSource, buttonParams);
+        LinearLayout.LayoutParams secondParams = new LinearLayout.LayoutParams(0, dp(40), 1f);
+        secondParams.setMarginStart(dp(5));
+        selector.addView(page.efuktSource, secondParams);
+
+        page.crazyShitSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CRAZYSHIT));
+        page.efuktSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_EFUKT));
+        updateSeriesSourceButtons(page);
+
+        FrameLayout.LayoutParams refreshParams = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
+        refreshParams.topMargin = dp(56);
+        page.refresh.setLayoutParams(refreshParams);
+        FrameLayout.LayoutParams selectorParams = new FrameLayout.LayoutParams(-1, dp(56));
+        selectorParams.gravity = Gravity.TOP;
+        page.root.addView(selector, selectorParams);
+    }
+
+    private TextView seriesSourceButton(String label) {
+        TextView button = new TextView(activity);
+        button.setText(label);
+        button.setTextSize(14);
+        button.setTypeface(null, android.graphics.Typeface.BOLD);
+        button.setGravity(Gravity.CENTER);
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setContentDescription("Show " + label + " series");
+        return button;
+    }
+
+    private void switchSeriesSource(Page page, int source) {
+        if (page == null || page.kind != PageKind.SERIES || page.seriesSource == source) return;
+        page.seriesSource = source;
+        activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .edit()
+                .putInt(PREF_SERIES_SOURCE, source)
+                .apply();
+        updateSeriesSourceButtons(page);
+        page.generation++;
+        page.loading = false;
+        page.endReached = false;
+        page.currentPage = 0;
+        page.browseAdapter.replace(java.util.Collections.emptyList());
+        page.recycler.scrollToPosition(0);
+        page.empty.setVisibility(View.GONE);
+        load(page, false);
+    }
+
+    private void updateSeriesSourceButtons(Page page) {
+        styleSeriesSourceButton(page.crazyShitSource, page.seriesSource == SERIES_SOURCE_CRAZYSHIT);
+        styleSeriesSourceButton(page.efuktSource, page.seriesSource == SERIES_SOURCE_EFUKT);
+    }
+
+    private void styleSeriesSourceButton(TextView button, boolean selected) {
+        if (button == null) return;
+        GradientDrawable background = new GradientDrawable();
+        background.setCornerRadius(dp(20));
+        background.setColor(selected ? UiPalette.PRIMARY : Color.rgb(27, 27, 31));
+        background.setStroke(dp(1), selected ? UiPalette.PRIMARY : Color.rgb(57, 57, 64));
+        button.setBackground(background);
+        button.setTextColor(selected ? Color.BLACK : Color.rgb(220, 220, 226));
+        button.setSelected(selected);
     }
 
     private Page createPageShell(int index, PageKind kind, String prefKey, String baseUrl) {
@@ -248,7 +347,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.root.setBackgroundColor(Color.rgb(13, 13, 15));
 
         page.refresh = new SwipeRefreshLayout(activity);
-        page.refresh.setColorSchemeColors(Color.rgb(255, 90, 31));
+        page.refresh.setColorSchemeColors(UiPalette.PRIMARY);
         page.root.addView(page.refresh, new FrameLayout.LayoutParams(-1, -1));
 
         page.recycler = new RecyclerView(activity);
@@ -324,7 +423,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             try {
                 List<NativeContentItem> result;
                 if (page.kind == PageKind.SERIES) {
-                    result = browseRepository.fetchSeries(activity);
+                    result = page.seriesSource == SERIES_SOURCE_EFUKT
+                            ? efuktRepository.fetchSeries(activity)
+                            : browseRepository.fetchSeries(activity);
                 } else if (page.kind == PageKind.CATEGORIES) {
                     result = browseRepository.fetchCategories(activity);
                 } else {
@@ -350,8 +451,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     }
 
                     if (page.itemCount() == 0) {
-                        page.empty.setText(page.kind == PageKind.SERIES
-                                ? "Couldn't load Series right now."
+                        page.empty.setText(page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_EFUKT
+                                ? "Couldn't load EFukt Series here.\nIt may be unavailable in your region.\nTap to open the website."
+                                : page.kind == PageKind.SERIES
+                                ? "Couldn't load CrazyShit Series right now."
                                 : page.kind == PageKind.CATEGORIES
                                 ? "Couldn't load Categories right now."
                                 : "This feed couldn't be rendered right now.");
@@ -365,8 +468,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     page.progress.setVisibility(View.GONE);
                     page.refresh.setRefreshing(false);
                     if (page.itemCount() == 0) {
-                        page.empty.setText(page.kind == PageKind.SERIES
-                                ? "Couldn't load Series right now."
+                        page.empty.setText(page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_EFUKT
+                                ? "Couldn't load EFukt Series here.\nIt may be unavailable in your region.\nTap to open the website."
+                                : page.kind == PageKind.SERIES
+                                ? "Couldn't load CrazyShit Series right now."
                                 : page.kind == PageKind.CATEGORIES
                                 ? "Couldn't load Categories right now."
                                 : "Couldn't load this tab right now.");
@@ -388,7 +493,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             return;
         }
 
-        if (page.kind == PageKind.SERIES) {
+        if (page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_CRAZYSHIT) {
             browseArtworkResolver.request(BrowseRepository.SERIES, "/series/", (source, artwork) -> {
                 if (generation != page.generation) return;
                 page.browseAdapter.applyArtwork(artwork);
@@ -432,7 +537,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         TextView empty;
         NativeFeedAdapter feedAdapter;
         NativeCategoryAdapter browseAdapter;
+        TextView crazyShitSource;
+        TextView efuktSource;
         int viewMode = NativeFeedAdapter.VIEW_LIST;
+        int seriesSource = SERIES_SOURCE_CRAZYSHIT;
         int currentPage;
         boolean loading;
         boolean endReached;

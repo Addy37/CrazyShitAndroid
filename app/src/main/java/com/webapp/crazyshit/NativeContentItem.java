@@ -14,6 +14,7 @@ public final class NativeContentItem {
     public final String views;
     public final String uploader;
     public final String comments;
+    public final String description;
 
     public NativeContentItem(
             String kind,
@@ -24,6 +25,19 @@ public final class NativeContentItem {
             String uploader,
             String comments
     ) {
+        this(kind, title, url, imageUrl, views, uploader, comments, "");
+    }
+
+    public NativeContentItem(
+            String kind,
+            String title,
+            String url,
+            String imageUrl,
+            String views,
+            String uploader,
+            String comments,
+            String description
+    ) {
         this.kind = kind == null ? KIND_MEDIA : kind;
         this.title = title == null ? "" : title;
         this.url = url == null ? "" : url;
@@ -31,6 +45,7 @@ public final class NativeContentItem {
         this.views = views == null ? "" : views;
         this.uploader = uploader == null ? "" : uploader;
         this.comments = comments == null ? "" : comments;
+        this.description = description == null ? "" : description;
     }
 
     public boolean isCategory() {
@@ -58,7 +73,8 @@ public final class NativeContentItem {
                 choose(imageUrl, other.imageUrl),
                 choose(views, other.views),
                 choose(uploader, other.uploader),
-                choose(comments, other.comments)
+                choose(comments, other.comments),
+                choose(description, other.description)
         );
     }
 

@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -41,6 +42,7 @@ public final class SearchActivity extends Activity {
     private enum Filter {
         ALL,
         VIDEOS,
+        EFUKT,
         SERIES,
         CATEGORIES,
         LIBRARY
@@ -48,7 +50,8 @@ public final class SearchActivity extends Activity {
 
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final BrowseRepository browseRepository = new BrowseRepository();
-    private final ExecutorService io = Executors.newFixedThreadPool(3);
+    private final EfuktRepository efuktRepository = new EfuktRepository();
+    private final ExecutorService io = Executors.newFixedThreadPool(6);
 
     private EditText input;
     private ProgressBar progress;
@@ -58,7 +61,10 @@ public final class SearchActivity extends Activity {
     private final List<TextView> filterViews = new ArrayList<>();
 
     private List<NativeContentItem> videos = new ArrayList<>();
+    private List<NativeContentItem> crazyVideos = new ArrayList<>();
+    private List<NativeContentItem> efuktVideos = new ArrayList<>();
     private List<NativeContentItem> series = new ArrayList<>();
+    private List<NativeContentItem> efuktSeries = new ArrayList<>();
     private List<NativeContentItem> categories = new ArrayList<>();
     private List<NativeContentItem> library = new ArrayList<>();
     private Filter filter = Filter.ALL;
@@ -138,7 +144,7 @@ public final class SearchActivity extends Activity {
         status.setTextSize(15f);
         status.setGravity(Gravity.CENTER);
         status.setPadding(dp(26), dp(26), dp(26), dp(26));
-        status.setText("Search videos, Series, Categories and your Library");
+        status.setText("Search CrazyShit, EFukt, Series, Categories and your Library");
         content.addView(status, new FrameLayout.LayoutParams(-1, -1));
 
         progress = new ProgressBar(this);
@@ -194,7 +200,7 @@ public final class SearchActivity extends Activity {
         row.setPadding(dp(12), dp(8), dp(12), dp(6));
 
         input = new EditText(this);
-        input.setHint("Search CrazyShit");
+        input.setHint("Search CrazyShit and EFukt");
         input.setHintTextColor(Color.rgb(145, 145, 155));
         input.setTextColor(Color.WHITE);
         input.setTextSize(16f);
@@ -214,10 +220,10 @@ public final class SearchActivity extends Activity {
 
         Button go = new Button(this);
         go.setText("Search");
-        go.setTextColor(Color.WHITE);
+        go.setTextColor(UiPalette.ON_PRIMARY);
         go.setTextSize(13f);
         go.setAllCaps(false);
-        go.setBackground(rounded(Color.rgb(255, 90, 31), dp(14)));
+        go.setBackground(rounded(UiPalette.PRIMARY, dp(14)));
         go.setOnClickListener(v -> {
             haptic(v);
             runSearch();
@@ -239,6 +245,7 @@ public final class SearchActivity extends Activity {
 
         addFilter(row, "All", Filter.ALL);
         addFilter(row, "Videos", Filter.VIDEOS);
+        addFilter(row, "EFukt", Filter.EFUKT);
         addFilter(row, "Series", Filter.SERIES);
         addFilter(row, "Categories", Filter.CATEGORIES);
         addFilter(row, "Library", Filter.LIBRARY);
@@ -268,9 +275,9 @@ public final class SearchActivity extends Activity {
     private void refreshFilterStyles() {
         for (TextView chip : filterViews) {
             boolean selected = chip.getTag() == filter;
-            chip.setTextColor(selected ? Color.WHITE : Color.rgb(188, 188, 198));
+            chip.setTextColor(selected ? UiPalette.ON_PRIMARY : Color.rgb(188, 188, 198));
             chip.setBackground(rounded(
-                    selected ? Color.rgb(255, 90, 31) : Color.rgb(31, 31, 36),
+                    selected ? UiPalette.PRIMARY : Color.rgb(31, 31, 36),
                     dp(18)
             ));
         }
@@ -288,39 +295,103 @@ public final class SearchActivity extends Activity {
         status.setVisibility(View.GONE);
         adapter.replace(new ArrayList<>());
 
-        io.execute(() -> {
-            List<NativeContentItem> foundVideos = new ArrayList<>();
-            List<NativeContentItem> foundSeries = new ArrayList<>();
-            List<NativeContentItem> foundCategories = new ArrayList<>();
+        CompletableFuture<List<NativeContentItem>> crazyVideos = CompletableFuture.supplyAsync(
+                () -> fetchCrazyVideos(query), io
+        );
+        CompletableFuture<List<NativeContentItem>> efuktVideos = CompletableFuture.supplyAsync(
+                () -> fetchEfuktVideos(query), io
+        );
+        CompletableFuture<List<NativeContentItem>> crazySeries = CompletableFuture.supplyAsync(
+                () -> fetchCrazySeriesMatches(query), io
+        );
+        CompletableFuture<List<NativeContentItem>> efuktSeries = CompletableFuture.supplyAsync(
+                () -> fetchEfuktSeriesMatches(query), io
+        );
+        CompletableFuture<List<NativeContentItem>> foundCategories = CompletableFuture.supplyAsync(
+                () -> fetchCategoryMatches(query), io
+        );
+        CompletableFuture<List<NativeContentItem>> foundLibrary = CompletableFuture.supplyAsync(
+                () -> searchLibrary(query), io
+        );
 
-            try {
-                foundVideos = repository.fetchFeed(this, repository.searchUrl(query), 1);
-            } catch (Exception ignored) {
-            }
-            try {
-                foundSeries = matchCatalog(browseRepository.fetchSeries(this), query);
-            } catch (Exception ignored) {
-            }
-            try {
-                foundCategories = matchCatalog(browseRepository.fetchCategories(this), query);
-            } catch (Exception ignored) {
-            }
-            List<NativeContentItem> foundLibrary = searchLibrary(query);
+        CompletableFuture.allOf(
+                crazyVideos, efuktVideos, crazySeries, efuktSeries, foundCategories, foundLibrary
+        ).whenComplete((ignored, error) -> runOnUiThread(() -> {
+            if (requestGeneration != generation || isFinishing()) return;
+            SearchActivity.this.crazyVideos = crazyVideos.join();
+            SearchActivity.this.efuktVideos = efuktVideos.join();
+            SearchActivity.this.efuktSeries = efuktSeries.join();
+            videos = interleave(SearchActivity.this.crazyVideos, SearchActivity.this.efuktVideos);
+            series = interleave(crazySeries.join(), SearchActivity.this.efuktSeries);
+            categories = foundCategories.join();
+            library = foundLibrary.join();
+            progress.setVisibility(View.GONE);
+            renderResults();
+        }));
+    }
 
-            final List<NativeContentItem> videoResult = foundVideos;
-            final List<NativeContentItem> seriesResult = foundSeries;
-            final List<NativeContentItem> categoryResult = foundCategories;
-            final List<NativeContentItem> libraryResult = foundLibrary;
-            runOnUiThread(() -> {
-                if (requestGeneration != generation) return;
-                videos = videoResult;
-                series = seriesResult;
-                categories = categoryResult;
-                library = libraryResult;
-                progress.setVisibility(View.GONE);
-                renderResults();
-            });
-        });
+    private List<NativeContentItem> fetchCrazyVideos(String query) {
+        try {
+            return repository.fetchFeed(this, repository.searchUrl(query), 1);
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private List<NativeContentItem> fetchEfuktVideos(String query) {
+        try {
+            return efuktRepository.search(this, query);
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private List<NativeContentItem> fetchCrazySeriesMatches(String query) {
+        try {
+            return matchCatalog(browseRepository.fetchSeries(this), query);
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private List<NativeContentItem> fetchEfuktSeriesMatches(String query) {
+        try {
+            return matchCatalog(efuktRepository.fetchSeries(this), query);
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private List<NativeContentItem> fetchCategoryMatches(String query) {
+        try {
+            return matchCatalog(browseRepository.fetchCategories(this), query);
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private List<NativeContentItem> interleave(
+            List<NativeContentItem> first,
+            List<NativeContentItem> second
+    ) {
+        LinkedHashMap<String, NativeContentItem> result = new LinkedHashMap<>();
+        int firstSize = first == null ? 0 : first.size();
+        int secondSize = second == null ? 0 : second.size();
+        int count = Math.max(firstSize, secondSize);
+        for (int i = 0; i < count; i++) {
+            if (i < firstSize) addUnique(result, first.get(i));
+            if (i < secondSize) addUnique(result, second.get(i));
+        }
+        return new ArrayList<>(result.values());
+    }
+
+    private void addUnique(
+            LinkedHashMap<String, NativeContentItem> result,
+            NativeContentItem item
+    ) {
+        if (item == null || item.url == null || item.url.isEmpty()) return;
+        NativeContentItem old = result.get(item.url);
+        result.put(item.url, old == null ? item : old.merge(item));
     }
 
     private List<NativeContentItem> matchCatalog(List<NativeContentItem> source, String query) {
@@ -329,7 +400,7 @@ public final class SearchActivity extends Activity {
         String[] terms = normalized(query).split("\\s+");
         for (NativeContentItem item : source) {
             if (item == null) continue;
-            String haystack = normalized(item.title + " " + item.url);
+            String haystack = normalized(item.title + " " + item.url + " " + item.description);
             boolean match = true;
             for (String term : terms) {
                 if (!term.isEmpty() && !haystack.contains(term)) {
@@ -376,8 +447,10 @@ public final class SearchActivity extends Activity {
     private void renderResults() {
         if (activeQuery.isEmpty()) return;
         ArrayList<GlobalSearchAdapter.Entry> output = new ArrayList<>();
-        if (filter == Filter.ALL || filter == Filter.VIDEOS) appendSection(output, "Videos", videos, GlobalSearchAdapter.SOURCE_REMOTE, 30);
+        if (filter == Filter.ALL || filter == Filter.VIDEOS) appendSection(output, "Videos  •  CrazyShit + EFukt", videos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
+        if (filter == Filter.EFUKT) appendSection(output, "EFukt Videos", efuktVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.ALL || filter == Filter.SERIES) appendSection(output, "Series", series, GlobalSearchAdapter.SOURCE_REMOTE, 20);
+        if (filter == Filter.EFUKT) appendSection(output, "EFukt Series", efuktSeries, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.ALL || filter == Filter.CATEGORIES) appendSection(output, "Categories", categories, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.ALL || filter == Filter.LIBRARY) appendSection(output, "Your Library", library, GlobalSearchAdapter.SOURCE_LIBRARY, 30);
         adapter.replace(output);
@@ -410,7 +483,12 @@ public final class SearchActivity extends Activity {
         if (item == null || item.url == null || item.url.isEmpty()) return;
         haptic(recycler);
         if (item.isSeries() || item.isCategory()) {
-            startActivity(NativeFeedBrowserActivity.create(this, item.title, item.url, false));
+            String source = EfuktRepository.isEfuktUrl(item.url)
+                    ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                    : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
+            startActivity(NativeFeedBrowserActivity.create(
+                    this, item.title, item.url, false, source
+            ));
             return;
         }
 
@@ -419,7 +497,7 @@ public final class SearchActivity extends Activity {
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = repository.resolvePlayable(this, item.url);
+                stream = PlayableSourceRouter.resolve(this, item.url);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
@@ -440,6 +518,10 @@ public final class SearchActivity extends Activity {
                 intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
                 intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
+                if (EfuktRepository.isEfuktUrl(item.url)) {
+                    intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, EfuktRepository.SERIES);
+                    intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, NativeFeedBrowserActivity.SOURCE_EFUKT);
+                }
                 try {
                     intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, WebSettings.getDefaultUserAgent(this));
                 } catch (Exception ignored) {

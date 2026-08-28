@@ -14,7 +14,6 @@ import org.jsoup.select.Elements;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -99,28 +98,12 @@ final class RelatedVideosPolish {
                         if (!running || host == null || host.isFinishing() || host.isDestroyed()) return;
                         if (requestGeneration != generation || !sameUrl(current, stringField(host, "pageUrl"))) return;
                         apply(host, related);
-
-                        // VideoDetailActivity's legacy Home/Trending request can finish after ours.
-                        // Re-apply the context-aware set briefly so the old request cannot win a race.
-                        MAIN.postDelayed(() -> reapply(host, current, requestGeneration, related), 700L);
-                        MAIN.postDelayed(() -> reapply(host, current, requestGeneration, related), 1800L);
                     });
                 });
             }
             MAIN.postDelayed(watcher, 450L);
         }
 
-        void reapply(
-                VideoDetailActivity activity,
-                String expectedPage,
-                int expectedGeneration,
-                List<NativeContentItem> related
-        ) {
-            if (!running || activity == null || activity.isFinishing() || activity.isDestroyed()) return;
-            if (expectedGeneration != generation) return;
-            if (!sameUrl(expectedPage, stringField(activity, "pageUrl"))) return;
-            apply(activity, related);
-        }
     }
 
     private static List<NativeContentItem> fetchRelated(Context context, String pageUrl, int limit) {
@@ -344,12 +327,8 @@ final class RelatedVideosPolish {
     }
 
     private static void apply(VideoDetailActivity activity, List<NativeContentItem> items) {
-        try {
-            Method method = VideoDetailActivity.class.getDeclaredMethod("renderRelated", List.class);
-            method.setAccessible(true);
-            method.invoke(activity, items == null ? new ArrayList<>() : items);
-        } catch (Exception ignored) {
-        }
+        if (activity == null) return;
+        activity.renderContextRelated(items == null ? new ArrayList<>() : items);
     }
 
     private static String stringField(VideoDetailActivity activity, String name) {

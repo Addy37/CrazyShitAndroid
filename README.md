@@ -17,6 +17,7 @@ Version 2.0 replaces the old WebView-first experience with a native Android inte
 ### Main navigation
 
 - **Home** with native cards, pagination, grid/list view, comments, and related content
+- **Series** with a remembered CrazyShit / EFukt source selector and native series feeds
 - **Trending** with its own live page and retained scroll position
 - **Chaos** as the featured center tab with a randomized vertical video feed
 - **Memes** as a native static-image feed and image viewer
@@ -80,7 +81,7 @@ Playback features include:
 - Fullscreen rotation
 - Share and Watch Later
 
-The app only attempts to play media URLs already exposed by the website to the current device/session. It does not bypass DRM, encryption, paywalls, authentication, or access controls.
+The app only attempts to play media URLs already exposed by CrazyShit.com or EFukt.com to the current device/session. It does not bypass DRM, encryption, paywalls, authentication, or access controls.
 
 ## Comments and account
 
@@ -126,7 +127,7 @@ See [PRIVACY.md](PRIVACY.md) for more information.
 
 ## Credits and ownership
 
-- Website, site content, branding, and user submissions: CrazyShit.com and their respective owners
+- Website, site content, branding, and user submissions: CrazyShit.com, EFukt.com, and their respective owners
 - Android platform and WebView: Android Open Source Project / Google
 - Material Components: Google / Android Open Source ecosystem
 - Media playback: AndroidX Media3 / ExoPlayer

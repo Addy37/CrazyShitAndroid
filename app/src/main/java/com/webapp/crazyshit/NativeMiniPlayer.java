@@ -65,6 +65,8 @@ public final class NativeMiniPlayer {
     private String views;
     private String uploader;
     private String comments;
+    private String relatedFeedUrl;
+    private String source;
     private String handoffSnapshotPath;
     private boolean reopenDetail;
     private boolean resumeAfterPause;
@@ -108,6 +110,8 @@ public final class NativeMiniPlayer {
         views = data.getStringExtra(VideoDetailActivity.EXTRA_VIEWS);
         uploader = data.getStringExtra(VideoDetailActivity.EXTRA_UPLOADER);
         comments = data.getStringExtra(VideoDetailActivity.EXTRA_COMMENTS);
+        relatedFeedUrl = data.getStringExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL);
+        source = data.getStringExtra(VideoDetailActivity.EXTRA_SOURCE);
         boolean directHandoff = data.getBooleanExtra(MiniPlayerHandoffPolish.EXTRA_DIRECT_HANDOFF, false);
         handoffSnapshotPath = data.getStringExtra(MiniPlayerHandoffPolish.EXTRA_SNAPSHOT_PATH);
         int sourceLeft = data.getIntExtra(MiniPlayerHandoffPolish.EXTRA_SOURCE_LEFT, -1);
@@ -232,6 +236,8 @@ public final class NativeMiniPlayer {
         views = null;
         uploader = null;
         comments = null;
+        relatedFeedUrl = null;
+        source = null;
         reopenDetail = false;
     }
 
@@ -253,6 +259,8 @@ public final class NativeMiniPlayer {
             intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, views);
             intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, uploader);
             intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, comments);
+            intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, relatedFeedUrl);
+            intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
         }
         stopWithoutRecording();
         host.reopenMiniPlayer(intent);
@@ -543,7 +551,7 @@ public final class NativeMiniPlayer {
         card.setCardBackgroundColor(Color.rgb(24, 24, 28));
         card.setRadius(dp(18));
         card.setCardElevation(dp(15));
-        card.setStrokeColor(Color.rgb(82, 52, 43));
+        card.setStrokeColor(Color.rgb(70, 68, 18));
         card.setStrokeWidth(dp(1));
         card.setVisibility(View.GONE);
 
@@ -596,7 +604,7 @@ public final class NativeMiniPlayer {
         content.addView(track, trackParams);
 
         progressFill = new View(activity);
-        progressFill.setBackgroundColor(Color.rgb(255, 90, 31));
+        progressFill.setBackgroundColor(UiPalette.PRIMARY);
         progressFill.setScaleX(0f);
         progressFill.setPivotX(0f);
         FrameLayout.LayoutParams fillParams = new FrameLayout.LayoutParams(-1, dp(3));

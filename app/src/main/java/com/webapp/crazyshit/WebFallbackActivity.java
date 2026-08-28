@@ -125,7 +125,7 @@ public final class WebFallbackActivity extends Activity {
 
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
-        progress.getProgressDrawable().setTint(Color.rgb(255, 90, 31));
+        progress.getProgressDrawable().setTint(UiPalette.PRIMARY);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(-1, dp(3));
         progressParams.gravity = Gravity.TOP;
         webContainer.addView(progress, progressParams);
@@ -255,8 +255,10 @@ public final class WebFallbackActivity extends Activity {
 
     private boolean isSameSite(Uri uri) {
         String host = uri == null ? null : uri.getHost();
-        return host != null &&
-                (host.equalsIgnoreCase("crazyshit.com") || host.toLowerCase().endsWith(".crazyshit.com"));
+        if (host == null) return false;
+        String lower = host.toLowerCase(java.util.Locale.US);
+        return lower.equals("crazyshit.com") || lower.endsWith(".crazyshit.com") ||
+                lower.equals("efukt.com") || lower.endsWith(".efukt.com");
     }
 
     private String currentUrl() {
