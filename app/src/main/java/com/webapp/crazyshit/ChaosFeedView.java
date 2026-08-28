@@ -89,6 +89,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Activity activity;
     private final Host host;
     private final CrazyShitRepository repository = new CrazyShitRepository();
+    private final EfuktRepository efuktRepository = new EfuktRepository();
     private final ExecutorService io = Executors.newFixedThreadPool(4);
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
     private final Set<String> sessionUrls = new HashSet<>();
@@ -380,7 +381,7 @@ public final class ChaosFeedView extends FrameLayout {
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = repository.resolvePlayable(activity, item.url);
+                stream = resolvePlayable(item);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
@@ -400,6 +401,15 @@ public final class ChaosFeedView extends FrameLayout {
                 if (position == selectedPosition) playSelected();
             });
         });
+    }
+
+    private CrazyShitRepository.StreamInfo resolvePlayable(NativeContentItem item)
+            throws Exception {
+        if (item == null || item.url == null || item.url.isEmpty()) return null;
+        if (EfuktRepository.isEfuktUrl(item.url)) {
+            return efuktRepository.resolvePlayable(activity, item.url);
+        }
+        return repository.resolvePlayable(activity, item.url);
     }
 
     private boolean shouldRetryResolution(NativeContentItem item, int position) {
@@ -641,7 +651,7 @@ public final class ChaosFeedView extends FrameLayout {
         io.execute(() -> {
             CrazyShitRepository.StreamInfo refreshed = null;
             try {
-                refreshed = repository.resolvePlayable(activity, pageUrl);
+                refreshed = resolvePlayable(retryItem);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = refreshed;
@@ -729,6 +739,14 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void openInlineComments(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
+        if (EfuktRepository.isEfuktUrl(item.url)) {
+            Toast.makeText(
+                    activity,
+                    "Comments are not available for EFukt clips in Chaos yet.",
+                    Toast.LENGTH_SHORT
+            ).show();
+            return;
+        }
         if (commentsDialog != null && commentsDialog.isShowing()) return;
 
         pager.animate().cancel();
@@ -778,7 +796,8 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void preloadReadyComments(NativeContentItem item, int position) {
-        if (item == null || position != selectedPosition || !active || !hostResumed) return;
+        if (item == null || EfuktRepository.isEfuktUrl(item.url)) return;
+        if (position != selectedPosition || !active || !hostResumed) return;
         if (!ChaosPreloadPolicy.allowsCommentPreload(activity)) return;
         String url = item.url;
         pager.postDelayed(() -> {
@@ -863,6 +882,7 @@ public final class ChaosFeedView extends FrameLayout {
         final TextView title;
         final TextView meta;
         final TextView save;
+        final TextView comments;
         final TextView mute;
         final TextView speedBadge;
         final SeekBar seekBar;
@@ -980,7 +1000,7 @@ public final class ChaosFeedView extends FrameLayout {
             save = actionButton("☆\nSave", "Save to Watch Later");
             actions.addView(save, actionParams());
 
-            TextView comments = actionButton("💬\nComments", "Open comments");
+            comments = actionButton("💬\nComments", "Open comments");
             actions.addView(comments, actionParams());
 
             TextView share = actionButton("↗\nShare", "Share video");
@@ -1182,6 +1202,9 @@ public final class ChaosFeedView extends FrameLayout {
                 info.append(next.views).append(" views");
             }
             meta.setText(info);
+            comments.setVisibility(
+                    EfuktRepository.isEfuktUrl(next.url) ? View.GONE : View.VISIBLE
+            );
             updateSaveButton(next, save);
             loading.setVisibility(View.VISIBLE);
             failure.setText("Couldn't play this one\nSwipe up for the next video");
@@ -1478,7 +1501,7 @@ public final class ChaosFeedView extends FrameLayout {
                             VideoActionSheet.action(
                                     R.drawable.ic_action_share,
                                     "Share",
-                                    "Send the CrazyShit page",
+                                    "Send the video page",
                                     () -> share(item)
                             )
                     ),

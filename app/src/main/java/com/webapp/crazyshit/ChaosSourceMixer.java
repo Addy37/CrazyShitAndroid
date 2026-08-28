@@ -24,6 +24,8 @@ final class ChaosSourceMixer {
     private static final int SOURCES_PER_BATCH = 6;
     private static final int REGULAR_ITEMS_PER_SOURCE = 4;
     private static final int SHIT_SHOW_PER_BATCH = 24;
+    private static final int EFUKT_ITEMS_PER_BATCH = 12;
+    private static final int EFUKT_SERIES_PER_BATCH = 2;
     private static final int STARTER_ITEMS = 1;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
@@ -31,10 +33,14 @@ final class ChaosSourceMixer {
     private final CrazyShitRepository repository;
     private final Random random;
     private final ShitShowTapSource shitShow = new ShitShowTapSource();
+    private final EfuktRepository efukt = new EfuktRepository();
+    private final ArrayList<NativeContentItem> efuktSeries = new ArrayList<>();
+    private final ArrayDeque<NativeContentItem> efuktSeriesDeck = new ArrayDeque<>();
     private final ArrayList<String> catalog = new ArrayList<>();
     private final ArrayDeque<String> sourceDeck = new ArrayDeque<>();
     private final Set<String> usedSourcePages = new HashSet<>();
     private boolean catalogLoaded;
+    private boolean efuktCatalogAttempted;
     private boolean starterPending = true;
 
     ChaosSourceMixer(CrazyShitRepository repository, Random random) {
@@ -58,9 +64,9 @@ final class ChaosSourceMixer {
             if (!starter.isEmpty()) return starter;
         }
 
-        // Keep all six regular source slots so Home/Trending/Videos/User Uploads/categories remain
-        // broad, but cap each source at four clips. Pair that with up to 24 Shit Show stories so
-        // the finished Chaos batch is intentionally close to a 50/50 mix.
+        // Keep all six CrazyShit source slots broad, add up to 12 EFukt clips from two shuffled
+        // series, then weave in up to 24 Shit Show stories. A full batch is about 40% CrazyShit,
+        // 20% EFukt, and 40% Shit Show while every source still degrades cleanly when unavailable.
         ensureCatalog(context);
 
         LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
@@ -80,7 +86,10 @@ final class ChaosSourceMixer {
         }
         Collections.shuffle(shitShowItems, random);
 
-        return weaveShitShow(regularItems, shitShowItems);
+        ArrayList<NativeContentItem> efuktItems = new ArrayList<>(loadEfuktBatch(context));
+        Collections.shuffle(efuktItems, random);
+        List<NativeContentItem> regularAndEfukt = weaveEfukt(regularItems, efuktItems);
+        return weaveShitShow(regularAndEfukt, shitShowItems);
     }
 
     void resetDeck() {
@@ -88,6 +97,8 @@ final class ChaosSourceMixer {
         usedSourcePages.clear();
         starterPending = true;
         shitShow.resetDeck();
+        efuktSeriesDeck.clear();
+        if (efuktSeries.isEmpty()) efuktCatalogAttempted = false;
     }
 
     private List<NativeContentItem> loadStarterBatch(Context context) {
@@ -117,6 +128,92 @@ final class ChaosSourceMixer {
             }
         }
         return new ArrayList<>();
+    }
+
+
+    private List<NativeContentItem> loadEfuktBatch(Context context) {
+        ensureEfuktCatalog(context);
+        if (efuktSeries.isEmpty()) return new ArrayList<>();
+
+        LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
+        HashSet<String> usedSeries = new HashSet<>();
+        int seriesTarget = Math.min(EFUKT_SERIES_PER_BATCH, efuktSeries.size());
+        int attempts = Math.max(4, efuktSeries.size() * 2);
+
+        while (usedSeries.size() < seriesTarget && attempts-- > 0) {
+            if (efuktSeriesDeck.isEmpty()) refillEfuktDeck();
+            NativeContentItem series = efuktSeriesDeck.pollFirst();
+            if (series == null || series.url == null || series.url.isEmpty()) continue;
+            if (!usedSeries.add(series.url)) continue;
+
+            try {
+                for (NativeContentItem item : efukt.fetchSeriesFeed(context, series.url, 1)) {
+                    if (item == null || item.url == null || item.url.isEmpty()) continue;
+                    if (!NativeContentItem.KIND_MEDIA.equals(item.kind)) continue;
+                    combined.putIfAbsent(item.url, item);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        ArrayList<NativeContentItem> candidates = new ArrayList<>(combined.values());
+        Collections.shuffle(candidates, random);
+        int take = Math.min(EFUKT_ITEMS_PER_BATCH, candidates.size());
+        return new ArrayList<>(candidates.subList(0, take));
+    }
+
+    private void ensureEfuktCatalog(Context context) {
+        if (efuktCatalogAttempted) return;
+        efuktCatalogAttempted = true;
+        try {
+            for (NativeContentItem series : efukt.fetchSeries(context)) {
+                if (series == null || series.url == null || series.url.isEmpty()) continue;
+                if (!NativeContentItem.KIND_SERIES.equals(series.kind)) continue;
+                efuktSeries.add(series);
+            }
+        } catch (Exception ignored) {
+        }
+        refillEfuktDeck();
+    }
+
+    private void refillEfuktDeck() {
+        if (efuktSeries.isEmpty()) return;
+        ArrayList<NativeContentItem> shuffled = new ArrayList<>(efuktSeries);
+        Collections.shuffle(shuffled, random);
+        efuktSeriesDeck.addAll(shuffled);
+    }
+
+    private List<NativeContentItem> weaveEfukt(
+            List<NativeContentItem> regularItems,
+            List<NativeContentItem> efuktItems
+    ) {
+        if (efuktItems == null || efuktItems.isEmpty()) {
+            return regularItems == null ? new ArrayList<>() : new ArrayList<>(regularItems);
+        }
+        if (regularItems == null || regularItems.isEmpty()) return new ArrayList<>(efuktItems);
+
+        ArrayList<NativeContentItem> regular = new ArrayList<>(regularItems);
+        ArrayList<NativeContentItem> efuktClips = new ArrayList<>(efuktItems);
+        ArrayList<NativeContentItem> result =
+                new ArrayList<>(regular.size() + efuktClips.size());
+
+        int regularIndex = 0;
+        int efuktIndex = 0;
+        int openingRegular = random.nextInt(3);
+        while (regularIndex < regular.size() && openingRegular-- > 0) {
+            result.add(regular.get(regularIndex++));
+        }
+
+        while (regularIndex < regular.size() && efuktIndex < efuktClips.size()) {
+            result.add(efuktClips.get(efuktIndex++));
+            for (int i = 0; i < 2 && regularIndex < regular.size(); i++) {
+                result.add(regular.get(regularIndex++));
+            }
+        }
+
+        while (regularIndex < regular.size()) result.add(regular.get(regularIndex++));
+        while (efuktIndex < efuktClips.size()) result.add(efuktClips.get(efuktIndex++));
+        return result;
     }
 
     private List<NativeContentItem> weaveShitShow(
