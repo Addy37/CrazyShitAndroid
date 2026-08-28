@@ -1,59 +1,46 @@
-# CrazyShit v2.8.1
+# CrazyShit v2.8.2
 
-CrazyShit 2.8.1 is the fast-start and interface release. It keeps the playback, Chaos mixing, navigation, and replay behavior from 2.8.0 while improving startup, comments, related videos, player controls, menus, and downloads.
+CrazyShit 2.8.2 adds EFukt Series, search, and Chaos support while improving descriptions and thumbnail recovery across the app.
 
-## Faster startup
+## EFukt Series
 
-- Replaces the old circular splash artwork with the transparent CrazyShit wordmark
-- Uses an OLED-black splash with restrained yellow glow and light effects
-- Keeps the splash visible until the first real Chaos player reaches a ready state
-- Fades directly into the first Chaos video and hides the loading spinner during the handoff when possible
-- Retains a hard timeout so a slow or failed stream cannot trap the app on the splash
-- Starts Chaos from a small prepared batch while the wider feed continues loading
+- Adds a remembered CrazyShit and EFukt selector to the existing Series tab
+- Loads EFukt's public Series directory into native cards
+- Shows up to five description lines with taller cards when description text is available
+- Opens EFukt series as native video feeds
+- Plays supported EFukt MP4 and stream sources through the existing Media3 player
+- Keeps website fallback available when native parsing cannot load a page
 
-## Updated interface
+## Search
 
-- Reworks the adaptive launcher icon colors and Android mask fit
-- Changes the app accent color from orange to the yellow used by the CrazyShit logo
-- Refines the floating bottom navigation pill and top header sizing
-- Redesigns More as a native bottom sheet with clearer Library, Account, Settings, browse, display, and app sections
-- Adds launcher shortcuts for Chaos, Continue Watching, Search, and Watch Later
+- Searches EFukt videos and series alongside CrazyShit, Categories, and the local Library
+- Interleaves CrazyShit and EFukt video results
+- Adds an EFukt-only filter
+- Searches remote sources concurrently
+- Supports EFukt video pages stored under nested URL paths
 
-## Comments and related videos
+## Chaos
 
-- Opens comments in an in-place bottom sheet instead of a separate screen
-- Keeps portrait Chaos videos in place while moving horizontal videos upward to make room for comments
-- Keeps the surrounding Chaos interface at full size during the comments handoff
-- Improves related-video thumbnail loading and caching
-- Preserves the related-video history stack so Back returns through each previously opened video
-- Adds Android predictive-back support to related-video navigation
+- Adds EFukt clips to the full-screen Chaos feed
+- Targets full batches near 40% regular CrazyShit, 20% EFukt, and 40% Shit Show
+- Samples EFukt clips from two shuffled series per batch
+- Uses the EFukt resolver for first playback and retry playback
+- Keeps History, Continue Watching, Watch Later, sharing, and downloads working for EFukt clips
+- Hides native comments on EFukt clips because that comment reader only supports CrazyShit pages
 
-Comment posting still depends on the website accepting the signed-in session and request. Comment viewing remains available when the site exposes the thread.
+## Thumbnails
 
-## Player and menu polish
+- Loads direct thumbnails first for faster initial artwork
+- Runs page-based thumbnail recovery for visible Home and Search videos
+- Rejects failed direct, cached, static, and rendered image URLs from later retries
+- Falls back to rendered-page artwork or an extracted video frame when needed
 
-- Replaces the old popup player menu with a consistent native action sheet
-- Refreshes play, pause, seek, timeline, title, fullscreen, speed, comments, save, share, and download controls
-- Reduces control-show and control-hide stutter
-- Adds playback retry handling and shareable playback reports for failed clips
-- Keeps Picture-in-Picture, mini-player, gestures, resume position, fullscreen rotation, and completed-video replay behavior
+## Compatibility
 
-## Downloads
-
-- Adds Download actions to Chaos and regular video menus
-- Adds a Downloads section under More for progress, retry, playback, and removal
-- Saves new downloads in the device's public Downloads folder
-- Uses up to four parallel byte-range transfers when the media host supports them
-- Falls back to one reliable transfer when parallel ranges are unavailable
-- Keeps active downloads running through an Android foreground service
-
-## Existing behavior retained
-
-- Chaos source mixing and frequency remain unchanged
-- Shit Show playback remains unchanged
-- Home, Series, Categories, Search, Continue Watching, History, and Watch Later remain available
-- Stable application ID and signing identity remain unchanged, so 2.8.1 installs over 2.8.0
+- Keeps the existing stable application ID and signing identity
+- Installs directly over CrazyShit 2.8.1
+- Keeps CrazyShit Series and playback behavior available when EFukt is unavailable in the current region or session
 
 ## Project status
 
-This Android client is an independent community project. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
+This Android client is an independent community project. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com or EFukt.com.

@@ -33,10 +33,10 @@ Chaos is the app's full-screen random video feed.
 - Swipe down to return to previous videos in the current stack
 - Autoplay the active item and pause offscreen items
 - Resolve upcoming videos ahead of time for quicker transitions
-- Mix Home and Trending sources
+- Mix Home, Trending, Videos, User Uploads, Categories, Shit Show, and EFukt sources
 - Prevent duplicates within the current session
-- Remember up to 180 recently viewed URLs and strongly prefer unseen videos on later visits
-- Save to Watch Later, open comments, share, or open full details
+- Remember up to 500 recently viewed URLs and strongly prefer unseen videos on later visits
+- Save to Watch Later, open supported comments, share, or open full details
 - Feed Chaos playback into normal History and Continue Watching
 - Rotate to landscape for immersive fullscreen playback
 - Keep vertical next/previous swiping active while landscape
