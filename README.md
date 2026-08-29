@@ -8,7 +8,7 @@ A native-first Android client for [CrazyShit.com](https://crazyshit.com/).
 
 ## Content warning
 
-CrazyShit.com contains adult, graphic, violent, and otherwise sensitive material. This app is intended only for adults who knowingly choose to access that site. The app shows a one-time 18+ / graphic-content warning.
+CrazyShit.com and EFukt.com contain adult, graphic, violent, and otherwise sensitive material. This app is intended only for adults who knowingly choose to access those sites. The app shows a one-time 18+ access notice covering sensitive content, regional availability, lawful VPN use, and the project's unofficial status.
 
 ## CrazyShit 2.0
 

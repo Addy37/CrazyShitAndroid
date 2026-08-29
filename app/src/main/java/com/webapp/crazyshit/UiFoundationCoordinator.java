@@ -119,8 +119,7 @@ final class UiFoundationCoordinator {
             FRESH_MAIN.put(main, false);
             return;
         }
-        if (!main.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getBoolean("age_warning_accepted", false)) {
+        if (!AccessNoticeDialog.isAccepted(main)) {
             return;
         }
         FRESH_MAIN.put(main, false);

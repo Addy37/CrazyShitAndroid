@@ -1,6 +1,12 @@
-# CrazyShit v2.8.2
+# CrazyShit v2.8.3
 
-CrazyShit 2.8.2 adds EFukt Series, search, and Chaos support while improving descriptions and thumbnail recovery across the app.
+CrazyShit 2.8.3 adds a redesigned one-time access notice for CrazyShit and EFukt.
+
+- Explains that adult and graphic content is limited to users age 18 or older.
+- Notes that access can vary because of state or regional laws, provider blocks, and site policies.
+- Mentions that a reputable VPN may help with some location or provider blocks while making clear that it does not override local law or required age verification.
+- States that the app is an independent, unofficial project made for fun and is not affiliated with CrazyShit.com or EFukt.com.
+- Matches the app's OLED theme with bright accent colors, rounded notice cards, and themed actions.
 
 ## EFukt Series
 

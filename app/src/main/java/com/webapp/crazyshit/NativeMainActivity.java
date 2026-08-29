@@ -94,9 +94,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         appUpdater = new AppUpdater(this);
         configureBack();
 
-        SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
-        if (!prefs.getBoolean("age_warning_accepted", false)) {
-            showAgeWarning();
+        if (!AccessNoticeDialog.isAccepted(this)) {
+            AccessNoticeDialog.show(this, () -> {
+                showHome();
+                dispatchLauncherShortcut();
+            });
         } else {
             showHome();
             dispatchLauncherShortcut();
@@ -108,8 +110,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        if (!getSharedPreferences("app_prefs", MODE_PRIVATE)
-                .getBoolean("age_warning_accepted", false)) {
+        if (!AccessNoticeDialog.isAccepted(this)) {
             return;
         }
         showHome();
@@ -835,27 +836,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void showNativeEmpty(String text) {
         emptyView.setText(text);
         emptyView.setVisibility(View.VISIBLE);
-    }
-
-    private void showAgeWarning() {
-        new AlertDialog.Builder(this)
-                .setTitle("18+ / Graphic Content")
-                .setMessage(
-                        "CrazyShit connects to CrazyShit.com, which contains adult and graphic material. " +
-                        "Continue only if you are 18 or older and want to view that type of content.\n\n" +
-                        "This community app is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com."
-                )
-                .setCancelable(false)
-                .setNegativeButton("Exit", (dialog, which) -> finish())
-                .setPositiveButton("Continue", (dialog, which) -> {
-                    getSharedPreferences("app_prefs", MODE_PRIVATE)
-                            .edit()
-                            .putBoolean("age_warning_accepted", true)
-                            .apply();
-                    showHome();
-                    dispatchLauncherShortcut();
-                })
-                .show();
     }
 
     private void checkForUpdates(boolean manual) {

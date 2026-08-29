@@ -151,9 +151,11 @@ public class MainActivity extends Activity {
         checkForUpdates(false);
 
         String requestedStart = getIntent().getStringExtra("start_url");
-        SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
-        if (!prefs.getBoolean("age_warning_accepted", false)) {
-            showAgeWarning();
+        if (!AccessNoticeDialog.isAccepted(this)) {
+            AccessNoticeDialog.show(this, () ->
+                    webView.loadUrl(requestedStart == null || requestedStart.isEmpty()
+                            ? HOME
+                            : requestedStart));
         } else if (state == null || webView.restoreState(state) == null) {
             webView.loadUrl(requestedStart == null || requestedStart.isEmpty() ? HOME : requestedStart);
         }
@@ -1104,27 +1106,6 @@ public class MainActivity extends Activity {
     private String currentUrl() {
         String url = webView.getUrl();
         return url == null || url.isEmpty() ? HOME : url;
-    }
-
-    private void showAgeWarning() {
-        new AlertDialog.Builder(this)
-                .setTitle("18+ / Graphic Content")
-                .setMessage(
-                        "CrazyShit opens CrazyShit.com, which contains adult and graphic material. " +
-                        "Continue only if you are 18 or older and want to view that type of content.\n\n" +
-                        "This community app is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com."
-                )
-                .setCancelable(false)
-                .setNegativeButton("Exit", (dialog, which) -> finish())
-                .setPositiveButton("Continue", (dialog, which) -> {
-                    getSharedPreferences("app_prefs", MODE_PRIVATE)
-                            .edit()
-                            .putBoolean("age_warning_accepted", true)
-                            .apply();
-                    String requestedStart = getIntent().getStringExtra("start_url");
-                    webView.loadUrl(requestedStart == null || requestedStart.isEmpty() ? HOME : requestedStart);
-                })
-                .show();
     }
 
     private void showError() {

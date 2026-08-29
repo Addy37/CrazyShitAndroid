@@ -34,8 +34,7 @@ final class ChaosStartupOverlayController {
         activity.getIntent().removeExtra(EXTRA_STARTUP_HANDOFF);
 
         if (!ChaosStartupHandoff.isWaiting()) return;
-        if (!activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getBoolean("age_warning_accepted", false)) {
+        if (!AccessNoticeDialog.isAccepted(activity)) {
             ChaosStartupHandoff.finish();
             return;
         }
