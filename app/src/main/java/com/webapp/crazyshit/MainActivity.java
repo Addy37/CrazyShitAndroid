@@ -152,10 +152,10 @@ public class MainActivity extends Activity {
 
         String requestedStart = getIntent().getStringExtra("start_url");
         if (!AccessNoticeDialog.isAccepted(this)) {
-            AccessNoticeDialog.show(this, () -> {
-                String requestedStart = getIntent().getStringExtra("start_url");
-                webView.loadUrl(requestedStart == null || requestedStart.isEmpty() ? HOME : requestedStart);
-            });
+            AccessNoticeDialog.show(this, () ->
+                    webView.loadUrl(requestedStart == null || requestedStart.isEmpty()
+                            ? HOME
+                            : requestedStart));
         } else if (state == null || webView.restoreState(state) == null) {
             webView.loadUrl(requestedStart == null || requestedStart.isEmpty() ? HOME : requestedStart);
         }
