@@ -21,6 +21,8 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.materialswitch.MaterialSwitch;
 
 public class SettingsActivity extends Activity {
+    public static final String EXTRA_CHECK_FOR_UPDATES = "check_for_updates";
+
     private SharedPreferences prefs;
     private AppUpdater appUpdater;
 
@@ -30,6 +32,12 @@ public class SettingsActivity extends Activity {
         prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         appUpdater = new AppUpdater(this);
         buildUi();
+        if (getIntent().getBooleanExtra(EXTRA_CHECK_FOR_UPDATES, false)) {
+            getIntent().removeExtra(EXTRA_CHECK_FOR_UPDATES);
+            getWindow().getDecorView().postDelayed(() -> {
+                if (appUpdater != null) appUpdater.check(true);
+            }, 250L);
+        }
     }
 
     private void buildUi() {
@@ -66,6 +74,41 @@ public class SettingsActivity extends Activity {
         titleParams.setMargins(dp(12), 0, 0, 0);
         header.addView(title, titleParams);
         root.addView(header);
+
+        addSection(root, "Notifications");
+        addSwitch(root,
+                "New video alerts",
+                "Notify you when followed sites add fresh uploads.",
+                NotificationCoordinator.PREF_NEW_VIDEO_ALERTS,
+                true);
+        addSwitch(root,
+                "CrazyShit alerts",
+                "Include new uploads from CrazyShit.",
+                NotificationCoordinator.PREF_CRAZYSHIT_ALERTS,
+                true);
+        addSwitch(root,
+                "EFukt alerts",
+                "Include new uploads from EFukt when the site is available in your region.",
+                NotificationCoordinator.PREF_EFUKT_ALERTS,
+                true);
+        addSwitch(root,
+                "Show video titles",
+                "List titles inside expanded alerts. Leave this off for discreet notifications.",
+                NotificationCoordinator.PREF_SHOW_TITLES,
+                false);
+        addAction(root,
+                "Check frequency",
+                NotificationCoordinator.frequencySummary(this),
+                this::showNotificationFrequencyChoices);
+        addSwitch(root,
+                "App update alerts",
+                "Notify you when a new build is ready. Nothing downloads until you tap it.",
+                NotificationCoordinator.PREF_UPDATE_ALERTS,
+                true);
+        addAction(root,
+                "Preview notification",
+                "Send a branded test alert and check Android notification access.",
+                () -> NotificationCoordinator.showTestNotification(this));
 
         addSection(root, "Playback");
         addSwitch(root,
@@ -130,11 +173,6 @@ public class SettingsActivity extends Activity {
         });
 
         addSection(root, "App");
-        addSwitch(root,
-                "Automatic updates",
-                "Automatically check and download new builds. Android still asks for final install confirmation.",
-                "auto_update_enabled",
-                true);
         addAction(root, "Check for updates", "Check your current beta or stable channel and install inside the app.", () -> {
             if (appUpdater != null) appUpdater.check(true);
         });
@@ -200,6 +238,13 @@ public class SettingsActivity extends Activity {
             if ("oled_black_enabled".equals(key)) {
                 button.postDelayed(this::recreate, 90L);
             }
+            if (NotificationCoordinator.isNotificationPreference(key)) {
+                NotificationCoordinator.onPreferencesChanged(this);
+                if (checked && (NotificationCoordinator.PREF_NEW_VIDEO_ALERTS.equals(key) ||
+                        NotificationCoordinator.PREF_UPDATE_ALERTS.equals(key))) {
+                    NotificationCoordinator.requestPermissionFromSettings(this);
+                }
+            }
         });
         row.addView(toggle);
         card.addView(row);
@@ -246,6 +291,22 @@ public class SettingsActivity extends Activity {
                 .setTitle("Chaos preloading")
                 .setSingleChoiceItems(choices, ChaosPreloadPolicy.selectedIndex(this), (dialog, which) -> {
                     ChaosPreloadPolicy.setMode(this, ChaosPreloadPolicy.modeForIndex(which));
+                    dialog.dismiss();
+                    recreate();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showNotificationFrequencyChoices() {
+        int selectedHours = prefs.getInt(NotificationCoordinator.PREF_FREQUENCY_HOURS, 1);
+        int selected = selectedHours >= 6 ? 2 : selectedHours >= 3 ? 1 : 0;
+        String[] choices = {"Every hour", "Every 3 hours", "Every 6 hours"};
+        new AlertDialog.Builder(this)
+                .setTitle("Notification check frequency")
+                .setSingleChoiceItems(choices, selected, (dialog, which) -> {
+                    int hours = which == 2 ? 6 : which == 1 ? 3 : 1;
+                    NotificationCoordinator.setFrequency(this, hours);
                     dialog.dismiss();
                     recreate();
                 })

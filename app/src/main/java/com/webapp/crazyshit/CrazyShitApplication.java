@@ -34,9 +34,32 @@ public final class CrazyShitApplication extends Application {
         if (!appPrefs.contains("oled_black_enabled")) {
             migration.putBoolean("oled_black_enabled", true);
         }
+        if (!appPrefs.contains(NotificationCoordinator.PREF_NEW_VIDEO_ALERTS)) {
+            migration.putBoolean(NotificationCoordinator.PREF_NEW_VIDEO_ALERTS, true);
+        }
+        if (!appPrefs.contains(NotificationCoordinator.PREF_CRAZYSHIT_ALERTS)) {
+            migration.putBoolean(NotificationCoordinator.PREF_CRAZYSHIT_ALERTS, true);
+        }
+        if (!appPrefs.contains(NotificationCoordinator.PREF_EFUKT_ALERTS)) {
+            migration.putBoolean(NotificationCoordinator.PREF_EFUKT_ALERTS, true);
+        }
+        if (!appPrefs.contains(NotificationCoordinator.PREF_UPDATE_ALERTS)) {
+            migration.putBoolean(
+                    NotificationCoordinator.PREF_UPDATE_ALERTS,
+                    appPrefs.getBoolean("auto_update_enabled", true)
+            );
+        }
+        if (!appPrefs.contains(NotificationCoordinator.PREF_SHOW_TITLES)) {
+            migration.putBoolean(NotificationCoordinator.PREF_SHOW_TITLES, false);
+        }
+        if (!appPrefs.contains(NotificationCoordinator.PREF_FREQUENCY_HOURS)) {
+            migration.putInt(NotificationCoordinator.PREF_FREQUENCY_HOURS, 1);
+        }
+        migration.remove("auto_update_enabled");
         migration.apply();
 
         AppShortcuts.publish(this);
+        NotificationCoordinator.initialize(this);
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override

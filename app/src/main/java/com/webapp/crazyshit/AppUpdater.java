@@ -62,8 +62,7 @@ final class AppUpdater {
         }
 
         SharedPreferences prefs = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
-        // BETA20_AUTO_UPDATE
-        if (!manual && !prefs.getBoolean("auto_update_enabled", true)) return;
+        if (!manual && !prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)) return;
         String key = betaChannel ? "beta_last_update_check" : "stable_last_update_check";
         long now = System.currentTimeMillis();
         long last = prefs.getLong(key, 0L);
@@ -80,13 +79,13 @@ final class AppUpdater {
                 activity.runOnUiThread(() -> {
                     checking = false;
                     if (newer) {
-                        if (!manual && prefs.getBoolean("auto_update_enabled", true)) {
-                            Toast.makeText(
+                        if (!manual) {
+                            NotificationCoordinator.showUpdateNotification(
                                     activity,
-                                    "Update " + release.version + " found. Downloading…",
-                                    Toast.LENGTH_SHORT
-                            ).show();
-                            downloadAndInstall(release);
+                                    release.version,
+                                    release.title,
+                                    release.beta
+                            );
                         } else {
                             showUpdateDialog(release, current);
                         }

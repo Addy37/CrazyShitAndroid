@@ -65,6 +65,11 @@ public final class EfuktRepository {
         throw new IOException("EFukt Series is unavailable in this region or session");
     }
 
+    /** Returns the newest public EFukt uploads for background alerts and the native latest feed. */
+    public List<NativeContentItem> fetchLatest(Context context) throws IOException {
+        return parseVideoFeed(fetchDocument(context, BASE));
+    }
+
     public List<NativeContentItem> fetchSeriesFeed(Context context, String seriesUrl, int page)
             throws IOException {
         if (page > 1) return new ArrayList<>();

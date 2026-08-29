@@ -95,15 +95,16 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         configureBack();
 
         if (!AccessNoticeDialog.isAccepted(this)) {
-            AccessNoticeDialog.show(this, () -> {
-                showHome();
-                dispatchLauncherShortcut();
-            });
+            AccessNoticeDialog.show(this, this::startAppContent);
         } else {
-            showHome();
-            dispatchLauncherShortcut();
+            startAppContent();
         }
-        checkForUpdates(false);
+    }
+
+    private void startAppContent() {
+        showHome();
+        dispatchLauncherShortcut();
+        NotificationCoordinator.maybeOfferPermission(this);
     }
 
     @Override
@@ -932,7 +933,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (primaryPagerAdapter != null) primaryPagerAdapter.onHostResume();
         if (appUpdater != null) {
             appUpdater.onHostResume();
-            appUpdater.check(false);
         }
         applyChaosFullscreenChrome();
     }

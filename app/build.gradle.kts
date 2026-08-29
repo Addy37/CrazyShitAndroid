@@ -15,8 +15,8 @@ android {
         applicationId = "com.addy37.crazyshitunofficial"
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 47
-        versionName = System.getenv("APP_VERSION_NAME") ?: "2.8.0"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 48
+        versionName = System.getenv("APP_VERSION_NAME") ?: "2.8.4"
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
@@ -72,6 +72,7 @@ dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.2.0")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
+    implementation("androidx.work:work-runtime:2.11.2")
     implementation("org.jsoup:jsoup:1.23.1")
     implementation("com.github.bumptech.glide:glide:4.16.0")
 
