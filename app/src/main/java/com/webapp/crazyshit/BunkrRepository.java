@@ -72,7 +72,10 @@ public final class BunkrRepository {
 
     public List<NativeContentItem> fetchPopularAlbums(Context context, int page)
             throws IOException {
-        String url = TOP_ALBUMS + "?lapse=7d&page=" + Math.max(1, page);
+        int safePage = Math.max(1, page);
+        String url = safePage == 1
+                ? TOP_ALBUMS
+                : TOP_ALBUMS + "?lapse=24h&page=" + safePage;
         return parseAlbumIndex(fetchDocument(context, url));
     }
 
@@ -465,7 +468,10 @@ public final class BunkrRepository {
     private Element cardScope(Element link) {
         Element current = link;
         for (int i = 0; i < 6 && current != null; i++, current = current.parent()) {
-            if (!current.select("img,[class*=title],h1,h2,h3,h4,h5").isEmpty()) return current;
+            if (current.hasClass("rounded-xl") && current.hasClass("bg-mute")) return current;
+            if (!current.select(
+                    "img,[class*=title],[class*=text-subs],[class*=text-xs],h1,h2,h3,h4,h5"
+            ).isEmpty()) return current;
         }
         return link.parent();
     }
