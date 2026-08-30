@@ -24,7 +24,8 @@ import java.util.regex.Pattern;
 /** Balbums album discovery plus native Bunkr album and playable-file support. */
 public final class BunkrRepository {
     public static final String INDEX = "https://balbums.st/";
-    public static final String TOP_ALBUMS = INDEX + "topalbums";
+    public static final String MOST_FILES_ALBUMS =
+            INDEX + "?search=&mode=broad&per=20&sort=files&page=1";
 
     private static final int PAGE_SIZE = 60;
     private static final String USER_AGENT =
@@ -70,12 +71,10 @@ public final class BunkrRepository {
         return parseAlbumIndex(fetchDocument(context, url));
     }
 
-    public List<NativeContentItem> fetchPopularAlbums(Context context, int page)
+    public List<NativeContentItem> fetchAlbumsByFileCount(Context context, int page)
             throws IOException {
         int safePage = Math.max(1, page);
-        String url = safePage == 1
-                ? TOP_ALBUMS
-                : TOP_ALBUMS + "?lapse=24h&page=" + safePage;
+        String url = INDEX + "?search=&mode=broad&per=20&sort=files&page=" + safePage;
         return parseAlbumIndex(fetchDocument(context, url));
     }
 
