@@ -101,6 +101,36 @@ public final class BunkrRepository {
         return new ArrayList<>(all.subList(start, end));
     }
 
+    /** Returns the first real file thumbnail, including artwork from image-only albums. */
+    public String fetchAlbumArtwork(Context context, String albumUrl) throws IOException {
+        String canonical = normalizeUrl(albumUrl, INDEX);
+        Matcher album = ALBUM_PATH.matcher(canonical);
+        if (!album.find()) throw new IOException("Not a Bunkr album URL");
+
+        String advancedUrl = origin(canonical) + "/a/" + album.group(1) + "?advanced=1";
+        Document doc = fetchDocument(context, advancedUrl);
+        String pageOrigin = origin(doc.location());
+        for (String image : parseFileArtwork(doc).values()) {
+            if (image != null && !image.trim().isEmpty()) return image.trim();
+        }
+
+        for (Element script : doc.select("script")) {
+            String body = script.data().isEmpty() ? script.html() : script.data();
+            Matcher thumbnails = THUMBNAIL.matcher(body);
+            while (thumbnails.find()) {
+                String image = normalizeUrl(unescapeScriptUrl(thumbnails.group(2)), pageOrigin);
+                if (!image.isEmpty()) return image;
+            }
+        }
+
+        Element socialImage = doc.selectFirst(
+                "meta[property=og:image][content],meta[name=twitter:image][content]"
+        );
+        return socialImage == null
+                ? ""
+                : normalizeUrl(socialImage.attr("content"), pageOrigin);
+    }
+
     public CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl)
             throws IOException {
         String canonical = normalizeUrl(pageUrl, INDEX);

@@ -3,6 +3,8 @@ package com.webapp.crazyshit;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,6 +29,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** Visual browser cards used by Categories and Series. */
 public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCategoryAdapter.Holder> {
@@ -41,8 +45,10 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     private final Listener listener;
     private final Map<String, String> resolvedArtwork = new HashMap<>();
     private final Set<String> requestedArtwork = new HashSet<>();
-    private RenderedThumbnailResolver[] bunkrResolvers;
-    private int resolverCursor;
+    private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService bunkrArtworkIo = Executors.newFixedThreadPool(3);
+    private volatile boolean closed;
 
     public NativeCategoryAdapter(Listener listener) {
         this.listener = listener;
@@ -68,11 +74,9 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     }
 
     public void close() {
-        if (bunkrResolvers == null) return;
-        for (RenderedThumbnailResolver resolver : bunkrResolvers) {
-            if (resolver != null) resolver.close();
-        }
-        bunkrResolvers = null;
+        closed = true;
+        bunkrArtworkIo.shutdownNow();
+        mainHandler.removeCallbacksAndMessages(null);
         requestedArtwork.clear();
     }
 
@@ -176,8 +180,11 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
             return;
         }
 
-        String imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
-        if (imageUrl.isEmpty()) imageUrl = resolvedArtwork.get(item.url);
+        String imageUrl = BunkrRepository.isAlbumUrl(item.url)
+                ? resolvedArtwork.get(item.url)
+                : item.imageUrl;
+        if (imageUrl == null || imageUrl.trim().isEmpty()) imageUrl = item.imageUrl;
+        if (imageUrl != null) imageUrl = imageUrl.trim();
         if (imageUrl == null || imageUrl.trim().isEmpty()) {
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(31, 31, 35)));
@@ -229,23 +236,29 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     }
 
     private void requestBunkrArtwork(android.content.Context context, NativeContentItem item) {
-        if (context == null || item == null || !BunkrRepository.isAlbumUrl(item.url)) return;
-        if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) return;
+        if (closed || context == null || item == null || !BunkrRepository.isAlbumUrl(item.url)) return;
         String resolved = resolvedArtwork.get(item.url);
         if (resolved != null && !resolved.isEmpty()) return;
         if (!requestedArtwork.add(item.url)) return;
-        if (bunkrResolvers == null) {
-            bunkrResolvers = new RenderedThumbnailResolver[] {
-                    new RenderedThumbnailResolver(context, this::onBunkrArtwork),
-                    new RenderedThumbnailResolver(context, this::onBunkrArtwork),
-                    new RenderedThumbnailResolver(context, this::onBunkrArtwork)
-            };
+        android.content.Context appContext = context.getApplicationContext();
+        String albumUrl = item.url;
+        try {
+            bunkrArtworkIo.execute(() -> {
+                String imageUrl = "";
+                try {
+                    imageUrl = bunkrRepository.fetchAlbumArtwork(appContext, albumUrl);
+                } catch (Exception ignored) {
+                }
+                String result = imageUrl;
+                mainHandler.post(() -> onBunkrArtwork(albumUrl, result));
+            });
+        } catch (RuntimeException ignored) {
+            requestedArtwork.remove(albumUrl);
         }
-        bunkrResolvers[resolverCursor++ % bunkrResolvers.length].request(item.url);
     }
 
     private void onBunkrArtwork(String pageUrl, String imageUrl) {
-        if (pageUrl == null || pageUrl.isEmpty()) return;
+        if (closed || pageUrl == null || pageUrl.isEmpty()) return;
         if (imageUrl == null || imageUrl.isEmpty()) {
             requestedArtwork.remove(pageUrl);
             return;
