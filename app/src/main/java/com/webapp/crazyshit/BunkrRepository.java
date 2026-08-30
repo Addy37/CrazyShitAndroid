@@ -55,6 +55,12 @@ public final class BunkrRepository {
     private static final Pattern THUMBNAIL = Pattern.compile(
             "(?s)\\bthumbnail\\s*:\\s*([\\\"'])(.*?)\\1\\s*,"
     );
+    private static final Pattern JS_CDN = Pattern.compile(
+            "(?is)\\bjsCDN\\s*=\\s*([\\\"'])(.*?)\\1"
+    );
+    private static final Pattern SIGN_URL = Pattern.compile(
+            "(?is)\\bsignUrl\\s*=\\s*([\\\"'])(.*?)\\1"
+    );
     private static final Pattern SIZE = Pattern.compile("(?i)\\bsize\\s*:\\s*([0-9]+)");
 
     public List<NativeContentItem> fetchAlbums(Context context, int page) throws IOException {
@@ -104,8 +110,24 @@ public final class BunkrRepository {
 
         Document doc = fetchDocument(context, canonical);
         String title = clean(doc.selectFirst("h1") == null ? doc.title() : doc.selectFirst("h1").text());
-        String dataId = dataFileId(doc);
         IOException last = null;
+        String cdnUrl = scriptValue(doc, JS_CDN);
+        String signUrl = scriptValue(doc, SIGN_URL);
+        if (!cdnUrl.isEmpty() || !signUrl.isEmpty()) {
+            if (cdnUrl.isEmpty() || signUrl.isEmpty()) {
+                throw new IOException("Bunkr's signed stream data was incomplete");
+            }
+            String signed = requestSignedCdnUrl(context, canonical, cdnUrl, signUrl);
+            if (!signed.isEmpty() && !isMaintenanceVideo(signed)) {
+                return new CrazyShitRepository.StreamInfo(
+                        signed, canonical, title, "https://get.bunkrr.su/"
+                );
+            }
+            throw new IOException("Bunkr did not return a signed playable URL");
+        }
+
+        // Older mirrors still use Bunkr's legacy download API.
+        String dataId = dataFileId(doc);
         if (!dataId.isEmpty()) {
             for (String endpoint : API_ENDPOINTS) {
                 try {
@@ -179,6 +201,7 @@ public final class BunkrRepository {
                 Element heading = card.selectFirst("h1,h2,h3,h4,h5,.title,[class*=title]");
                 if (heading != null) title = clean(heading.text());
             }
+            title = cleanAlbumTitle(title);
             if (title.length() < 2) title = albumTitle(url);
 
             String image = imageFrom(link);
@@ -308,6 +331,67 @@ public final class BunkrRepository {
         }
     }
 
+    private String requestSignedCdnUrl(
+            Context context,
+            String pageUrl,
+            String rawCdnUrl,
+            String rawSignUrl
+    ) throws IOException {
+        String cdnUrl = unescapeScriptUrl(rawCdnUrl);
+        String signUrl = unescapeScriptUrl(rawSignUrl);
+        if (!isTrustedSignUrl(signUrl)) {
+            throw new IOException("Bunkr returned an untrusted signing address");
+        }
+
+        String path;
+        try {
+            URI cdn = new URI(cdnUrl);
+            path = cdn.getRawPath();
+        } catch (Exception error) {
+            throw new IOException("Bunkr's CDN address was invalid", error);
+        }
+        if (path == null || path.isEmpty()) {
+            throw new IOException("Bunkr's CDN path was missing");
+        }
+
+        String encodedPath;
+        try {
+            encodedPath = URLEncoder.encode(path, StandardCharsets.UTF_8.name())
+                    .replace("+", "%20")
+                    .replace("%7E", "~");
+        } catch (Exception error) {
+            throw new IOException("Bunkr's CDN path could not be encoded", error);
+        }
+
+        String requestUrl = signUrl + (signUrl.contains("?") ? "&" : "?") + "path=" + encodedPath;
+        Connection connection = Jsoup.connect(requestUrl)
+                .userAgent(USER_AGENT)
+                .header("Accept", "application/json")
+                .header("Origin", origin(pageUrl))
+                .referrer(pageUrl)
+                .timeout(18000)
+                .maxBodySize(1024 * 1024)
+                .ignoreContentType(true)
+                .ignoreHttpErrors(false)
+                .followRedirects(true);
+        addCookies(context, connection, requestUrl);
+
+        try {
+            JSONObject payload = new JSONObject(connection.execute().body());
+            String token = payload.optString("token", "");
+            String expiry = payload.optString("ex", "");
+            if (token.isEmpty() || expiry.isEmpty()) {
+                throw new IOException("Bunkr's signing response was incomplete");
+            }
+            String base = cdnUrl.split("#", 2)[0].split("\\?", 2)[0];
+            return base + "?token=" + queryValue(token) + "&ex=" + queryValue(expiry);
+        } catch (IOException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new IOException("Bunkr's signing response was invalid", error);
+        }
+    }
+
     private Document fetchDocument(Context context, String url) throws IOException {
         Connection connection = Jsoup.connect(url)
                 .userAgent(USER_AGENT)
@@ -373,6 +457,16 @@ public final class BunkrRepository {
         return match.find() ? "Bunkr album " + match.group(1) : "Bunkr album";
     }
 
+    private String cleanAlbumTitle(String value) {
+        String title = clean(value).replaceFirst("(?i)^view\\s+album\\s+", "");
+        title = title.replaceFirst(
+                "(?i)\\s+[0-9][0-9,]*\\s+(?:files?|items?|videos?)" +
+                        "\\s*(?:→|->|›)?\\s*open\\s*$",
+                ""
+        );
+        return clean(title);
+    }
+
     private String fileTitle(String value) {
         String text = value == null ? "" : value;
         int slash = text.lastIndexOf('/');
@@ -414,6 +508,46 @@ public final class BunkrRepository {
         }
         Matcher matcher = FILE_ID.matcher(doc.html());
         return matcher.find() ? matcher.group(1) : "";
+    }
+
+    private String scriptValue(Document doc, Pattern pattern) {
+        if (doc == null) return "";
+        for (Element script : doc.select("script")) {
+            String body = script.data();
+            if (body == null || body.isEmpty()) body = script.html();
+            Matcher matcher = pattern.matcher(body == null ? "" : body);
+            if (matcher.find()) return unescapeScriptUrl(matcher.group(2));
+        }
+        return "";
+    }
+
+    private String unescapeScriptUrl(String value) {
+        return clean(value)
+                .replace("\\/", "/")
+                .replace("\\u0026", "&")
+                .replace("&amp;", "&");
+    }
+
+    private boolean isTrustedSignUrl(String value) {
+        try {
+            URI uri = new URI(value);
+            String host = uri.getHost();
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || host == null) return false;
+            host = host.toLowerCase(Locale.US);
+            return "cdn.cr".equals(host) || host.endsWith(".cdn.cr");
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private String queryValue(String value) throws IOException {
+        try {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8.name())
+                    .replace("+", "%20")
+                    .replace("%7E", "~");
+        } catch (Exception error) {
+            throw new IOException("Bunkr's stream token could not be encoded", error);
+        }
     }
 
     private String jsValue(String input, Pattern pattern) {
