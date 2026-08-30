@@ -148,6 +148,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     public void close() {
         chaosView.close();
         browseArtworkResolver.close();
+        for (Page page : pages) {
+            if (page != null && page.browseAdapter != null) page.browseAdapter.close();
+        }
         io.shutdownNow();
     }
 

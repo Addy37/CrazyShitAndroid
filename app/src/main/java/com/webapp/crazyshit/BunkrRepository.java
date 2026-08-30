@@ -38,7 +38,7 @@ public final class BunkrRepository {
     private static final Pattern ALBUM_PATH = Pattern.compile("(?i)/a/([^/?#]+)");
     private static final Pattern FILE_PATH = Pattern.compile("(?i)/[fvid]/([^/?#]+)");
     private static final Pattern FILE_ID = Pattern.compile(
-            "(?i)(?:data-file-id=[\\\"']|\\bid\\s*:\\s*)([0-9]+)"
+            "(?i)data-file-id\\s*=\\s*[\\\"']([0-9]+)"
     );
     private static final Pattern MEDIA_URL = Pattern.compile(
             "(?i)https?://[^\\s\\\"'<>]+?\\.(?:m3u8|mpd|mp4|webm|m4v|mov)(?:\\?[^\\s\\\"'<>]*)?"
@@ -51,6 +51,9 @@ public final class BunkrRepository {
     );
     private static final Pattern NAME = Pattern.compile(
             "(?s)\\bname\\s*:\\s*([\\\"'])(.*?)\\1\\s*,"
+    );
+    private static final Pattern THUMBNAIL = Pattern.compile(
+            "(?s)\\bthumbnail\\s*:\\s*([\\\"'])(.*?)\\1\\s*,"
     );
     private static final Pattern SIZE = Pattern.compile("(?i)\\bsize\\s*:\\s*([0-9]+)");
 
@@ -101,41 +104,49 @@ public final class BunkrRepository {
 
         Document doc = fetchDocument(context, canonical);
         String title = clean(doc.selectFirst("h1") == null ? doc.title() : doc.selectFirst("h1").text());
+        String dataId = dataFileId(doc);
+        IOException last = null;
+        if (!dataId.isEmpty()) {
+            for (String endpoint : API_ENDPOINTS) {
+                try {
+                    String mediaUrl = requestDownloadUrl(context, endpoint, dataId);
+                    if (!mediaUrl.isEmpty() && !isMaintenanceVideo(mediaUrl)) {
+                        String downloadRoot = endpoint.contains("apidl.bunkr.ru")
+                                ? "https://get.bunkrr.su"
+                                : DOWNLOAD_ROOT;
+                        return new CrazyShitRepository.StreamInfo(
+                                mediaUrl, canonical, title, downloadRoot + "/file/" + dataId
+                        );
+                    }
+                } catch (IOException error) {
+                    last = error;
+                }
+            }
+        }
+
+        // Some older Bunkr mirrors still expose the real source directly. Only use this after the
+        // signed API path, since page scripts also mention Bunkr's maintenance placeholder video.
         for (Element media : doc.select("video[src],video source[src],source[type*=video][src]")) {
             String candidate = normalizeUrl(media.absUrl("src"), canonical);
-            if (isDirectMedia(candidate)) {
+            if (isDirectMedia(candidate) && !isMaintenanceVideo(candidate)) {
                 return new CrazyShitRepository.StreamInfo(candidate, canonical, title);
             }
         }
         for (Element script : doc.select("script")) {
             String body = script.data().isEmpty() ? script.html() : script.data();
             Matcher direct = MEDIA_URL.matcher(body.replace("\\/", "/"));
-            if (direct.find()) {
-                return new CrazyShitRepository.StreamInfo(direct.group(), canonical, title);
+            while (direct.find()) {
+                String candidate = direct.group();
+                if (!isMaintenanceVideo(candidate)) {
+                    return new CrazyShitRepository.StreamInfo(candidate, canonical, title);
+                }
             }
         }
 
-        Matcher idMatcher = FILE_ID.matcher(doc.html());
-        if (!idMatcher.find()) throw new IOException("Bunkr file id was not found");
-        String dataId = idMatcher.group(1);
-        IOException last = null;
-        for (String endpoint : API_ENDPOINTS) {
-            try {
-                String mediaUrl = requestDownloadUrl(context, endpoint, dataId);
-                if (!mediaUrl.isEmpty()) {
-                    String downloadRoot = endpoint.contains("apidl.bunkr.ru")
-                            ? "https://get.bunkrr.su"
-                            : DOWNLOAD_ROOT;
-                    return new CrazyShitRepository.StreamInfo(
-                            mediaUrl, canonical, title, downloadRoot + "/file/" + dataId
-                    );
-                }
-            } catch (IOException error) {
-                last = error;
-            }
-        }
         if (last != null) throw last;
-        throw new IOException("Bunkr did not return a playable URL");
+        throw new IOException(dataId.isEmpty()
+                ? "Bunkr file id was not found"
+                : "Bunkr did not return a playable URL");
     }
 
     public static boolean isBalbumsUrl(String url) {
@@ -208,10 +219,12 @@ public final class BunkrRepository {
             String original = jsValue(item, ORIGINAL);
             String slug = jsValue(item, SLUG);
             String name = jsValue(item, NAME);
+            String thumbnail = jsValue(item, THUMBNAIL);
             if (slug.isEmpty()) continue;
             String title = original.isEmpty() ? fileTitle(slug) : original;
             if (!isPlayableName(title) && !isPlayableName(slug)) continue;
-            String image = artwork.get(slug);
+            String image = normalizeUrl(thumbnail, origin);
+            if (image.isEmpty()) image = artwork.get(slug);
             if (image == null || image.isEmpty()) image = artwork.get(name);
             String size = value(item, SIZE);
             result.add(new NativeContentItem(
@@ -272,7 +285,7 @@ public final class BunkrRepository {
                 .header("Content-Type", "application/json")
                 .header("Origin", downloadRoot)
                 .referrer(referer)
-                .requestBody("{\"id\":" + dataId + "}")
+                .requestBody("{\"id\":\"" + dataId + "\"}")
                 .method(Connection.Method.POST)
                 .timeout(18000)
                 .maxBodySize(1024 * 1024)
@@ -383,6 +396,24 @@ public final class BunkrRepository {
 
     private boolean isDirectMedia(String url) {
         return isPlayableName(url);
+    }
+
+    private boolean isMaintenanceVideo(String url) {
+        if (url == null) return false;
+        String lower = url.toLowerCase(Locale.US);
+        return lower.endsWith("/maint.mp4") || lower.contains("/maint.mp4?") ||
+                lower.endsWith("/maintenance-vid.mp4") || lower.contains("/maintenance-vid.mp4?");
+    }
+
+    private String dataFileId(Document doc) {
+        if (doc == null) return "";
+        Element tagged = doc.selectFirst("[data-file-id]");
+        if (tagged != null) {
+            String value = tagged.attr("data-file-id").trim();
+            if (value.matches("[0-9]+")) return value;
+        }
+        Matcher matcher = FILE_ID.matcher(doc.html());
+        return matcher.find() ? matcher.group(1) : "";
     }
 
     private String jsValue(String input, Pattern pattern) {

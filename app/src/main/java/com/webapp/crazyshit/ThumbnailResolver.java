@@ -20,7 +20,8 @@ final class ThumbnailResolver {
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
     private static final Pattern JSON_IMAGE = Pattern.compile(
-            "(?i)[\\\"'](?:thumbnailUrl|thumbnail|poster|image|imageUrl)[\\\"']\\s*[:=]\\s*[\\\"']([^\\\"']+)[\\\"']"
+            "(?i)(?:[\\\"']?(?:thumbnailUrl|thumbnail|poster|image|imageUrl)[\\\"']?)" +
+                    "\\s*[:=]\\s*[\\\"']([^\\\"']+)[\\\"']"
     );
 
     private static final Pattern IMAGE_URL = Pattern.compile(

@@ -22,8 +22,11 @@ import com.bumptech.glide.load.model.LazyHeaders;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Visual browser cards used by Categories and Series. */
 public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCategoryAdapter.Holder> {
@@ -36,6 +39,10 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
     private final List<NativeContentItem> items = new ArrayList<>();
     private final Listener listener;
+    private final Map<String, String> resolvedArtwork = new HashMap<>();
+    private final Set<String> requestedArtwork = new HashSet<>();
+    private RenderedThumbnailResolver[] bunkrResolvers;
+    private int resolverCursor;
 
     public NativeCategoryAdapter(Listener listener) {
         this.listener = listener;
@@ -58,6 +65,15 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     /** Kept for source compatibility with the pager while remote artwork resolution is retired. */
     public void applyArtwork(Map<String, String> artwork) {
         // Intentionally no-op. Series/Categories thumbnails come from EmbeddedBrowseArtwork.
+    }
+
+    public void close() {
+        if (bunkrResolvers == null) return;
+        for (RenderedThumbnailResolver resolver : bunkrResolvers) {
+            if (resolver != null) resolver.close();
+        }
+        bunkrResolvers = null;
+        requestedArtwork.clear();
     }
 
     @Override
@@ -142,6 +158,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 : item.title);
         holder.card.setOnClickListener(v -> listener.onOpen(item));
         loadImage(holder, item);
+        requestBunkrArtwork(holder.image.getContext(), item);
     }
 
     private void loadImage(Holder holder, NativeContentItem item) {
@@ -159,13 +176,15 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
             return;
         }
 
-        if (item.imageUrl == null || item.imageUrl.trim().isEmpty()) {
+        String imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
+        if (imageUrl.isEmpty()) imageUrl = resolvedArtwork.get(item.url);
+        if (imageUrl == null || imageUrl.trim().isEmpty()) {
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(31, 31, 35)));
             return;
         }
         Glide.with(holder.image)
-                .load(remoteImage(item))
+                .load(remoteImage(item, imageUrl))
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
                 .centerCrop()
@@ -192,21 +211,50 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         holder.copy.setLayoutParams(copyParams);
     }
 
-    private GlideUrl remoteImage(NativeContentItem item) {
+    private GlideUrl remoteImage(NativeContentItem item, String imageUrl) {
         String referer = item.url == null || item.url.isEmpty() ? EfuktRepository.BASE : item.url;
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
                 .addHeader("User-Agent", EfuktRepository.USER_AGENT)
                 .addHeader("Referer", referer)
                 .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
         try {
-            String cookies = CookieManager.getInstance().getCookie(item.imageUrl);
+            String cookies = CookieManager.getInstance().getCookie(imageUrl);
             if ((cookies == null || cookies.isEmpty()) && !referer.isEmpty()) {
                 cookies = CookieManager.getInstance().getCookie(referer);
             }
             if (cookies != null && !cookies.isEmpty()) headers.addHeader("Cookie", cookies);
         } catch (Exception ignored) {
         }
-        return new GlideUrl(item.imageUrl, headers.build());
+        return new GlideUrl(imageUrl, headers.build());
+    }
+
+    private void requestBunkrArtwork(android.content.Context context, NativeContentItem item) {
+        if (context == null || item == null || !BunkrRepository.isAlbumUrl(item.url)) return;
+        if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) return;
+        String resolved = resolvedArtwork.get(item.url);
+        if (resolved != null && !resolved.isEmpty()) return;
+        if (!requestedArtwork.add(item.url)) return;
+        if (bunkrResolvers == null) {
+            bunkrResolvers = new RenderedThumbnailResolver[] {
+                    new RenderedThumbnailResolver(context, this::onBunkrArtwork),
+                    new RenderedThumbnailResolver(context, this::onBunkrArtwork),
+                    new RenderedThumbnailResolver(context, this::onBunkrArtwork)
+            };
+        }
+        bunkrResolvers[resolverCursor++ % bunkrResolvers.length].request(item.url);
+    }
+
+    private void onBunkrArtwork(String pageUrl, String imageUrl) {
+        if (pageUrl == null || pageUrl.isEmpty()) return;
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            requestedArtwork.remove(pageUrl);
+            return;
+        }
+        resolvedArtwork.put(pageUrl, imageUrl);
+        for (int i = 0; i < items.size(); i++) {
+            NativeContentItem item = items.get(i);
+            if (item != null && pageUrl.equals(item.url)) notifyItemChanged(i);
+        }
     }
 
     @Override
