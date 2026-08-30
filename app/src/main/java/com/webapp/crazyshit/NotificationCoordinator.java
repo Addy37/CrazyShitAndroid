@@ -17,12 +17,14 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.os.Build;
 import android.provider.Settings;
+import android.text.format.DateUtils;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.work.Constraints;
+import androidx.work.Data;
 import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.ExistingWorkPolicy;
 import androidx.work.NetworkType;
@@ -32,6 +34,7 @@ import androidx.work.WorkManager;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /** Creates branded alerts, owns their settings, and schedules background checks. */
@@ -50,9 +53,22 @@ final class NotificationCoordinator {
     private static final String GROUP_NEW_CONTENT = "crazyshit_new_content";
     private static final String PERIODIC_WORK = "content_and_update_notifications";
     private static final String INITIAL_WORK = "initial_content_and_update_check";
+    private static final String MANUAL_WORK = "manual_content_and_update_check";
     private static final String KEY_EDUCATION_SHOWN = "notification_education_shown";
     private static final String KEY_PERMISSION_REQUESTED = "notification_permission_requested";
     private static final String KEY_LAST_UPDATE = "last_notified_update";
+    static final String KEY_CHECK_STARTED = "content_check_started_at";
+    static final String KEY_CHECK_FINISHED = "content_check_finished_at";
+    static final String KEY_STATUS_CRAZYSHIT = "content_check_status_crazyshit";
+    static final String KEY_STATUS_EFUKT = "content_check_status_efukt";
+    static final String KEY_STATUS_UPDATES = "content_check_status_updates";
+    static final String INPUT_MANUAL_CHECK = "manual_check";
+    static final String EXTRA_MANUAL_CHECK = "manual_check";
+    static final String ACTION_CHECK_FINISHED =
+            BuildConfig.APPLICATION_ID + ".action.NOTIFICATION_CHECK_FINISHED";
+
+    private static final long STARTUP_CHECK_AGE_MS = TimeUnit.MINUTES.toMillis(30);
+    private static final long STUCK_CHECK_AGE_MS = TimeUnit.MINUTES.toMillis(3);
 
     private static final int REQUEST_NOTIFICATIONS = 731;
     private static final int ID_CRAZYSHIT = 4101;
@@ -74,6 +90,19 @@ final class NotificationCoordinator {
         schedule(context, true);
     }
 
+    static void onAppForeground(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (!alertsEnabled(prefs)) return;
+
+        SharedPreferences state = context.getSharedPreferences(STATE, Context.MODE_PRIVATE);
+        long finished = state.getLong(KEY_CHECK_FINISHED, 0L);
+        long started = state.getLong(KEY_CHECK_STARTED, 0L);
+        long now = System.currentTimeMillis();
+        boolean running = started > finished && now - started <= STUCK_CHECK_AGE_MS;
+        boolean stale = finished == 0L || now - finished >= STARTUP_CHECK_AGE_MS;
+        if (!running && stale) enqueueImmediate(context, INITIAL_WORK, false);
+    }
+
     static boolean isNotificationPreference(String key) {
         return PREF_NEW_VIDEO_ALERTS.equals(key) ||
                 PREF_CRAZYSHIT_ALERTS.equals(key) ||
@@ -88,6 +117,35 @@ final class NotificationCoordinator {
         return hours == 1
                 ? "Check about every hour. Android may delay background work to save battery."
                 : "Check about every " + hours + " hours. Android may delay background work to save battery.";
+    }
+
+    static String statusSummary(Context context) {
+        SharedPreferences state = context.getSharedPreferences(STATE, Context.MODE_PRIVATE);
+        long started = state.getLong(KEY_CHECK_STARTED, 0L);
+        long finished = state.getLong(KEY_CHECK_FINISHED, 0L);
+        long now = System.currentTimeMillis();
+        if (started > finished && now - started <= STUCK_CHECK_AGE_MS) {
+            return "Checking CrazyShit and EFukt now…";
+        }
+        if (finished == 0L) {
+            return started > 0L
+                    ? "The last check did not finish. Tap to try again."
+                    : "No completed check yet. Tap to scan both sites now.";
+        }
+
+        CharSequence relative = DateUtils.getRelativeTimeSpanString(
+                finished,
+                now,
+                DateUtils.MINUTE_IN_MILLIS,
+                DateUtils.FORMAT_ABBREV_RELATIVE
+        );
+        String crazyShit = state.getString(KEY_STATUS_CRAZYSHIT, "Not checked");
+        String efukt = state.getString(KEY_STATUS_EFUKT, "Not checked");
+        return "Last checked " + relative + ". CrazyShit: " + crazyShit + ". EFukt: " + efukt + ".";
+    }
+
+    static UUID checkNow(Context context) {
+        return enqueueImmediate(context, MANUAL_WORK, true);
     }
 
     static void setFrequency(Context context, int hours) {
@@ -441,9 +499,7 @@ final class NotificationCoordinator {
             return;
         }
 
-        Constraints constraints = new Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build();
+        Constraints constraints = networkConstraints();
         int hours = normalizedHours(prefs.getInt(PREF_FREQUENCY_HOURS, 1));
         PeriodicWorkRequest periodic = new PeriodicWorkRequest.Builder(
                 ContentUpdateWorker.class,
@@ -456,10 +512,37 @@ final class NotificationCoordinator {
                 periodic
         );
 
-        OneTimeWorkRequest initial = new OneTimeWorkRequest.Builder(ContentUpdateWorker.class)
-                .setConstraints(constraints)
+        SharedPreferences state = context.getSharedPreferences(STATE, Context.MODE_PRIVATE);
+        long finished = state.getLong(KEY_CHECK_FINISHED, 0L);
+        long started = state.getLong(KEY_CHECK_STARTED, 0L);
+        long now = System.currentTimeMillis();
+        boolean running = started > finished && now - started <= STUCK_CHECK_AGE_MS;
+        if (updateExisting || (!running && finished == 0L)) {
+            enqueueImmediate(context, INITIAL_WORK, false);
+        }
+    }
+
+    private static UUID enqueueImmediate(Context context, String name, boolean manual) {
+        context.getSharedPreferences(STATE, Context.MODE_PRIVATE)
+                .edit()
+                .putLong(KEY_CHECK_STARTED, System.currentTimeMillis())
+                .apply();
+        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(ContentUpdateWorker.class)
+                .setConstraints(networkConstraints())
+                .setInputData(new Data.Builder().putBoolean(INPUT_MANUAL_CHECK, manual).build())
                 .build();
-        workManager.enqueueUniqueWork(INITIAL_WORK, ExistingWorkPolicy.KEEP, initial);
+        WorkManager.getInstance(context).enqueueUniqueWork(
+                name,
+                ExistingWorkPolicy.REPLACE,
+                request
+        );
+        return request.getId();
+    }
+
+    private static Constraints networkConstraints() {
+        return new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build();
     }
 
     private static boolean alertsEnabled(SharedPreferences prefs) {
