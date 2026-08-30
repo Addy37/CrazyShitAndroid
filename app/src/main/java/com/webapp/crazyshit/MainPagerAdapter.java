@@ -260,7 +260,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             addSeriesSourceSelector(page);
             page.empty.setOnClickListener(v -> {
                 String url = page.seriesSource == SERIES_SOURCE_BUNKR
-                        ? BunkrRepository.INDEX
+                        ? BunkrRepository.TOP_ALBUMS + "?lapse=7d"
                         : page.seriesSource == SERIES_SOURCE_EFUKT
                         ? EfuktRepository.SERIES
                         : BrowseRepository.SERIES;
@@ -442,7 +442,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 List<NativeContentItem> result;
                 if (page.kind == PageKind.SERIES) {
                     result = page.seriesSource == SERIES_SOURCE_BUNKR
-                            ? bunkrRepository.fetchAlbums(activity, 1)
+                            ? bunkrRepository.fetchPopularAlbums(activity, 1)
                             : page.seriesSource == SERIES_SOURCE_EFUKT
                             ? efuktRepository.fetchSeries(activity)
                             : browseRepository.fetchSeries(activity);

@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 /** Balbums album discovery plus native Bunkr album and playable-file support. */
 public final class BunkrRepository {
     public static final String INDEX = "https://balbums.st/";
+    public static final String TOP_ALBUMS = INDEX + "topalbums";
 
     private static final int PAGE_SIZE = 60;
     private static final String USER_AGENT =
@@ -66,6 +67,12 @@ public final class BunkrRepository {
     public List<NativeContentItem> fetchAlbums(Context context, int page) throws IOException {
         int safePage = Math.max(1, page);
         String url = safePage == 1 ? INDEX : INDEX + "?page=" + safePage;
+        return parseAlbumIndex(fetchDocument(context, url));
+    }
+
+    public List<NativeContentItem> fetchPopularAlbums(Context context, int page)
+            throws IOException {
+        String url = TOP_ALBUMS + "?lapse=7d&page=" + Math.max(1, page);
         return parseAlbumIndex(fetchDocument(context, url));
     }
 
@@ -478,8 +485,20 @@ public final class BunkrRepository {
 
     private String albumDescription(String text) {
         String clean = clean(text);
+        Matcher rank = Pattern.compile("(?i)^#\\s*([0-9]+)").matcher(clean);
+        Matcher views = Pattern.compile("(?i)([0-9][0-9,]*)\\s+views?").matcher(clean);
         Matcher count = Pattern.compile("(?i)([0-9][0-9,]*)\\s+(?:files?|items?|videos?)").matcher(clean);
-        return count.find() ? count.group(1) + " files" : "Bunkr album";
+        StringBuilder description = new StringBuilder();
+        if (rank.find()) description.append('#').append(rank.group(1));
+        if (views.find()) {
+            if (description.length() > 0) description.append("  •  ");
+            description.append(views.group(1)).append(" views");
+        }
+        if (count.find()) {
+            if (description.length() > 0) description.append("  •  ");
+            description.append(count.group(1)).append(" files");
+        }
+        return description.length() > 0 ? description.toString() : "Bunkr album";
     }
 
     private String albumTitle(String url) {
@@ -488,10 +507,18 @@ public final class BunkrRepository {
     }
 
     private String cleanAlbumTitle(String value) {
-        String title = clean(value).replaceFirst("(?i)^view\\s+album\\s+", "");
+        String title = clean(value)
+                .replaceFirst("(?i)^#\\s*[0-9]+\\s+", "")
+                .replaceFirst("(?i)^view\\s+album\\s+", "");
         title = title.replaceFirst(
                 "(?i)\\s+[0-9][0-9,]*\\s+(?:files?|items?|videos?)" +
+                        "(?:\\s+[0-9][0-9,]*\\s+views?)?" +
                         "\\s*(?:→|->|›)?\\s*open\\s*$",
+                ""
+        );
+        title = title.replaceFirst(
+                "(?i)\\s+[0-9][0-9,]*\\s+(?:files?|items?|videos?)" +
+                        "(?:\\s+[0-9][0-9,]*\\s+views?)?\\s*$",
                 ""
         );
         return clean(title);
