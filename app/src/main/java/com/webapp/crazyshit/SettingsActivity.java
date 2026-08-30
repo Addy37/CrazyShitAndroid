@@ -2,7 +2,10 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -16,6 +19,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.content.ContextCompat;
+
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.materialswitch.MaterialSwitch;
@@ -25,6 +30,19 @@ public class SettingsActivity extends Activity {
 
     private SharedPreferences prefs;
     private AppUpdater appUpdater;
+    private TextView notificationStatusView;
+    private boolean notificationReceiverRegistered;
+    private final BroadcastReceiver notificationCheckReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (notificationStatusView != null) {
+                notificationStatusView.setText(NotificationCoordinator.statusSummary(SettingsActivity.this));
+            }
+            if (intent != null && intent.getBooleanExtra(NotificationCoordinator.EXTRA_MANUAL_CHECK, false)) {
+                Toast.makeText(SettingsActivity.this, "Site check finished.", Toast.LENGTH_SHORT).show();
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle state) {
@@ -100,6 +118,10 @@ public class SettingsActivity extends Activity {
                 "Check frequency",
                 NotificationCoordinator.frequencySummary(this),
                 this::showNotificationFrequencyChoices);
+        notificationStatusView = addAction(root,
+                "Check now",
+                NotificationCoordinator.statusSummary(this),
+                this::checkNotificationsNow);
         addSwitch(root,
                 "App update alerts",
                 "Notify you when a new build is ready. Nothing downloads until you tap it.",
@@ -251,7 +273,7 @@ public class SettingsActivity extends Activity {
         root.addView(card, cardParams());
     }
 
-    private void addAction(LinearLayout root, String title, String subtitle, Runnable action) {
+    private TextView addAction(LinearLayout root, String title, String subtitle, Runnable action) {
         MaterialCardView card = card();
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -279,6 +301,15 @@ public class SettingsActivity extends Activity {
         row.addView(chevron);
         card.addView(row);
         root.addView(card, cardParams());
+        return sub;
+    }
+
+    private void checkNotificationsNow() {
+        if (notificationStatusView != null) {
+            notificationStatusView.setText("Checking CrazyShit and EFukt now…");
+        }
+        NotificationCoordinator.checkNow(this);
+        Toast.makeText(this, "Checking both sites in the background.", Toast.LENGTH_SHORT).show();
     }
 
     private void showChaosPreloadChoices() {
@@ -349,6 +380,32 @@ public class SettingsActivity extends Activity {
         super.onResume();
         OledThemeController.applySoon(this);
         if (appUpdater != null) appUpdater.onHostResume();
+        if (notificationStatusView != null) {
+            notificationStatusView.setText(NotificationCoordinator.statusSummary(this));
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (!notificationReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                    this,
+                    notificationCheckReceiver,
+                    new IntentFilter(NotificationCoordinator.ACTION_CHECK_FINISHED),
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+            );
+            notificationReceiverRegistered = true;
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        if (notificationReceiverRegistered) {
+            unregisterReceiver(notificationCheckReceiver);
+            notificationReceiverRegistered = false;
+        }
+        super.onStop();
     }
 
     @Override
