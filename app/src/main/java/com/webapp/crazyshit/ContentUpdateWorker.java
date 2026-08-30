@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 
@@ -46,14 +47,34 @@ public final class ContentUpdateWorker extends Worker {
     public Result doWork() {
         Context context = getApplicationContext();
         SharedPreferences prefs = context.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE);
+        SharedPreferences state = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE);
         ArrayList<NotificationCoordinator.SourceAlert> alerts = new ArrayList<>();
-        boolean failed = false;
+        boolean manual = getInputData().getBoolean(NotificationCoordinator.INPUT_MANUAL_CHECK, false);
+        int attempted = 0;
+        int succeeded = 0;
+        String crazyShitStatus = prefs.getBoolean(NotificationCoordinator.PREF_CRAZYSHIT_ALERTS, true)
+                ? "Waiting to check"
+                : "Off";
+        String efuktStatus = prefs.getBoolean(NotificationCoordinator.PREF_EFUKT_ALERTS, true)
+                ? "Waiting to check"
+                : "Off";
+        String updateStatus = prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)
+                ? "Waiting to check"
+                : "Off";
+
+        state.edit()
+                .putLong(NotificationCoordinator.KEY_CHECK_STARTED, System.currentTimeMillis())
+                .apply();
 
         if (prefs.getBoolean(NotificationCoordinator.PREF_NEW_VIDEO_ALERTS, true)) {
             if (prefs.getBoolean(NotificationCoordinator.PREF_CRAZYSHIT_ALERTS, true)) {
+                attempted++;
                 try {
                     List<NativeContentItem> items = new CrazyShitRepository()
                             .fetchFeed(context, CrazyShitRepository.HOME, 1);
+                    int itemCount = countFeedItems(items);
+                    if (itemCount == 0) throw new Exception("No videos found");
+                    boolean alreadyWatching = state.getBoolean("seen_initialized_crazyshit", false);
                     NotificationCoordinator.SourceAlert alert = findNew(
                             context,
                             "crazyshit",
@@ -62,14 +83,20 @@ public final class ContentUpdateWorker extends Worker {
                             items
                     );
                     if (alert != null) alerts.add(alert);
-                } catch (Exception ignored) {
-                    failed = true;
+                    crazyShitStatus = sourceStatus(alreadyWatching, itemCount, alert);
+                    succeeded++;
+                } catch (Exception error) {
+                    crazyShitStatus = friendlyError(error);
                 }
             }
 
             if (prefs.getBoolean(NotificationCoordinator.PREF_EFUKT_ALERTS, true)) {
+                attempted++;
                 try {
                     List<NativeContentItem> items = new EfuktRepository().fetchLatest(context);
+                    int itemCount = countFeedItems(items);
+                    if (itemCount == 0) throw new Exception("No videos found");
+                    boolean alreadyWatching = state.getBoolean("seen_initialized_efukt", false);
                     NotificationCoordinator.SourceAlert alert = findNew(
                             context,
                             "efukt",
@@ -78,23 +105,81 @@ public final class ContentUpdateWorker extends Worker {
                             items
                     );
                     if (alert != null) alerts.add(alert);
-                } catch (Exception ignored) {
-                    failed = true;
+                    efuktStatus = sourceStatus(alreadyWatching, itemCount, alert);
+                    succeeded++;
+                } catch (Exception error) {
+                    efuktStatus = friendlyError(error);
                 }
             }
+        } else {
+            crazyShitStatus = "Video alerts off";
+            efuktStatus = "Video alerts off";
         }
 
         if (!alerts.isEmpty()) NotificationCoordinator.showNewVideoNotifications(context, alerts);
 
         if (prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)) {
+            attempted++;
             try {
                 checkForAppUpdate(context);
-            } catch (Exception ignored) {
-                failed = true;
+                updateStatus = "Up to date";
+                succeeded++;
+            } catch (Exception error) {
+                updateStatus = friendlyError(error);
             }
         }
 
-        return failed ? Result.retry() : Result.success();
+        state.edit()
+                .putLong(NotificationCoordinator.KEY_CHECK_FINISHED, System.currentTimeMillis())
+                .putString(NotificationCoordinator.KEY_STATUS_CRAZYSHIT, crazyShitStatus)
+                .putString(NotificationCoordinator.KEY_STATUS_EFUKT, efuktStatus)
+                .putString(NotificationCoordinator.KEY_STATUS_UPDATES, updateStatus)
+                .apply();
+
+        Intent finished = new Intent(NotificationCoordinator.ACTION_CHECK_FINISHED)
+                .setPackage(context.getPackageName())
+                .putExtra(NotificationCoordinator.EXTRA_MANUAL_CHECK, manual);
+        context.sendBroadcast(finished);
+
+        if (!manual && attempted > 0 && succeeded == 0 && getRunAttemptCount() < 2) {
+            return Result.retry();
+        }
+        return Result.success();
+    }
+
+    private int countFeedItems(List<NativeContentItem> items) {
+        int count = 0;
+        if (items == null) return count;
+        for (NativeContentItem item : items) {
+            if (item != null && !item.isSection() && item.url != null && !item.url.trim().isEmpty()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private String sourceStatus(
+            boolean alreadyWatching,
+            int itemCount,
+            NotificationCoordinator.SourceAlert alert
+    ) {
+        if (!alreadyWatching) return "Watching " + itemCount + " current videos";
+        if (alert == null || alert.items.isEmpty()) return "No new videos";
+        int count = alert.items.size();
+        return count + (count == 1 ? " new video found" : " new videos found");
+    }
+
+    private String friendlyError(Exception error) {
+        String message = error == null || error.getMessage() == null
+                ? ""
+                : error.getMessage().toLowerCase(Locale.US);
+        if (message.contains("region") || message.contains("area")) return "Unavailable in this region";
+        if (message.contains("timed out") || message.contains("timeout")) return "Timed out";
+        if (message.contains("unable to resolve host") || message.contains("unknown host")) {
+            return "No connection";
+        }
+        if (message.contains("no videos")) return "Site changed or returned no videos";
+        return "Could not check site";
     }
 
     private NotificationCoordinator.SourceAlert findNew(

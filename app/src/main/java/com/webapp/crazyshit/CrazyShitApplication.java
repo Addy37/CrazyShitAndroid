@@ -73,6 +73,7 @@ public final class CrazyShitApplication extends Application {
 
             @Override
             public void onActivityResumed(Activity activity) {
+                NotificationCoordinator.onAppForeground(activity);
                 UiFoundationCoordinator.onActivityResumed(activity);
             }
 
