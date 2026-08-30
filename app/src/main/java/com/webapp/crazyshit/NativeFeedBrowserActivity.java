@@ -37,10 +37,12 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_SOURCE = "browser_source";
     public static final String SOURCE_CRAZYSHIT = "crazyshit";
     public static final String SOURCE_EFUKT = "efukt";
+    public static final String SOURCE_BUNKR = "bunkr";
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
+    private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final MemeRepository memeRepository = new MemeRepository();
 
     private NativeFeedAdapter adapter;
@@ -83,7 +85,8 @@ public final class NativeFeedBrowserActivity extends Activity {
         baseUrl = value(getIntent().getStringExtra(EXTRA_BASE_URL), CrazyShitRepository.HOME);
         memeMode = getIntent().getBooleanExtra(EXTRA_MEME_MODE, false);
         source = value(getIntent().getStringExtra(EXTRA_SOURCE), SOURCE_CRAZYSHIT);
-        if (EfuktRepository.isEfuktUrl(baseUrl)) source = SOURCE_EFUKT;
+        if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
+        else if (EfuktRepository.isEfuktUrl(baseUrl)) source = SOURCE_EFUKT;
         buildUi();
         load(false);
     }
@@ -149,7 +152,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
             @Override
             public void onComments(NativeContentItem item) {
-                if (item == null || item.isSection() || memeMode || isEfukt()) return;
+                if (item == null || item.isSection() || memeMode || !supportsComments()) return;
                 new InlineCommentsDialog(
                         NativeFeedBrowserActivity.this,
                         item.url,
@@ -215,6 +218,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                 List<NativeContentItem> result;
                 if (memeMode) {
                     result = memeRepository.fetch(this, requestPage);
+                } else if (isBunkr()) {
+                    result = bunkrRepository.fetchAlbum(this, baseUrl, requestPage);
                 } else if (isEfukt()) {
                     result = efuktRepository.fetchSeriesFeed(this, baseUrl, requestPage);
                 } else {
@@ -277,6 +282,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, baseUrl);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                intent.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
                 try {
                     intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, WebSettings.getDefaultUserAgent(this));
                 } catch (Exception ignored) {
@@ -488,6 +494,14 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private boolean isEfukt() {
         return SOURCE_EFUKT.equals(source) || EfuktRepository.isEfuktUrl(baseUrl);
+    }
+
+    private boolean isBunkr() {
+        return SOURCE_BUNKR.equals(source) || BunkrRepository.isAlbumUrl(baseUrl);
+    }
+
+    private boolean supportsComments() {
+        return !isEfukt() && !isBunkr();
     }
 
     @Override

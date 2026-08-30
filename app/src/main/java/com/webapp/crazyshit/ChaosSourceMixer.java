@@ -26,6 +26,8 @@ final class ChaosSourceMixer {
     private static final int SHIT_SHOW_PER_BATCH = 24;
     private static final int EFUKT_ITEMS_PER_BATCH = 12;
     private static final int EFUKT_SERIES_PER_BATCH = 2;
+    private static final int BUNKR_ITEMS_PER_BATCH = 6;
+    private static final int BUNKR_ALBUMS_PER_BATCH = 2;
     private static final int STARTER_ITEMS = 1;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
@@ -34,13 +36,17 @@ final class ChaosSourceMixer {
     private final Random random;
     private final ShitShowTapSource shitShow = new ShitShowTapSource();
     private final EfuktRepository efukt = new EfuktRepository();
+    private final BunkrRepository bunkr = new BunkrRepository();
     private final ArrayList<NativeContentItem> efuktSeries = new ArrayList<>();
     private final ArrayDeque<NativeContentItem> efuktSeriesDeck = new ArrayDeque<>();
+    private final ArrayList<NativeContentItem> bunkrAlbums = new ArrayList<>();
+    private final ArrayDeque<NativeContentItem> bunkrAlbumDeck = new ArrayDeque<>();
     private final ArrayList<String> catalog = new ArrayList<>();
     private final ArrayDeque<String> sourceDeck = new ArrayDeque<>();
     private final Set<String> usedSourcePages = new HashSet<>();
     private boolean catalogLoaded;
     private boolean efuktCatalogAttempted;
+    private boolean bunkrCatalogAttempted;
     private boolean starterPending = true;
 
     ChaosSourceMixer(CrazyShitRepository repository, Random random) {
@@ -64,9 +70,8 @@ final class ChaosSourceMixer {
             if (!starter.isEmpty()) return starter;
         }
 
-        // Keep all six CrazyShit source slots broad, add up to 12 EFukt clips from two shuffled
-        // series, then weave in up to 24 Shit Show stories. A full batch is about 40% CrazyShit,
-        // 20% EFukt, and 40% Shit Show while every source still degrades cleanly when unavailable.
+        // Keep all six CrazyShit source slots broad, add EFukt clips and a smaller Bunkr sample,
+        // then weave in Shit Show stories. Every source degrades cleanly when unavailable.
         ensureCatalog(context);
 
         LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
@@ -89,7 +94,10 @@ final class ChaosSourceMixer {
         ArrayList<NativeContentItem> efuktItems = new ArrayList<>(loadEfuktBatch(context));
         Collections.shuffle(efuktItems, random);
         List<NativeContentItem> regularAndEfukt = weaveEfukt(regularItems, efuktItems);
-        return weaveShitShow(regularAndEfukt, shitShowItems);
+        ArrayList<NativeContentItem> bunkrItems = new ArrayList<>(loadBunkrBatch(context));
+        Collections.shuffle(bunkrItems, random);
+        List<NativeContentItem> mixedExternal = weaveEfukt(regularAndEfukt, bunkrItems);
+        return weaveShitShow(mixedExternal, shitShowItems);
     }
 
     void resetDeck() {
@@ -99,6 +107,8 @@ final class ChaosSourceMixer {
         shitShow.resetDeck();
         efuktSeriesDeck.clear();
         if (efuktSeries.isEmpty()) efuktCatalogAttempted = false;
+        bunkrAlbumDeck.clear();
+        if (bunkrAlbums.isEmpty()) bunkrCatalogAttempted = false;
     }
 
     private List<NativeContentItem> loadStarterBatch(Context context) {
@@ -181,6 +191,60 @@ final class ChaosSourceMixer {
         ArrayList<NativeContentItem> shuffled = new ArrayList<>(efuktSeries);
         Collections.shuffle(shuffled, random);
         efuktSeriesDeck.addAll(shuffled);
+    }
+
+    private List<NativeContentItem> loadBunkrBatch(Context context) {
+        ensureBunkrCatalog(context);
+        if (bunkrAlbums.isEmpty()) return new ArrayList<>();
+
+        LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
+        HashSet<String> usedAlbums = new HashSet<>();
+        int albumTarget = Math.min(BUNKR_ALBUMS_PER_BATCH, bunkrAlbums.size());
+        int attempts = Math.max(4, bunkrAlbums.size() * 2);
+        while (usedAlbums.size() < albumTarget && attempts-- > 0) {
+            if (bunkrAlbumDeck.isEmpty()) refillBunkrDeck();
+            NativeContentItem album = bunkrAlbumDeck.pollFirst();
+            if (album == null || album.url == null || album.url.isEmpty()) continue;
+            if (!usedAlbums.add(album.url)) continue;
+            try {
+                ArrayList<NativeContentItem> candidates = new ArrayList<>(
+                        bunkr.fetchAlbum(context, album.url, 1)
+                );
+                Collections.shuffle(candidates, random);
+                int perAlbum = Math.min(3, candidates.size());
+                for (int i = 0; i < perAlbum; i++) {
+                    NativeContentItem item = candidates.get(i);
+                    if (item == null || item.url == null || item.url.isEmpty()) continue;
+                    combined.putIfAbsent(item.url, item);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        ArrayList<NativeContentItem> candidates = new ArrayList<>(combined.values());
+        Collections.shuffle(candidates, random);
+        int take = Math.min(BUNKR_ITEMS_PER_BATCH, candidates.size());
+        return new ArrayList<>(candidates.subList(0, take));
+    }
+
+    private void ensureBunkrCatalog(Context context) {
+        if (bunkrCatalogAttempted) return;
+        bunkrCatalogAttempted = true;
+        try {
+            for (NativeContentItem album : bunkr.fetchAlbums(context, 1)) {
+                if (album == null || album.url == null || album.url.isEmpty()) continue;
+                if (!NativeContentItem.KIND_SERIES.equals(album.kind)) continue;
+                bunkrAlbums.add(album);
+            }
+        } catch (Exception ignored) {
+        }
+        refillBunkrDeck();
+    }
+
+    private void refillBunkrDeck() {
+        if (bunkrAlbums.isEmpty()) return;
+        ArrayList<NativeContentItem> shuffled = new ArrayList<>(bunkrAlbums);
+        Collections.shuffle(shuffled, random);
+        bunkrAlbumDeck.addAll(shuffled);
     }
 
     private List<NativeContentItem> weaveEfukt(

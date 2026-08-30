@@ -35,7 +35,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** v2.6 native search across site videos, Series, Categories and the local Library. */
+/** Native search across site videos, collections, categories and the local Library. */
 public final class SearchActivity extends Activity {
     public static final String EXTRA_QUERY = "query";
 
@@ -43,7 +43,8 @@ public final class SearchActivity extends Activity {
         ALL,
         VIDEOS,
         EFUKT,
-        SERIES,
+        BUNKR,
+        COLLECTIONS,
         CATEGORIES,
         LIBRARY
     }
@@ -51,7 +52,8 @@ public final class SearchActivity extends Activity {
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final BrowseRepository browseRepository = new BrowseRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
-    private final ExecutorService io = Executors.newFixedThreadPool(6);
+    private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final ExecutorService io = Executors.newFixedThreadPool(7);
 
     private EditText input;
     private ProgressBar progress;
@@ -65,6 +67,7 @@ public final class SearchActivity extends Activity {
     private List<NativeContentItem> efuktVideos = new ArrayList<>();
     private List<NativeContentItem> series = new ArrayList<>();
     private List<NativeContentItem> efuktSeries = new ArrayList<>();
+    private List<NativeContentItem> bunkrAlbums = new ArrayList<>();
     private List<NativeContentItem> categories = new ArrayList<>();
     private List<NativeContentItem> library = new ArrayList<>();
     private Filter filter = Filter.ALL;
@@ -144,7 +147,7 @@ public final class SearchActivity extends Activity {
         status.setTextSize(15f);
         status.setGravity(Gravity.CENTER);
         status.setPadding(dp(26), dp(26), dp(26), dp(26));
-        status.setText("Search CrazyShit, EFukt, Series, Categories and your Library");
+        status.setText("Search CrazyShit, EFukt, Bunkr, Collections, Categories and your Library");
         content.addView(status, new FrameLayout.LayoutParams(-1, -1));
 
         progress = new ProgressBar(this);
@@ -200,7 +203,7 @@ public final class SearchActivity extends Activity {
         row.setPadding(dp(12), dp(8), dp(12), dp(6));
 
         input = new EditText(this);
-        input.setHint("Search CrazyShit and EFukt");
+        input.setHint("Search CrazyShit, EFukt and Bunkr");
         input.setHintTextColor(Color.rgb(145, 145, 155));
         input.setTextColor(Color.WHITE);
         input.setTextSize(16f);
@@ -246,7 +249,8 @@ public final class SearchActivity extends Activity {
         addFilter(row, "All", Filter.ALL);
         addFilter(row, "Videos", Filter.VIDEOS);
         addFilter(row, "EFukt", Filter.EFUKT);
-        addFilter(row, "Series", Filter.SERIES);
+        addFilter(row, "Bunkr", Filter.BUNKR);
+        addFilter(row, "Collections", Filter.COLLECTIONS);
         addFilter(row, "Categories", Filter.CATEGORIES);
         addFilter(row, "Library", Filter.LIBRARY);
         refreshFilterStyles();
@@ -307,6 +311,9 @@ public final class SearchActivity extends Activity {
         CompletableFuture<List<NativeContentItem>> efuktSeries = CompletableFuture.supplyAsync(
                 () -> fetchEfuktSeriesMatches(query), io
         );
+        CompletableFuture<List<NativeContentItem>> bunkrAlbums = CompletableFuture.supplyAsync(
+                () -> fetchBunkrAlbums(query), io
+        );
         CompletableFuture<List<NativeContentItem>> foundCategories = CompletableFuture.supplyAsync(
                 () -> fetchCategoryMatches(query), io
         );
@@ -315,12 +322,14 @@ public final class SearchActivity extends Activity {
         );
 
         CompletableFuture.allOf(
-                crazyVideos, efuktVideos, crazySeries, efuktSeries, foundCategories, foundLibrary
+                crazyVideos, efuktVideos, crazySeries, efuktSeries, bunkrAlbums,
+                foundCategories, foundLibrary
         ).whenComplete((ignored, error) -> runOnUiThread(() -> {
             if (requestGeneration != generation || isFinishing()) return;
             SearchActivity.this.crazyVideos = crazyVideos.join();
             SearchActivity.this.efuktVideos = efuktVideos.join();
             SearchActivity.this.efuktSeries = efuktSeries.join();
+            SearchActivity.this.bunkrAlbums = bunkrAlbums.join();
             videos = interleave(SearchActivity.this.crazyVideos, SearchActivity.this.efuktVideos);
             series = interleave(crazySeries.join(), SearchActivity.this.efuktSeries);
             categories = foundCategories.join();
@@ -357,6 +366,14 @@ public final class SearchActivity extends Activity {
     private List<NativeContentItem> fetchEfuktSeriesMatches(String query) {
         try {
             return matchCatalog(efuktRepository.fetchSeries(this), query);
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private List<NativeContentItem> fetchBunkrAlbums(String query) {
+        try {
+            return bunkrRepository.searchAlbums(this, query, 1);
         } catch (Exception ignored) {
             return new ArrayList<>();
         }
@@ -449,7 +466,10 @@ public final class SearchActivity extends Activity {
         ArrayList<GlobalSearchAdapter.Entry> output = new ArrayList<>();
         if (filter == Filter.ALL || filter == Filter.VIDEOS) appendSection(output, "Videos  •  CrazyShit + EFukt", videos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Videos", efuktVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
-        if (filter == Filter.ALL || filter == Filter.SERIES) appendSection(output, "Series", series, GlobalSearchAdapter.SOURCE_REMOTE, 20);
+        if (filter == Filter.ALL || filter == Filter.BUNKR || filter == Filter.COLLECTIONS) {
+            appendSection(output, "Bunkr Albums", bunkrAlbums, GlobalSearchAdapter.SOURCE_REMOTE, 30);
+        }
+        if (filter == Filter.ALL || filter == Filter.COLLECTIONS) appendSection(output, "Series", series, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Series", efuktSeries, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.ALL || filter == Filter.CATEGORIES) appendSection(output, "Categories", categories, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.ALL || filter == Filter.LIBRARY) appendSection(output, "Your Library", library, GlobalSearchAdapter.SOURCE_LIBRARY, 30);
@@ -483,7 +503,9 @@ public final class SearchActivity extends Activity {
         if (item == null || item.url == null || item.url.isEmpty()) return;
         haptic(recycler);
         if (item.isSeries() || item.isCategory()) {
-            String source = EfuktRepository.isEfuktUrl(item.url)
+            String source = BunkrRepository.isAlbumUrl(item.url)
+                    ? NativeFeedBrowserActivity.SOURCE_BUNKR
+                    : EfuktRepository.isEfuktUrl(item.url)
                     ? NativeFeedBrowserActivity.SOURCE_EFUKT
                     : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
             startActivity(NativeFeedBrowserActivity.create(
@@ -518,7 +540,10 @@ public final class SearchActivity extends Activity {
                 intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
                 intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
-                if (EfuktRepository.isEfuktUrl(item.url)) {
+                intent.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
+                if (BunkrRepository.isBunkrUrl(item.url)) {
+                    intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, NativeFeedBrowserActivity.SOURCE_BUNKR);
+                } else if (EfuktRepository.isEfuktUrl(item.url)) {
                     intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, EfuktRepository.SERIES);
                     intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, NativeFeedBrowserActivity.SOURCE_EFUKT);
                 }

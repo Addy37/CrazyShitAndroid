@@ -71,6 +71,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_REOPEN_DETAIL = "reopen_detail";
     public static final String EXTRA_RELATED_FEED_URL = "related_feed_url";
     public static final String EXTRA_SOURCE = "content_source";
+    public static final String EXTRA_MEDIA_REFERER = "media_referer";
 
     private static final String SITE = "https://crazyshit.com/";
     private static final int CONTROL_TIMEOUT_MS = 2600;
@@ -83,6 +84,7 @@ public class VideoDetailActivity extends Activity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
+    private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final Map<String, ImageView> relatedImages = new LinkedHashMap<>();
     private final Map<String, String> resolvedRelatedThumbnails = new LinkedHashMap<>();
     private final Set<String> requestedRelatedThumbnails = new HashSet<>();
@@ -117,6 +119,7 @@ public class VideoDetailActivity extends Activity {
     private String cookies;
     private String relatedFeedUrl;
     private String source;
+    private String mediaReferer;
     private long requestedStartPosition;
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
     private boolean failureShown;
@@ -135,6 +138,7 @@ public class VideoDetailActivity extends Activity {
         final String comments;
         final String userAgent;
         final String cookies;
+        final String mediaReferer;
         final long positionMs;
         final Bitmap previewBitmap;
 
@@ -147,6 +151,7 @@ public class VideoDetailActivity extends Activity {
                 String comments,
                 String userAgent,
                 String cookies,
+                String mediaReferer,
                 long positionMs,
                 Bitmap previewBitmap
         ) {
@@ -158,6 +163,7 @@ public class VideoDetailActivity extends Activity {
             this.comments = comments;
             this.userAgent = userAgent;
             this.cookies = cookies;
+            this.mediaReferer = mediaReferer;
             this.positionMs = positionMs;
             this.previewBitmap = previewBitmap;
         }
@@ -180,6 +186,7 @@ public class VideoDetailActivity extends Activity {
         cookies = clean(getIntent().getStringExtra(PlayerActivity.EXTRA_COOKIES));
         relatedFeedUrl = clean(getIntent().getStringExtra(EXTRA_RELATED_FEED_URL));
         source = clean(getIntent().getStringExtra(EXTRA_SOURCE));
+        mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -188,6 +195,7 @@ public class VideoDetailActivity extends Activity {
         }
         if (title.isEmpty()) title = "Video";
         if (pageUrl == null) pageUrl = "";
+        if (mediaReferer.isEmpty()) mediaReferer = pageUrl;
 
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -329,7 +337,7 @@ public class VideoDetailActivity extends Activity {
         actions.setGravity(Gravity.CENTER_VERTICAL);
         actions.setPadding(0, 0, 0, dp(3));
         detailsColumn.addView(actions, new LinearLayout.LayoutParams(-1, -2));
-        if (!isEfukt()) {
+        if (supportsComments()) {
             actions.addView(actionButton(comments.isEmpty() ? "💬 Comments" : "💬 " + comments, this::openComments), actionParams());
         }
         actions.addView(actionButton("♡ Later", this::toggleWatchLater), actionParams());
@@ -504,10 +512,10 @@ public class VideoDetailActivity extends Activity {
         if (!userAgent.isEmpty()) httpFactory.setUserAgent(userAgent);
 
         Map<String, String> headers = new LinkedHashMap<>();
-        if (!pageUrl.isEmpty()) {
-            headers.put("Referer", pageUrl);
+        if (!mediaReferer.isEmpty()) {
+            headers.put("Referer", mediaReferer);
             try {
-                Uri page = Uri.parse(pageUrl);
+                Uri page = Uri.parse(mediaReferer);
                 if (page.getScheme() != null && page.getHost() != null) {
                     headers.put("Origin", page.getScheme() + "://" + page.getHost());
                 }
@@ -542,7 +550,7 @@ public class VideoDetailActivity extends Activity {
                 if (playbackState == Player.STATE_READY) {
                     String readyPageUrl = pageUrl;
                     playerView.postDelayed(() -> {
-                        if (!isEfukt() && readyPageUrl.equals(pageUrl)) {
+                        if (supportsComments() && readyPageUrl.equals(pageUrl)) {
                             NativeCommentsLoader.preload(VideoDetailActivity.this, readyPageUrl);
                         }
                     }, 650L);
@@ -583,7 +591,17 @@ public class VideoDetailActivity extends Activity {
         final String excludeUrl = pageUrl;
         io.execute(() -> {
             LinkedHashMap<String, NativeContentItem> merged = new LinkedHashMap<>();
-            if (isEfukt()) {
+            if (isBunkr()) {
+                try {
+                    if (!relatedFeedUrl.isEmpty()) {
+                        List<NativeContentItem> album = bunkrRepository.fetchAlbum(this, relatedFeedUrl, 1);
+                        for (NativeContentItem item : album) {
+                            if (!item.url.equals(excludeUrl)) merged.put(item.url, item);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            } else if (isEfukt()) {
                 try {
                     String feed = relatedFeedUrl.isEmpty() ? EfuktRepository.SERIES : relatedFeedUrl;
                     List<NativeContentItem> series = efuktRepository.fetchSeriesFeed(this, feed, 1);
@@ -811,6 +829,7 @@ public class VideoDetailActivity extends Activity {
                 savePlaybackState(false);
                 mediaUrl = resolved.mediaUrl;
                 pageUrl = item.url;
+                mediaReferer = resolved.requestReferer;
                 title = clean(item.title).isEmpty() ? resolved.title : item.title;
                 views = clean(item.views);
                 uploader = clean(item.uploader);
@@ -838,6 +857,7 @@ public class VideoDetailActivity extends Activity {
                 comments,
                 userAgent,
                 cookies,
+                mediaReferer,
                 position,
                 captureRelatedBackPreview()
         ));
@@ -861,6 +881,7 @@ public class VideoDetailActivity extends Activity {
         comments = previous.comments;
         userAgent = previous.userAgent;
         cookies = previous.cookies;
+        mediaReferer = previous.mediaReferer;
         requestedStartPosition = previous.positionMs;
         updateMetadataUi();
         buildPlayer(previous.positionMs);
@@ -1092,7 +1113,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void openComments() {
-        if (pageUrl.isEmpty() || isEfukt()) return;
+        if (pageUrl.isEmpty() || !supportsComments()) return;
         new InlineCommentsDialog(
                 this,
                 pageUrl,
@@ -1127,7 +1148,7 @@ public class VideoDetailActivity extends Activity {
                 ? "Remove from Watch Later"
                 : "Save to Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
-        if (!isEfukt()) {
+        if (supportsComments()) {
             actions.add(VideoActionSheet.action(
                     R.drawable.ic_action_comments,
                     "Comments",
@@ -1210,12 +1231,21 @@ public class VideoDetailActivity extends Activity {
                 "",
                 mediaUrl,
                 userAgent,
-                cookies
+                cookies,
+                mediaReferer
         );
     }
 
     private boolean isEfukt() {
         return NativeFeedBrowserActivity.SOURCE_EFUKT.equals(source) || EfuktRepository.isEfuktUrl(pageUrl);
+    }
+
+    private boolean isBunkr() {
+        return NativeFeedBrowserActivity.SOURCE_BUNKR.equals(source) || BunkrRepository.isBunkrUrl(pageUrl);
+    }
+
+    private boolean supportsComments() {
+        return !isEfukt() && !isBunkr();
     }
 
     private void minimizeFromMenu() {
@@ -1366,10 +1396,13 @@ public class VideoDetailActivity extends Activity {
         result.putExtra(PlayerActivity.EXTRA_TITLE, title);
         result.putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent);
         result.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
+        result.putExtra(EXTRA_MEDIA_REFERER, mediaReferer);
         result.putExtra(EXTRA_REOPEN_DETAIL, true);
         result.putExtra(EXTRA_VIEWS, views);
         result.putExtra(EXTRA_UPLOADER, uploader);
         result.putExtra(EXTRA_COMMENTS, comments);
+        result.putExtra(EXTRA_RELATED_FEED_URL, relatedFeedUrl);
+        result.putExtra(EXTRA_SOURCE, source);
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
         setResult(RESULT_OK, result);
         finish();

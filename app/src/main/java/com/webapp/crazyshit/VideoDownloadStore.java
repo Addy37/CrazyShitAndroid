@@ -71,7 +71,8 @@ final class VideoDownloadStore {
                         imageUrl,
                         resolved.mediaUrl,
                         defaultUserAgent(app),
-                        cookiesFor(resolved.mediaUrl, pageUrl)
+                        cookiesFor(resolved.mediaUrl, pageUrl),
+                        resolved.requestReferer
                 );
             });
         });
@@ -94,7 +95,31 @@ final class VideoDownloadStore {
                 safe(imageUrl),
                 safe(mediaUrl),
                 safe(userAgent).isEmpty() ? defaultUserAgent(context) : userAgent,
-                safe(cookies).isEmpty() ? cookiesFor(mediaUrl, pageUrl) : cookies
+                safe(cookies).isEmpty() ? cookiesFor(mediaUrl, pageUrl) : cookies,
+                safe(pageUrl)
+        );
+    }
+
+    static void downloadKnown(
+            Context context,
+            String title,
+            String pageUrl,
+            String imageUrl,
+            String mediaUrl,
+            String userAgent,
+            String cookies,
+            String requestReferer
+    ) {
+        if (context == null) return;
+        enqueue(
+                context.getApplicationContext(),
+                cleanTitle(title, "Video"),
+                safe(pageUrl),
+                safe(imageUrl),
+                safe(mediaUrl),
+                safe(userAgent).isEmpty() ? defaultUserAgent(context) : userAgent,
+                safe(cookies).isEmpty() ? cookiesFor(mediaUrl, pageUrl) : cookies,
+                safe(requestReferer).isEmpty() ? safe(pageUrl) : requestReferer
         );
     }
 
@@ -105,7 +130,8 @@ final class VideoDownloadStore {
             String imageUrl,
             String mediaUrl,
             String userAgent,
-            String cookies
+            String cookies,
+            String requestReferer
     ) {
         String lower = mediaUrl.toLowerCase(Locale.US);
         if (!lower.startsWith("https://") && !lower.startsWith("http://")) {
@@ -130,7 +156,9 @@ final class VideoDownloadStore {
 
         String mime = mimeType(mediaUrl);
         String fileName = fileName(title, pageUrl.isEmpty() ? mediaUrl : pageUrl, mime);
-        Map<String, String> requestHeaders = requestHeaders(mediaUrl, pageUrl, userAgent, cookies);
+        Map<String, String> requestHeaders = requestHeaders(
+                mediaUrl, requestReferer, userAgent, cookies
+        );
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             long id = nextCustomId();
