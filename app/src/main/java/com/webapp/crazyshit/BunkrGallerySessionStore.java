@@ -96,6 +96,12 @@ final class BunkrGallerySessionStore {
         session.resolvedUrls.put(pageUrl, mediaUrl);
     }
 
+    static synchronized void clearResolvedUrl(String id, String pageUrl) {
+        Session session = SESSIONS.get(id);
+        if (session == null || pageUrl == null || pageUrl.isEmpty()) return;
+        session.resolvedUrls.remove(pageUrl);
+    }
+
     static synchronized Snapshot snapshot(String id) {
         Session session = SESSIONS.get(id);
         return session == null ? null : new Snapshot(session);

@@ -140,7 +140,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             Glide.with(holder.image)
                     .load(withHeaders(item.imageUrl, item.url))
                     .centerCrop()
-                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                    .override(360, 360)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
                     .dontAnimate()
                     .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
                     .error(new ColorDrawable(Color.rgb(20, 20, 23)))
@@ -186,7 +187,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             Glide.with(context)
                     .load(withHeaders(item.imageUrl, item.url))
                     .centerCrop()
-                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
                     .preload(360, 360);
         }
     }

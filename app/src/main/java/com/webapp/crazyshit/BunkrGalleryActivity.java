@@ -46,7 +46,8 @@ public final class BunkrGalleryActivity extends Activity {
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService pageIo = Executors.newSingleThreadExecutor();
+    private final ExecutorService mediaIo = Executors.newFixedThreadPool(2);
     private final BunkrRepository repository = new BunkrRepository();
 
     private String sessionId;
@@ -70,6 +71,7 @@ public final class BunkrGalleryActivity extends Activity {
     private boolean chromeVisible = true;
     private ExoPlayer player;
     private int activeVideoPosition = -1;
+    private volatile int requestedPhotoPosition = -1;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -110,7 +112,20 @@ public final class BunkrGalleryActivity extends Activity {
         pager = new ViewPager2(this);
         pager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
         pager.setOffscreenPageLimit(1);
-        adapter = new BunkrGalleryPagerAdapter(this, this::onMediaTap);
+        adapter = new BunkrGalleryPagerAdapter(
+                this,
+                new BunkrGalleryPagerAdapter.Listener() {
+                    @Override
+                    public void onMediaTap(int position, NativeContentItem item) {
+                        BunkrGalleryActivity.this.onMediaTap(position, item);
+                    }
+
+                    @Override
+                    public void onResolvedImageFailed(int position, NativeContentItem item) {
+                        BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
+                    }
+                }
+        );
         pager.setAdapter(adapter);
         root.addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
@@ -196,6 +211,7 @@ public final class BunkrGalleryActivity extends Activity {
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
+                requestedPhotoPosition = position;
                 releasePlayer();
                 updateChrome(position);
                 resolvePhoto(position);
@@ -224,7 +240,7 @@ public final class BunkrGalleryActivity extends Activity {
             return;
         }
         int requestGeneration = generation;
-        io.execute(() -> {
+        pageIo.execute(() -> {
             try {
                 List<NativeContentItem> result = repository.fetchAlbum(this, albumUrl, 1);
                 runOnUiThread(() -> {
@@ -262,7 +278,7 @@ public final class BunkrGalleryActivity extends Activity {
         loadingMore = true;
         int requestPage = Math.max(1, currentPage + 1);
         int requestGeneration = generation;
-        io.execute(() -> {
+        pageIo.execute(() -> {
             try {
                 List<NativeContentItem> result = repository.fetchAlbum(
                         this,
@@ -291,6 +307,12 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void onMediaTap(int position, NativeContentItem item) {
         if (item == null) return;
+        if (adapter.isFailed(position)) {
+            adapter.setFailed(position, false);
+            if (item.isVideo()) playVideo(position, item);
+            else resolvePhoto(position);
+            return;
+        }
         if (item.isVideo()) playVideo(position, item);
         else toggleChrome();
     }
@@ -301,7 +323,15 @@ public final class BunkrGalleryActivity extends Activity {
                 !adapter.resolvedUrl(position).isEmpty()) return;
         adapter.setLoading(position, true);
         int requestGeneration = generation;
-        io.execute(() -> {
+        mediaIo.execute(() -> {
+            if (requestedPhotoPosition != position) {
+                runOnUiThread(() -> {
+                    if (requestGeneration == generation && !isFinishing()) {
+                        adapter.setLoading(position, false);
+                    }
+                });
+                return;
+            }
             try {
                 CrazyShitRepository.StreamInfo resolved = repository.resolvePlayable(
                         this,
@@ -340,7 +370,7 @@ public final class BunkrGalleryActivity extends Activity {
 
         adapter.setLoading(position, true);
         int requestGeneration = generation;
-        io.execute(() -> {
+        mediaIo.execute(() -> {
             try {
                 CrazyShitRepository.StreamInfo resolved = repository.resolvePlayable(
                         this,
@@ -527,7 +557,8 @@ public final class BunkrGalleryActivity extends Activity {
     protected void onDestroy() {
         generation++;
         releasePlayer();
-        io.shutdownNow();
+        pageIo.shutdownNow();
+        mediaIo.shutdownNow();
         super.onDestroy();
     }
 

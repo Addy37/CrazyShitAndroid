@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -20,9 +21,13 @@ import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,6 +45,8 @@ final class BunkrGalleryPagerAdapter
 
     interface Listener {
         void onMediaTap(int position, NativeContentItem item);
+
+        void onResolvedImageFailed(int position, NativeContentItem item);
     }
 
     private final Context context;
@@ -96,7 +103,12 @@ final class BunkrGalleryPagerAdapter
     void setLoading(int position, boolean value) {
         NativeContentItem item = itemAt(position);
         if (item == null) return;
-        if (value) loading.add(item.url); else loading.remove(item.url);
+        if (value) {
+            failed.remove(item.url);
+            loading.add(item.url);
+        } else {
+            loading.remove(item.url);
+        }
         notifyItemChanged(position);
     }
 
@@ -105,10 +117,20 @@ final class BunkrGalleryPagerAdapter
         return item != null && loading.contains(item.url);
     }
 
+    boolean isFailed(int position) {
+        NativeContentItem item = itemAt(position);
+        return item != null && failed.contains(item.url);
+    }
+
     void setFailed(int position, boolean value) {
         NativeContentItem item = itemAt(position);
         if (item == null) return;
-        if (value) failed.add(item.url); else failed.remove(item.url);
+        if (value) {
+            loading.remove(item.url);
+            failed.add(item.url);
+        } else {
+            failed.remove(item.url);
+        }
         notifyItemChanged(position);
     }
 
@@ -192,11 +214,12 @@ final class BunkrGalleryPagerAdapter
         root.addView(progress, progressParams);
 
         TextView failure = new TextView(parent.getContext());
-        failure.setText("Couldn't load this item.\nUse the menu to open its page.");
+        failure.setText("Couldn't load this item.\nTap to retry or use the menu to open its page.");
         failure.setTextColor(Color.rgb(205, 205, 212));
         failure.setTextSize(14);
         failure.setGravity(Gravity.CENTER);
         failure.setPadding(dp(parent, 28), dp(parent, 28), dp(parent, 28), dp(parent, 28));
+        failure.setBackgroundColor(Color.argb(185, 0, 0, 0));
         failure.setVisibility(View.GONE);
         root.addView(failure, new FrameLayout.LayoutParams(-1, -1));
 
@@ -216,7 +239,7 @@ final class BunkrGalleryPagerAdapter
         holder.image.setVisibility(activeVideo ? View.GONE : View.VISIBLE);
         holder.play.setVisibility(item.isVideo() && !activeVideo ? View.VISIBLE : View.GONE);
         holder.progress.setVisibility(loading.contains(item.url) ? View.VISIBLE : View.GONE);
-        boolean showFailure = failed.contains(item.url) && preview.isEmpty() && !activeVideo;
+        boolean showFailure = failed.contains(item.url) && !activeVideo;
         holder.failure.setVisibility(showFailure ? View.VISIBLE : View.GONE);
 
         if (!activeVideo) {
@@ -227,12 +250,47 @@ final class BunkrGalleryPagerAdapter
                 Glide.with(holder.image)
                         .load(withHeaders(preview, item.url))
                         .fitCenter()
-                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                        .diskCacheStrategy(DiskCacheStrategy.ALL)
                         .dontAnimate()
                         .placeholder(item.imageUrl == null || item.imageUrl.isEmpty()
                                 ? new ColorDrawable(Color.BLACK)
                                 : null)
                         .error(new ColorDrawable(Color.BLACK))
+                        .listener(new RequestListener<Drawable>() {
+                            @Override
+                            public boolean onLoadFailed(
+                                    GlideException error,
+                                    Object model,
+                                    Target<Drawable> target,
+                                    boolean firstResource
+                            ) {
+                                if (!item.isImage() || resolved.isEmpty()) return false;
+                                holder.itemView.post(() -> {
+                                    int current = holder.getBindingAdapterPosition();
+                                    if (current == RecyclerView.NO_POSITION ||
+                                            current >= items.size() ||
+                                            !item.url.equals(items.get(current).url) ||
+                                            !resolved.equals(resolvedUrls.get(item.url))) return;
+                                    resolvedUrls.remove(item.url);
+                                    loading.remove(item.url);
+                                    failed.add(item.url);
+                                    listener.onResolvedImageFailed(current, item);
+                                    notifyItemChanged(current);
+                                });
+                                return false;
+                            }
+
+                            @Override
+                            public boolean onResourceReady(
+                                    Drawable resource,
+                                    Object model,
+                                    Target<Drawable> target,
+                                    DataSource source,
+                                    boolean firstResource
+                            ) {
+                                return false;
+                            }
+                        })
                         .into(holder.image);
             }
         }
