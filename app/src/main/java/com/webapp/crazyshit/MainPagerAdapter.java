@@ -383,6 +383,21 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             params.topMargin = dp(showPopularCaption ? 108 : 56);
             page.refresh.setLayoutParams(params);
         }
+        if (page.browseAdapter != null) {
+            page.browseAdapter.setWideCreatorCards(showPopularCaption);
+        }
+        applyBrowseLayout(page, showPopularCaption);
+    }
+
+    private void applyBrowseLayout(Page page, boolean wideCards) {
+        if (page == null || page.recycler == null) return;
+        RecyclerView.LayoutManager current = page.recycler.getLayoutManager();
+        if (wideCards && current instanceof LinearLayoutManager &&
+                !(current instanceof GridLayoutManager)) return;
+        if (!wideCards && current instanceof GridLayoutManager) return;
+        page.recycler.setLayoutManager(wideCards
+                ? new LinearLayoutManager(activity)
+                : new GridLayoutManager(activity, 2));
     }
 
     private void styleSeriesSourceButton(TextView button, boolean selected) {
