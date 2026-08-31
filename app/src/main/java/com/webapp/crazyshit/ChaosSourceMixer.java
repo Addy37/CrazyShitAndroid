@@ -210,6 +210,7 @@ final class ChaosSourceMixer {
                 ArrayList<NativeContentItem> candidates = new ArrayList<>(
                         bunkr.fetchAlbum(context, album.url, 1)
                 );
+                candidates.removeIf(item -> item == null || !item.isVideo());
                 Collections.shuffle(candidates, random);
                 int perAlbum = Math.min(3, candidates.size());
                 for (int i = 0; i < perAlbum; i++) {

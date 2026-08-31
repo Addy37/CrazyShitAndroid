@@ -27,7 +27,6 @@ public final class BunkrRepository {
     public static final String MOST_FILES_ALBUMS =
             INDEX + "?search=&mode=broad&per=20&sort=files&page=1";
 
-    private static final int PAGE_SIZE = 60;
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -56,6 +55,12 @@ public final class BunkrRepository {
     );
     private static final Pattern THUMBNAIL = Pattern.compile(
             "(?s)\\bthumbnail\\s*:\\s*([\\\"'])(.*?)\\1\\s*,"
+    );
+    private static final Pattern TYPE = Pattern.compile(
+            "(?s)\\btype\\s*:\\s*([\\\"'])(.*?)\\1\\s*,"
+    );
+    private static final Pattern EXTENSION = Pattern.compile(
+            "(?s)\\bextension\\s*:\\s*([\\\"'])(.*?)\\1\\s*,"
     );
     private static final Pattern JS_CDN = Pattern.compile(
             "(?is)\\bjsCDN\\s*=\\s*([\\\"'])(.*?)\\1"
@@ -97,17 +102,28 @@ public final class BunkrRepository {
         if (!album.find()) throw new IOException("Not a Bunkr album URL");
 
         String origin = origin(canonical);
-        String advancedUrl = origin + "/a/" + album.group(1) + "?advanced=1";
-        Document doc = fetchDocument(context, advancedUrl);
+        int safePage = Math.max(1, page);
+        String pageUrl = origin + "/a/" + album.group(1) + "?page=" + safePage;
+        Document doc = fetchDocument(context, pageUrl);
         origin = origin(doc.location());
         LinkedHashMap<String, String> artwork = parseFileArtwork(doc);
         ArrayList<NativeContentItem> all = parseAlbumFiles(doc, origin, artwork);
         if (all.isEmpty()) all.addAll(parseAlbumDom(doc, origin));
 
-        int start = (Math.max(1, page) - 1) * PAGE_SIZE;
-        if (start >= all.size()) return new ArrayList<>();
-        int end = Math.min(all.size(), start + PAGE_SIZE);
-        return new ArrayList<>(all.subList(start, end));
+        // Older layouts only expose file metadata in Advanced View. Keep it as a first-page
+        // fallback, but use Bunkr's normal server-side pages for large albums so a phone never
+        // needs to download tens of thousands of records in one response.
+        if (all.isEmpty() && safePage == 1) {
+            Document advanced = fetchDocument(
+                    context,
+                    origin + "/a/" + album.group(1) + "?advanced=1"
+            );
+            String advancedOrigin = origin(advanced.location());
+            LinkedHashMap<String, String> advancedArtwork = parseFileArtwork(advanced);
+            all.addAll(parseAlbumFiles(advanced, advancedOrigin, advancedArtwork));
+            if (all.isEmpty()) all.addAll(parseAlbumDom(advanced, advancedOrigin));
+        }
+        return all;
     }
 
     /** Returns the first real file thumbnail, including artwork from image-only albums. */
@@ -116,8 +132,8 @@ public final class BunkrRepository {
         Matcher album = ALBUM_PATH.matcher(canonical);
         if (!album.find()) throw new IOException("Not a Bunkr album URL");
 
-        String advancedUrl = origin(canonical) + "/a/" + album.group(1) + "?advanced=1";
-        Document doc = fetchDocument(context, advancedUrl);
+        String firstPageUrl = origin(canonical) + "/a/" + album.group(1) + "?page=1";
+        Document doc = fetchDocument(context, firstPageUrl);
         String pageOrigin = origin(doc.location());
         for (String image : parseFileArtwork(doc).values()) {
             if (image != null && !image.trim().isEmpty()) return image.trim();
@@ -284,13 +300,21 @@ public final class BunkrRepository {
             String thumbnail = jsValue(item, THUMBNAIL);
             if (slug.isEmpty()) continue;
             String title = original.isEmpty() ? fileTitle(slug) : original;
-            if (!isPlayableName(title) && !isPlayableName(slug)) continue;
+            String type = jsValue(item, TYPE);
+            String extension = jsValue(item, EXTENSION);
+            boolean video = isPlayableName(title) || isPlayableName(slug) ||
+                    isPlayableName(extension) || "video".equalsIgnoreCase(type);
+            boolean imageFile = isImageName(title) || isImageName(slug) ||
+                    isImageName(extension) || "image".equalsIgnoreCase(type);
+            if (!video && !imageFile) continue;
             String image = normalizeUrl(thumbnail, origin);
             if (image.isEmpty()) image = artwork.get(slug);
             if (image == null || image.isEmpty()) image = artwork.get(name);
             String size = value(item, SIZE);
             result.add(new NativeContentItem(
-                    NativeContentItem.KIND_MEDIA,
+                    imageFile && !video
+                            ? NativeContentItem.KIND_IMAGE
+                            : NativeContentItem.KIND_MEDIA,
                     title,
                     origin + "/f/" + slug,
                     image == null ? "" : image,
@@ -304,7 +328,9 @@ public final class BunkrRepository {
 
     private LinkedHashMap<String, String> parseFileArtwork(Document doc) {
         LinkedHashMap<String, String> result = new LinkedHashMap<>();
-        for (Element link : doc.select("a[href*=/f/],a[href*=/v/]")) {
+        for (Element link : doc.select(
+                "a[href*=/f/],a[href*=/v/],a[href*=/i/],a[href*=/d/]"
+        )) {
             Matcher path = FILE_PATH.matcher(link.attr("href"));
             if (!path.find()) continue;
             String image = imageFrom(link);
@@ -321,15 +347,27 @@ public final class BunkrRepository {
 
     private ArrayList<NativeContentItem> parseAlbumDom(Document doc, String origin) {
         LinkedHashMap<String, NativeContentItem> result = new LinkedHashMap<>();
-        for (Element link : doc.select("a[href*=/f/],a[href*=/v/]")) {
+        for (Element link : doc.select(
+                "a[href*=/f/],a[href*=/v/],a[href*=/i/],a[href*=/d/]"
+        )) {
             String url = normalizeUrl(link.absUrl("href"), origin);
             Matcher path = FILE_PATH.matcher(url);
             if (!path.find()) continue;
             String title = clean(link.text());
             if (title.isEmpty()) title = fileTitle(path.group(1));
-            if (!isPlayableName(title) && !isPlayableName(path.group(1))) continue;
+            boolean video = isPlayableName(title) || isPlayableName(path.group(1));
+            boolean imageFile = isImageName(title) || isImageName(path.group(1));
+            if (!video && !imageFile) continue;
             result.putIfAbsent(url, new NativeContentItem(
-                    NativeContentItem.KIND_MEDIA, title, url, imageFrom(link), "", "Bunkr", ""
+                    imageFile && !video
+                            ? NativeContentItem.KIND_IMAGE
+                            : NativeContentItem.KIND_MEDIA,
+                    title,
+                    url,
+                    imageFrom(link),
+                    "",
+                    "Bunkr",
+                    ""
             ));
         }
         return new ArrayList<>(result.values());
@@ -547,7 +585,19 @@ public final class BunkrRepository {
         String lower = value.toLowerCase(Locale.US).split("\\?", 2)[0];
         return lower.endsWith(".mp4") || lower.endsWith(".m4v") || lower.endsWith(".webm") ||
                 lower.endsWith(".mov") || lower.endsWith(".mkv") || lower.endsWith(".ts") ||
-                lower.endsWith(".m3u8") || lower.endsWith(".mpd");
+                lower.endsWith(".m3u8") || lower.endsWith(".mpd") ||
+                lower.matches("^\\.?(?:mp4|m4v|webm|mov|mkv|ts|m3u8|mpd)$");
+    }
+
+    private boolean isImageName(String value) {
+        if (value == null) return false;
+        String lower = value.toLowerCase(Locale.US).split("\\?", 2)[0];
+        return lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                lower.endsWith(".png") || lower.endsWith(".webp") ||
+                lower.endsWith(".gif") || lower.endsWith(".bmp") ||
+                lower.endsWith(".avif") || lower.endsWith(".heic") ||
+                lower.endsWith(".heif") ||
+                lower.matches("^\\.?(?:jpg|jpeg|png|webp|gif|bmp|avif|heic|heif)$");
     }
 
     private boolean isDirectMedia(String url) {

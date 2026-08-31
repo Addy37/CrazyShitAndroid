@@ -625,7 +625,9 @@ public class VideoDetailActivity extends Activity {
                     if (!relatedFeedUrl.isEmpty()) {
                         List<NativeContentItem> album = bunkrRepository.fetchAlbum(this, relatedFeedUrl, 1);
                         for (NativeContentItem item : album) {
-                            if (!item.url.equals(excludeUrl)) merged.put(item.url, item);
+                            if (item.isVideo() && !item.url.equals(excludeUrl)) {
+                                merged.put(item.url, item);
+                            }
                         }
                     }
                 } catch (Exception ignored) {

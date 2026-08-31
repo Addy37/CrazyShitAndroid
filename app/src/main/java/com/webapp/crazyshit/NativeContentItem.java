@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 public final class NativeContentItem {
     public static final String KIND_MEDIA = "media";
+    public static final String KIND_IMAGE = "image";
     public static final String KIND_MEME = "meme";
     public static final String KIND_CATEGORY = "category";
     public static final String KIND_SERIES = "series";
@@ -58,6 +59,14 @@ public final class NativeContentItem {
 
     public boolean isMeme() {
         return KIND_MEME.equals(kind);
+    }
+
+    public boolean isImage() {
+        return KIND_IMAGE.equals(kind) || KIND_MEME.equals(kind);
+    }
+
+    public boolean isVideo() {
+        return KIND_MEDIA.equals(kind);
     }
 
     public boolean isSection() {

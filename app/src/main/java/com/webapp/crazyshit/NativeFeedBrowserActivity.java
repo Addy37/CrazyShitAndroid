@@ -46,6 +46,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     private final MemeRepository memeRepository = new MemeRepository();
 
     private NativeFeedAdapter adapter;
+    private BunkrGalleryAdapter bunkrGalleryAdapter;
+    private String bunkrGallerySessionId;
     private RecyclerView recycler;
     private SwipeRefreshLayout refresh;
     private ProgressBar progress;
@@ -136,33 +138,52 @@ public final class NativeFeedBrowserActivity extends Activity {
         recycler.setItemAnimator(null);
         refresh.addView(recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
 
-        adapter = new NativeFeedAdapter(this, new NativeFeedAdapter.Listener() {
-            @Override
-            public void onOpen(NativeContentItem item) {
-                if (item == null || item.isSection()) return;
-                if (memeMode || item.isMeme()) openMeme(item);
-                else openVideo(item);
-            }
+        if (isBunkr()) {
+            bunkrGallerySessionId = BunkrGallerySessionStore.create(title, baseUrl);
+            bunkrGalleryAdapter = new BunkrGalleryAdapter(
+                    this,
+                    new BunkrGalleryAdapter.Listener() {
+                        @Override
+                        public void onOpen(int position, NativeContentItem item) {
+                            openBunkrGallery(position, item);
+                        }
 
-            @Override
-            public void onLongPress(NativeContentItem item, View anchor) {
-                if (item == null || item.isSection()) return;
-                showItemMenu(item, anchor);
-            }
+                        @Override
+                        public void onLongPress(NativeContentItem item, View anchor) {
+                            showItemMenu(item, anchor);
+                        }
+                    }
+            );
+            recycler.setAdapter(bunkrGalleryAdapter);
+        } else {
+            adapter = new NativeFeedAdapter(this, new NativeFeedAdapter.Listener() {
+                @Override
+                public void onOpen(NativeContentItem item) {
+                    if (item == null || item.isSection()) return;
+                    if (memeMode || item.isMeme()) openMeme(item);
+                    else openVideo(item);
+                }
 
-            @Override
-            public void onComments(NativeContentItem item) {
-                if (item == null || item.isSection() || memeMode || !supportsComments()) return;
-                new InlineCommentsDialog(
-                        NativeFeedBrowserActivity.this,
-                        item.url,
-                        item.title,
-                        item.comments,
-                        null
-                ).show();
-            }
-        });
-        recycler.setAdapter(adapter);
+                @Override
+                public void onLongPress(NativeContentItem item, View anchor) {
+                    if (item == null || item.isSection()) return;
+                    showItemMenu(item, anchor);
+                }
+
+                @Override
+                public void onComments(NativeContentItem item) {
+                    if (item == null || item.isSection() || memeMode || !supportsComments()) return;
+                    new InlineCommentsDialog(
+                            NativeFeedBrowserActivity.this,
+                            item.url,
+                            item.title,
+                            item.comments,
+                            null
+                    ).show();
+                }
+            });
+            recycler.setAdapter(adapter);
+        }
         applyLayout();
 
         recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -173,9 +194,10 @@ public final class NativeFeedBrowserActivity extends Activity {
                 LinearLayoutManager lm = (LinearLayoutManager) manager;
                 int first = lm.findFirstVisibleItemPosition();
                 int last = lm.findLastVisibleItemPosition();
-                adapter.preloadVisible(first, last);
+                if (isBunkr()) bunkrGalleryAdapter.preloadVisible(first, last);
+                else adapter.preloadVisible(first, last);
                 if (dy > 0 && !loading && !endReached &&
-                        last >= Math.max(0, adapter.getItemCount() - 5)) {
+                        last >= Math.max(0, itemCount() - 5)) {
                     load(true);
                 }
             }
@@ -202,7 +224,17 @@ public final class NativeFeedBrowserActivity extends Activity {
         currentPage = 0;
         loading = false;
         endReached = false;
-        adapter.replace(new ArrayList<>());
+        if (isBunkr()) {
+            bunkrGalleryAdapter.replace(new ArrayList<>());
+            BunkrGallerySessionStore.replace(
+                    bunkrGallerySessionId,
+                    new ArrayList<>(),
+                    0,
+                    false
+            );
+        } else {
+            adapter.replace(new ArrayList<>());
+        }
         load(false);
     }
 
@@ -211,7 +243,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         loading = true;
         int requestPage = append ? currentPage + 1 : 1;
         int requestGeneration = generation;
-        if (!append && adapter.getItemCount() == 0) progress.setVisibility(View.VISIBLE);
+        if (!append && itemCount() == 0) progress.setVisibility(View.VISIBLE);
 
         io.execute(() -> {
             try {
@@ -230,12 +262,42 @@ public final class NativeFeedBrowserActivity extends Activity {
                     loading = false;
                     progress.setVisibility(View.GONE);
                     refresh.setRefreshing(false);
-                    if (append) adapter.append(result); else adapter.replace(result);
-                    if (!result.isEmpty()) currentPage = requestPage;
-                    if (result.isEmpty() || isEfukt()) endReached = true;
+                    int before = itemCount();
+                    if (isBunkr()) {
+                        if (append) bunkrGalleryAdapter.append(result);
+                        else bunkrGalleryAdapter.replace(result);
+                    } else if (append) {
+                        adapter.append(result);
+                    } else {
+                        adapter.replace(result);
+                    }
+                    int added = itemCount() - before;
+                    if (!result.isEmpty() && (!append || added > 0)) currentPage = requestPage;
+                    if (result.isEmpty() || (append && added == 0) || isEfukt()) {
+                        endReached = true;
+                    }
+                    if (isBunkr()) {
+                        if (append) {
+                            BunkrGallerySessionStore.append(
+                                    bunkrGallerySessionId,
+                                    result,
+                                    currentPage,
+                                    endReached
+                            );
+                        } else {
+                            BunkrGallerySessionStore.replace(
+                                    bunkrGallerySessionId,
+                                    result,
+                                    currentPage,
+                                    endReached
+                            );
+                        }
+                    }
                     empty.setVisibility(View.GONE);
-                    if (adapter.getItemCount() == 0) {
-                        empty.setText("Couldn't render this feed natively.\nTap to open the website.");
+                    if (itemCount() == 0) {
+                        empty.setText(isBunkr()
+                                ? "No supported pictures or videos were found.\nTap to open the album."
+                                : "Couldn't render this feed natively.\nTap to open the website.");
                         empty.setVisibility(View.VISIBLE);
                     }
                 });
@@ -245,7 +307,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     loading = false;
                     progress.setVisibility(View.GONE);
                     refresh.setRefreshing(false);
-                    if (adapter.getItemCount() == 0) {
+                    if (itemCount() == 0) {
                         empty.setText("Couldn't load this feed.\nTap to open the website.");
                         empty.setVisibility(View.VISIBLE);
                     } else {
@@ -308,7 +370,42 @@ public final class NativeFeedBrowserActivity extends Activity {
         startActivity(intent);
     }
 
+    private void openBunkrGallery(int position, NativeContentItem item) {
+        if (item == null || bunkrGalleryAdapter == null) return;
+        BunkrGallerySessionStore.replace(
+                bunkrGallerySessionId,
+                bunkrGalleryAdapter.snapshot(),
+                currentPage,
+                endReached
+        );
+        Intent intent = new Intent(this, BunkrGalleryActivity.class);
+        intent.putExtra(BunkrGalleryActivity.EXTRA_SESSION_ID, bunkrGallerySessionId);
+        intent.putExtra(BunkrGalleryActivity.EXTRA_TITLE, title);
+        intent.putExtra(BunkrGalleryActivity.EXTRA_ALBUM_URL, baseUrl);
+        intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, item.url);
+        intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_POSITION, position);
+        startActivity(intent);
+    }
+
     private void showItemMenu(NativeContentItem item, View anchor) {
+        if (isBunkr()) {
+            PopupMenu menu = new PopupMenu(this, anchor);
+            menu.getMenu().add(Menu.NONE, 2, 1, "Share");
+            menu.getMenu().add(Menu.NONE, 3, 2, "Open item page");
+            menu.setOnMenuItemClickListener(clicked -> {
+                if (clicked.getItemId() == 2) {
+                    shareItem(item);
+                    return true;
+                }
+                if (clicked.getItemId() == 3) {
+                    openWebsite(item.url);
+                    return true;
+                }
+                return false;
+            });
+            menu.show();
+            return;
+        }
         if (!memeMode) {
             showVideoItemMenu(item);
             return;
@@ -407,7 +504,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void showOptions(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
-        menu.getMenu().add(Menu.NONE, 1, 0, "View style");
+        if (!isBunkr()) menu.getMenu().add(Menu.NONE, 1, 0, "View style");
         menu.getMenu().add(Menu.NONE, 2, 1, "Open website");
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
@@ -450,7 +547,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void applyLayout() {
-        if (recycler == null || adapter == null) return;
+        if (recycler == null || (adapter == null && bunkrGalleryAdapter == null)) return;
         RecyclerView.LayoutManager old = recycler.getLayoutManager();
         int position = 0;
         int offset = 0;
@@ -459,6 +556,21 @@ public final class NativeFeedBrowserActivity extends Activity {
             position = Math.max(0, lm.findFirstVisibleItemPosition());
             View anchor = lm.findViewByPosition(position);
             if (anchor != null) offset = anchor.getTop() - recycler.getPaddingTop();
+        }
+
+        if (isBunkr()) {
+            Configuration config = getResources().getConfiguration();
+            boolean landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE;
+            int columns;
+            if (landscape) columns = config.screenWidthDp >= 900 ? 7 : 5;
+            else columns = config.screenWidthDp >= 600 ? 5 : 3;
+            GridLayoutManager gallery = new GridLayoutManager(this, columns);
+            recycler.setLayoutManager(gallery);
+            if (bunkrGalleryAdapter.getItemCount() > 0) {
+                int safe = Math.min(position, bunkrGalleryAdapter.getItemCount() - 1);
+                gallery.scrollToPositionWithOffset(safe, offset);
+            }
+            return;
         }
 
         int mode = viewMode();
@@ -504,10 +616,28 @@ public final class NativeFeedBrowserActivity extends Activity {
         return !isEfukt() && !isBunkr();
     }
 
+    private int itemCount() {
+        return isBunkr()
+                ? (bunkrGalleryAdapter == null ? 0 : bunkrGalleryAdapter.getItemCount())
+                : (adapter == null ? 0 : adapter.getItemCount());
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
-        if (adapter != null) adapter.refreshPlaybackState();
+        if (isBunkr() && bunkrGalleryAdapter != null) {
+            BunkrGallerySessionStore.Snapshot snapshot =
+                    BunkrGallerySessionStore.snapshot(bunkrGallerySessionId);
+            if (snapshot != null) {
+                if (snapshot.items.size() > bunkrGalleryAdapter.size()) {
+                    bunkrGalleryAdapter.replace(snapshot.items);
+                }
+                currentPage = snapshot.currentPage;
+                endReached = snapshot.endReached;
+            }
+        } else if (adapter != null) {
+            adapter.refreshPlaybackState();
+        }
         applyLayout();
     }
 
