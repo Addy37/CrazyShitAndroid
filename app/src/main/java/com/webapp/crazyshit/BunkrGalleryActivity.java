@@ -40,8 +40,12 @@ public final class BunkrGalleryActivity extends Activity {
     public static final String EXTRA_TITLE = "bunkr_gallery_title";
     public static final String EXTRA_ALBUM_URL = "bunkr_gallery_album_url";
     public static final String EXTRA_CREATOR_QUERY = "bunkr_gallery_creator_query";
+    public static final String EXTRA_MEDIA_FILTER = "bunkr_gallery_media_filter";
     public static final String EXTRA_INITIAL_URL = "bunkr_gallery_initial_url";
     public static final String EXTRA_INITIAL_POSITION = "bunkr_gallery_initial_position";
+    public static final String FILTER_ALL = "all";
+    public static final String FILTER_PICTURES = "pictures";
+    public static final String FILTER_VIDEOS = "videos";
 
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
@@ -57,6 +61,7 @@ public final class BunkrGalleryActivity extends Activity {
     private String albumTitle;
     private String albumUrl;
     private String creatorQuery;
+    private String mediaFilter;
     private String initialUrl;
     private int initialPosition;
     private int currentPage;
@@ -87,6 +92,10 @@ public final class BunkrGalleryActivity extends Activity {
         albumTitle = value(getIntent().getStringExtra(EXTRA_TITLE));
         albumUrl = value(getIntent().getStringExtra(EXTRA_ALBUM_URL));
         creatorQuery = value(getIntent().getStringExtra(EXTRA_CREATOR_QUERY));
+        mediaFilter = value(getIntent().getStringExtra(EXTRA_MEDIA_FILTER));
+        if (!FILTER_PICTURES.equals(mediaFilter) && !FILTER_VIDEOS.equals(mediaFilter)) {
+            mediaFilter = FILTER_ALL;
+        }
         initialUrl = value(getIntent().getStringExtra(EXTRA_INITIAL_URL));
         initialPosition = Math.max(0, getIntent().getIntExtra(EXTRA_INITIAL_POSITION, 0));
         if (albumTitle.isEmpty()) albumTitle = "Bunkr album";
@@ -233,9 +242,17 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void showSnapshot(BunkrGallerySessionStore.Snapshot snapshot) {
         initialLoading.setVisibility(View.GONE);
-        adapter.replace(snapshot.items, snapshot.resolvedUrls);
+        adapter.replace(filterMedia(snapshot.items), snapshot.resolvedUrls);
         currentPage = snapshot.currentPage;
         endReached = snapshot.endReached;
+        if (adapter.getItemCount() == 0) {
+            updateChrome(0);
+            if (isCreatorGallery() && !endReached) {
+                initialLoading.setVisibility(View.VISIBLE);
+                loadMore();
+            }
+            return;
+        }
         int start = adapter.indexOfUrl(initialUrl);
         if (start < 0) start = Math.min(initialPosition, Math.max(0, adapter.getItemCount() - 1));
         pager.setCurrentItem(start, false);
@@ -302,7 +319,8 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void loadMore() {
         if (loadingMore || endReached ||
-                (albumUrl.isEmpty() && !isCreatorGallery()) || adapter.getItemCount() == 0) return;
+                (albumUrl.isEmpty() && !isCreatorGallery()) ||
+                (adapter.getItemCount() == 0 && !isCreatorGallery())) return;
         loadingMore = true;
         int requestPage = Math.max(1, currentPage + 1);
         int requestGeneration = generation;
@@ -314,11 +332,13 @@ public final class BunkrGalleryActivity extends Activity {
                 List<NativeContentItem> result = creatorBatch == null
                         ? repository.fetchAlbum(this, albumUrl, requestPage)
                         : creatorBatch.items;
+                List<NativeContentItem> visibleResult = filterMedia(result);
                 boolean completed = creatorBatch != null && creatorBatch.endReached;
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     loadingMore = false;
-                    int added = adapter.append(result);
+                    initialLoading.setVisibility(View.GONE);
+                    int added = adapter.append(visibleResult);
                     if (isCreatorGallery()) endReached = completed;
                     else if (result.isEmpty() || added == 0) endReached = true;
                     else currentPage = requestPage;
@@ -330,9 +350,23 @@ public final class BunkrGalleryActivity extends Activity {
                             endReached
                     );
                     updateChrome(pager.getCurrentItem());
+                    if (isCreatorGallery() && added == 0 && !endReached) {
+                        initialLoading.setVisibility(View.VISIBLE);
+                        pager.post(this::loadMore);
+                    }
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> loadingMore = false);
+                runOnUiThread(() -> {
+                    loadingMore = false;
+                    initialLoading.setVisibility(View.GONE);
+                    if (adapter.getItemCount() == 0) {
+                        Toast.makeText(
+                                this,
+                                "Couldn't load more matching media.",
+                                Toast.LENGTH_SHORT
+                        ).show();
+                    }
+                });
             }
         });
     }
@@ -586,6 +620,18 @@ public final class BunkrGalleryActivity extends Activity {
 
     private boolean isCreatorGallery() {
         return creatorQuery != null && !creatorQuery.isEmpty();
+    }
+
+    private ArrayList<NativeContentItem> filterMedia(List<NativeContentItem> items) {
+        ArrayList<NativeContentItem> filtered = new ArrayList<>();
+        if (items == null) return filtered;
+        for (NativeContentItem item : items) {
+            if (item == null) continue;
+            if (FILTER_PICTURES.equals(mediaFilter) && !item.isImage()) continue;
+            if (FILTER_VIDEOS.equals(mediaFilter) && !item.isVideo()) continue;
+            filtered.add(item);
+        }
+        return filtered;
     }
 
     @Override

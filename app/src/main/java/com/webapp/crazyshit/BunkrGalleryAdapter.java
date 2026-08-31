@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
@@ -15,12 +16,19 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.RequestBuilder;
+import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Dense mixed-media grid used for Bunkr albums. */
 final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter.Holder> {
@@ -35,12 +43,19 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
+    private final Map<String, Float> aspectRatios = new HashMap<>();
     private final Context context;
     private final Listener listener;
+    private final boolean adaptiveAspectRatios;
 
     BunkrGalleryAdapter(Context context, Listener listener) {
+        this(context, listener, false);
+    }
+
+    BunkrGalleryAdapter(Context context, Listener listener, boolean adaptiveAspectRatios) {
         this.context = context.getApplicationContext();
         this.listener = listener;
+        this.adaptiveAspectRatios = adaptiveAspectRatios;
         setHasStableIds(true);
     }
 
@@ -91,7 +106,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        SquareFrameLayout tile = new SquareFrameLayout(parent.getContext());
+        AspectRatioFrameLayout tile = new AspectRatioFrameLayout(parent.getContext());
         tile.setBackgroundColor(Color.rgb(20, 20, 23));
         RecyclerView.LayoutParams tileParams = new RecyclerView.LayoutParams(-1, -2);
         int gap = dp(parent, 1);
@@ -128,6 +143,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
+        holder.tile.setAspectRatio(adaptiveAspectRatios
+                ? aspectRatios.getOrDefault(item.url, 1f)
+                : 1f);
         holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
         holder.itemView.setContentDescription(
                 (item.isVideo() ? "Video, " : "Photo, ") + item.title
@@ -137,15 +155,42 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
         } else {
-            Glide.with(holder.image)
+            RequestBuilder<Drawable> request = Glide.with(holder.image)
                     .load(withHeaders(item.imageUrl, item.url))
-                    .centerCrop()
-                    .override(360, 360)
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
                     .dontAnimate()
                     .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
-                    .error(new ColorDrawable(Color.rgb(20, 20, 23)))
-                    .into(holder.image);
+                    .error(new ColorDrawable(Color.rgb(20, 20, 23)));
+            if (adaptiveAspectRatios) {
+                request = request
+                        .dontTransform()
+                        .listener(new RequestListener<Drawable>() {
+                            @Override
+                            public boolean onLoadFailed(
+                                    GlideException error,
+                                    Object model,
+                                    Target<Drawable> target,
+                                    boolean firstResource
+                            ) {
+                                return false;
+                            }
+
+                            @Override
+                            public boolean onResourceReady(
+                                    Drawable resource,
+                                    Object model,
+                                    Target<Drawable> target,
+                                    DataSource dataSource,
+                                    boolean firstResource
+                            ) {
+                                applyAspectRatio(holder, item, resource);
+                                return false;
+                            }
+                        });
+            } else {
+                request = request.centerCrop().override(360, 360);
+            }
+            request.into(holder.image);
         }
 
         holder.itemView.setOnClickListener(v -> {
@@ -184,12 +229,29 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         for (int i = start; i < end; i++) {
             NativeContentItem item = items.get(i);
             if (item.imageUrl == null || item.imageUrl.isEmpty()) continue;
-            Glide.with(context)
+            RequestBuilder<Drawable> request = Glide.with(context)
                     .load(withHeaders(item.imageUrl, item.url))
-                    .centerCrop()
-                    .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .preload(360, 360);
+                    .diskCacheStrategy(DiskCacheStrategy.ALL);
+            if (adaptiveAspectRatios) request = request.dontTransform();
+            else request = request.centerCrop();
+            request.preload(360, 360);
         }
+    }
+
+    private void applyAspectRatio(
+            Holder holder,
+            NativeContentItem item,
+            Drawable resource
+    ) {
+        if (resource == null || resource.getIntrinsicWidth() <= 0 ||
+                resource.getIntrinsicHeight() <= 0) return;
+        float ratio = (float) resource.getIntrinsicWidth() / resource.getIntrinsicHeight();
+        ratio = Math.max(0.56f, Math.min(1.78f, ratio));
+        aspectRatios.put(item.url, ratio);
+        int current = holder.getBindingAdapterPosition();
+        if (current == RecyclerView.NO_POSITION || current >= items.size() ||
+                !item.url.equals(items.get(current).url)) return;
+        holder.tile.setAspectRatio(ratio);
     }
 
     private GlideUrl withHeaders(String imageUrl, String pageUrl) {
@@ -209,26 +271,44 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     static final class Holder extends RecyclerView.ViewHolder {
+        final AspectRatioFrameLayout tile;
         final ImageView image;
         final View play;
 
-        Holder(View itemView, ImageView image, View play) {
+        Holder(AspectRatioFrameLayout itemView, ImageView image, View play) {
             super(itemView);
+            this.tile = itemView;
             this.image = image;
             this.play = play;
         }
     }
 
-    private static final class SquareFrameLayout extends FrameLayout {
-        SquareFrameLayout(Context context) {
+    private static final class AspectRatioFrameLayout extends FrameLayout {
+        private float aspectRatio = 1f;
+
+        AspectRatioFrameLayout(Context context) {
             super(context);
+        }
+
+        void setAspectRatio(float next) {
+            float safe = Math.max(0.56f, Math.min(1.78f, next));
+            if (Math.abs(aspectRatio - safe) < 0.01f) return;
+            aspectRatio = safe;
+            requestLayout();
         }
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            super.onMeasure(widthMeasureSpec, widthMeasureSpec);
-            int width = getMeasuredWidth();
-            setMeasuredDimension(width, width);
+            int width = MeasureSpec.getSize(widthMeasureSpec);
+            if (width <= 0) {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                return;
+            }
+            int height = Math.max(1, Math.round(width / aspectRatio));
+            super.onMeasure(
+                    widthMeasureSpec,
+                    MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY)
+            );
         }
     }
 

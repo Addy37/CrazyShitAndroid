@@ -479,7 +479,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 List<NativeContentItem> result;
                 if (page.kind == PageKind.SERIES) {
                     result = page.seriesSource == SERIES_SOURCE_BUNKR
-                            ? popularCreatorRepository.fetch(activity)
+                            ? popularCreatorRepository.fetch(
+                                    activity,
+                                    items -> showPopularCreatorProgress(page, generation, items)
+                            )
                             : page.seriesSource == SERIES_SOURCE_EFUKT
                             ? efuktRepository.fetchSeries(activity)
                             : browseRepository.fetchSeries(activity);
@@ -540,6 +543,23 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     }
                 });
             }
+        });
+    }
+
+    private void showPopularCreatorProgress(
+            Page page,
+            int generation,
+            List<NativeContentItem> items
+    ) {
+        if (items == null || items.isEmpty()) return;
+        activity.runOnUiThread(() -> {
+            if (generation != page.generation ||
+                    page.seriesSource != SERIES_SOURCE_BUNKR ||
+                    page.browseAdapter == null) return;
+            page.progress.setVisibility(View.GONE);
+            page.refresh.setRefreshing(false);
+            page.empty.setVisibility(View.GONE);
+            page.browseAdapter.replace(items);
         });
     }
 

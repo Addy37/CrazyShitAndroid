@@ -25,19 +25,25 @@ import java.util.regex.Pattern;
 
 /** Builds the monthly creator shelf from real Balbums search matches. */
 public final class PopularCreatorRepository {
-    public static final String SHELF_TITLE = "Top 20 creators this month";
+    public static final String SHELF_TITLE = "Top 50 creators this month";
     public static final String SHELF_HINT = "Tap a creator for one combined gallery";
 
-    private static final String PREFS = "popular_creator_feed_v2";
+    private static final String PREFS = "popular_creator_feed_v3";
+    private static final String LEGACY_PREFS = "popular_creator_feed_v2";
     private static final String KEY_UPDATED = "updated";
     private static final String KEY_ITEMS = "items";
-    private static final int MAX_ITEMS = 20;
+    private static final int MAX_ITEMS = 50;
+    private static final int PROGRESS_STEP = 10;
     private static final long CACHE_AGE_MS = TimeUnit.HOURS.toMillis(24);
-    private static final long FETCH_BUDGET_MS = 22_000L;
+    private static final long FETCH_BUDGET_MS = 42_000L;
     private static final Pattern FILE_COUNT = Pattern.compile("(?i)([0-9,]+)\\s+files?");
 
+    public interface ProgressListener {
+        void onProgress(List<NativeContentItem> items);
+    }
+
     // This is a curated shelf, not an official OnlyFans ranking. Extra names provide fallbacks
-    // when Balbums has no current album matching one of the first twenty creators.
+    // when Balbums has no current album matching one of the first fifty creators.
     private static final Creator[] CREATORS = {
             new Creator("Sophie Rain", "sophieraiin"),
             new Creator("Bonnie Blue"),
@@ -76,17 +82,93 @@ public final class PopularCreatorRepository {
             new Creator("Sami Sheen"),
             new Creator("Denise Richards"),
             new Creator("Trisha Paytas"),
-            new Creator("Amber Rose")
+            new Creator("Amber Rose"),
+            new Creator("Coco Austin"),
+            new Creator("Carmen Electra"),
+            new Creator("Salice Rose"),
+            new Creator("Erica Mena"),
+            new Creator("Skylar Mae"),
+            new Creator("Jessica Nigri"),
+            new Creator("Ana Cheri"),
+            new Creator("Chloe Cherry"),
+            new Creator("Megan Barton-Hanson", "meganbartonhanson"),
+            new Creator("Key Alves"),
+            new Creator("Savannah Bond"),
+            new Creator("Ebanie Bridges"),
+            new Creator("Asa Akira"),
+            new Creator("Mia Malkova"),
+            new Creator("Alexis Texas"),
+            new Creator("Brandi Love"),
+            new Creator("Kendra Lust"),
+            new Creator("Kendra Sunderland"),
+            new Creator("Eva Elfie"),
+            new Creator("Autumn Falls"),
+            new Creator("Nicole Aniston"),
+            new Creator("Ava Addams"),
+            new Creator("Dani Daniels"),
+            new Creator("Vanna Bardot"),
+            new Creator("Skylar Vox"),
+            new Creator("Gianna Dior"),
+            new Creator("Alina Lopez"),
+            new Creator("Gabbie Carter"),
+            new Creator("Leah Gotti"),
+            new Creator("Jessa Rhodes"),
+            new Creator("Lena Paul"),
+            new Creator("Violet Myers"),
+            new Creator("Rae Lil Black", "raelilblack"),
+            new Creator("Alexis Fawx"),
+            new Creator("Adriana Chechik"),
+            new Creator("Elsa Jean"),
+            new Creator("Piper Perri"),
+            new Creator("Dillon Harper"),
+            new Creator("Remy LaCroix", "remylacroix"),
+            new Creator("Ariella Ferrera"),
+            new Creator("Kayden Kross"),
+            new Creator("Lauren Phillips"),
+            new Creator("Madison Ivy"),
+            new Creator("Romi Rain"),
+            new Creator("Phoenix Marie"),
+            new Creator("Cherie DeVille", "cheriedeville"),
+            new Creator("Jailyne Ojeda"),
+            new Creator("Holly Sonders"),
+            new Creator("Ana Lorde"),
+            new Creator("Jem Wolfie"),
+            new Creator("Amanda Cerny"),
+            new Creator("Demi Rose"),
+            new Creator("Lyna Perez"),
+            new Creator("Sommer Ray"),
+            new Creator("Lindsey Pelas"),
+            new Creator("Katie Sigmond"),
+            new Creator("Nala Ray"),
+            new Creator("Kira Noir"),
+            new Creator("Kazumi"),
+            new Creator("Emma Magnolia"),
+            new Creator("Gali Golan"),
+            new Creator("Teanna Trump")
     };
 
     private final BunkrRepository bunkrRepository = new BunkrRepository();
 
     public List<NativeContentItem> fetch(Context context) throws IOException {
+        return fetch(context, null);
+    }
+
+    public List<NativeContentItem> fetch(
+            Context context,
+            ProgressListener progressListener
+    ) throws IOException {
         Context appContext = context.getApplicationContext();
-        List<NativeContentItem> cached = readCache(appContext, false);
+        List<NativeContentItem> cached = readCache(appContext, PREFS, false, MAX_ITEMS);
         if (cached.size() >= MAX_ITEMS) return cached;
 
-        ExecutorService workers = Executors.newFixedThreadPool(8);
+        List<NativeContentItem> warm = cached.isEmpty()
+                ? readCache(appContext, LEGACY_PREFS, true, 20)
+                : cached;
+        if (progressListener != null && !warm.isEmpty()) {
+            progressListener.onProgress(new ArrayList<>(warm));
+        }
+
+        ExecutorService workers = Executors.newFixedThreadPool(12);
         ExecutorCompletionService<Match> completed = new ExecutorCompletionService<>(workers);
         for (int index = 0; index < CREATORS.length; index++) {
             final int rank = index;
@@ -95,6 +177,7 @@ public final class PopularCreatorRepository {
         }
 
         ArrayList<Match> matches = new ArrayList<>();
+        int lastPublished = warm.size();
         long deadline = SystemClock.elapsedRealtime() + FETCH_BUDGET_MS;
         try {
             for (int i = 0; i < CREATORS.length; i++) {
@@ -106,6 +189,17 @@ public final class PopularCreatorRepository {
                     Match match = future.get();
                     if (match != null) {
                         matches.add(match);
+                        if (progressListener != null) {
+                            ArrayList<NativeContentItem> progress = buildItems(matches);
+                            int nextMilestone = Math.min(
+                                    MAX_ITEMS,
+                                    ((lastPublished / PROGRESS_STEP) + 1) * PROGRESS_STEP
+                            );
+                            if (progress.size() >= nextMilestone) {
+                                lastPublished = progress.size();
+                                progressListener.onProgress(progress);
+                            }
+                        }
                         if (matches.size() >= MAX_ITEMS) break;
                     }
                 } catch (Exception ignored) {
@@ -117,6 +211,24 @@ public final class PopularCreatorRepository {
             workers.shutdownNow();
         }
 
+        ArrayList<NativeContentItem> result = buildItems(matches);
+        result = mergeWarm(result, warm);
+        if (progressListener != null && !result.isEmpty()) {
+            progressListener.onProgress(new ArrayList<>(result));
+        }
+
+        if (result.size() >= MAX_ITEMS) {
+            writeCache(appContext, result);
+            return result;
+        }
+
+        List<NativeContentItem> stale = readCache(appContext, PREFS, true, MAX_ITEMS);
+        if (stale.size() >= MAX_ITEMS) return stale;
+        if (!result.isEmpty()) return result;
+        throw new IOException("No popular creator albums were available");
+    }
+
+    private ArrayList<NativeContentItem> buildItems(List<Match> matches) {
         Collections.sort(matches, Comparator.comparingInt(match -> match.rank));
         ArrayList<NativeContentItem> result = new ArrayList<>();
         Set<String> creators = new HashSet<>();
@@ -136,16 +248,41 @@ public final class PopularCreatorRepository {
             ));
             if (result.size() >= MAX_ITEMS) break;
         }
+        return result;
+    }
 
-        if (result.size() >= MAX_ITEMS) {
-            writeCache(appContext, result);
-            return result;
+    private ArrayList<NativeContentItem> mergeWarm(
+            List<NativeContentItem> resolved,
+            List<NativeContentItem> warm
+    ) {
+        ArrayList<NativeContentItem> merged = new ArrayList<>();
+        if (resolved != null) merged.addAll(resolved);
+        if (warm != null) {
+            for (NativeContentItem candidate : warm) {
+                if (candidate == null || containsCreator(merged, candidate.title)) continue;
+                merged.add(candidate);
+            }
         }
+        Collections.sort(merged, Comparator.comparingInt(item -> creatorRank(item.title)));
+        if (merged.size() > MAX_ITEMS) {
+            return new ArrayList<>(merged.subList(0, MAX_ITEMS));
+        }
+        return merged;
+    }
 
-        List<NativeContentItem> stale = readCache(appContext, true);
-        if (stale.size() >= MAX_ITEMS) return stale;
-        if (!result.isEmpty()) return result;
-        throw new IOException("No popular creator albums were available");
+    private boolean containsCreator(List<NativeContentItem> items, String name) {
+        if (name == null) return false;
+        for (NativeContentItem item : items) {
+            if (item != null && name.equalsIgnoreCase(item.title)) return true;
+        }
+        return false;
+    }
+
+    private int creatorRank(String name) {
+        for (int index = 0; index < CREATORS.length; index++) {
+            if (CREATORS[index].name.equalsIgnoreCase(name == null ? "" : name)) return index;
+        }
+        return Integer.MAX_VALUE;
     }
 
     private Match resolve(Context context, int rank, Creator creator) {
@@ -186,16 +323,24 @@ public final class PopularCreatorRepository {
         }
     }
 
-    private List<NativeContentItem> readCache(Context context, boolean allowStale) {
+    private List<NativeContentItem> readCache(
+            Context context,
+            String preferencesName,
+            boolean allowStale,
+            int limit
+    ) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         try {
-            SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            SharedPreferences prefs = context.getSharedPreferences(
+                    preferencesName,
+                    Context.MODE_PRIVATE
+            );
             long updated = prefs.getLong(KEY_UPDATED, 0L);
             if (!allowStale && (updated <= 0L || System.currentTimeMillis() - updated > CACHE_AGE_MS)) {
                 return result;
             }
             JSONArray values = new JSONArray(prefs.getString(KEY_ITEMS, "[]"));
-            for (int i = 0; i < values.length() && result.size() < MAX_ITEMS; i++) {
+            for (int i = 0; i < values.length() && result.size() < limit; i++) {
                 JSONObject value = values.optJSONObject(i);
                 if (value == null) continue;
                 String name = value.optString("name", "").trim();
