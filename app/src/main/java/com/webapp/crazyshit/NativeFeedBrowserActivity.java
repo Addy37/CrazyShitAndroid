@@ -35,6 +35,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_BASE_URL = "browser_base_url";
     public static final String EXTRA_MEME_MODE = "browser_meme_mode";
     public static final String EXTRA_SOURCE = "browser_source";
+    public static final String EXTRA_BUNKR_CREATOR_QUERY = "browser_bunkr_creator_query";
     public static final String SOURCE_CRAZYSHIT = "crazyshit";
     public static final String SOURCE_EFUKT = "efukt";
     public static final String SOURCE_BUNKR = "bunkr";
@@ -43,6 +44,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final BunkrCreatorGalleryRepository creatorGalleryRepository =
+            new BunkrCreatorGalleryRepository();
     private final MemeRepository memeRepository = new MemeRepository();
 
     private NativeFeedAdapter adapter;
@@ -55,6 +58,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private String title;
     private String baseUrl;
     private String source;
+    private String creatorQuery;
     private boolean memeMode;
     private boolean loading;
     private boolean endReached;
@@ -80,6 +84,19 @@ public final class NativeFeedBrowserActivity extends Activity {
         return intent;
     }
 
+    public static Intent createCreatorGallery(Activity activity, String title, String query) {
+        String cleanQuery = query == null ? "" : query.trim();
+        Intent intent = create(
+                activity,
+                title,
+                BunkrRepository.searchUrl(cleanQuery),
+                false,
+                SOURCE_BUNKR
+        );
+        intent.putExtra(EXTRA_BUNKR_CREATOR_QUERY, cleanQuery);
+        return intent;
+    }
+
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -87,7 +104,11 @@ public final class NativeFeedBrowserActivity extends Activity {
         baseUrl = value(getIntent().getStringExtra(EXTRA_BASE_URL), CrazyShitRepository.HOME);
         memeMode = getIntent().getBooleanExtra(EXTRA_MEME_MODE, false);
         source = value(getIntent().getStringExtra(EXTRA_SOURCE), SOURCE_CRAZYSHIT);
-        if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
+        creatorQuery = value(getIntent().getStringExtra(EXTRA_BUNKR_CREATOR_QUERY), "");
+        if (!creatorQuery.isEmpty()) {
+            source = SOURCE_BUNKR;
+            baseUrl = BunkrRepository.searchUrl(creatorQuery);
+        } else if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
         else if (EfuktRepository.isEfuktUrl(baseUrl)) source = SOURCE_EFUKT;
         buildUi();
         load(false);
@@ -139,7 +160,12 @@ public final class NativeFeedBrowserActivity extends Activity {
         refresh.addView(recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
 
         if (isBunkr()) {
-            bunkrGallerySessionId = BunkrGallerySessionStore.create(title, baseUrl);
+            bunkrGallerySessionId = isCreatorGallery()
+                    ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
+                    : BunkrGallerySessionStore.create(title, baseUrl);
+            if (isCreatorGallery()) {
+                creatorGalleryRepository.reset(bunkrGallerySessionId, creatorQuery);
+            }
             bunkrGalleryAdapter = new BunkrGalleryAdapter(
                     this,
                     new BunkrGalleryAdapter.Listener() {
@@ -213,7 +239,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(28), dp(28), dp(28), dp(28));
         empty.setVisibility(View.GONE);
-        empty.setOnClickListener(v -> openWebsite(baseUrl));
+        empty.setOnClickListener(v -> {
+            if (isCreatorGallery()) reload();
+            else openWebsite(baseUrl);
+        });
         body.addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
         setContentView(shell);
@@ -232,6 +261,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                     0,
                     false
             );
+            if (isCreatorGallery()) {
+                creatorGalleryRepository.reset(bunkrGallerySessionId, creatorQuery);
+            }
         } else {
             adapter.replace(new ArrayList<>());
         }
@@ -248,8 +280,16 @@ public final class NativeFeedBrowserActivity extends Activity {
         io.execute(() -> {
             try {
                 List<NativeContentItem> result;
+                BunkrCreatorGalleryRepository.Batch creatorBatch = null;
                 if (memeMode) {
                     result = memeRepository.fetch(this, requestPage);
+                } else if (isCreatorGallery()) {
+                    creatorBatch = creatorGalleryRepository.fetchNext(
+                            this,
+                            bunkrGallerySessionId,
+                            creatorQuery
+                    );
+                    result = creatorBatch.items;
                 } else if (isBunkr()) {
                     result = bunkrRepository.fetchAlbum(this, baseUrl, requestPage);
                 } else if (isEfukt()) {
@@ -257,6 +297,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 } else {
                     result = repository.fetchFeed(this, baseUrl, requestPage);
                 }
+                BunkrCreatorGalleryRepository.Batch completedCreatorBatch = creatorBatch;
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     loading = false;
@@ -273,7 +314,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                     }
                     int added = itemCount() - before;
                     if (!result.isEmpty() && (!append || added > 0)) currentPage = requestPage;
-                    if (result.isEmpty() || (append && added == 0) || isEfukt()) {
+                    if (isCreatorGallery()) {
+                        endReached = completedCreatorBatch == null || completedCreatorBatch.endReached;
+                    } else if (result.isEmpty() || (append && added == 0) || isEfukt()) {
                         endReached = true;
                     }
                     if (isBunkr()) {
@@ -295,7 +338,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                     }
                     empty.setVisibility(View.GONE);
                     if (itemCount() == 0) {
-                        empty.setText(isBunkr()
+                        empty.setText(isCreatorGallery()
+                                ? "No matching pictures or videos loaded.\nTap to try again."
+                                : isBunkr()
                                 ? "No supported pictures or videos were found.\nTap to open the album."
                                 : "Couldn't render this feed natively.\nTap to open the website.");
                         empty.setVisibility(View.VISIBLE);
@@ -308,7 +353,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                     progress.setVisibility(View.GONE);
                     refresh.setRefreshing(false);
                     if (itemCount() == 0) {
-                        empty.setText("Couldn't load this feed.\nTap to open the website.");
+                        empty.setText(isCreatorGallery()
+                                ? "Couldn't build this creator gallery.\nTap to try again."
+                                : "Couldn't load this feed.\nTap to open the website.");
                         empty.setVisibility(View.VISIBLE);
                     } else {
                         Toast.makeText(this, "Couldn't load more right now.", Toast.LENGTH_SHORT).show();
@@ -382,6 +429,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         intent.putExtra(BunkrGalleryActivity.EXTRA_SESSION_ID, bunkrGallerySessionId);
         intent.putExtra(BunkrGalleryActivity.EXTRA_TITLE, title);
         intent.putExtra(BunkrGalleryActivity.EXTRA_ALBUM_URL, baseUrl);
+        intent.putExtra(BunkrGalleryActivity.EXTRA_CREATOR_QUERY, creatorQuery);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, item.url);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_POSITION, position);
         startActivity(intent);
@@ -610,6 +658,10 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private boolean isBunkr() {
         return SOURCE_BUNKR.equals(source) || BunkrRepository.isAlbumUrl(baseUrl);
+    }
+
+    private boolean isCreatorGallery() {
+        return creatorQuery != null && !creatorQuery.isEmpty();
     }
 
     private boolean supportsComments() {

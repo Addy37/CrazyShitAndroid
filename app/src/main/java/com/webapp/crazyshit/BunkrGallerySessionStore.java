@@ -14,6 +14,7 @@ final class BunkrGallerySessionStore {
     static final class Snapshot {
         final String title;
         final String albumUrl;
+        final String creatorQuery;
         final ArrayList<NativeContentItem> items;
         final int currentPage;
         final boolean endReached;
@@ -22,6 +23,7 @@ final class BunkrGallerySessionStore {
         Snapshot(Session source) {
             title = source.title;
             albumUrl = source.albumUrl;
+            creatorQuery = source.creatorQuery;
             items = new ArrayList<>(source.items);
             currentPage = source.currentPage;
             endReached = source.endReached;
@@ -32,14 +34,16 @@ final class BunkrGallerySessionStore {
     private static final class Session {
         final String title;
         final String albumUrl;
+        final String creatorQuery;
         final ArrayList<NativeContentItem> items = new ArrayList<>();
         final LinkedHashMap<String, String> resolvedUrls = new LinkedHashMap<>();
         int currentPage;
         boolean endReached;
 
-        Session(String title, String albumUrl) {
+        Session(String title, String albumUrl, String creatorQuery) {
             this.title = title == null ? "Bunkr album" : title;
             this.albumUrl = albumUrl == null ? "" : albumUrl;
+            this.creatorQuery = creatorQuery == null ? "" : creatorQuery.trim();
         }
     }
 
@@ -47,8 +51,16 @@ final class BunkrGallerySessionStore {
     }
 
     static synchronized String create(String title, String albumUrl) {
+        return createInternal(title, albumUrl, "");
+    }
+
+    static synchronized String createCreator(String title, String albumUrl, String creatorQuery) {
+        return createInternal(title, albumUrl, creatorQuery);
+    }
+
+    private static String createInternal(String title, String albumUrl, String creatorQuery) {
         String id = UUID.randomUUID().toString();
-        SESSIONS.put(id, new Session(title, albumUrl));
+        SESSIONS.put(id, new Session(title, albumUrl, creatorQuery));
         trim();
         return id;
     }

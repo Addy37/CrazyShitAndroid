@@ -39,6 +39,7 @@ public final class BunkrGalleryActivity extends Activity {
     public static final String EXTRA_SESSION_ID = "bunkr_gallery_session";
     public static final String EXTRA_TITLE = "bunkr_gallery_title";
     public static final String EXTRA_ALBUM_URL = "bunkr_gallery_album_url";
+    public static final String EXTRA_CREATOR_QUERY = "bunkr_gallery_creator_query";
     public static final String EXTRA_INITIAL_URL = "bunkr_gallery_initial_url";
     public static final String EXTRA_INITIAL_POSITION = "bunkr_gallery_initial_position";
 
@@ -49,10 +50,13 @@ public final class BunkrGalleryActivity extends Activity {
     private final ExecutorService pageIo = Executors.newSingleThreadExecutor();
     private final ExecutorService mediaIo = Executors.newFixedThreadPool(2);
     private final BunkrRepository repository = new BunkrRepository();
+    private final BunkrCreatorGalleryRepository creatorGalleryRepository =
+            new BunkrCreatorGalleryRepository();
 
     private String sessionId;
     private String albumTitle;
     private String albumUrl;
+    private String creatorQuery;
     private String initialUrl;
     private int initialPosition;
     private int currentPage;
@@ -82,6 +86,7 @@ public final class BunkrGalleryActivity extends Activity {
         sessionId = value(getIntent().getStringExtra(EXTRA_SESSION_ID));
         albumTitle = value(getIntent().getStringExtra(EXTRA_TITLE));
         albumUrl = value(getIntent().getStringExtra(EXTRA_ALBUM_URL));
+        creatorQuery = value(getIntent().getStringExtra(EXTRA_CREATOR_QUERY));
         initialUrl = value(getIntent().getStringExtra(EXTRA_INITIAL_URL));
         initialPosition = Math.max(0, getIntent().getIntExtra(EXTRA_INITIAL_POSITION, 0));
         if (albumTitle.isEmpty()) albumTitle = "Bunkr album";
@@ -89,10 +94,16 @@ public final class BunkrGalleryActivity extends Activity {
         BunkrGallerySessionStore.Snapshot snapshot =
                 BunkrGallerySessionStore.snapshot(sessionId);
         if (snapshot == null) {
-            sessionId = BunkrGallerySessionStore.create(albumTitle, albumUrl);
+            sessionId = isCreatorGallery()
+                    ? BunkrGallerySessionStore.createCreator(albumTitle, albumUrl, creatorQuery)
+                    : BunkrGallerySessionStore.create(albumTitle, albumUrl);
+            if (isCreatorGallery()) {
+                creatorGalleryRepository.reset(sessionId, creatorQuery);
+            }
         } else {
             albumTitle = snapshot.title;
             albumUrl = snapshot.albumUrl;
+            if (!snapshot.creatorQuery.isEmpty()) creatorQuery = snapshot.creatorQuery;
             currentPage = snapshot.currentPage;
             endReached = snapshot.endReached;
         }
@@ -234,7 +245,7 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void loadInitialPage() {
-        if (albumUrl.isEmpty()) {
+        if (albumUrl.isEmpty() && !isCreatorGallery()) {
             initialLoading.setVisibility(View.GONE);
             Toast.makeText(this, "This album could not be opened.", Toast.LENGTH_SHORT).show();
             return;
@@ -242,12 +253,20 @@ public final class BunkrGalleryActivity extends Activity {
         int requestGeneration = generation;
         pageIo.execute(() -> {
             try {
-                List<NativeContentItem> result = repository.fetchAlbum(this, albumUrl, 1);
+                BunkrCreatorGalleryRepository.Batch creatorBatch = isCreatorGallery()
+                        ? creatorGalleryRepository.fetchNext(this, sessionId, creatorQuery)
+                        : null;
+                List<NativeContentItem> result = creatorBatch == null
+                        ? repository.fetchAlbum(this, albumUrl, 1)
+                        : creatorBatch.items;
+                boolean completed = creatorBatch == null
+                        ? result.isEmpty()
+                        : creatorBatch.endReached;
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     initialLoading.setVisibility(View.GONE);
                     currentPage = result.isEmpty() ? 0 : 1;
-                    endReached = result.isEmpty();
+                    endReached = completed;
                     BunkrGallerySessionStore.replace(
                             sessionId,
                             result,
@@ -259,7 +278,9 @@ public final class BunkrGalleryActivity extends Activity {
                     if (fresh != null && !fresh.items.isEmpty()) showSnapshot(fresh);
                     else Toast.makeText(
                             this,
-                            "No supported pictures or videos were found.",
+                            isCreatorGallery()
+                                    ? "No matching pictures or videos loaded. Try again."
+                                    : "No supported pictures or videos were found.",
                             Toast.LENGTH_LONG
                     ).show();
                 });
@@ -267,30 +288,41 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     initialLoading.setVisibility(View.GONE);
-                    Toast.makeText(this, "Couldn't load this album.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(
+                            this,
+                            isCreatorGallery()
+                                    ? "Couldn't build this creator gallery. Try again."
+                                    : "Couldn't load this album.",
+                            Toast.LENGTH_LONG
+                    ).show();
                 });
             }
         });
     }
 
     private void loadMore() {
-        if (loadingMore || endReached || albumUrl.isEmpty() || adapter.getItemCount() == 0) return;
+        if (loadingMore || endReached ||
+                (albumUrl.isEmpty() && !isCreatorGallery()) || adapter.getItemCount() == 0) return;
         loadingMore = true;
         int requestPage = Math.max(1, currentPage + 1);
         int requestGeneration = generation;
         pageIo.execute(() -> {
             try {
-                List<NativeContentItem> result = repository.fetchAlbum(
-                        this,
-                        albumUrl,
-                        requestPage
-                );
+                BunkrCreatorGalleryRepository.Batch creatorBatch = isCreatorGallery()
+                        ? creatorGalleryRepository.fetchNext(this, sessionId, creatorQuery)
+                        : null;
+                List<NativeContentItem> result = creatorBatch == null
+                        ? repository.fetchAlbum(this, albumUrl, requestPage)
+                        : creatorBatch.items;
+                boolean completed = creatorBatch != null && creatorBatch.endReached;
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     loadingMore = false;
                     int added = adapter.append(result);
-                    if (result.isEmpty() || added == 0) endReached = true;
+                    if (isCreatorGallery()) endReached = completed;
+                    else if (result.isEmpty() || added == 0) endReached = true;
                     else currentPage = requestPage;
+                    if (isCreatorGallery() && added > 0) currentPage = requestPage;
                     BunkrGallerySessionStore.append(
                             sessionId,
                             result,
@@ -514,7 +546,12 @@ public final class BunkrGalleryActivity extends Activity {
     private void showMenu(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
         menu.getMenu().add(Menu.NONE, 1, 0, "Open item page");
-        menu.getMenu().add(Menu.NONE, 2, 1, "Open album page");
+        menu.getMenu().add(
+                Menu.NONE,
+                2,
+                1,
+                isCreatorGallery() ? "Open creator search page" : "Open album page"
+        );
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
                 NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
@@ -545,6 +582,10 @@ public final class BunkrGalleryActivity extends Activity {
         Intent intent = new Intent(this, WebFallbackActivity.class);
         intent.putExtra(WebFallbackActivity.EXTRA_URL, url);
         startActivity(intent);
+    }
+
+    private boolean isCreatorGallery() {
+        return creatorQuery != null && !creatorQuery.isEmpty();
     }
 
     @Override

@@ -10,7 +10,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -175,9 +174,7 @@ final class BunkrGalleryPagerAdapter
         root.setBackgroundColor(Color.BLACK);
         root.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
 
-        ImageView image = new ImageView(parent.getContext());
-        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        image.setBackgroundColor(Color.BLACK);
+        ZoomableImageView image = new ZoomableImageView(parent.getContext());
         root.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
         PlayerView playerView = new PlayerView(parent.getContext());
@@ -229,6 +226,8 @@ final class BunkrGalleryPagerAdapter
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
+        holder.image.resetZoom();
+        holder.image.setZoomEnabled(item.isImage());
         String resolved = value(resolvedUrls.get(item.url));
         String preview = resolved.isEmpty() ? value(item.imageUrl) : resolved;
         boolean activeVideo = item.isVideo() && position == activeVideoPosition &&
@@ -298,16 +297,20 @@ final class BunkrGalleryPagerAdapter
         holder.itemView.setContentDescription(
                 (item.isVideo() ? "Video, " : "Photo, ") + item.title
         );
-        holder.itemView.setOnClickListener(v -> {
+        View.OnClickListener openItem = v -> {
             int current = holder.getBindingAdapterPosition();
             if (current == RecyclerView.NO_POSITION || current >= items.size()) return;
             listener.onMediaTap(current, items.get(current));
-        });
+        };
+        holder.itemView.setOnClickListener(openItem);
+        holder.image.setOnClickListener(item.isImage() ? openItem : null);
     }
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
         holder.playerView.setPlayer(null);
+        holder.image.setOnClickListener(null);
+        holder.image.resetZoom();
         Glide.with(holder.image).clear(holder.image);
         super.onViewRecycled(holder);
     }
@@ -342,7 +345,7 @@ final class BunkrGalleryPagerAdapter
     }
 
     static final class Holder extends RecyclerView.ViewHolder {
-        final ImageView image;
+        final ZoomableImageView image;
         final PlayerView playerView;
         final TextView play;
         final ProgressBar progress;
@@ -350,7 +353,7 @@ final class BunkrGalleryPagerAdapter
 
         Holder(
                 View root,
-                ImageView image,
+                ZoomableImageView image,
                 PlayerView playerView,
                 TextView play,
                 ProgressBar progress,

@@ -1,7 +1,6 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
-import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -247,9 +246,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
                         ? item.title
                         : item.searchQuery.trim();
-                Intent intent = new Intent(activity, SearchActivity.class);
-                intent.putExtra(SearchActivity.EXTRA_QUERY, query);
-                activity.startActivity(intent);
+                activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+                        activity,
+                        item.title,
+                        query
+                ));
                 return;
             }
             if (item.url == null || item.url.isEmpty()) return;

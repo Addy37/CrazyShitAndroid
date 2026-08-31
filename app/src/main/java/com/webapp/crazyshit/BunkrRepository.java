@@ -102,14 +102,21 @@ public final class BunkrRepository {
 
     public List<NativeContentItem> searchAlbums(Context context, String query, int page)
             throws IOException {
+        return parseAlbumIndex(fetchDocument(context, searchUrl(query, page)));
+    }
+
+    public static String searchUrl(String query) {
+        return searchUrl(query, 1);
+    }
+
+    public static String searchUrl(String query, int page) {
         String encoded;
         try {
             encoded = URLEncoder.encode(query == null ? "" : query.trim(), "UTF-8");
         } catch (Exception ignored) {
             encoded = query == null ? "" : query.trim();
         }
-        String url = INDEX + "?search=" + encoded + "&mode=broad&page=" + Math.max(1, page);
-        return parseAlbumIndex(fetchDocument(context, url));
+        return INDEX + "?search=" + encoded + "&mode=broad&page=" + Math.max(1, page);
     }
 
     public List<NativeContentItem> fetchAlbum(Context context, String albumUrl, int page)

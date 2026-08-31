@@ -25,19 +25,19 @@ import java.util.regex.Pattern;
 
 /** Builds the monthly creator shelf from real Balbums search matches. */
 public final class PopularCreatorRepository {
-    public static final String SHELF_TITLE = "Popular this month";
-    public static final String SHELF_HINT = "Tap a creator to search the whole app";
+    public static final String SHELF_TITLE = "Top 20 creators this month";
+    public static final String SHELF_HINT = "Tap a creator for one combined gallery";
 
-    private static final String PREFS = "popular_creator_feed_v1";
+    private static final String PREFS = "popular_creator_feed_v2";
     private static final String KEY_UPDATED = "updated";
     private static final String KEY_ITEMS = "items";
-    private static final int MAX_ITEMS = 10;
+    private static final int MAX_ITEMS = 20;
     private static final long CACHE_AGE_MS = TimeUnit.HOURS.toMillis(24);
-    private static final long FETCH_BUDGET_MS = 18_000L;
+    private static final long FETCH_BUDGET_MS = 22_000L;
     private static final Pattern FILE_COUNT = Pattern.compile("(?i)([0-9,]+)\\s+files?");
 
     // This is a curated shelf, not an official OnlyFans ranking. Extra names provide fallbacks
-    // when Balbums has no current album matching one of the first ten creators.
+    // when Balbums has no current album matching one of the first twenty creators.
     private static final Creator[] CREATORS = {
             new Creator("Sophie Rain", "sophieraiin"),
             new Creator("Bonnie Blue"),
@@ -56,7 +56,27 @@ public final class PopularCreatorRepository {
             new Creator("Aishah Sofey", "aishahsofey"),
             new Creator("Marie Temara"),
             new Creator("Karely Ruiz"),
-            new Creator("Mia Khalifa")
+            new Creator("Mia Khalifa"),
+            new Creator("Blac Chyna"),
+            new Creator("Tana Mongeau"),
+            new Creator("Cardi B"),
+            new Creator("Iggy Azalea"),
+            new Creator("Annie Knight"),
+            new Creator("Jameliz"),
+            new Creator("Morgpie"),
+            new Creator("Meg Turney"),
+            new Creator("Angela White"),
+            new Creator("Abella Danger"),
+            new Creator("Riley Reid"),
+            new Creator("Lana Rhoades"),
+            new Creator("Emily Black"),
+            new Creator("Astrid Wett"),
+            new Creator("Elle Brooke"),
+            new Creator("Grace Charis"),
+            new Creator("Sami Sheen"),
+            new Creator("Denise Richards"),
+            new Creator("Trisha Paytas"),
+            new Creator("Amber Rose")
     };
 
     private final BunkrRepository bunkrRepository = new BunkrRepository();
@@ -66,7 +86,7 @@ public final class PopularCreatorRepository {
         List<NativeContentItem> cached = readCache(appContext, false);
         if (cached.size() >= MAX_ITEMS) return cached;
 
-        ExecutorService workers = Executors.newFixedThreadPool(6);
+        ExecutorService workers = Executors.newFixedThreadPool(8);
         ExecutorCompletionService<Match> completed = new ExecutorCompletionService<>(workers);
         for (int index = 0; index < CREATORS.length; index++) {
             final int rank = index;
