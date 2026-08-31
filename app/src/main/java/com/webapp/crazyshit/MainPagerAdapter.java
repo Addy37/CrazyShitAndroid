@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -55,6 +56,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final BrowseRepository browseRepository = new BrowseRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final PopularCreatorRepository popularCreatorRepository = new PopularCreatorRepository();
     private final BrowseArtworkResolver browseArtworkResolver;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
@@ -240,7 +242,17 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private Page buildBrowsePage(int index, PageKind kind) {
         Page page = createPageShell(index, kind, "", "");
         page.browseAdapter = new NativeCategoryAdapter(item -> {
-            if (item == null || item.url == null || item.url.isEmpty()) return;
+            if (item == null) return;
+            if (item.isCreator()) {
+                String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
+                        ? item.title
+                        : item.searchQuery.trim();
+                Intent intent = new Intent(activity, SearchActivity.class);
+                intent.putExtra(SearchActivity.EXTRA_QUERY, query);
+                activity.startActivity(intent);
+                return;
+            }
+            if (item.url == null || item.url.isEmpty()) return;
             String source = BunkrRepository.isAlbumUrl(item.url)
                     ? NativeFeedBrowserActivity.SOURCE_BUNKR
                     : EfuktRepository.isEfuktUrl(item.url)
@@ -259,6 +271,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (kind == PageKind.SERIES) {
             addSeriesSourceSelector(page);
             page.empty.setOnClickListener(v -> {
+                if (page.seriesSource == SERIES_SOURCE_BUNKR) {
+                    refresh(PAGE_SERIES);
+                    return;
+                }
                 String url = page.seriesSource == SERIES_SOURCE_BUNKR
                         ? BunkrRepository.MOST_FILES_ALBUMS
                         : page.seriesSource == SERIES_SOURCE_EFUKT
@@ -302,14 +318,25 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.crazyShitSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CRAZYSHIT));
         page.efuktSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_EFUKT));
         page.bunkrSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_BUNKR));
-        updateSeriesSourceButtons(page);
-
-        FrameLayout.LayoutParams refreshParams = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-        refreshParams.topMargin = dp(56);
-        page.refresh.setLayoutParams(refreshParams);
         FrameLayout.LayoutParams selectorParams = new FrameLayout.LayoutParams(-1, dp(56));
         selectorParams.gravity = Gravity.TOP;
         page.root.addView(selector, selectorParams);
+
+        page.seriesCaption = new TextView(activity);
+        page.seriesCaption.setText(
+                PopularCreatorRepository.SHELF_TITLE + "\n" +
+                        PopularCreatorRepository.SHELF_HINT
+        );
+        page.seriesCaption.setTextColor(Color.rgb(221, 221, 227));
+        page.seriesCaption.setTextSize(13);
+        page.seriesCaption.setGravity(Gravity.CENTER_VERTICAL);
+        page.seriesCaption.setPadding(dp(17), dp(3), dp(17), dp(5));
+        page.seriesCaption.setBackgroundColor(Color.rgb(17, 17, 20));
+        FrameLayout.LayoutParams captionParams = new FrameLayout.LayoutParams(-1, dp(52));
+        captionParams.gravity = Gravity.TOP;
+        captionParams.topMargin = dp(56);
+        page.root.addView(page.seriesCaption, captionParams);
+        updateSeriesSourceButtons(page);
     }
 
     private TextView seriesSourceButton(String label) {
@@ -346,6 +373,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         styleSeriesSourceButton(page.crazyShitSource, page.seriesSource == SERIES_SOURCE_CRAZYSHIT);
         styleSeriesSourceButton(page.efuktSource, page.seriesSource == SERIES_SOURCE_EFUKT);
         styleSeriesSourceButton(page.bunkrSource, page.seriesSource == SERIES_SOURCE_BUNKR);
+        boolean showPopularCaption = page.seriesSource == SERIES_SOURCE_BUNKR;
+        if (page.seriesCaption != null) {
+            page.seriesCaption.setVisibility(showPopularCaption ? View.VISIBLE : View.GONE);
+        }
+        if (page.refresh != null) {
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
+            params.topMargin = dp(showPopularCaption ? 108 : 56);
+            page.refresh.setLayoutParams(params);
+        }
     }
 
     private void styleSeriesSourceButton(TextView button, boolean selected) {
@@ -442,7 +478,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 List<NativeContentItem> result;
                 if (page.kind == PageKind.SERIES) {
                     result = page.seriesSource == SERIES_SOURCE_BUNKR
-                            ? bunkrRepository.fetchAlbumsByFileCount(activity, 1)
+                            ? popularCreatorRepository.fetch(activity)
                             : page.seriesSource == SERIES_SOURCE_EFUKT
                             ? efuktRepository.fetchSeries(activity)
                             : browseRepository.fetchSeries(activity);
@@ -472,7 +508,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
                     if (page.itemCount() == 0) {
                         page.empty.setText(page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_BUNKR
-                                ? "Couldn't load Bunkr albums right now.\nTap to open Balbums."
+                                ? "Couldn't load popular creators right now.\nPull down to try again."
                                 : page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_EFUKT
                                 ? "Couldn't load EFukt Series here.\nIt may be unavailable in your region.\nTap to open the website."
                                 : page.kind == PageKind.SERIES
@@ -491,7 +527,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     page.refresh.setRefreshing(false);
                     if (page.itemCount() == 0) {
                         page.empty.setText(page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_BUNKR
-                                ? "Couldn't load Bunkr albums right now.\nTap to open Balbums."
+                                ? "Couldn't load popular creators right now.\nPull down to try again."
                                 : page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_EFUKT
                                 ? "Couldn't load EFukt Series here.\nIt may be unavailable in your region.\nTap to open the website."
                                 : page.kind == PageKind.SERIES
@@ -564,6 +600,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         TextView crazyShitSource;
         TextView efuktSource;
         TextView bunkrSource;
+        TextView seriesCaption;
         int viewMode = NativeFeedAdapter.VIEW_LIST;
         int seriesSource = SERIES_SOURCE_CRAZYSHIT;
         int currentPage;

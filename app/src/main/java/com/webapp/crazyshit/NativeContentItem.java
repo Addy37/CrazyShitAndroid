@@ -7,6 +7,7 @@ public final class NativeContentItem {
     public static final String KIND_CATEGORY = "category";
     public static final String KIND_SERIES = "series";
     public static final String KIND_SECTION = "section";
+    public static final String KIND_CREATOR = "creator";
 
     public final String kind;
     public final String title;
@@ -16,6 +17,7 @@ public final class NativeContentItem {
     public final String uploader;
     public final String comments;
     public final String description;
+    public final String searchQuery;
 
     public NativeContentItem(
             String kind,
@@ -26,7 +28,7 @@ public final class NativeContentItem {
             String uploader,
             String comments
     ) {
-        this(kind, title, url, imageUrl, views, uploader, comments, "");
+        this(kind, title, url, imageUrl, views, uploader, comments, "", "");
     }
 
     public NativeContentItem(
@@ -39,6 +41,20 @@ public final class NativeContentItem {
             String comments,
             String description
     ) {
+        this(kind, title, url, imageUrl, views, uploader, comments, description, "");
+    }
+
+    public NativeContentItem(
+            String kind,
+            String title,
+            String url,
+            String imageUrl,
+            String views,
+            String uploader,
+            String comments,
+            String description,
+            String searchQuery
+    ) {
         this.kind = kind == null ? KIND_MEDIA : kind;
         this.title = title == null ? "" : title;
         this.url = url == null ? "" : url;
@@ -47,6 +63,7 @@ public final class NativeContentItem {
         this.uploader = uploader == null ? "" : uploader;
         this.comments = comments == null ? "" : comments;
         this.description = description == null ? "" : description;
+        this.searchQuery = searchQuery == null ? "" : searchQuery;
     }
 
     public boolean isCategory() {
@@ -73,6 +90,10 @@ public final class NativeContentItem {
         return KIND_SECTION.equals(kind);
     }
 
+    public boolean isCreator() {
+        return KIND_CREATOR.equals(kind);
+    }
+
     public NativeContentItem merge(NativeContentItem other) {
         if (other == null) return this;
         return new NativeContentItem(
@@ -83,7 +104,8 @@ public final class NativeContentItem {
                 choose(views, other.views),
                 choose(uploader, other.uploader),
                 choose(comments, other.comments),
-                choose(description, other.description)
+                choose(description, other.description),
+                choose(searchQuery, other.searchQuery)
         );
     }
 

@@ -82,7 +82,8 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
     @Override
     public long getItemId(int position) {
-        return items.get(position).url.hashCode();
+        NativeContentItem item = items.get(position);
+        return (item.kind + "\n" + item.title + "\n" + item.url).hashCode();
     }
 
     @NonNull
