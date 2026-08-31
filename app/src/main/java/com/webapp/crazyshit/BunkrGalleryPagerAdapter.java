@@ -303,13 +303,19 @@ final class BunkrGalleryPagerAdapter
             listener.onMediaTap(current, items.get(current));
         };
         holder.itemView.setOnClickListener(openItem);
-        holder.image.setOnClickListener(item.isImage() ? openItem : null);
+        // The preview sits above the page root, so give it the same action for videos too.
+        // Leaving a recycled preview clickable with a cleared listener swallows the play tap.
+        holder.image.setOnClickListener(openItem);
+        holder.play.setOnClickListener(openItem);
+        holder.failure.setOnClickListener(openItem);
     }
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
         holder.playerView.setPlayer(null);
         holder.image.setOnClickListener(null);
+        holder.play.setOnClickListener(null);
+        holder.failure.setOnClickListener(null);
         holder.image.resetZoom();
         Glide.with(holder.image).clear(holder.image);
         super.onViewRecycled(holder);
