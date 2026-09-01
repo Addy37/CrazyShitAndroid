@@ -1,6 +1,8 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import android.graphics.BitmapFactory;
+import android.os.SystemClock;
 import android.util.Base64;
 import android.webkit.CookieManager;
 
@@ -41,6 +43,11 @@ public final class BunkrRepository {
     };
     private static final String DEFAULT_SIGN_URL = "https://glb-apisign.cdn.cr/sign";
     private static final String DOWNLOAD_ROOT = "https://dl.bunkr.cr";
+    private static final int COVER_ALBUM_LIMIT = 4;
+    private static final int COVER_PROBES_PER_ALBUM = 8;
+    private static final int COVER_PROBE_BYTES = 512 * 1024;
+    private static final long COVER_LOOKUP_BUDGET_MS = 18_000L;
+    private static final double COVER_GOOD_MATCH = 0.06d;
     private static volatile String preferredPageOrigin = "";
 
     private static final Pattern ALBUM_PATH = Pattern.compile("(?i)/a/([^/?#]+)");
@@ -189,6 +196,89 @@ public final class BunkrRepository {
         return socialImage == null
                 ? ""
                 : normalizeThumbnailUrl(socialImage.attr("content"), pageOrigin, "");
+    }
+
+    /** Finds a still image close to the requested card ratio, then resolves its original file. */
+    public CrazyShitRepository.StreamInfo fetchBestCreatorArtwork(
+            Context context,
+            String creatorQuery,
+            String preferredAlbumUrl,
+            float targetAspectRatio
+    ) throws IOException {
+        float target = targetAspectRatio > 0f ? targetAspectRatio : 16f / 9f;
+        LinkedHashMap<String, String> albumUrls = new LinkedHashMap<>();
+        if (isAlbumUrl(preferredAlbumUrl)) albumUrls.put(preferredAlbumUrl, preferredAlbumUrl);
+        String query = creatorQuery == null ? "" : creatorQuery.trim();
+        if (!query.isEmpty()) {
+            try {
+                for (NativeContentItem album : searchAlbums(context, query, 1)) {
+                    if (album != null && isAlbumUrl(album.url)) {
+                        albumUrls.putIfAbsent(album.url, album.url);
+                        if (albumUrls.size() >= COVER_ALBUM_LIMIT) break;
+                    }
+                }
+            } catch (IOException ignored) {
+            }
+        }
+
+        CoverCandidate best = null;
+        CoverCandidate firstImage = null;
+        IOException last = null;
+        int albumsChecked = 0;
+        long deadline = SystemClock.elapsedRealtime() + COVER_LOOKUP_BUDGET_MS;
+        outer:
+        for (String albumUrl : albumUrls.keySet()) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new IOException("Creator artwork lookup was interrupted");
+            }
+            if (albumsChecked++ >= COVER_ALBUM_LIMIT) break;
+            if (SystemClock.elapsedRealtime() >= deadline) break;
+            List<NativeContentItem> files;
+            try {
+                files = fetchAlbum(context, albumUrl, 1);
+            } catch (IOException error) {
+                last = error;
+                continue;
+            }
+
+            ArrayList<NativeContentItem> images = new ArrayList<>();
+            for (NativeContentItem file : files) {
+                if (isCoverImage(file)) images.add(file);
+            }
+            if (images.isEmpty()) continue;
+            if (firstImage == null) firstImage = new CoverCandidate(images.get(0), Double.MAX_VALUE);
+
+            int probes = Math.min(COVER_PROBES_PER_ALBUM, images.size());
+            for (int probe = 0; probe < probes; probe++) {
+                if (SystemClock.elapsedRealtime() >= deadline) break outer;
+                int index = probes == 1
+                        ? 0
+                        : Math.round(probe * (images.size() - 1f) / (probes - 1f));
+                NativeContentItem candidate = images.get(index);
+                float ratio = imageAspectRatio(context, candidate.imageUrl, candidate.url);
+                if (ratio <= 0f) continue;
+                double score = Math.abs(Math.log(ratio / target));
+                if (best == null || score < best.score) {
+                    best = new CoverCandidate(candidate, score);
+                }
+                if (score <= COVER_GOOD_MATCH) break outer;
+            }
+        }
+
+        CoverCandidate selected = best == null ? firstImage : best;
+        if (selected != null) {
+            try {
+                CrazyShitRepository.StreamInfo resolved = resolvePlayable(
+                        context,
+                        selected.item.url
+                );
+                if (isImageName(resolved.mediaUrl)) return resolved;
+            } catch (IOException error) {
+                last = error;
+            }
+        }
+        if (last != null) throw last;
+        throw new IOException("No full-resolution creator image was available");
     }
 
     public CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl)
@@ -565,7 +655,7 @@ public final class BunkrRepository {
                     .header("Accept", "application/json")
                     .header("Origin", origin(pageUrl))
                     .referrer(pageUrl)
-                    .timeout(8000)
+                    .timeout(4000)
                     .maxBodySize(1024 * 1024)
                     .ignoreContentType(true)
                     .ignoreHttpErrors(false)
@@ -638,6 +728,39 @@ public final class BunkrRepository {
             if (cookies != null && !cookies.trim().isEmpty()) connection.header("Cookie", cookies);
         } catch (Exception ignored) {
         }
+    }
+
+    private float imageAspectRatio(Context context, String imageUrl, String referer) {
+        if (imageUrl == null || imageUrl.trim().isEmpty()) return 0f;
+        try {
+            Connection connection = Jsoup.connect(imageUrl)
+                    .userAgent(USER_AGENT)
+                    .referrer(referer == null || referer.isEmpty() ? INDEX : referer)
+                    .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+                    .header("Range", "bytes=0-" + (COVER_PROBE_BYTES - 1))
+                    .timeout(8000)
+                    .maxBodySize(COVER_PROBE_BYTES)
+                    .ignoreContentType(true)
+                    .ignoreHttpErrors(false)
+                    .followRedirects(true);
+            addCookies(context, connection, imageUrl);
+            byte[] data = connection.execute().bodyAsBytes();
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(data, 0, data.length, bounds);
+            return bounds.outWidth > 0 && bounds.outHeight > 0
+                    ? (float) bounds.outWidth / bounds.outHeight
+                    : 0f;
+        } catch (Exception ignored) {
+            return 0f;
+        }
+    }
+
+    private boolean isCoverImage(NativeContentItem item) {
+        if (item == null || !item.isImage() || item.imageUrl == null ||
+                item.imageUrl.trim().isEmpty()) return false;
+        String name = (item.title + " " + item.url).toLowerCase(Locale.US);
+        return !name.contains(".gif") && !name.contains(".bmp");
     }
 
     private String decryptXor(String encrypted, String key) throws IOException {
@@ -933,5 +1056,15 @@ public final class BunkrRepository {
 
     private String clean(String value) {
         return value == null ? "" : value.replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
+    }
+
+    private static final class CoverCandidate {
+        final NativeContentItem item;
+        final double score;
+
+        CoverCandidate(NativeContentItem item, double score) {
+            this.item = item;
+            this.score = score;
+        }
     }
 }

@@ -1,5 +1,7 @@
 package com.webapp.crazyshit;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -21,11 +23,17 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.RequestBuilder;
+import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 import com.google.android.material.card.MaterialCardView;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,6 +51,8 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     private static final int DESCRIPTION_COPY_HEIGHT_DP = 132;
     private static final int WIDE_CREATOR_COPY_HEIGHT_DP = 66;
     private static final int WIDE_CREATOR_SHADE_HEIGHT_DP = 104;
+    private static final String CREATOR_ARTWORK_PREFS = "creator_artwork_cache_v1";
+    private static final float CREATOR_CARD_ASPECT_RATIO = 16f / 9f;
 
     public interface Listener {
         void onOpen(NativeContentItem item);
@@ -50,8 +60,9 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
     private final List<NativeContentItem> items = new ArrayList<>();
     private final Listener listener;
-    private final Map<String, String> resolvedArtwork = new HashMap<>();
+    private final Map<String, Artwork> resolvedArtwork = new HashMap<>();
     private final Set<String> requestedArtwork = new HashSet<>();
+    private final Set<String> failedArtworkRetry = new HashSet<>();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService bunkrArtworkIo = Executors.newFixedThreadPool(3);
@@ -131,7 +142,9 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         card.addView(frame, new MaterialCardView.LayoutParams(-1, -1));
 
         ImageView image = new ImageView(parent.getContext());
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setScaleType(wideCreator
+                ? ImageView.ScaleType.FIT_CENTER
+                : ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(Color.rgb(18, 18, 21));
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
@@ -202,6 +215,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 ? item.title + ". " + item.description.trim()
                 : item.title);
         holder.card.setOnClickListener(v -> listener.onOpen(item));
+        restoreCreatorArtwork(holder.image.getContext(), item);
         loadImage(holder, item);
         requestBunkrArtwork(holder.image.getContext(), item);
     }
@@ -214,16 +228,17 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .skipMemoryCache(false)
                     .dontAnimate()
-                    .centerCrop()
                     .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
                     .error(new ColorDrawable(Color.rgb(31, 31, 35)));
+            request = holder.wideCreator ? request.fitCenter() : request.centerCrop();
             sizeImageRequest(holder, request).into(holder.image);
             return;
         }
 
-        String imageUrl = BunkrRepository.isAlbumUrl(item.url)
+        Artwork artwork = BunkrRepository.isAlbumUrl(item.url)
                 ? resolvedArtwork.get(item.url)
-                : item.imageUrl;
+                : null;
+        String imageUrl = artwork == null ? item.imageUrl : artwork.imageUrl;
         if (imageUrl == null || imageUrl.trim().isEmpty()) imageUrl = item.imageUrl;
         if (imageUrl != null) imageUrl = imageUrl.trim();
         if (imageUrl == null || imageUrl.trim().isEmpty()) {
@@ -232,14 +247,47 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
             return;
         }
         RequestBuilder<Drawable> request = Glide.with(holder.image)
-                .load(remoteImage(item, imageUrl))
+                .load(remoteImage(
+                        imageUrl,
+                        artwork == null ? item.url : artwork.referer
+                ))
                 .diskCacheStrategy(holder.wideCreator
                         ? DiskCacheStrategy.ALL
                         : DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
-                .centerCrop()
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 35)));
+        request = holder.wideCreator ? request.fitCenter() : request.centerCrop();
+        if (holder.wideCreator && artwork != null) {
+            String requestedUrl = imageUrl;
+            request = request.listener(new RequestListener<Drawable>() {
+                @Override
+                public boolean onLoadFailed(
+                        GlideException error,
+                        Object model,
+                        Target<Drawable> target,
+                        boolean firstResource
+                ) {
+                    mainHandler.post(() -> onResolvedArtworkFailed(
+                            holder.image.getContext(),
+                            item,
+                            requestedUrl
+                    ));
+                    return false;
+                }
+
+                @Override
+                public boolean onResourceReady(
+                        Drawable resource,
+                        Object model,
+                        Target<Drawable> target,
+                        DataSource source,
+                        boolean firstResource
+                ) {
+                    return false;
+                }
+            });
+        }
         sizeImageRequest(holder, request).into(holder.image);
     }
 
@@ -280,8 +328,10 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         return request.override(width, Math.max(1, Math.round(width * 9f / 16f)));
     }
 
-    private GlideUrl remoteImage(NativeContentItem item, String imageUrl) {
-        String referer = item.url == null || item.url.isEmpty() ? EfuktRepository.BASE : item.url;
+    private GlideUrl remoteImage(String imageUrl, String requestReferer) {
+        String referer = requestReferer == null || requestReferer.isEmpty()
+                ? EfuktRepository.BASE
+                : requestReferer;
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
                 .addHeader("User-Agent", EfuktRepository.USER_AGENT)
                 .addHeader("Referer", referer)
@@ -299,36 +349,114 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
     private void requestBunkrArtwork(android.content.Context context, NativeContentItem item) {
         if (closed || context == null || item == null || !BunkrRepository.isAlbumUrl(item.url)) return;
-        String resolved = resolvedArtwork.get(item.url);
-        if (resolved != null && !resolved.isEmpty()) return;
+        Artwork resolved = resolvedArtwork.get(item.url);
+        if (resolved != null && !resolved.imageUrl.isEmpty()) return;
         if (!requestedArtwork.add(item.url)) return;
         android.content.Context appContext = context.getApplicationContext();
         String albumUrl = item.url;
         try {
             bunkrArtworkIo.execute(() -> {
-                String imageUrl = "";
+                Artwork artwork = null;
                 try {
-                    imageUrl = bunkrRepository.fetchAlbumArtwork(appContext, albumUrl);
+                    if (item.isCreator()) {
+                        CrazyShitRepository.StreamInfo resolvedImage =
+                                bunkrRepository.fetchBestCreatorArtwork(
+                                        appContext,
+                                        item.searchQuery,
+                                        albumUrl,
+                                        CREATOR_CARD_ASPECT_RATIO
+                                );
+                        artwork = new Artwork(
+                                resolvedImage.mediaUrl,
+                                resolvedImage.requestReferer,
+                                true
+                        );
+                    } else {
+                        String imageUrl = bunkrRepository.fetchAlbumArtwork(appContext, albumUrl);
+                        artwork = new Artwork(imageUrl, albumUrl, false);
+                    }
                 } catch (Exception ignored) {
                 }
-                String result = imageUrl;
-                mainHandler.post(() -> onBunkrArtwork(albumUrl, result));
+                Artwork result = artwork;
+                mainHandler.post(() -> onBunkrArtwork(appContext, albumUrl, result));
             });
         } catch (RuntimeException ignored) {
             requestedArtwork.remove(albumUrl);
         }
     }
 
-    private void onBunkrArtwork(String pageUrl, String imageUrl) {
+    private void onBunkrArtwork(Context context, String pageUrl, Artwork artwork) {
         if (closed || pageUrl == null || pageUrl.isEmpty()) return;
-        if (imageUrl == null || imageUrl.isEmpty()) {
+        if (artwork == null || artwork.imageUrl.isEmpty()) {
             requestedArtwork.remove(pageUrl);
             return;
         }
-        resolvedArtwork.put(pageUrl, imageUrl);
+        resolvedArtwork.put(pageUrl, artwork);
+        if (artwork.persistent) writeCreatorArtworkCache(context, pageUrl, artwork);
         for (int i = 0; i < items.size(); i++) {
             NativeContentItem item = items.get(i);
             if (item != null && pageUrl.equals(item.url)) notifyItemChanged(i);
+        }
+    }
+
+    private void restoreCreatorArtwork(Context context, NativeContentItem item) {
+        if (context == null || item == null || !item.isCreator() ||
+                resolvedArtwork.containsKey(item.url)) return;
+        SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(
+                CREATOR_ARTWORK_PREFS,
+                Context.MODE_PRIVATE
+        );
+        String key = artworkCacheKey(item.url);
+        String imageUrl = prefs.getString(key + "_url", "");
+        if (imageUrl == null || imageUrl.isEmpty()) return;
+        String referer = prefs.getString(key + "_referer", item.url);
+        resolvedArtwork.put(item.url, new Artwork(imageUrl, referer, true));
+    }
+
+    private void writeCreatorArtworkCache(Context context, String pageUrl, Artwork artwork) {
+        if (context == null || artwork == null || artwork.imageUrl.isEmpty()) return;
+        String key = artworkCacheKey(pageUrl);
+        context.getApplicationContext().getSharedPreferences(
+                CREATOR_ARTWORK_PREFS,
+                Context.MODE_PRIVATE
+        ).edit()
+                .putString(key + "_url", artwork.imageUrl)
+                .putString(key + "_referer", artwork.referer)
+                .apply();
+    }
+
+    private void onResolvedArtworkFailed(
+            Context context,
+            NativeContentItem item,
+            String failedUrl
+    ) {
+        if (closed || context == null || item == null || !item.isCreator()) return;
+        Artwork current = resolvedArtwork.get(item.url);
+        if (current == null || !current.imageUrl.equals(failedUrl)) return;
+        if (!failedArtworkRetry.add(item.url)) return;
+        resolvedArtwork.remove(item.url);
+        requestedArtwork.remove(item.url);
+        String key = artworkCacheKey(item.url);
+        context.getApplicationContext().getSharedPreferences(
+                CREATOR_ARTWORK_PREFS,
+                Context.MODE_PRIVATE
+        ).edit()
+                .remove(key + "_url")
+                .remove(key + "_referer")
+                .apply();
+        requestBunkrArtwork(context, item);
+    }
+
+    private String artworkCacheKey(String pageUrl) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(
+                    pageUrl.getBytes(StandardCharsets.UTF_8)
+            );
+            StringBuilder key = new StringBuilder("cover_");
+            for (byte value : digest) key.append(String.format("%02x", value & 0xff));
+            return key.toString();
+        } catch (Exception ignored) {
+            return "cover_" + Integer.toHexString(pageUrl.hashCode());
         }
     }
 
@@ -402,6 +530,18 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
             this.title = title;
             this.description = description;
             this.wideCreator = wideCreator;
+        }
+    }
+
+    private static final class Artwork {
+        final String imageUrl;
+        final String referer;
+        final boolean persistent;
+
+        Artwork(String imageUrl, String referer, boolean persistent) {
+            this.imageUrl = imageUrl == null ? "" : imageUrl.trim();
+            this.referer = referer == null ? "" : referer.trim();
+            this.persistent = persistent;
         }
     }
 }
