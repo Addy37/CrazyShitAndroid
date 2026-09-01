@@ -133,6 +133,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         chaosView.setActive(position == PAGE_CHAOS);
     }
 
+    public boolean isBunkrCollectionsSelected() {
+        Page page = pageAt(PAGE_SERIES);
+        return page != null && page.seriesSource == SERIES_SOURCE_BUNKR;
+    }
+
     public void onHostResume() {
         chaosView.onHostResume();
         Page home = pageAt(PAGE_HOME);

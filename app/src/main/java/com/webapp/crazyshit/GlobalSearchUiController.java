@@ -1,6 +1,5 @@
 package com.webapp.crazyshit;
 
-import android.content.Intent;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,7 +25,7 @@ final class GlobalSearchUiController {
                     .getBoolean("haptics_enabled", true)) {
                 v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             }
-            activity.startActivity(new Intent(activity, SearchActivity.class));
+            activity.openContextualSearch();
         });
         search.setContentDescription("Global Search");
     }

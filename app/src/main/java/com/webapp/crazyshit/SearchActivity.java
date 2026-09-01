@@ -38,6 +38,8 @@ import java.util.concurrent.Executors;
 /** Native search across site videos, collections, categories and the local Library. */
 public final class SearchActivity extends Activity {
     public static final String EXTRA_QUERY = "query";
+    private static final String EXTRA_SCOPE = "scope";
+    private static final String SCOPE_BUNKR = "bunkr";
 
     private enum Filter {
         ALL,
@@ -73,10 +75,18 @@ public final class SearchActivity extends Activity {
     private Filter filter = Filter.ALL;
     private String activeQuery = "";
     private int generation;
+    private boolean bunkrOnly;
+
+    static Intent createBunkrSearch(Activity activity) {
+        Intent intent = new Intent(activity, SearchActivity.class);
+        intent.putExtra(EXTRA_SCOPE, SCOPE_BUNKR);
+        return intent;
+    }
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        bunkrOnly = SCOPE_BUNKR.equals(getIntent().getStringExtra(EXTRA_SCOPE));
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
         buildUi();
@@ -127,7 +137,9 @@ public final class SearchActivity extends Activity {
 
         shell.addView(buildTopBar(), new LinearLayout.LayoutParams(-1, dp(66)));
         shell.addView(buildSearchRow(), new LinearLayout.LayoutParams(-1, dp(62)));
-        shell.addView(buildFilters(), new LinearLayout.LayoutParams(-1, dp(52)));
+        if (!bunkrOnly) {
+            shell.addView(buildFilters(), new LinearLayout.LayoutParams(-1, dp(52)));
+        }
 
         FrameLayout content = new FrameLayout(this);
         shell.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -147,7 +159,9 @@ public final class SearchActivity extends Activity {
         status.setTextSize(15f);
         status.setGravity(Gravity.CENTER);
         status.setPadding(dp(26), dp(26), dp(26), dp(26));
-        status.setText("Search CrazyShit, EFukt, Bunkr, Collections, Categories and your Library");
+        status.setText(bunkrOnly
+                ? "Search Bunkr albums\nMatching pictures and videos open together in one gallery"
+                : "Search CrazyShit, EFukt, Bunkr, Collections, Categories and your Library");
         content.addView(status, new FrameLayout.LayoutParams(-1, -1));
 
         progress = new ProgressBar(this);
@@ -181,14 +195,14 @@ public final class SearchActivity extends Activity {
         labels.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView title = new TextView(this);
-        title.setText("Search");
+        title.setText(bunkrOnly ? "Search Bunkr" : "Search");
         title.setTextColor(Color.WHITE);
         title.setTextSize(20f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         labels.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("Everything in one place");
+        subtitle.setText(bunkrOnly ? "One combined media gallery" : "Everything in one place");
         subtitle.setTextColor(Color.rgb(165, 165, 176));
         subtitle.setTextSize(12f);
         labels.addView(subtitle);
@@ -203,7 +217,7 @@ public final class SearchActivity extends Activity {
         row.setPadding(dp(12), dp(8), dp(12), dp(6));
 
         input = new EditText(this);
-        input.setHint("Search CrazyShit, EFukt and Bunkr");
+        input.setHint(bunkrOnly ? "Search creators or albums" : "Search CrazyShit, EFukt and Bunkr");
         input.setHintTextColor(Color.rgb(145, 145, 155));
         input.setTextColor(Color.WHITE);
         input.setTextSize(16f);
@@ -291,6 +305,11 @@ public final class SearchActivity extends Activity {
         String query = input.getText().toString().trim();
         if (query.length() < 2) {
             Toast.makeText(this, "Type at least 2 characters.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (bunkrOnly) {
+            startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, query, query));
+            finish();
             return;
         }
         activeQuery = query;

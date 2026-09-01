@@ -335,7 +335,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         search.setFocusable(true);
         search.setOnClickListener(v -> {
             haptic(v);
-            showSearchDialog();
+            openContextualSearch();
         });
         bar.addView(search, new LinearLayout.LayoutParams(dp(48), dp(48)));
         return bar;
@@ -351,6 +351,21 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void showCategoriesPage() {
         showPrimaryPage(MainPagerAdapter.PAGE_CATEGORIES, true);
+    }
+
+    boolean isBunkrCollectionSearchContext() {
+        return primaryPager != null &&
+                primaryPager.getVisibility() == View.VISIBLE &&
+                primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_SERIES &&
+                primaryPagerAdapter != null &&
+                primaryPagerAdapter.isBunkrCollectionsSelected();
+    }
+
+    void openContextualSearch() {
+        Intent intent = isBunkrCollectionSearchContext()
+                ? SearchActivity.createBunkrSearch(this)
+                : new Intent(this, SearchActivity.class);
+        startActivity(intent);
     }
 
     private void showPrimaryPage(int position, boolean smooth) {
