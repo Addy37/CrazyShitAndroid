@@ -85,7 +85,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     private final Set<String> failedArtworkRetry = new HashSet<>();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService bunkrArtworkIo = Executors.newFixedThreadPool(3);
+    private final ExecutorService bunkrArtworkIo = Executors.newFixedThreadPool(6);
     private boolean wideCreatorCards;
     private volatile boolean closed;
 
@@ -363,7 +363,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         holder.card.setOnClickListener(v -> listener.onOpen(item));
         restoreCreatorArtwork(item);
         loadImage(holder, item);
-        requestBunkrArtwork(item, position);
+        requestBunkrArtwork(item);
     }
 
     private void styleCreatorCard(Holder holder, int rank) {
@@ -586,34 +586,40 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         return new GlideUrl(imageUrl, headers.build());
     }
 
-    private void requestBunkrArtwork(NativeContentItem item, int position) {
+    private void requestBunkrArtwork(NativeContentItem item) {
         if (closed || item == null || !BunkrRepository.isAlbumUrl(item.url)) return;
         String key = artworkKey(item);
         Artwork resolved = resolvedArtwork.get(key);
         if (resolved != null && !resolved.imageUrl.isEmpty()) return;
         if (!requestedArtwork.add(key)) return;
         String albumUrl = item.url;
-        String query = item.searchQuery;
         boolean creator = item.isCreator();
-        float targetAspect = targetAspectForViewType(plannedCreatorViewType(position));
         try {
             bunkrArtworkIo.execute(() -> {
                 Artwork artwork = null;
                 try {
                     if (creator) {
-                        CrazyShitRepository.StreamInfo resolvedImage =
-                                bunkrRepository.fetchBestCreatorArtwork(
-                                        appContext,
-                                        query,
-                                        albumUrl,
-                                        targetAspect
-                                );
-                        artwork = new Artwork(
-                                resolvedImage.mediaUrl,
-                                resolvedImage.requestReferer,
-                                true,
+                        BunkrRepository.CreatorArtwork preview =
+                                bunkrRepository.fetchCreatorArtworkPreview(appContext, albumUrl);
+                        Artwork previewArtwork = new Artwork(
+                                preview.imageUrl,
+                                preview.requestReferer,
+                                false,
                                 0f
                         );
+                        mainHandler.post(() -> onBunkrArtwork(key, previewArtwork));
+                        try {
+                            BunkrRepository.CreatorArtwork resolvedImage =
+                                    bunkrRepository.resolveCreatorArtwork(appContext, preview);
+                            artwork = new Artwork(
+                                    resolvedImage.imageUrl,
+                                    resolvedImage.requestReferer,
+                                    true,
+                                    0f
+                            );
+                        } catch (Exception ignored) {
+                            // Keep the preview already posted instead of returning to initials.
+                        }
                     } else {
                         String imageUrl = bunkrRepository.fetchAlbumArtwork(appContext, albumUrl);
                         artwork = new Artwork(imageUrl, albumUrl, false, 0f);
@@ -721,7 +727,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 .remove(key + "_ratio")
                 .apply();
         int position = indexOfArtwork(artworkKey);
-        if (position >= 0) requestBunkrArtwork(item, position);
+        if (position >= 0) requestBunkrArtwork(item);
     }
 
     private void notifyArtworkChanged(String artworkKey) {

@@ -198,6 +198,43 @@ public final class BunkrRepository {
                 : normalizeThumbnailUrl(socialImage.attr("content"), pageOrigin, "");
     }
 
+    /** Finds one useful creator preview without exhaustively probing an album for a perfect ratio. */
+    public CreatorArtwork fetchCreatorArtworkPreview(Context context, String albumUrl)
+            throws IOException {
+        List<NativeContentItem> files = fetchAlbum(context, albumUrl, 1);
+        NativeContentItem firstImage = null;
+        for (NativeContentItem file : files) {
+            if (isCoverImage(file)) {
+                firstImage = file;
+                break;
+            }
+        }
+        if (firstImage == null) throw new IOException("No creator image was available");
+        String thumbnail = firstImage.imageUrl == null ? "" : firstImage.imageUrl.trim();
+        if (!thumbnail.isEmpty()) {
+            return new CreatorArtwork(thumbnail, firstImage.url, firstImage.url, false);
+        }
+        throw new IOException("No creator image URL was available");
+    }
+
+    /** Upgrades a creator preview to its original image when Bunkr's file endpoint responds. */
+    public CreatorArtwork resolveCreatorArtwork(Context context, CreatorArtwork preview)
+            throws IOException {
+        if (preview == null || preview.pageUrl.isEmpty()) {
+            throw new IOException("Creator image page was unavailable");
+        }
+        CrazyShitRepository.StreamInfo resolved = resolvePlayable(context, preview.pageUrl);
+        if (!isImageName(resolved.mediaUrl)) {
+            throw new IOException("Creator file did not resolve to an image");
+        }
+        return new CreatorArtwork(
+                resolved.mediaUrl,
+                resolved.requestReferer,
+                preview.pageUrl,
+                true
+        );
+    }
+
     /** Finds a still image close to the requested card ratio, then resolves its original file. */
     public CrazyShitRepository.StreamInfo fetchBestCreatorArtwork(
             Context context,
@@ -1065,6 +1102,25 @@ public final class BunkrRepository {
         CoverCandidate(NativeContentItem item, double score) {
             this.item = item;
             this.score = score;
+        }
+    }
+
+    public static final class CreatorArtwork {
+        public final String imageUrl;
+        public final String requestReferer;
+        public final String pageUrl;
+        public final boolean fullResolution;
+
+        CreatorArtwork(
+                String imageUrl,
+                String requestReferer,
+                String pageUrl,
+                boolean fullResolution
+        ) {
+            this.imageUrl = imageUrl == null ? "" : imageUrl;
+            this.requestReferer = requestReferer == null ? "" : requestReferer;
+            this.pageUrl = pageUrl == null ? "" : pageUrl;
+            this.fullResolution = fullResolution;
         }
     }
 }

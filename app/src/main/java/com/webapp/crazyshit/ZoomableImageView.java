@@ -1,45 +1,46 @@
 package com.webapp.crazyshit;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Matrix;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
-import android.view.ViewConfiguration;
 import android.view.ViewParent;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
 
 /** Matrix-backed photo view with pinch zoom and drag panning. */
 final class ZoomableImageView extends ImageView {
     private static final float MIN_SCALE = 1f;
     private static final float MAX_SCALE = 5f;
+    private static final float DOUBLE_TAP_SCALE = 2.5f;
 
     private final Matrix zoomMatrix = new Matrix();
     private final RectF drawableBounds = new RectF();
     private final ScaleGestureDetector scaleDetector;
-    private final int touchSlop;
+    private final GestureDetector gestureDetector;
 
     private float zoom = MIN_SCALE;
     private float lastX;
     private float lastY;
-    private float downX;
-    private float downY;
-    private boolean moved;
-    private boolean multiTouch;
     private boolean zoomEnabled = true;
+    private ValueAnimator zoomAnimator;
 
     ZoomableImageView(Context context) {
         super(context);
         super.setScaleType(ScaleType.MATRIX);
         setBackgroundColor(android.graphics.Color.BLACK);
-        touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         scaleDetector = new ScaleGestureDetector(
                 context,
                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
                     @Override
                     public boolean onScaleBegin(ScaleGestureDetector detector) {
-                        multiTouch = true;
+                        cancelZoomAnimation();
                         disallowPager(true);
                         return zoomEnabled;
                     }
@@ -68,6 +69,30 @@ final class ZoomableImageView extends ImageView {
                     }
                 }
         );
+        gestureDetector = new GestureDetector(
+                context,
+                new GestureDetector.SimpleOnGestureListener() {
+                    @Override
+                    public boolean onDown(MotionEvent event) {
+                        return true;
+                    }
+
+                    @Override
+                    public boolean onSingleTapConfirmed(MotionEvent event) {
+                        return performClick();
+                    }
+
+                    @Override
+                    public boolean onDoubleTap(MotionEvent event) {
+                        if (!zoomEnabled || getDrawable() == null) return false;
+                        float target = zoom > MIN_SCALE + 0.05f
+                                ? MIN_SCALE
+                                : DOUBLE_TAP_SCALE;
+                        animateZoom(target, event.getX(), event.getY());
+                        return true;
+                    }
+                }
+        );
     }
 
     void setZoomEnabled(boolean enabled) {
@@ -76,9 +101,8 @@ final class ZoomableImageView extends ImageView {
     }
 
     void resetZoom() {
+        cancelZoomAnimation();
         zoom = MIN_SCALE;
-        moved = false;
-        multiTouch = false;
         fitDrawable();
         disallowPager(false);
     }
@@ -98,26 +122,21 @@ final class ZoomableImageView extends ImageView {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (!zoomEnabled) return super.onTouchEvent(event);
+        gestureDetector.onTouchEvent(event);
         scaleDetector.onTouchEvent(event);
 
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                downX = lastX = event.getX();
-                downY = lastY = event.getY();
-                moved = false;
-                multiTouch = false;
+                lastX = event.getX();
+                lastY = event.getY();
                 disallowPager(zoom > MIN_SCALE + 0.01f);
                 return true;
             case MotionEvent.ACTION_POINTER_DOWN:
-                multiTouch = true;
                 disallowPager(true);
                 return true;
             case MotionEvent.ACTION_MOVE:
                 float x = event.getX();
                 float y = event.getY();
-                if (Math.abs(x - downX) > touchSlop || Math.abs(y - downY) > touchSlop) {
-                    moved = true;
-                }
                 if (zoom > MIN_SCALE + 0.01f && !scaleDetector.isInProgress()) {
                     disallowPager(true);
                     zoomMatrix.postTranslate(x - lastX, y - lastY);
@@ -130,12 +149,10 @@ final class ZoomableImageView extends ImageView {
                 lastY = y;
                 return true;
             case MotionEvent.ACTION_POINTER_UP:
-                multiTouch = true;
                 lastX = event.getX();
                 lastY = event.getY();
                 return true;
             case MotionEvent.ACTION_UP:
-                if (!moved && !multiTouch) performClick();
                 disallowPager(zoom > MIN_SCALE + 0.01f);
                 return true;
             case MotionEvent.ACTION_CANCEL:
@@ -198,6 +215,45 @@ final class ZoomableImageView extends ImageView {
             dy = getHeight() - drawableBounds.bottom;
         }
         zoomMatrix.postTranslate(dx, dy);
+    }
+
+    private void animateZoom(float requestedTarget, float focusX, float focusY) {
+        cancelZoomAnimation();
+        float start = zoom;
+        float target = clamp(requestedTarget, MIN_SCALE, MAX_SCALE);
+        if (Math.abs(start - target) < 0.01f) return;
+
+        final float[] applied = {start};
+        ValueAnimator animator = ValueAnimator.ofFloat(start, target);
+        zoomAnimator = animator;
+        animator.setDuration(220L);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(animation -> {
+            float next = (float) animation.getAnimatedValue();
+            float factor = next / applied[0];
+            applied[0] = next;
+            zoom = next;
+            zoomMatrix.postScale(factor, factor, focusX, focusY);
+            constrain();
+            setImageMatrix(zoomMatrix);
+            disallowPager(true);
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (zoomAnimator != animation) return;
+                zoomAnimator = null;
+                if (target <= MIN_SCALE + 0.01f) resetZoom();
+                else disallowPager(true);
+            }
+        });
+        animator.start();
+    }
+
+    private void cancelZoomAnimation() {
+        ValueAnimator running = zoomAnimator;
+        zoomAnimator = null;
+        if (running != null) running.cancel();
     }
 
     private void disallowPager(boolean disallow) {

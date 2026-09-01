@@ -8,6 +8,8 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.Menu;
+import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -82,6 +84,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private boolean endReached;
     private int currentPage;
     private int generation;
+    private int creatorGalleryColumns;
 
     public static Intent create(Activity activity, String title, String baseUrl, boolean memeMode) {
         return create(activity, title, baseUrl, memeMode, SOURCE_CRAZYSHIT);
@@ -279,6 +282,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void buildCreatorTabs() {
+        creatorGalleryColumns = savedCreatorGalleryColumnCount();
         for (int index = 0; index < CREATOR_TAB_COUNT; index++) {
             creatorTabAdapters[index] = createBunkrGalleryAdapter(true);
         }
@@ -938,10 +942,149 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private int creatorGalleryColumnCount() {
+        if (creatorGalleryColumns > 0) {
+            return clamp(
+                    creatorGalleryColumns,
+                    creatorGalleryMinimumColumns(),
+                    creatorGalleryMaximumColumns()
+            );
+        }
+        creatorGalleryColumns = savedCreatorGalleryColumnCount();
+        return creatorGalleryColumns;
+    }
+
+    private int savedCreatorGalleryColumnCount() {
+        int fallback = defaultCreatorGalleryColumnCount();
+        int saved = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getInt(creatorGalleryPreferenceKey(), fallback);
+        return clamp(saved, creatorGalleryMinimumColumns(), creatorGalleryMaximumColumns());
+    }
+
+    private int defaultCreatorGalleryColumnCount() {
         Configuration config = getResources().getConfiguration();
         boolean landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE;
         if (landscape) return config.screenWidthDp >= 900 ? 7 : 5;
         return config.screenWidthDp >= 600 ? 5 : 3;
+    }
+
+    private int creatorGalleryMinimumColumns() {
+        return getResources().getConfiguration().screenWidthDp >= 600 ? 3 : 2;
+    }
+
+    private int creatorGalleryMaximumColumns() {
+        Configuration config = getResources().getConfiguration();
+        if (config.screenWidthDp >= 900) return 8;
+        if (config.screenWidthDp >= 600) return 7;
+        return config.orientation == Configuration.ORIENTATION_LANDSCAPE ? 7 : 5;
+    }
+
+    private String creatorGalleryPreferenceKey() {
+        Configuration config = getResources().getConfiguration();
+        String size = config.screenWidthDp >= 600 ? "tablet" : "phone";
+        String orientation = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+                ? "wide"
+                : "tall";
+        return "creator_gallery_columns_" + size + "_" + orientation;
+    }
+
+    private void changeCreatorGalleryColumns(int delta) {
+        int next = clamp(
+                creatorGalleryColumnCount() + delta,
+                creatorGalleryMinimumColumns(),
+                creatorGalleryMaximumColumns()
+        );
+        if (next == creatorGalleryColumns) return;
+        creatorGalleryColumns = next;
+        getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .edit()
+                .putInt(creatorGalleryPreferenceKey(), next)
+                .apply();
+
+        for (RecyclerView creatorRecycler : creatorTabRecyclers) {
+            if (creatorRecycler == null) continue;
+            RecyclerView.LayoutManager manager = creatorRecycler.getLayoutManager();
+            if (manager instanceof StaggeredGridLayoutManager) {
+                StaggeredGridLayoutManager grid = (StaggeredGridLayoutManager) manager;
+                grid.setSpanCount(next);
+                grid.invalidateSpanAssignments();
+            } else {
+                applyCreatorGalleryLayout(creatorRecycler);
+            }
+        }
+    }
+
+    private void attachCreatorGalleryPinch(RecyclerView list) {
+        final float[] accumulatedScale = {1f};
+        ScaleGestureDetector detector = new ScaleGestureDetector(
+                this,
+                new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                    @Override
+                    public boolean onScaleBegin(ScaleGestureDetector scaleDetector) {
+                        accumulatedScale[0] = 1f;
+                        list.requestDisallowInterceptTouchEvent(true);
+                        return true;
+                    }
+
+                    @Override
+                    public boolean onScale(ScaleGestureDetector scaleDetector) {
+                        accumulatedScale[0] *= scaleDetector.getScaleFactor();
+                        if (accumulatedScale[0] >= 1.16f) {
+                            changeCreatorGalleryColumns(-1);
+                            accumulatedScale[0] = 1f;
+                        } else if (accumulatedScale[0] <= 0.86f) {
+                            changeCreatorGalleryColumns(1);
+                            accumulatedScale[0] = 1f;
+                        }
+                        return true;
+                    }
+
+                    @Override
+                    public void onScaleEnd(ScaleGestureDetector scaleDetector) {
+                        accumulatedScale[0] = 1f;
+                        list.requestDisallowInterceptTouchEvent(false);
+                    }
+                }
+        );
+
+        list.addOnItemTouchListener(new RecyclerView.SimpleOnItemTouchListener() {
+            private boolean scaling;
+
+            @Override
+            public boolean onInterceptTouchEvent(
+                    @NonNull RecyclerView view,
+                    @NonNull MotionEvent event
+            ) {
+                detector.onTouchEvent(event);
+                if (event.getPointerCount() > 1 || detector.isInProgress()) {
+                    scaling = true;
+                    view.requestDisallowInterceptTouchEvent(true);
+                    return true;
+                }
+                if (event.getActionMasked() == MotionEvent.ACTION_UP ||
+                        event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                    scaling = false;
+                    view.requestDisallowInterceptTouchEvent(false);
+                }
+                return scaling;
+            }
+
+            @Override
+            public void onTouchEvent(
+                    @NonNull RecyclerView view,
+                    @NonNull MotionEvent event
+            ) {
+                detector.onTouchEvent(event);
+                if (event.getActionMasked() == MotionEvent.ACTION_UP ||
+                        event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                    scaling = false;
+                    view.requestDisallowInterceptTouchEvent(false);
+                }
+            }
+        });
+    }
+
+    private int clamp(int value, int minimum, int maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
     }
 
     private void openWebsite(String url) {
@@ -1027,6 +1170,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             page.setAdapter(creatorTabAdapters[viewType]);
             creatorTabRecyclers[viewType] = page;
             applyCreatorGalleryLayout(page);
+            attachCreatorGalleryPinch(page);
             attachGalleryScrollListener(page, creatorTabAdapters[viewType]);
             if (viewType == activeCreatorTab()) recycler = page;
             return new CreatorTabHolder(page, viewType);
