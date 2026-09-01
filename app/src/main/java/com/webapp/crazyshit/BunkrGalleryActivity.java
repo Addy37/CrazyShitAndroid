@@ -74,6 +74,7 @@ public final class BunkrGalleryActivity extends Activity {
     private LinearLayout topBar;
     private LinearLayout bottomBar;
     private TextView countView;
+    private TextView downloadAction;
     private TextView itemTitleView;
     private TextView itemMetaView;
     private ProgressBar initialLoading;
@@ -180,6 +181,12 @@ public final class BunkrGalleryActivity extends Activity {
         countView.setSingleLine(true);
         heading.addView(countView, new LinearLayout.LayoutParams(-1, -2));
         topBar.addView(heading, new LinearLayout.LayoutParams(0, -1, 1f));
+
+        downloadAction = action("↓", 24);
+        downloadAction.setContentDescription("Download video");
+        downloadAction.setOnClickListener(v -> downloadCurrentVideo());
+        downloadAction.setVisibility(View.GONE);
+        topBar.addView(downloadAction, new LinearLayout.LayoutParams(dp(52), dp(54)));
 
         TextView share = action("↗", 22);
         share.setContentDescription("Share item");
@@ -543,10 +550,12 @@ public final class BunkrGalleryActivity extends Activity {
         int total = adapter.getItemCount();
         countView.setText(total == 0 ? "" : (position + 1) + " of " + total);
         if (item == null) {
+            downloadAction.setVisibility(View.GONE);
             itemTitleView.setText("");
             itemMetaView.setText("");
             return;
         }
+        downloadAction.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
         itemTitleView.setText(item.title);
         ArrayList<String> meta = new ArrayList<>();
         meta.add(item.isVideo() ? "Video" : "Photo");
@@ -578,17 +587,24 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void showMenu(View anchor) {
+        NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
         PopupMenu menu = new PopupMenu(this, anchor);
-        menu.getMenu().add(Menu.NONE, 1, 0, "Open item page");
+        if (current != null && current.isVideo()) {
+            menu.getMenu().add(Menu.NONE, 3, 0, "Download video");
+        }
+        menu.getMenu().add(Menu.NONE, 1, 1, "Open item page");
         menu.getMenu().add(
                 Menu.NONE,
                 2,
-                1,
+                2,
                 isCreatorGallery() ? "Open creator search page" : "Open album page"
         );
         menu.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == 3) {
+                downloadCurrentVideo();
+                return true;
+            }
             if (item.getItemId() == 1) {
-                NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
                 if (current != null) openPage(current.url);
                 return true;
             }
@@ -599,6 +615,15 @@ public final class BunkrGalleryActivity extends Activity {
             return false;
         });
         menu.show();
+    }
+
+    private void downloadCurrentVideo() {
+        NativeContentItem item = adapter.itemAt(pager.getCurrentItem());
+        if (item == null || !item.isVideo()) {
+            Toast.makeText(this, "This item is not a video.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        VideoDownloadStore.downloadPage(this, item);
     }
 
     private void shareCurrent() {

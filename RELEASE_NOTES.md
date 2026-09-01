@@ -1,33 +1,29 @@
-# CrazyShit v2.9.0
+# CrazyShit v2.9.1
 
-CrazyShit 2.9.0 promotes the completed Fapzone experience from public beta to stable.
+CrazyShit 2.9.1 adds creator favorites, Fapzone video downloads, and better search back behavior.
 
-## Fapzone
+## Creator favorites
 
-- Renames Bunkr to Fapzone
-- Combines Bunkr and Fapello creator content in one gallery
-- Adds Top 50, New, Hot, and Popular creator shelves
-- Uses the best available creator artwork with cached thumbnail fallbacks
-- Keeps Fapzone search scoped to Fapzone and opens complete creator galleries
+- Long-press a Fapzone creator card to favorite or unfavorite the creator
+- Shows a yellow star on favorite creator cards
+- Keeps favorites after the app closes or the phone restarts
 
-## Galleries and playback
+## Video downloads
 
-- Separates pictures and videos with dedicated tabs
-- Adapts gallery tiles to media aspect ratios
-- Adds pinch gestures for gallery sizing and image zoom
-- Adds double-tap image zoom and left or right swiping
-- Supports portrait video fullscreen playback
-- Improves Bunkr and Fapello video playback and media loading
+- Downloads Fapzone videos from the gallery tile menu
+- Adds a download button to the full-screen gallery viewer
+- Uses the existing download system and saves completed files to Android's Downloads folder
 
-## Chaos
+## Search behavior
 
-- Adds Fapello videos to the mixed Chaos feed
+- Keeps the Fapzone search screen in Android's activity history
+- Returns to the same search screen after swiping back from a creator gallery
 
 ## Compatibility
 
-- Keeps the stable application ID and signing identity
-- Installs directly over the previous stable release
-- Keeps the beta app separate from the stable app
+- Installs directly over CrazyShit 2.9.0
+- Uses the stable application ID and existing signing identity
+- Keeps the separate beta app unchanged
 
 ## Project status
 

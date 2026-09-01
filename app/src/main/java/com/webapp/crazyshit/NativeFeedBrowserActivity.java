@@ -700,9 +700,16 @@ public final class NativeFeedBrowserActivity extends Activity {
     private void showItemMenu(NativeContentItem item, View anchor) {
         if (isBunkr()) {
             PopupMenu menu = new PopupMenu(this, anchor);
+            if (item.isVideo()) {
+                menu.getMenu().add(Menu.NONE, 1, 0, "Download video");
+            }
             menu.getMenu().add(Menu.NONE, 2, 1, "Share");
             menu.getMenu().add(Menu.NONE, 3, 2, "Open item page");
             menu.setOnMenuItemClickListener(clicked -> {
+                if (clicked.getItemId() == 1) {
+                    VideoDownloadStore.downloadPage(this, item);
+                    return true;
+                }
                 if (clicked.getItemId() == 2) {
                     shareItem(item);
                     return true;
