@@ -26,6 +26,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -40,6 +41,7 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
+import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -71,6 +73,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_REOPEN_DETAIL = "reopen_detail";
     public static final String EXTRA_RELATED_FEED_URL = "related_feed_url";
     public static final String EXTRA_SOURCE = "content_source";
+    public static final String EXTRA_MEDIA_REFERER = "media_referer";
 
     private static final String SITE = "https://crazyshit.com/";
     private static final int CONTROL_TIMEOUT_MS = 2600;
@@ -83,6 +86,7 @@ public class VideoDetailActivity extends Activity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
+    private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final Map<String, ImageView> relatedImages = new LinkedHashMap<>();
     private final Map<String, String> resolvedRelatedThumbnails = new LinkedHashMap<>();
     private final Set<String> requestedRelatedThumbnails = new HashSet<>();
@@ -98,6 +102,7 @@ public class VideoDetailActivity extends Activity {
     private TextView titleView;
     private TextView metaView;
     private TextView playerTitleView;
+    private ImageButton portraitFullscreenButton;
     private ProgressBar loading;
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
@@ -117,11 +122,14 @@ public class VideoDetailActivity extends Activity {
     private String cookies;
     private String relatedFeedUrl;
     private String source;
+    private String mediaReferer;
     private long requestedStartPosition;
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
     private boolean failureShown;
     private boolean minimizing;
     private boolean entrancePlayed;
+    private boolean portraitVideo;
+    private boolean portraitFullscreen;
     private int thumbnailResolverCursor;
     private int relatedLoadGeneration;
     private int relatedPlayGeneration;
@@ -135,6 +143,7 @@ public class VideoDetailActivity extends Activity {
         final String comments;
         final String userAgent;
         final String cookies;
+        final String mediaReferer;
         final long positionMs;
         final Bitmap previewBitmap;
 
@@ -147,6 +156,7 @@ public class VideoDetailActivity extends Activity {
                 String comments,
                 String userAgent,
                 String cookies,
+                String mediaReferer,
                 long positionMs,
                 Bitmap previewBitmap
         ) {
@@ -158,6 +168,7 @@ public class VideoDetailActivity extends Activity {
             this.comments = comments;
             this.userAgent = userAgent;
             this.cookies = cookies;
+            this.mediaReferer = mediaReferer;
             this.positionMs = positionMs;
             this.previewBitmap = previewBitmap;
         }
@@ -180,6 +191,7 @@ public class VideoDetailActivity extends Activity {
         cookies = clean(getIntent().getStringExtra(PlayerActivity.EXTRA_COOKIES));
         relatedFeedUrl = clean(getIntent().getStringExtra(EXTRA_RELATED_FEED_URL));
         source = clean(getIntent().getStringExtra(EXTRA_SOURCE));
+        mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -188,6 +200,7 @@ public class VideoDetailActivity extends Activity {
         }
         if (title.isEmpty()) title = "Video";
         if (pageUrl == null) pageUrl = "";
+        if (mediaReferer.isEmpty()) mediaReferer = pageUrl;
 
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -214,7 +227,8 @@ public class VideoDetailActivity extends Activity {
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(oledEnabled() ? Color.BLACK : Color.rgb(13, 13, 15));
         shell.setOnApplyWindowInsetsListener((view, insets) -> {
-            if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            if (portraitFullscreen ||
+                    getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 view.setPadding(0, 0, 0, 0);
                 return insets;
             }
@@ -289,6 +303,7 @@ public class VideoDetailActivity extends Activity {
 
         View playerBack = playerView.findViewById(R.id.player_back);
         playerTitleView = playerView.findViewById(R.id.player_title);
+        portraitFullscreenButton = playerView.findViewById(R.id.player_portrait_fullscreen);
         View playerMenu = playerView.findViewById(R.id.player_menu);
         playerTitleView.setText(title);
         playerBack.setOnClickListener(v -> {
@@ -299,6 +314,11 @@ public class VideoDetailActivity extends Activity {
             haptic(v);
             showPlayerMenu();
         });
+        portraitFullscreenButton.setOnClickListener(v -> {
+            haptic(v);
+            setPortraitFullscreen(!portraitFullscreen);
+        });
+        updatePortraitFullscreenButton();
         playerView.hideController();
 
         detailsScroll = new ScrollView(this);
@@ -329,7 +349,7 @@ public class VideoDetailActivity extends Activity {
         actions.setGravity(Gravity.CENTER_VERTICAL);
         actions.setPadding(0, 0, 0, dp(3));
         detailsColumn.addView(actions, new LinearLayout.LayoutParams(-1, -2));
-        if (!isEfukt()) {
+        if (supportsComments()) {
             actions.addView(actionButton(comments.isEmpty() ? "💬 Comments" : "💬 " + comments, this::openComments), actionParams());
         }
         actions.addView(actionButton("♡ Later", this::toggleWatchLater), actionParams());
@@ -497,6 +517,9 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void buildPlayer(long startPosition) {
+        portraitVideo = false;
+        if (portraitFullscreen) setPortraitFullscreen(false);
+        else updatePortraitFullscreenButton();
         releasePlayer();
         failureShown = false;
 
@@ -504,10 +527,10 @@ public class VideoDetailActivity extends Activity {
         if (!userAgent.isEmpty()) httpFactory.setUserAgent(userAgent);
 
         Map<String, String> headers = new LinkedHashMap<>();
-        if (!pageUrl.isEmpty()) {
-            headers.put("Referer", pageUrl);
+        if (!mediaReferer.isEmpty()) {
+            headers.put("Referer", mediaReferer);
             try {
-                Uri page = Uri.parse(pageUrl);
+                Uri page = Uri.parse(mediaReferer);
                 if (page.getScheme() != null && page.getHost() != null) {
                     headers.put("Origin", page.getScheme() + "://" + page.getHost());
                 }
@@ -535,14 +558,13 @@ public class VideoDetailActivity extends Activity {
         }
         if (position > 0L) player.seekTo(position);
         player.setPlayWhenReady(true);
-        player.prepare();
         player.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
                 if (playbackState == Player.STATE_READY) {
                     String readyPageUrl = pageUrl;
                     playerView.postDelayed(() -> {
-                        if (!isEfukt() && readyPageUrl.equals(pageUrl)) {
+                        if (supportsComments() && readyPageUrl.equals(pageUrl)) {
                             NativeCommentsLoader.preload(VideoDetailActivity.this, readyPageUrl);
                         }
                     }, 650L);
@@ -555,7 +577,22 @@ public class VideoDetailActivity extends Activity {
             public void onPlayerError(PlaybackException error) {
                 showPlaybackFailure();
             }
+
+            @Override
+            public void onVideoSizeChanged(VideoSize videoSize) {
+                float displayWidth = videoSize == null
+                        ? 0f
+                        : videoSize.width * videoSize.pixelWidthHeightRatio;
+                boolean isPortrait = videoSize != null
+                        && videoSize.width > 0
+                        && videoSize.height > displayWidth;
+                if (portraitVideo == isPortrait) return;
+                portraitVideo = isPortrait;
+                if (!portraitVideo && portraitFullscreen) setPortraitFullscreen(false);
+                else updatePortraitFullscreenButton();
+            }
         });
+        player.prepare();
     }
 
     private void updateMetadataUi() {
@@ -583,7 +620,19 @@ public class VideoDetailActivity extends Activity {
         final String excludeUrl = pageUrl;
         io.execute(() -> {
             LinkedHashMap<String, NativeContentItem> merged = new LinkedHashMap<>();
-            if (isEfukt()) {
+            if (isBunkr()) {
+                try {
+                    if (!relatedFeedUrl.isEmpty()) {
+                        List<NativeContentItem> album = bunkrRepository.fetchAlbum(this, relatedFeedUrl, 1);
+                        for (NativeContentItem item : album) {
+                            if (item.isVideo() && !item.url.equals(excludeUrl)) {
+                                merged.put(item.url, item);
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            } else if (isEfukt()) {
                 try {
                     String feed = relatedFeedUrl.isEmpty() ? EfuktRepository.SERIES : relatedFeedUrl;
                     List<NativeContentItem> series = efuktRepository.fetchSeriesFeed(this, feed, 1);
@@ -811,6 +860,7 @@ public class VideoDetailActivity extends Activity {
                 savePlaybackState(false);
                 mediaUrl = resolved.mediaUrl;
                 pageUrl = item.url;
+                mediaReferer = resolved.requestReferer;
                 title = clean(item.title).isEmpty() ? resolved.title : item.title;
                 views = clean(item.views);
                 uploader = clean(item.uploader);
@@ -838,6 +888,7 @@ public class VideoDetailActivity extends Activity {
                 comments,
                 userAgent,
                 cookies,
+                mediaReferer,
                 position,
                 captureRelatedBackPreview()
         ));
@@ -861,6 +912,7 @@ public class VideoDetailActivity extends Activity {
         comments = previous.comments;
         userAgent = previous.userAgent;
         cookies = previous.cookies;
+        mediaReferer = previous.mediaReferer;
         requestedStartPosition = previous.positionMs;
         updateMetadataUi();
         buildPlayer(previous.positionMs);
@@ -909,6 +961,7 @@ public class VideoDetailActivity extends Activity {
 
     boolean canPreviewRelatedBack() {
         return !minimizing
+                && !portraitFullscreen
                 && root != null
                 && shell != null
                 && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE
@@ -1092,7 +1145,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void openComments() {
-        if (pageUrl.isEmpty() || isEfukt()) return;
+        if (pageUrl.isEmpty() || !supportsComments()) return;
         new InlineCommentsDialog(
                 this,
                 pageUrl,
@@ -1127,7 +1180,7 @@ public class VideoDetailActivity extends Activity {
                 ? "Remove from Watch Later"
                 : "Save to Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
-        if (!isEfukt()) {
+        if (supportsComments()) {
             actions.add(VideoActionSheet.action(
                     R.drawable.ic_action_comments,
                     "Comments",
@@ -1148,6 +1201,18 @@ public class VideoDetailActivity extends Activity {
                 () -> openWebsite(pageUrl)
         ));
         if (getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE) {
+            if (portraitVideo) {
+                actions.add(VideoActionSheet.action(
+                        portraitFullscreen
+                                ? R.drawable.ic_action_fullscreen_exit
+                                : R.drawable.ic_action_fullscreen,
+                        portraitFullscreen ? "Exit portrait fullscreen" : "Portrait fullscreen",
+                        portraitFullscreen
+                                ? "Return to the video details"
+                                : "Fill the screen without rotating",
+                        () -> setPortraitFullscreen(!portraitFullscreen)
+                ));
+            }
             actions.add(VideoActionSheet.action(
                     R.drawable.ic_action_minimize,
                     "Minimize",
@@ -1156,8 +1221,8 @@ public class VideoDetailActivity extends Activity {
             ));
             actions.add(VideoActionSheet.action(
                     R.drawable.ic_action_fullscreen,
-                    "Fullscreen",
-                    "Rotate the player to landscape",
+                    "Rotate fullscreen",
+                    "Turn the player sideways",
                     () -> setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
             ));
         }
@@ -1210,12 +1275,21 @@ public class VideoDetailActivity extends Activity {
                 "",
                 mediaUrl,
                 userAgent,
-                cookies
+                cookies,
+                mediaReferer
         );
     }
 
     private boolean isEfukt() {
         return NativeFeedBrowserActivity.SOURCE_EFUKT.equals(source) || EfuktRepository.isEfuktUrl(pageUrl);
+    }
+
+    private boolean isBunkr() {
+        return NativeFeedBrowserActivity.SOURCE_BUNKR.equals(source) || BunkrRepository.isBunkrUrl(pageUrl);
+    }
+
+    private boolean supportsComments() {
+        return !isEfukt() && !isBunkr();
     }
 
     private void minimizeFromMenu() {
@@ -1278,13 +1352,15 @@ public class VideoDetailActivity extends Activity {
 
     private void applyOrientation(int orientation) {
         boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
+        if (landscape) portraitFullscreen = false;
+        boolean fullscreen = landscape || portraitFullscreen;
         if (detailsScroll != null) {
-            detailsScroll.setVisibility(landscape ? View.GONE : View.VISIBLE);
+            detailsScroll.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
             detailsScroll.setAlpha(1f);
             detailsScroll.setTranslationY(0f);
         }
         LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) playerContainer.getLayoutParams();
-        if (landscape) {
+        if (fullscreen) {
             params.height = 0;
             params.weight = 1f;
             setFullscreenUi(true);
@@ -1298,8 +1374,34 @@ public class VideoDetailActivity extends Activity {
         playerContainer.setScaleY(1f);
         playerContainer.setTranslationY(0f);
         playerContainer.setAlpha(1f);
+        updatePortraitFullscreenButton();
         updateSwipeEnabled();
         shell.requestApplyInsets();
+    }
+
+    private void setPortraitFullscreen(boolean enabled) {
+        boolean portraitOrientation = getResources().getConfiguration().orientation
+                != Configuration.ORIENTATION_LANDSCAPE;
+        portraitFullscreen = enabled && portraitVideo && portraitOrientation;
+        applyOrientation(getResources().getConfiguration().orientation);
+        if (playerView != null) playerView.showController();
+    }
+
+    private void updatePortraitFullscreenButton() {
+        if (portraitFullscreenButton == null) return;
+        boolean portraitOrientation = getResources().getConfiguration().orientation
+                != Configuration.ORIENTATION_LANDSCAPE;
+        portraitFullscreenButton.setVisibility(
+                portraitVideo && portraitOrientation ? View.VISIBLE : View.GONE
+        );
+        portraitFullscreenButton.setImageResource(
+                portraitFullscreen
+                        ? R.drawable.ic_action_fullscreen_exit
+                        : R.drawable.ic_action_fullscreen
+        );
+        portraitFullscreenButton.setContentDescription(
+                portraitFullscreen ? "Exit portrait fullscreen" : "Portrait fullscreen"
+        );
     }
 
     private void updateSwipeEnabled() {
@@ -1307,7 +1409,7 @@ public class VideoDetailActivity extends Activity {
         boolean portrait = getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE;
         boolean enabled = getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean("swipe_down_minimize", true);
-        playerContainer.setSwipeEnabled(portrait && enabled && !minimizing);
+        playerContainer.setSwipeEnabled(portrait && enabled && !minimizing && !portraitFullscreen);
     }
 
     private void setFullscreenUi(boolean enabled) {
@@ -1341,6 +1443,10 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void handleBack() {
+        if (portraitFullscreen) {
+            setPortraitFullscreen(false);
+            return;
+        }
         if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             return;
@@ -1366,10 +1472,13 @@ public class VideoDetailActivity extends Activity {
         result.putExtra(PlayerActivity.EXTRA_TITLE, title);
         result.putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent);
         result.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
+        result.putExtra(EXTRA_MEDIA_REFERER, mediaReferer);
         result.putExtra(EXTRA_REOPEN_DETAIL, true);
         result.putExtra(EXTRA_VIEWS, views);
         result.putExtra(EXTRA_UPLOADER, uploader);
         result.putExtra(EXTRA_COMMENTS, comments);
+        result.putExtra(EXTRA_RELATED_FEED_URL, relatedFeedUrl);
+        result.putExtra(EXTRA_SOURCE, source);
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
         setResult(RESULT_OK, result);
         finish();
@@ -1499,6 +1608,10 @@ public class VideoDetailActivity extends Activity {
     @Override
     protected void onDestroy() {
         abortRelatedBackPreview();
+        if (portraitFullscreen ||
+                getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            setFullscreenUi(false);
+        }
         if (Build.VERSION.SDK_INT >= 33 && backCallback != null) {
             try {
                 getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backCallback);

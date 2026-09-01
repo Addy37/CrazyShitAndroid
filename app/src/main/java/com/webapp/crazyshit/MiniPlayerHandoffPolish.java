@@ -289,6 +289,7 @@ final class MiniPlayerHandoffPolish {
         result.putExtra(VideoDetailActivity.EXTRA_COMMENTS, stringField(activity, "comments"));
         result.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, stringField(activity, "relatedFeedUrl"));
         result.putExtra(VideoDetailActivity.EXTRA_SOURCE, stringField(activity, "source"));
+        result.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, stringField(activity, "mediaReferer"));
 
         boolean direct = snapshotPath != null && !snapshotPath.isEmpty() && sourceBounds != null;
         result.putExtra(EXTRA_DIRECT_HANDOFF, direct);

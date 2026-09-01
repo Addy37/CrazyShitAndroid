@@ -89,7 +89,6 @@ public final class ChaosFeedView extends FrameLayout {
     private final Activity activity;
     private final Host host;
     private final CrazyShitRepository repository = new CrazyShitRepository();
-    private final EfuktRepository efuktRepository = new EfuktRepository();
     private final ExecutorService io = Executors.newFixedThreadPool(4);
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
     private final Set<String> sessionUrls = new HashSet<>();
@@ -406,10 +405,7 @@ public final class ChaosFeedView extends FrameLayout {
     private CrazyShitRepository.StreamInfo resolvePlayable(NativeContentItem item)
             throws Exception {
         if (item == null || item.url == null || item.url.isEmpty()) return null;
-        if (EfuktRepository.isEfuktUrl(item.url)) {
-            return efuktRepository.resolvePlayable(activity, item.url);
-        }
-        return repository.resolvePlayable(activity, item.url);
+        return PlayableSourceRouter.resolve(activity, item.url);
     }
 
     private boolean shouldRetryResolution(NativeContentItem item, int position) {
@@ -739,10 +735,10 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void openInlineComments(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
-        if (EfuktRepository.isEfuktUrl(item.url)) {
+        if (!supportsComments(item)) {
             Toast.makeText(
                     activity,
-                    "Comments are not available for EFukt clips in Chaos yet.",
+                    "Comments are not available for this source in Chaos.",
                     Toast.LENGTH_SHORT
             ).show();
             return;
@@ -796,7 +792,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void preloadReadyComments(NativeContentItem item, int position) {
-        if (item == null || EfuktRepository.isEfuktUrl(item.url)) return;
+        if (item == null || !supportsComments(item)) return;
         if (position != selectedPosition || !active || !hostResumed) return;
         if (!ChaosPreloadPolicy.allowsCommentPreload(activity)) return;
         String url = item.url;
@@ -808,6 +804,13 @@ public final class ChaosFeedView extends FrameLayout {
             if (selected == null || !url.equals(selected.url)) return;
             NativeCommentsLoader.preload(activity, url);
         }, 850L);
+    }
+
+    private boolean supportsComments(NativeContentItem item) {
+        return item != null
+                && !EfuktRepository.isEfuktUrl(item.url)
+                && !BunkrRepository.isBunkrUrl(item.url)
+                && !FapelloRepository.isFapelloUrl(item.url);
     }
 
     private void haptic(View view) {
@@ -1202,9 +1205,7 @@ public final class ChaosFeedView extends FrameLayout {
                 info.append(next.views).append(" views");
             }
             meta.setText(info);
-            comments.setVisibility(
-                    EfuktRepository.isEfuktUrl(next.url) ? View.GONE : View.VISIBLE
-            );
+            comments.setVisibility(supportsComments(next) ? View.VISIBLE : View.GONE);
             updateSaveButton(next, save);
             loading.setVisibility(View.VISIBLE);
             failure.setText("Couldn't play this one\nSwipe up for the next video");
@@ -1310,7 +1311,7 @@ public final class ChaosFeedView extends FrameLayout {
             } catch (Exception ignored) {
             }
             if (nextStream.pageUrl != null && !nextStream.pageUrl.isEmpty()) {
-                putHeaderIfMissing(headers, "Referer", nextStream.pageUrl);
+                putHeaderIfMissing(headers, "Referer", nextStream.requestReferer);
                 try {
                     Uri page = Uri.parse(nextStream.pageUrl);
                     if (page.getScheme() != null && page.getHost() != null) {
@@ -1563,7 +1564,8 @@ public final class ChaosFeedView extends FrameLayout {
                     item.imageUrl,
                     stream.mediaUrl,
                     userAgent,
-                    cookies
+                    cookies,
+                    stream.requestReferer
             );
         }
 

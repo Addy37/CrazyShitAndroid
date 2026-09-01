@@ -51,6 +51,17 @@
             android:textSize="14sp" />
 
         <ImageButton
+            android:id="@+id/player_portrait_fullscreen"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/player_control_button"
+            android:contentDescription="Portrait fullscreen"
+            android:padding="11dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_action_fullscreen"
+            android:visibility="gone" />
+
+        <ImageButton
             android:id="@+id/player_menu"
             android:layout_width="44dp"
             android:layout_height="44dp"

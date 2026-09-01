@@ -20,7 +20,8 @@ final class ThumbnailResolver {
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
     private static final Pattern JSON_IMAGE = Pattern.compile(
-            "(?i)[\\\"'](?:thumbnailUrl|thumbnail|poster|image|imageUrl)[\\\"']\\s*[:=]\\s*[\\\"']([^\\\"']+)[\\\"']"
+            "(?i)(?:[\\\"']?(?:thumbnailUrl|thumbnail|poster|image|imageUrl)[\\\"']?)" +
+                    "\\s*[:=]\\s*[\\\"']([^\\\"']+)[\\\"']"
     );
 
     private static final Pattern IMAGE_URL = Pattern.compile(
@@ -32,7 +33,15 @@ final class ThumbnailResolver {
     static String resolve(Context context, String pageUrl) {
         if (pageUrl == null || pageUrl.trim().isEmpty()) return "";
         try {
-            Document doc = fetch(context, pageUrl);
+            String fetchUrl = thumbnailPageUrl(pageUrl);
+            Document doc = fetch(context, fetchUrl);
+
+            // Bunkr albums do not have a dedicated cover. The advanced page exposes each
+            // video's real thumbnail, so use the first one before generic page metadata.
+            if (BunkrRepository.isAlbumUrl(pageUrl)) {
+                String bunkrThumbnail = scriptThumbnail(doc, fetchUrl);
+                if (good(bunkrThumbnail)) return bunkrThumbnail;
+            }
 
             String[] metaSelectors = {
                     "meta[property=og:image]",
@@ -46,7 +55,7 @@ final class ThumbnailResolver {
             for (String selector : metaSelectors) {
                 Element meta = doc.selectFirst(selector);
                 if (meta == null) continue;
-                String value = absolute(pageUrl, meta.attr("content"));
+                String value = absolute(fetchUrl, meta.attr("content"));
                 if (good(value)) return value;
             }
 
@@ -67,7 +76,7 @@ final class ThumbnailResolver {
                             element.attr("data-original"),
                             element.attr("data-lazy-src")
                     );
-                    String value = absolute(pageUrl, raw);
+                    String value = absolute(fetchUrl, raw);
                     if (good(value)) return value;
                 }
             }
@@ -82,13 +91,13 @@ final class ThumbnailResolver {
 
                 Matcher keyed = JSON_IMAGE.matcher(body);
                 while (keyed.find()) {
-                    String value = absolute(pageUrl, keyed.group(1));
+                    String value = absolute(fetchUrl, keyed.group(1));
                     if (good(value)) return value;
                 }
 
                 Matcher generic = IMAGE_URL.matcher(body);
                 while (generic.find()) {
-                    String value = absolute(pageUrl, generic.group());
+                    String value = absolute(fetchUrl, generic.group());
                     if (good(value)) return value;
                 }
             }
@@ -100,10 +109,29 @@ final class ThumbnailResolver {
                         image.attr("data-lazy-src"),
                         image.attr("src")
                 );
-                String value = absolute(pageUrl, raw);
+                String value = absolute(fetchUrl, raw);
                 if (good(value)) return value;
             }
         } catch (Exception ignored) {
+        }
+        return "";
+    }
+
+    private static String thumbnailPageUrl(String pageUrl) {
+        if (!BunkrRepository.isAlbumUrl(pageUrl) || pageUrl.contains("advanced=")) return pageUrl;
+        return pageUrl + (pageUrl.contains("?") ? "&" : "?") + "advanced=1";
+    }
+
+    private static String scriptThumbnail(Document doc, String pageUrl) {
+        if (doc == null) return "";
+        for (Element script : doc.select("script")) {
+            String body = script.data();
+            if (body == null || body.isEmpty()) body = script.html();
+            Matcher keyed = JSON_IMAGE.matcher(body == null ? "" : body.replace("\\/", "/"));
+            while (keyed.find()) {
+                String value = absolute(pageUrl, keyed.group(1));
+                if (good(value)) return value;
+            }
         }
         return "";
     }

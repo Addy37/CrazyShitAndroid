@@ -257,7 +257,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         bottomNavigation.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
         Menu menu = bottomNavigation.getMenu();
         menu.add(Menu.NONE, NAV_HOME, 0, "Home").setIcon(R.drawable.ic_nav_home);
-        menu.add(Menu.NONE, NAV_SERIES, 1, "Series").setIcon(R.drawable.ic_nav_series);
+        menu.add(Menu.NONE, NAV_SERIES, 1, "Collections").setIcon(R.drawable.ic_nav_series);
         menu.add(Menu.NONE, NAV_CHAOS, 2, "Chaos").setIcon(R.drawable.ic_nav_chaos);
         menu.add(Menu.NONE, NAV_CATEGORIES, 3, "Categories").setIcon(R.drawable.ic_nav_categories);
         menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
@@ -335,7 +335,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         search.setFocusable(true);
         search.setOnClickListener(v -> {
             haptic(v);
-            showSearchDialog();
+            openContextualSearch();
         });
         bar.addView(search, new LinearLayout.LayoutParams(dp(48), dp(48)));
         return bar;
@@ -351,6 +351,21 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void showCategoriesPage() {
         showPrimaryPage(MainPagerAdapter.PAGE_CATEGORIES, true);
+    }
+
+    boolean isBunkrCollectionSearchContext() {
+        return primaryPager != null &&
+                primaryPager.getVisibility() == View.VISIBLE &&
+                primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_SERIES &&
+                primaryPagerAdapter != null &&
+                primaryPagerAdapter.isBunkrCollectionsSelected();
+    }
+
+    void openContextualSearch() {
+        Intent intent = isBunkrCollectionSearchContext()
+                ? SearchActivity.createBunkrSearch(this)
+                : new Intent(this, SearchActivity.class);
+        startActivity(intent);
     }
 
     private void showPrimaryPage(int position, boolean smooth) {
@@ -378,7 +393,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (position == MainPagerAdapter.PAGE_SERIES) {
             screen = Screen.SERIES;
             feedBaseUrl = CrazyShitRepository.HOME;
-            feedTitle = "Series";
+            feedTitle = "Collections";
             selectNavSilently(NAV_SERIES);
         } else if (position == MainPagerAdapter.PAGE_CATEGORIES) {
             screen = Screen.CATEGORIES;
@@ -403,7 +418,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             if (position == MainPagerAdapter.PAGE_CHAOS) {
                 headerSubtitle.setText("Random video feed  •  Swipe up/down");
             } else if (position == MainPagerAdapter.PAGE_SERIES) {
-                headerSubtitle.setText("CrazyShit  •  Browse series");
+                headerSubtitle.setText("CrazyShit  •  EFukt  •  Fapzone");
             } else if (position == MainPagerAdapter.PAGE_CATEGORIES) {
                 headerSubtitle.setText("CrazyShit  •  Browse categories");
             } else {
@@ -594,6 +609,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         Intent intent = new Intent(this, VideoDetailActivity.class);
         intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, stream.mediaUrl);
         intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, stream.pageUrl);
+        intent.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, stream.requestReferer);
         intent.putExtra(PlayerActivity.EXTRA_TITLE,
                 item != null && item.title != null && !item.title.trim().isEmpty()
                         ? item.title : stream.title);

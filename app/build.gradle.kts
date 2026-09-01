@@ -75,6 +75,7 @@ dependencies {
     implementation("androidx.work:work-runtime:2.11.2")
     implementation("org.jsoup:jsoup:1.23.1")
     implementation("com.github.bumptech.glide:glide:4.16.0")
+    implementation("com.github.bumptech.glide:avif-integration:4.16.0")
 
     val media3Version = "1.9.4"
     implementation("androidx.media3:media3-exoplayer:$media3Version")

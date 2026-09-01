@@ -67,6 +67,7 @@ public final class NativeMiniPlayer {
     private String comments;
     private String relatedFeedUrl;
     private String source;
+    private String mediaReferer;
     private String handoffSnapshotPath;
     private boolean reopenDetail;
     private boolean resumeAfterPause;
@@ -112,6 +113,7 @@ public final class NativeMiniPlayer {
         comments = data.getStringExtra(VideoDetailActivity.EXTRA_COMMENTS);
         relatedFeedUrl = data.getStringExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL);
         source = data.getStringExtra(VideoDetailActivity.EXTRA_SOURCE);
+        mediaReferer = data.getStringExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER);
         boolean directHandoff = data.getBooleanExtra(MiniPlayerHandoffPolish.EXTRA_DIRECT_HANDOFF, false);
         handoffSnapshotPath = data.getStringExtra(MiniPlayerHandoffPolish.EXTRA_SNAPSHOT_PATH);
         int sourceLeft = data.getIntExtra(MiniPlayerHandoffPolish.EXTRA_SOURCE_LEFT, -1);
@@ -139,10 +141,11 @@ public final class NativeMiniPlayer {
             if (userAgent != null && !userAgent.isEmpty()) http.setUserAgent(userAgent);
 
             Map<String, String> headers = new HashMap<>();
-            if (pageUrl != null && !pageUrl.isEmpty()) {
-                headers.put("Referer", pageUrl);
+            String requestPage = mediaReferer == null || mediaReferer.isEmpty() ? pageUrl : mediaReferer;
+            if (requestPage != null && !requestPage.isEmpty()) {
+                headers.put("Referer", requestPage);
                 try {
-                    Uri page = Uri.parse(pageUrl);
+                    Uri page = Uri.parse(requestPage);
                     if (page.getScheme() != null && page.getHost() != null) {
                         headers.put("Origin", page.getScheme() + "://" + page.getHost());
                     }
@@ -238,6 +241,7 @@ public final class NativeMiniPlayer {
         comments = null;
         relatedFeedUrl = null;
         source = null;
+        mediaReferer = null;
         reopenDetail = false;
     }
 
@@ -261,6 +265,7 @@ public final class NativeMiniPlayer {
             intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, comments);
             intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, relatedFeedUrl);
             intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+            intent.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, mediaReferer);
         }
         stopWithoutRecording();
         host.reopenMiniPlayer(intent);

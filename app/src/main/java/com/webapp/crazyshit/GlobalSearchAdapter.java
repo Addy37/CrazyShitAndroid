@@ -231,7 +231,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (source == SOURCE_LIBRARY) {
             meta = new StringBuilder("Library");
         } else if (item.isSeries()) {
-            meta = new StringBuilder("Series");
+            meta = new StringBuilder(BunkrRepository.isAlbumUrl(item.url) ? "Fapzone album" : "Series");
         } else if (item.isCategory()) {
             meta = new StringBuilder("Category");
         } else {
@@ -270,7 +270,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     private void requestRenderedThumbnail(NativeContentItem item, String rejectedUrl) {
-        if (item == null || item.isSection() || item.isSeries() || item.isCategory()) return;
+        if (item == null || item.isSection()) return;
+        if ((item.isSeries() || item.isCategory()) && !BunkrRepository.isAlbumUrl(item.url)) return;
         if (item.url == null || item.url.isEmpty()) return;
         String rejected = rejectedUrl == null ? "" : rejectedUrl;
         if (rejected.isEmpty() && failedDirectThumbnails.contains(item.url)) rejected = item.imageUrl;

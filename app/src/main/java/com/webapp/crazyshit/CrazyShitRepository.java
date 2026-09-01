@@ -536,11 +536,19 @@ public final class CrazyShitRepository {
         public final String mediaUrl;
         public final String pageUrl;
         public final String title;
+        public final String requestReferer;
 
         StreamInfo(String mediaUrl, String pageUrl, String title) {
+            this(mediaUrl, pageUrl, title, pageUrl);
+        }
+
+        StreamInfo(String mediaUrl, String pageUrl, String title, String requestReferer) {
             this.mediaUrl = mediaUrl;
             this.pageUrl = pageUrl;
             this.title = title == null || title.trim().isEmpty() ? "Video" : title;
+            this.requestReferer = requestReferer == null || requestReferer.trim().isEmpty()
+                    ? pageUrl
+                    : requestReferer;
         }
     }
 }
