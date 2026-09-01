@@ -1,8 +1,6 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
-import android.graphics.BitmapFactory;
-import android.os.SystemClock;
 import android.util.Base64;
 import android.webkit.CookieManager;
 
@@ -43,11 +41,7 @@ public final class BunkrRepository {
     };
     private static final String DEFAULT_SIGN_URL = "https://glb-apisign.cdn.cr/sign";
     private static final String DOWNLOAD_ROOT = "https://dl.bunkr.cr";
-    private static final int COVER_ALBUM_LIMIT = 4;
-    private static final int COVER_PROBES_PER_ALBUM = 8;
-    private static final int COVER_PROBE_BYTES = 512 * 1024;
-    private static final long COVER_LOOKUP_BUDGET_MS = 18_000L;
-    private static final double COVER_GOOD_MATCH = 0.06d;
+    private static final int CREATOR_PREVIEW_LIMIT = 8;
     private static volatile String preferredPageOrigin = "";
 
     private static final Pattern ALBUM_PATH = Pattern.compile("(?i)/a/([^/?#]+)");
@@ -198,124 +192,27 @@ public final class BunkrRepository {
                 : normalizeThumbnailUrl(socialImage.attr("content"), pageOrigin, "");
     }
 
-    /** Finds one useful creator preview without exhaustively probing an album for a perfect ratio. */
-    public CreatorArtwork fetchCreatorArtworkPreview(Context context, String albumUrl)
+    /** Returns lightweight collection artwork, preferring fast video posters over full images. */
+    public List<CreatorArtwork> fetchCreatorArtworkPreviews(Context context, String albumUrl)
             throws IOException {
         List<NativeContentItem> files = fetchAlbum(context, albumUrl, 1);
-        NativeContentItem firstImage = null;
+        LinkedHashMap<String, CreatorArtwork> previews = new LinkedHashMap<>();
+
+        // Bunkr video posters are typically smaller and respond faster than image originals.
         for (NativeContentItem file : files) {
-            if (isCoverImage(file)) {
-                firstImage = file;
-                break;
-            }
+            if (file != null && file.isVideo()) addCreatorPreview(previews, file);
+            if (previews.size() >= CREATOR_PREVIEW_LIMIT) break;
         }
-        if (firstImage == null) throw new IOException("No creator image was available");
-        String thumbnail = firstImage.imageUrl == null ? "" : firstImage.imageUrl.trim();
-        if (!thumbnail.isEmpty()) {
-            return new CreatorArtwork(thumbnail, firstImage.url, firstImage.url, false);
-        }
-        throw new IOException("No creator image URL was available");
-    }
-
-    /** Upgrades a creator preview to its original image when Bunkr's file endpoint responds. */
-    public CreatorArtwork resolveCreatorArtwork(Context context, CreatorArtwork preview)
-            throws IOException {
-        if (preview == null || preview.pageUrl.isEmpty()) {
-            throw new IOException("Creator image page was unavailable");
-        }
-        CrazyShitRepository.StreamInfo resolved = resolvePlayable(context, preview.pageUrl);
-        if (!isImageName(resolved.mediaUrl)) {
-            throw new IOException("Creator file did not resolve to an image");
-        }
-        return new CreatorArtwork(
-                resolved.mediaUrl,
-                resolved.requestReferer,
-                preview.pageUrl,
-                true
-        );
-    }
-
-    /** Finds a still image close to the requested card ratio, then resolves its original file. */
-    public CrazyShitRepository.StreamInfo fetchBestCreatorArtwork(
-            Context context,
-            String creatorQuery,
-            String preferredAlbumUrl,
-            float targetAspectRatio
-    ) throws IOException {
-        float target = targetAspectRatio > 0f ? targetAspectRatio : 16f / 9f;
-        LinkedHashMap<String, String> albumUrls = new LinkedHashMap<>();
-        if (isAlbumUrl(preferredAlbumUrl)) albumUrls.put(preferredAlbumUrl, preferredAlbumUrl);
-        String query = creatorQuery == null ? "" : creatorQuery.trim();
-        if (!query.isEmpty()) {
-            try {
-                for (NativeContentItem album : searchAlbums(context, query, 1)) {
-                    if (album != null && isAlbumUrl(album.url)) {
-                        albumUrls.putIfAbsent(album.url, album.url);
-                        if (albumUrls.size() >= COVER_ALBUM_LIMIT) break;
-                    }
-                }
-            } catch (IOException ignored) {
-            }
-        }
-
-        CoverCandidate best = null;
-        CoverCandidate firstImage = null;
-        IOException last = null;
-        int albumsChecked = 0;
-        long deadline = SystemClock.elapsedRealtime() + COVER_LOOKUP_BUDGET_MS;
-        outer:
-        for (String albumUrl : albumUrls.keySet()) {
-            if (Thread.currentThread().isInterrupted()) {
-                throw new IOException("Creator artwork lookup was interrupted");
-            }
-            if (albumsChecked++ >= COVER_ALBUM_LIMIT) break;
-            if (SystemClock.elapsedRealtime() >= deadline) break;
-            List<NativeContentItem> files;
-            try {
-                files = fetchAlbum(context, albumUrl, 1);
-            } catch (IOException error) {
-                last = error;
-                continue;
-            }
-
-            ArrayList<NativeContentItem> images = new ArrayList<>();
+        if (previews.size() < CREATOR_PREVIEW_LIMIT) {
             for (NativeContentItem file : files) {
-                if (isCoverImage(file)) images.add(file);
-            }
-            if (images.isEmpty()) continue;
-            if (firstImage == null) firstImage = new CoverCandidate(images.get(0), Double.MAX_VALUE);
-
-            int probes = Math.min(COVER_PROBES_PER_ALBUM, images.size());
-            for (int probe = 0; probe < probes; probe++) {
-                if (SystemClock.elapsedRealtime() >= deadline) break outer;
-                int index = probes == 1
-                        ? 0
-                        : Math.round(probe * (images.size() - 1f) / (probes - 1f));
-                NativeContentItem candidate = images.get(index);
-                float ratio = imageAspectRatio(context, candidate.imageUrl, candidate.url);
-                if (ratio <= 0f) continue;
-                double score = Math.abs(Math.log(ratio / target));
-                if (best == null || score < best.score) {
-                    best = new CoverCandidate(candidate, score);
-                }
-                if (score <= COVER_GOOD_MATCH) break outer;
+                if (file != null && file.isImage()) addCreatorPreview(previews, file);
+                if (previews.size() >= CREATOR_PREVIEW_LIMIT) break;
             }
         }
-
-        CoverCandidate selected = best == null ? firstImage : best;
-        if (selected != null) {
-            try {
-                CrazyShitRepository.StreamInfo resolved = resolvePlayable(
-                        context,
-                        selected.item.url
-                );
-                if (isImageName(resolved.mediaUrl)) return resolved;
-            } catch (IOException error) {
-                last = error;
-            }
+        if (previews.isEmpty()) {
+            throw new IOException("No creator preview was available");
         }
-        if (last != null) throw last;
-        throw new IOException("No full-resolution creator image was available");
+        return new ArrayList<>(previews.values());
     }
 
     public CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl)
@@ -767,37 +664,13 @@ public final class BunkrRepository {
         }
     }
 
-    private float imageAspectRatio(Context context, String imageUrl, String referer) {
-        if (imageUrl == null || imageUrl.trim().isEmpty()) return 0f;
-        try {
-            Connection connection = Jsoup.connect(imageUrl)
-                    .userAgent(USER_AGENT)
-                    .referrer(referer == null || referer.isEmpty() ? INDEX : referer)
-                    .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
-                    .header("Range", "bytes=0-" + (COVER_PROBE_BYTES - 1))
-                    .timeout(8000)
-                    .maxBodySize(COVER_PROBE_BYTES)
-                    .ignoreContentType(true)
-                    .ignoreHttpErrors(false)
-                    .followRedirects(true);
-            addCookies(context, connection, imageUrl);
-            byte[] data = connection.execute().bodyAsBytes();
-            BitmapFactory.Options bounds = new BitmapFactory.Options();
-            bounds.inJustDecodeBounds = true;
-            BitmapFactory.decodeByteArray(data, 0, data.length, bounds);
-            return bounds.outWidth > 0 && bounds.outHeight > 0
-                    ? (float) bounds.outWidth / bounds.outHeight
-                    : 0f;
-        } catch (Exception ignored) {
-            return 0f;
-        }
-    }
-
-    private boolean isCoverImage(NativeContentItem item) {
-        if (item == null || !item.isImage() || item.imageUrl == null ||
-                item.imageUrl.trim().isEmpty()) return false;
-        String name = (item.title + " " + item.url).toLowerCase(Locale.US);
-        return !name.contains(".gif") && !name.contains(".bmp");
+    private void addCreatorPreview(
+            LinkedHashMap<String, CreatorArtwork> previews,
+            NativeContentItem file
+    ) {
+        if (file == null || file.imageUrl == null || file.imageUrl.trim().isEmpty()) return;
+        String imageUrl = file.imageUrl.trim();
+        previews.putIfAbsent(imageUrl, new CreatorArtwork(imageUrl, file.url));
     }
 
     private String decryptXor(String encrypted, String key) throws IOException {
@@ -1095,32 +968,13 @@ public final class BunkrRepository {
         return value == null ? "" : value.replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
     }
 
-    private static final class CoverCandidate {
-        final NativeContentItem item;
-        final double score;
-
-        CoverCandidate(NativeContentItem item, double score) {
-            this.item = item;
-            this.score = score;
-        }
-    }
-
     public static final class CreatorArtwork {
         public final String imageUrl;
         public final String requestReferer;
-        public final String pageUrl;
-        public final boolean fullResolution;
 
-        CreatorArtwork(
-                String imageUrl,
-                String requestReferer,
-                String pageUrl,
-                boolean fullResolution
-        ) {
+        CreatorArtwork(String imageUrl, String requestReferer) {
             this.imageUrl = imageUrl == null ? "" : imageUrl;
             this.requestReferer = requestReferer == null ? "" : requestReferer;
-            this.pageUrl = pageUrl == null ? "" : pageUrl;
-            this.fullResolution = fullResolution;
         }
     }
 }

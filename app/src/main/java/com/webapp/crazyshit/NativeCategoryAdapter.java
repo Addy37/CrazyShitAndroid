@@ -64,7 +64,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     private static final int DESCRIPTION_COPY_HEIGHT_DP = 132;
     private static final int CREATOR_COPY_HEIGHT_DP = 70;
     private static final int CREATOR_SHADE_HEIGHT_DP = 118;
-    private static final String CREATOR_ARTWORK_PREFS = "creator_artwork_cache_v2";
+    private static final String CREATOR_ARTWORK_PREFS = "creator_artwork_cache_v3";
     private static final float ASPECT_HERO = 16f / 9f;
     private static final float ASPECT_PORTRAIT = 4f / 5f;
     private static final float ASPECT_SQUARE = 1f;
@@ -80,12 +80,13 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     private final List<NativeContentItem> items = new ArrayList<>();
     private final Listener listener;
     private final Map<String, Artwork> resolvedArtwork = new HashMap<>();
+    private final Map<String, List<Artwork>> artworkCandidates = new HashMap<>();
     private final Map<String, Float> creatorAspectRatios = new HashMap<>();
     private final Set<String> requestedArtwork = new HashSet<>();
-    private final Set<String> failedArtworkRetry = new HashSet<>();
+    private final Set<String> exhaustedArtwork = new HashSet<>();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService bunkrArtworkIo = Executors.newFixedThreadPool(6);
+    private final ExecutorService bunkrArtworkIo = Executors.newFixedThreadPool(8);
     private boolean wideCreatorCards;
     private volatile boolean closed;
 
@@ -432,11 +433,15 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     }
 
     private void loadCreatorImage(Holder holder, NativeContentItem item) {
-        Artwork artwork = resolvedArtwork.get(artworkKey(item));
-        String previewUrl = clean(item.imageUrl);
-        String fullUrl = artwork == null ? "" : clean(artwork.imageUrl);
-        String foregroundUrl = fullUrl.isEmpty() ? previewUrl : fullUrl;
-        String foregroundReferer = fullUrl.isEmpty() ? item.url : artwork.referer;
+        String key = artworkKey(item);
+        boolean sameCard = key.equals(holder.boundArtworkKey);
+        Drawable foregroundPlaceholder = sameCard ? holder.image.getDrawable() : null;
+        Drawable backdropPlaceholder = sameCard ? holder.backdrop.getDrawable() : null;
+        holder.boundArtworkKey = key;
+        Artwork artwork = resolvedArtwork.get(key);
+        String itemPreview = exhaustedArtwork.contains(key) ? "" : clean(item.imageUrl);
+        String foregroundUrl = artwork == null ? itemPreview : clean(artwork.imageUrl);
+        String foregroundReferer = artwork == null ? item.url : artwork.referer;
 
         if (foregroundUrl.isEmpty()) {
             Glide.with(holder.image).clear(holder.image);
@@ -447,29 +452,16 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         }
 
         int[] foregroundSize = creatorRequestSize(holder);
-        RequestBuilder<Drawable> preview = null;
-        if (!previewUrl.isEmpty()) {
-            preview = Glide.with(holder.image)
-                    .load(remoteImage(previewUrl, item.url))
-                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                    .fitCenter()
-                    .override(
-                            Math.max(240, foregroundSize[0] / 2),
-                            Math.max(240, foregroundSize[1] / 2)
-                    )
-                    .dontAnimate();
-        }
-
         String requestedUrl = foregroundUrl;
         RequestBuilder<Drawable> foreground = Glide.with(holder.image)
                 .load(remoteImage(foregroundUrl, foregroundReferer))
-                .diskCacheStrategy(fullUrl.isEmpty()
-                        ? DiskCacheStrategy.AUTOMATIC
-                        : DiskCacheStrategy.ALL)
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .fitCenter()
                 .override(foregroundSize[0], foregroundSize[1])
                 .transition(DrawableTransitionOptions.with(CREATOR_CROSS_FADE))
-                .placeholder(new ColorDrawable(Color.TRANSPARENT))
+                .placeholder(foregroundPlaceholder == null
+                        ? new ColorDrawable(Color.TRANSPARENT)
+                        : foregroundPlaceholder)
                 .listener(new RequestListener<Drawable>() {
                     @Override
                     public boolean onLoadFailed(
@@ -478,8 +470,8 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                             Target<Drawable> target,
                             boolean firstResource
                     ) {
-                        if (!fullUrl.isEmpty()) {
-                            mainHandler.post(() -> onResolvedArtworkFailed(item, requestedUrl));
+                        if (artwork != null) {
+                            mainHandler.post(() -> onCreatorArtworkFailed(item, requestedUrl));
                         }
                         return false;
                     }
@@ -492,40 +484,30 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                             DataSource source,
                             boolean firstResource
                     ) {
-                        mainHandler.post(() -> onCreatorImageReady(item, resource));
+                        if (artwork != null) {
+                            mainHandler.post(() -> onCreatorImageReady(
+                                    item,
+                                    requestedUrl,
+                                    resource
+                            ));
+                        }
                         return false;
                     }
                 });
-        if (preview != null && !foregroundUrl.equals(previewUrl)) {
-            foreground = foreground.thumbnail(preview).error(preview.clone());
-        } else {
-            foreground = foreground.error(new ColorDrawable(Color.TRANSPARENT));
-        }
+        foreground = foreground.error(new ColorDrawable(Color.TRANSPARENT));
         foreground.into(holder.image);
 
-        RequestBuilder<Drawable> backdropPreview = null;
-        if (!previewUrl.isEmpty()) {
-            backdropPreview = Glide.with(holder.backdrop)
-                    .load(remoteImage(previewUrl, item.url))
-                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                    .centerCrop()
-                    .override(180, 180)
-                    .dontAnimate();
-        }
-        RequestBuilder<Drawable> backdrop = Glide.with(holder.backdrop)
+        Glide.with(holder.backdrop)
                 .load(remoteImage(foregroundUrl, foregroundReferer))
-                .diskCacheStrategy(fullUrl.isEmpty()
-                        ? DiskCacheStrategy.AUTOMATIC
-                        : DiskCacheStrategy.ALL)
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .centerCrop()
                 .override(220, 220)
                 .transition(DrawableTransitionOptions.with(CREATOR_CROSS_FADE))
-                .placeholder(new ColorDrawable(Color.TRANSPARENT))
-                .error(new ColorDrawable(Color.TRANSPARENT));
-        if (backdropPreview != null && !foregroundUrl.equals(previewUrl)) {
-            backdrop = backdrop.thumbnail(backdropPreview);
-        }
-        backdrop.into(holder.backdrop);
+                .placeholder(backdropPlaceholder == null
+                        ? new ColorDrawable(Color.TRANSPARENT)
+                        : backdropPlaceholder)
+                .error(new ColorDrawable(Color.TRANSPARENT))
+                .into(holder.backdrop);
     }
 
     private void resizeForDescription(Holder holder, boolean hasDescription) {
@@ -597,29 +579,13 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         try {
             bunkrArtworkIo.execute(() -> {
                 Artwork artwork = null;
+                boolean creatorCandidatesLoaded = false;
                 try {
                     if (creator) {
-                        BunkrRepository.CreatorArtwork preview =
-                                bunkrRepository.fetchCreatorArtworkPreview(appContext, albumUrl);
-                        Artwork previewArtwork = new Artwork(
-                                preview.imageUrl,
-                                preview.requestReferer,
-                                false,
-                                0f
-                        );
-                        mainHandler.post(() -> onBunkrArtwork(key, previewArtwork));
-                        try {
-                            BunkrRepository.CreatorArtwork resolvedImage =
-                                    bunkrRepository.resolveCreatorArtwork(appContext, preview);
-                            artwork = new Artwork(
-                                    resolvedImage.imageUrl,
-                                    resolvedImage.requestReferer,
-                                    true,
-                                    0f
-                            );
-                        } catch (Exception ignored) {
-                            // Keep the preview already posted instead of returning to initials.
-                        }
+                        List<BunkrRepository.CreatorArtwork> previews =
+                                bunkrRepository.fetchCreatorArtworkPreviews(appContext, albumUrl);
+                        mainHandler.post(() -> onCreatorArtworkCandidates(key, item, previews));
+                        creatorCandidatesLoaded = true;
                     } else {
                         String imageUrl = bunkrRepository.fetchAlbumArtwork(appContext, albumUrl);
                         artwork = new Artwork(imageUrl, albumUrl, false, 0f);
@@ -627,7 +593,11 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 } catch (Exception ignored) {
                 }
                 Artwork result = artwork;
-                mainHandler.post(() -> onBunkrArtwork(key, result));
+                if (!creator) {
+                    mainHandler.post(() -> onBunkrArtwork(key, result));
+                } else if (!creatorCandidatesLoaded) {
+                    mainHandler.post(() -> requestedArtwork.remove(key));
+                }
             });
         } catch (RuntimeException ignored) {
             requestedArtwork.remove(key);
@@ -642,6 +612,37 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         }
         resolvedArtwork.put(key, artwork);
         if (artwork.persistent) writeCreatorArtworkCache(key, artwork);
+        notifyArtworkChanged(key);
+    }
+
+    private void onCreatorArtworkCandidates(
+            String key,
+            NativeContentItem item,
+            List<BunkrRepository.CreatorArtwork> previews
+    ) {
+        if (closed || key == null || key.isEmpty()) return;
+        ArrayList<Artwork> candidates = new ArrayList<>();
+        HashSet<String> urls = new HashSet<>();
+        if (previews != null) {
+            for (BunkrRepository.CreatorArtwork preview : previews) {
+                if (preview == null) continue;
+                String url = clean(preview.imageUrl);
+                if (url.isEmpty() || !urls.add(url)) continue;
+                candidates.add(new Artwork(url, preview.requestReferer, true, 0f));
+            }
+        }
+        String originalPreview = item == null ? "" : clean(item.imageUrl);
+        if (!originalPreview.isEmpty() && urls.add(originalPreview)) {
+            candidates.add(new Artwork(originalPreview, item.url, true, 0f));
+        }
+        if (candidates.isEmpty()) {
+            requestedArtwork.remove(key);
+            return;
+        }
+
+        artworkCandidates.put(key, candidates);
+        exhaustedArtwork.remove(key);
+        resolvedArtwork.put(key, candidates.get(0));
         notifyArtworkChanged(key);
     }
 
@@ -681,7 +682,11 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         editor.apply();
     }
 
-    private void onCreatorImageReady(NativeContentItem item, Drawable resource) {
+    private void onCreatorImageReady(
+            NativeContentItem item,
+            String loadedUrl,
+            Drawable resource
+    ) {
         if (closed || item == null || resource == null || !item.isCreator()) return;
         int width = resource.getIntrinsicWidth();
         int height = resource.getIntrinsicHeight();
@@ -691,7 +696,8 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
         String key = artworkKey(item);
         Artwork artwork = resolvedArtwork.get(key);
-        if (artwork == null || artwork.imageUrl.isEmpty()) return;
+        if (artwork == null || artwork.imageUrl.isEmpty() ||
+                !artwork.imageUrl.equals(loadedUrl)) return;
         Float oldRatio = creatorAspectRatios.get(key);
         if (oldRatio != null && Math.abs(oldRatio - ratio) < 0.025f) return;
 
@@ -710,24 +716,52 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         if (oldViewType != newViewType) notifyArtworkChanged(key);
     }
 
-    private void onResolvedArtworkFailed(NativeContentItem item, String failedUrl) {
+    private void onCreatorArtworkFailed(NativeContentItem item, String failedUrl) {
         if (closed || item == null || !item.isCreator()) return;
-        String artworkKey = artworkKey(item);
-        Artwork current = resolvedArtwork.get(artworkKey);
+        String key = artworkKey(item);
+        Artwork current = resolvedArtwork.get(key);
         if (current == null || !current.imageUrl.equals(failedUrl)) return;
-        if (!failedArtworkRetry.add(artworkKey)) return;
-        resolvedArtwork.remove(artworkKey);
-        creatorAspectRatios.remove(artworkKey);
-        requestedArtwork.remove(artworkKey);
-        String key = artworkCacheKey(artworkKey);
+        removeCreatorArtworkCache(key);
+
+        List<Artwork> candidates = artworkCandidates.get(key);
+        if (candidates == null || candidates.isEmpty()) {
+            resolvedArtwork.remove(key);
+            creatorAspectRatios.remove(key);
+            requestedArtwork.remove(key);
+            int position = indexOfArtwork(key);
+            if (position >= 0) requestBunkrArtwork(item);
+            return;
+        }
+
+        int failedIndex = -1;
+        for (int index = 0; index < candidates.size(); index++) {
+            if (failedUrl.equals(candidates.get(index).imageUrl)) {
+                failedIndex = index;
+                break;
+            }
+        }
+        int nextIndex = failedIndex + 1;
+        if (failedIndex >= 0 && nextIndex < candidates.size()) {
+            resolvedArtwork.put(key, candidates.get(nextIndex));
+            creatorAspectRatios.remove(key);
+            notifyArtworkChanged(key);
+            return;
+        }
+
+        resolvedArtwork.remove(key);
+        creatorAspectRatios.remove(key);
+        exhaustedArtwork.add(key);
+        notifyArtworkChanged(key);
+    }
+
+    private void removeCreatorArtworkCache(String artworkKey) {
+        String preferenceKey = artworkCacheKey(artworkKey);
         appContext.getSharedPreferences(CREATOR_ARTWORK_PREFS, Context.MODE_PRIVATE)
                 .edit()
-                .remove(key + "_url")
-                .remove(key + "_referer")
-                .remove(key + "_ratio")
+                .remove(preferenceKey + "_url")
+                .remove(preferenceKey + "_referer")
+                .remove(preferenceKey + "_ratio")
                 .apply();
-        int position = indexOfArtwork(artworkKey);
-        if (position >= 0) requestBunkrArtwork(item);
     }
 
     private void notifyArtworkChanged(String artworkKey) {
@@ -774,6 +808,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     public void onViewRecycled(@NonNull Holder holder) {
         Glide.with(holder.image).clear(holder.image);
         Glide.with(holder.backdrop).clear(holder.backdrop);
+        holder.boundArtworkKey = "";
         holder.card.setOnClickListener(null);
         super.onViewRecycled(holder);
     }
@@ -925,6 +960,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         final TextView rank;
         final TextView arrow;
         final int viewType;
+        String boundArtworkKey = "";
 
         Holder(
                 MaterialCardView card,
