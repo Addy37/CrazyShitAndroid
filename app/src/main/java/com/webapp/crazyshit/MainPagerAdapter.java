@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -240,7 +241,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private Page buildBrowsePage(int index, PageKind kind) {
         Page page = createPageShell(index, kind, "", "");
-        page.browseAdapter = new NativeCategoryAdapter(item -> {
+        page.browseAdapter = new NativeCategoryAdapter(activity, item -> {
             if (item == null) return;
             if (item.isCreator()) {
                 String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
@@ -323,20 +324,56 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         selectorParams.gravity = Gravity.TOP;
         page.root.addView(selector, selectorParams);
 
-        page.seriesCaption = new TextView(activity);
-        page.seriesCaption.setText(
-                PopularCreatorRepository.SHELF_TITLE + "\n" +
-                        PopularCreatorRepository.SHELF_HINT
-        );
-        page.seriesCaption.setTextColor(Color.rgb(221, 221, 227));
-        page.seriesCaption.setTextSize(13);
-        page.seriesCaption.setGravity(Gravity.CENTER_VERTICAL);
-        page.seriesCaption.setPadding(dp(17), dp(3), dp(17), dp(5));
-        page.seriesCaption.setBackgroundColor(Color.rgb(17, 17, 20));
-        FrameLayout.LayoutParams captionParams = new FrameLayout.LayoutParams(-1, dp(52));
+        LinearLayout caption = new LinearLayout(activity);
+        caption.setOrientation(LinearLayout.HORIZONTAL);
+        caption.setGravity(Gravity.CENTER_VERTICAL);
+        caption.setPadding(dp(17), dp(7), dp(17), dp(9));
+        caption.setBackgroundColor(Color.rgb(17, 17, 20));
+
+        LinearLayout captionCopy = new LinearLayout(activity);
+        captionCopy.setOrientation(LinearLayout.VERTICAL);
+        captionCopy.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView captionTitle = new TextView(activity);
+        captionTitle.setText(PopularCreatorRepository.SHELF_TITLE);
+        captionTitle.setTextColor(Color.WHITE);
+        captionTitle.setTextSize(17);
+        captionTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        captionTitle.setMaxLines(1);
+        captionTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        captionCopy.addView(captionTitle, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView captionHint = new TextView(activity);
+        captionHint.setText(PopularCreatorRepository.SHELF_HINT);
+        captionHint.setTextColor(Color.rgb(164, 164, 174));
+        captionHint.setTextSize(11.5f);
+        captionHint.setMaxLines(1);
+        captionHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, -2);
+        hintParams.topMargin = dp(1);
+        captionCopy.addView(captionHint, hintParams);
+        caption.addView(captionCopy, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        TextView countBadge = new TextView(activity);
+        countBadge.setText("50");
+        countBadge.setTextColor(Color.BLACK);
+        countBadge.setTextSize(13);
+        countBadge.setTypeface(null, android.graphics.Typeface.BOLD);
+        countBadge.setGravity(Gravity.CENTER);
+        countBadge.setContentDescription("50 creators");
+        GradientDrawable badgeBackground = new GradientDrawable();
+        badgeBackground.setColor(UiPalette.PRIMARY);
+        badgeBackground.setCornerRadius(dp(17));
+        countBadge.setBackground(badgeBackground);
+        LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(dp(42), dp(30));
+        badgeParams.setMarginStart(dp(12));
+        caption.addView(countBadge, badgeParams);
+
+        page.seriesCaption = caption;
+        FrameLayout.LayoutParams captionParams = new FrameLayout.LayoutParams(-1, dp(64));
         captionParams.gravity = Gravity.TOP;
         captionParams.topMargin = dp(56);
-        page.root.addView(page.seriesCaption, captionParams);
+        page.root.addView(caption, captionParams);
         updateSeriesSourceButtons(page);
     }
 
@@ -380,8 +417,16 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         }
         if (page.refresh != null) {
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-            params.topMargin = dp(showPopularCaption ? 108 : 56);
+            params.topMargin = dp(showPopularCaption ? 120 : 56);
             page.refresh.setLayoutParams(params);
+        }
+        if (page.recycler != null) {
+            page.recycler.setPadding(
+                    showPopularCaption ? dp(4) : 0,
+                    showPopularCaption ? dp(3) : dp(5),
+                    showPopularCaption ? dp(4) : 0,
+                    showPopularCaption ? dp(26) : dp(18)
+            );
         }
         if (page.browseAdapter != null) {
             page.browseAdapter.setWideCreatorCards(showPopularCaption);
@@ -391,13 +436,34 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private void applyBrowseLayout(Page page, boolean wideCards) {
         if (page == null || page.recycler == null) return;
-        RecyclerView.LayoutManager current = page.recycler.getLayoutManager();
-        if (wideCards && current instanceof LinearLayoutManager &&
-                !(current instanceof GridLayoutManager)) return;
-        if (!wideCards && current instanceof GridLayoutManager) return;
-        page.recycler.setLayoutManager(wideCards
-                ? new LinearLayoutManager(activity)
-                : new GridLayoutManager(activity, 2));
+        if (!wideCards) {
+            RecyclerView.LayoutManager current = page.recycler.getLayoutManager();
+            if (current instanceof GridLayoutManager &&
+                    ((GridLayoutManager) current).getSpanCount() == 2) return;
+            page.recycler.setLayoutManager(new GridLayoutManager(activity, 2));
+            return;
+        }
+
+        int columns = creatorGridColumnCount();
+        GridLayoutManager editorialGrid = new GridLayoutManager(activity, columns);
+        editorialGrid.setInitialPrefetchItemCount(Math.max(8, columns * 3));
+        GridLayoutManager.SpanSizeLookup spanLookup = new GridLayoutManager.SpanSizeLookup() {
+            @Override
+            public int getSpanSize(int adapterPosition) {
+                return page.browseAdapter.creatorSpanSize(adapterPosition, columns);
+            }
+        };
+        spanLookup.setSpanIndexCacheEnabled(true);
+        editorialGrid.setSpanSizeLookup(spanLookup);
+        editorialGrid.setUsingSpansToEstimateScrollbarDimensions(true);
+        page.recycler.setLayoutManager(editorialGrid);
+    }
+
+    private int creatorGridColumnCount() {
+        Configuration config = activity.getResources().getConfiguration();
+        if (config.screenWidthDp >= 720) return 4;
+        return config.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+                config.screenWidthDp >= 600 ? 4 : 2;
     }
 
     private void styleSeriesSourceButton(TextView button, boolean selected) {
@@ -636,7 +702,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         TextView crazyShitSource;
         TextView efuktSource;
         TextView bunkrSource;
-        TextView seriesCaption;
+        View seriesCaption;
         int viewMode = NativeFeedAdapter.VIEW_LIST;
         int seriesSource = SERIES_SOURCE_CRAZYSHIT;
         int currentPage;

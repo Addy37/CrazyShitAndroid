@@ -240,7 +240,7 @@ public final class PopularCreatorRepository {
                     match.creator.name,
                     album.url,
                     album.imageUrl,
-                    "",
+                    String.valueOf(match.rank + 1),
                     "",
                     "",
                     "",
@@ -352,7 +352,7 @@ public final class PopularCreatorRepository {
                         name,
                         url,
                         value.optString("image", ""),
-                        "",
+                        value.optString("rank", ""),
                         "",
                         "",
                         "",
@@ -374,6 +374,7 @@ public final class PopularCreatorRepository {
                 value.put("query", item.searchQuery);
                 value.put("url", item.url);
                 value.put("image", item.imageUrl);
+                value.put("rank", item.views);
                 values.put(value);
             }
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
