@@ -89,8 +89,6 @@ public final class ChaosFeedView extends FrameLayout {
     private final Activity activity;
     private final Host host;
     private final CrazyShitRepository repository = new CrazyShitRepository();
-    private final EfuktRepository efuktRepository = new EfuktRepository();
-    private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final ExecutorService io = Executors.newFixedThreadPool(4);
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
     private final Set<String> sessionUrls = new HashSet<>();
@@ -407,13 +405,7 @@ public final class ChaosFeedView extends FrameLayout {
     private CrazyShitRepository.StreamInfo resolvePlayable(NativeContentItem item)
             throws Exception {
         if (item == null || item.url == null || item.url.isEmpty()) return null;
-        if (BunkrRepository.isBunkrUrl(item.url)) {
-            return bunkrRepository.resolvePlayable(activity, item.url);
-        }
-        if (EfuktRepository.isEfuktUrl(item.url)) {
-            return efuktRepository.resolvePlayable(activity, item.url);
-        }
-        return repository.resolvePlayable(activity, item.url);
+        return PlayableSourceRouter.resolve(activity, item.url);
     }
 
     private boolean shouldRetryResolution(NativeContentItem item, int position) {
@@ -817,7 +809,8 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean supportsComments(NativeContentItem item) {
         return item != null
                 && !EfuktRepository.isEfuktUrl(item.url)
-                && !BunkrRepository.isBunkrUrl(item.url);
+                && !BunkrRepository.isBunkrUrl(item.url)
+                && !FapelloRepository.isFapelloUrl(item.url);
     }
 
     private void haptic(View view) {

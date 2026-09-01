@@ -98,7 +98,7 @@ public final class BunkrGalleryActivity extends Activity {
         }
         initialUrl = value(getIntent().getStringExtra(EXTRA_INITIAL_URL));
         initialPosition = Math.max(0, getIntent().getIntExtra(EXTRA_INITIAL_POSITION, 0));
-        if (albumTitle.isEmpty()) albumTitle = "Bunkr album";
+        if (albumTitle.isEmpty()) albumTitle = "Fapzone gallery";
 
         BunkrGallerySessionStore.Snapshot snapshot =
                 BunkrGallerySessionStore.snapshot(sessionId);
@@ -399,7 +399,7 @@ public final class BunkrGalleryActivity extends Activity {
                 return;
             }
             try {
-                CrazyShitRepository.StreamInfo resolved = repository.resolvePlayable(
+                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(
                         this,
                         item.url
                 );
@@ -430,7 +430,7 @@ public final class BunkrGalleryActivity extends Activity {
         releasePlayer();
         String cached = adapter.resolvedUrl(position);
         if (!cached.isEmpty()) {
-            startPlayer(position, item, cached, "https://get.bunkrr.su/");
+            startPlayer(position, item, cached, item.url);
             return;
         }
 
@@ -438,7 +438,7 @@ public final class BunkrGalleryActivity extends Activity {
         int requestGeneration = generation;
         mediaIo.execute(() -> {
             try {
-                CrazyShitRepository.StreamInfo resolved = repository.resolvePlayable(
+                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(
                         this,
                         item.url
                 );

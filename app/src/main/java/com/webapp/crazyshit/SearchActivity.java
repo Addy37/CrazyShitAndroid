@@ -160,8 +160,8 @@ public final class SearchActivity extends Activity {
         status.setGravity(Gravity.CENTER);
         status.setPadding(dp(26), dp(26), dp(26), dp(26));
         status.setText(bunkrOnly
-                ? "Search Bunkr albums\nMatching pictures and videos open together in one gallery"
-                : "Search CrazyShit, EFukt, Bunkr, Collections, Categories and your Library");
+                ? "Search Fapzone\nMatching Bunkr and Fapello media opens in one gallery"
+                : "Search CrazyShit, EFukt, Fapzone, Collections, Categories and your Library");
         content.addView(status, new FrameLayout.LayoutParams(-1, -1));
 
         progress = new ProgressBar(this);
@@ -195,7 +195,7 @@ public final class SearchActivity extends Activity {
         labels.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView title = new TextView(this);
-        title.setText(bunkrOnly ? "Search Bunkr" : "Search");
+        title.setText(bunkrOnly ? "Search Fapzone" : "Search");
         title.setTextColor(Color.WHITE);
         title.setTextSize(20f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -217,7 +217,7 @@ public final class SearchActivity extends Activity {
         row.setPadding(dp(12), dp(8), dp(12), dp(6));
 
         input = new EditText(this);
-        input.setHint(bunkrOnly ? "Search creators or albums" : "Search CrazyShit, EFukt and Bunkr");
+        input.setHint(bunkrOnly ? "Search creators or albums" : "Search CrazyShit, EFukt and Fapzone");
         input.setHintTextColor(Color.rgb(145, 145, 155));
         input.setTextColor(Color.WHITE);
         input.setTextSize(16f);
@@ -263,7 +263,7 @@ public final class SearchActivity extends Activity {
         addFilter(row, "All", Filter.ALL);
         addFilter(row, "Videos", Filter.VIDEOS);
         addFilter(row, "EFukt", Filter.EFUKT);
-        addFilter(row, "Bunkr", Filter.BUNKR);
+        addFilter(row, "Fapzone", Filter.BUNKR);
         addFilter(row, "Collections", Filter.COLLECTIONS);
         addFilter(row, "Categories", Filter.CATEGORIES);
         addFilter(row, "Library", Filter.LIBRARY);
@@ -486,7 +486,7 @@ public final class SearchActivity extends Activity {
         if (filter == Filter.ALL || filter == Filter.VIDEOS) appendSection(output, "Videos  •  CrazyShit + EFukt", videos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Videos", efuktVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.ALL || filter == Filter.BUNKR || filter == Filter.COLLECTIONS) {
-            appendSection(output, "Bunkr Albums", bunkrAlbums, GlobalSearchAdapter.SOURCE_REMOTE, 30);
+            appendSection(output, "Fapzone Albums", bunkrAlbums, GlobalSearchAdapter.SOURCE_REMOTE, 30);
         }
         if (filter == Filter.ALL || filter == Filter.COLLECTIONS) appendSection(output, "Series", series, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Series", efuktSeries, GlobalSearchAdapter.SOURCE_REMOTE, 20);

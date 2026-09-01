@@ -10,6 +10,9 @@ final class PlayableSourceRouter {
     }
 
     static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl) throws IOException {
+        if (FapelloRepository.isFapelloUrl(pageUrl)) {
+            return new FapelloRepository().resolvePlayable(context, pageUrl);
+        }
         if (BunkrRepository.isBunkrUrl(pageUrl)) {
             return new BunkrRepository().resolvePlayable(context, pageUrl);
         }

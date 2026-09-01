@@ -28,6 +28,7 @@ final class ChaosSourceMixer {
     private static final int EFUKT_SERIES_PER_BATCH = 2;
     private static final int BUNKR_ITEMS_PER_BATCH = 6;
     private static final int BUNKR_ALBUMS_PER_BATCH = 2;
+    private static final int FAPELLO_ITEMS_PER_BATCH = 4;
     private static final int STARTER_ITEMS = 1;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
@@ -37,6 +38,7 @@ final class ChaosSourceMixer {
     private final ShitShowTapSource shitShow = new ShitShowTapSource();
     private final EfuktRepository efukt = new EfuktRepository();
     private final BunkrRepository bunkr = new BunkrRepository();
+    private final FapelloRepository fapello = new FapelloRepository();
     private final ArrayList<NativeContentItem> efuktSeries = new ArrayList<>();
     private final ArrayDeque<NativeContentItem> efuktSeriesDeck = new ArrayDeque<>();
     private final ArrayList<NativeContentItem> bunkrAlbums = new ArrayList<>();
@@ -70,7 +72,7 @@ final class ChaosSourceMixer {
             if (!starter.isEmpty()) return starter;
         }
 
-        // Keep all six CrazyShit source slots broad, add EFukt clips and a smaller Bunkr sample,
+        // Keep all six CrazyShit source slots broad, add EFukt clips and a smaller Fapzone sample,
         // then weave in Shit Show stories. Every source degrades cleanly when unavailable.
         ensureCatalog(context);
 
@@ -96,7 +98,10 @@ final class ChaosSourceMixer {
         List<NativeContentItem> regularAndEfukt = weaveEfukt(regularItems, efuktItems);
         ArrayList<NativeContentItem> bunkrItems = new ArrayList<>(loadBunkrBatch(context));
         Collections.shuffle(bunkrItems, random);
-        List<NativeContentItem> mixedExternal = weaveEfukt(regularAndEfukt, bunkrItems);
+        ArrayList<NativeContentItem> fapelloItems = new ArrayList<>(loadFapelloBatch(context));
+        Collections.shuffle(fapelloItems, random);
+        List<NativeContentItem> fapzoneItems = weaveEfukt(bunkrItems, fapelloItems);
+        List<NativeContentItem> mixedExternal = weaveEfukt(regularAndEfukt, fapzoneItems);
         return weaveShitShow(mixedExternal, shitShowItems);
     }
 
@@ -225,6 +230,20 @@ final class ChaosSourceMixer {
         Collections.shuffle(candidates, random);
         int take = Math.min(BUNKR_ITEMS_PER_BATCH, candidates.size());
         return new ArrayList<>(candidates.subList(0, take));
+    }
+
+    private List<NativeContentItem> loadFapelloBatch(Context context) {
+        try {
+            ArrayList<NativeContentItem> candidates = new ArrayList<>(
+                    fapello.fetchPopularVideos(context, 1 + random.nextInt(MAX_SOURCE_PAGE))
+            );
+            candidates.removeIf(item -> item == null || !item.isVideo());
+            Collections.shuffle(candidates, random);
+            int take = Math.min(FAPELLO_ITEMS_PER_BATCH, candidates.size());
+            return new ArrayList<>(candidates.subList(0, take));
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
     }
 
     private void ensureBunkrCatalog(Context context) {

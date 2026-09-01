@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
 /** Builds the monthly creator shelf from real Balbums search matches. */
 public final class PopularCreatorRepository {
     public static final String SHELF_TITLE = "Top 50 creators this month";
-    public static final String SHELF_HINT = "Tap a creator for one combined gallery";
+    public static final String SHELF_HINT = "Bunkr + Fapello in one gallery";
 
     private static final String PREFS = "popular_creator_feed_v3";
     private static final String LEGACY_PREFS = "popular_creator_feed_v2";

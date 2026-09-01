@@ -310,7 +310,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         page.crazyShitSource = seriesSourceButton("CrazyShit");
         page.efuktSource = seriesSourceButton("EFukt");
-        page.bunkrSource = seriesSourceButton("Bunkr");
+        page.bunkrSource = seriesSourceButton("Fapzone");
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(0, dp(40), 1f);
         buttonParams.setMarginEnd(dp(4));
         selector.addView(page.crazyShitSource, buttonParams);

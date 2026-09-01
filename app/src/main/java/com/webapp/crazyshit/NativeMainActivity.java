@@ -418,7 +418,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             if (position == MainPagerAdapter.PAGE_CHAOS) {
                 headerSubtitle.setText("Random video feed  •  Swipe up/down");
             } else if (position == MainPagerAdapter.PAGE_SERIES) {
-                headerSubtitle.setText("CrazyShit  •  EFukt  •  Bunkr");
+                headerSubtitle.setText("CrazyShit  •  EFukt  •  Fapzone");
             } else if (position == MainPagerAdapter.PAGE_CATEGORIES) {
                 headerSubtitle.setText("CrazyShit  •  Browse categories");
             } else {
