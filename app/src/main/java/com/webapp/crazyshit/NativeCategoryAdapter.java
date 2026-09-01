@@ -441,7 +441,9 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         Artwork artwork = resolvedArtwork.get(key);
         String itemPreview = exhaustedArtwork.contains(key) ? "" : clean(item.imageUrl);
         String foregroundUrl = artwork == null ? itemPreview : clean(artwork.imageUrl);
-        String foregroundReferer = artwork == null ? item.url : artwork.referer;
+        String foregroundReferer = artwork == null
+                ? creatorPreviewReferer(item)
+                : artwork.referer;
 
         if (foregroundUrl.isEmpty()) {
             Glide.with(holder.image).clear(holder.image);
@@ -623,6 +625,12 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         if (closed || key == null || key.isEmpty()) return;
         ArrayList<Artwork> candidates = new ArrayList<>();
         HashSet<String> urls = new HashSet<>();
+        String originalPreview = item == null ? "" : clean(item.imageUrl);
+        String originalReferer = creatorPreviewReferer(item);
+        boolean preferOriginal = FapelloRepository.isFapelloUrl(originalReferer);
+        if (preferOriginal && !originalPreview.isEmpty() && urls.add(originalPreview)) {
+            candidates.add(new Artwork(originalPreview, originalReferer, true, 0f));
+        }
         if (previews != null) {
             for (BunkrRepository.CreatorArtwork preview : previews) {
                 if (preview == null) continue;
@@ -631,9 +639,8 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 candidates.add(new Artwork(url, preview.requestReferer, true, 0f));
             }
         }
-        String originalPreview = item == null ? "" : clean(item.imageUrl);
         if (!originalPreview.isEmpty() && urls.add(originalPreview)) {
-            candidates.add(new Artwork(originalPreview, item.url, true, 0f));
+            candidates.add(new Artwork(originalPreview, originalReferer, true, 0f));
         }
         if (candidates.isEmpty()) {
             requestedArtwork.remove(key);
@@ -789,6 +796,14 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     private String artworkKey(NativeContentItem item) {
         if (item == null) return "";
         return clean(item.url) + "\n" + clean(item.searchQuery);
+    }
+
+    private String creatorPreviewReferer(NativeContentItem item) {
+        if (item == null) return "";
+        String candidate = clean(item.uploader);
+        return candidate.startsWith("http://") || candidate.startsWith("https://")
+                ? candidate
+                : clean(item.url);
     }
 
     private String artworkCacheKey(String value) {

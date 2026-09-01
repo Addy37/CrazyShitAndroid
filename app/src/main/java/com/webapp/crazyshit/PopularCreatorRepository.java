@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Builds the monthly creator shelf from real Balbums search matches. */
+/** Builds the monthly creator shelf from matching Bunkr albums with Fapello fallbacks. */
 public final class PopularCreatorRepository {
     public static final String SHELF_TITLE = "Top 50 creators this month";
     public static final String SHELF_HINT = "Bunkr + Fapello in one gallery";
@@ -43,7 +43,7 @@ public final class PopularCreatorRepository {
     }
 
     // This is a curated shelf, not an official OnlyFans ranking. Extra names provide fallbacks
-    // when Balbums has no current album matching one of the first fifty creators.
+    // when Fapzone has no current media matching one of the first fifty creators.
     private static final Creator[] CREATORS = {
             new Creator("Sophie Rain", "sophieraiin"),
             new Creator("Bonnie Blue"),
@@ -148,6 +148,7 @@ public final class PopularCreatorRepository {
     };
 
     private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final FapelloRepository fapelloRepository = new FapelloRepository();
 
     public List<NativeContentItem> fetch(Context context) throws IOException {
         return fetch(context, null);
@@ -289,10 +290,67 @@ public final class PopularCreatorRepository {
         try {
             List<NativeContentItem> albums = bunkrRepository.searchAlbums(context, creator.name, 1);
             NativeContentItem album = chooseAlbum(creator, albums);
-            return album == null ? null : new Match(rank, creator, album);
+            if (album != null) return new Match(rank, creator, album);
+        } catch (Exception ignored) {
+        }
+        try {
+            FapelloRepository.Model model = chooseModel(
+                    creator,
+                    fapelloRepository.searchModels(context, creator.name, 4)
+            );
+            if (model == null) return null;
+            String preview = model.imageUrl;
+            if (preview == null || preview.trim().isEmpty()) {
+                preview = chooseFapelloPreview(
+                        fapelloRepository.fetchModelMedia(context, model, 1)
+                );
+            }
+            NativeContentItem source = new NativeContentItem(
+                    NativeContentItem.KIND_SERIES,
+                    model.name,
+                    model.url,
+                    preview,
+                    "Fapello",
+                    "",
+                    "",
+                    "Fapello"
+            );
+            return new Match(rank, creator, source);
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private FapelloRepository.Model chooseModel(
+            Creator creator,
+            List<FapelloRepository.Model> models
+    ) {
+        if (models == null) return null;
+        FapelloRepository.Model best = null;
+        int bestScore = -1;
+        for (FapelloRepository.Model model : models) {
+            if (model == null || !FapelloRepository.isModelUrl(model.url)) continue;
+            int score = creator.matchScore(compact(model.name));
+            if (score > bestScore) {
+                best = model;
+                bestScore = score;
+            }
+        }
+        return bestScore < 0 ? null : best;
+    }
+
+    private String chooseFapelloPreview(List<NativeContentItem> media) {
+        if (media == null) return "";
+        for (NativeContentItem item : media) {
+            if (item != null && item.isVideo() && item.imageUrl != null &&
+                    !item.imageUrl.trim().isEmpty()) return item.imageUrl.trim();
+        }
+        for (NativeContentItem item : media) {
+            if (item != null && item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
+                return item.imageUrl.trim();
+            }
+        }
+        return "";
     }
 
     private NativeContentItem chooseAlbum(Creator creator, List<NativeContentItem> albums) {
@@ -346,7 +404,9 @@ public final class PopularCreatorRepository {
                 String name = value.optString("name", "").trim();
                 String query = value.optString("query", name).trim();
                 String url = value.optString("url", "").trim();
-                if (name.isEmpty() || query.isEmpty() || !BunkrRepository.isAlbumUrl(url)) continue;
+                if (name.isEmpty() || query.isEmpty() ||
+                        (!BunkrRepository.isAlbumUrl(url) &&
+                                !FapelloRepository.isModelUrl(url))) continue;
                 result.add(new NativeContentItem(
                         NativeContentItem.KIND_CREATOR,
                         name,

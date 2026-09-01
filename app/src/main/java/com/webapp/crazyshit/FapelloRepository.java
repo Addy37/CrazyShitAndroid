@@ -25,6 +25,9 @@ import java.util.regex.Pattern;
 /** Fapello model search, paged mixed-media feeds and original media resolution. */
 final class FapelloRepository {
     static final String BASE = "https://fapello.com/";
+    static final String LIST_NEW = "new";
+    static final String LIST_HOT = "hot";
+    static final String LIST_POPULAR = "popular";
 
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
@@ -82,6 +85,26 @@ final class FapelloRepository {
             } else if (searchError != null) {
                 throw searchError;
             }
+        }
+        return new ArrayList<>(models.values());
+    }
+
+    List<Model> fetchModelListing(Context context, String listing, int page) throws IOException {
+        String safeListing = normalizeListing(listing);
+        int safePage = Math.max(1, page);
+        String listingRoot = LIST_NEW.equals(safeListing) ? BASE : BASE + safeListing + "/";
+        String endpoint = listingRoot + (safePage > 1 ? "page-" + safePage + "/" : "");
+        Document document = fetchDocument(context, endpoint, listingRoot);
+        LinkedHashMap<String, Model> models = new LinkedHashMap<>();
+
+        for (Element link : document.select("a[href]")) {
+            String text = clean(link.text());
+            String prefix = "See all content of ";
+            if (!text.regionMatches(true, 0, prefix, 0, prefix.length())) continue;
+            String name = clean(text.substring(prefix.length()));
+            String url = normalizeUrl(link.attr("href"), endpoint);
+            if (name.isEmpty() || !isModelUrl(url)) continue;
+            models.putIfAbsent(url, new Model(name, url, listingImage(link, endpoint)));
         }
         return new ArrayList<>(models.values());
     }
@@ -222,6 +245,7 @@ final class FapelloRepository {
             if (parts.length != 1 || parts[0].isEmpty()) return false;
             String lower = parts[0].toLowerCase(Locale.US);
             return !lower.equals("search") && !lower.equals("search_v2") &&
+                    !lower.equals("new") && !lower.equals("hot") &&
                     !lower.equals("videos") && !lower.equals("trending") &&
                     !lower.equals("popular") && !lower.startsWith("top-") &&
                     !lower.equals("ajax") && !lower.equals("video");
@@ -314,6 +338,55 @@ final class FapelloRepository {
         return "";
     }
 
+    private String listingImage(Element creatorLink, String baseUrl) {
+        Element container = creatorLink == null ? null : creatorLink.parent();
+        for (int depth = 0; container != null && depth < 6; depth++) {
+            if (listingCreatorLinkCount(container) > 1) break;
+            String best = bestListingImage(container, baseUrl);
+            if (!best.isEmpty()) return best;
+            container = container.parent();
+        }
+        return "";
+    }
+
+    private int listingCreatorLinkCount(Element root) {
+        int count = 0;
+        String prefix = "See all content of ";
+        for (Element link : root.select("a[href]")) {
+            String text = clean(link.text());
+            if (text.regionMatches(true, 0, prefix, 0, prefix.length())) count++;
+            if (count > 1) break;
+        }
+        return count;
+    }
+
+    private String bestListingImage(Element root, String baseUrl) {
+        String best = "";
+        int bestScore = Integer.MIN_VALUE;
+        for (Element image : root.select("img")) {
+            String value = imageAttribute(image, baseUrl);
+            if (value.isEmpty()) continue;
+            String lower = value.toLowerCase(Locale.US);
+            if (lower.contains("/data/avatars/default/") || lower.contains("load.svg") ||
+                    lower.contains("/banners/") || lower.contains("logo")) continue;
+            int score = 10;
+            if (lower.contains("/content/")) score += 80;
+            if (lower.contains("_300px")) score += 35;
+            if (lower.contains("thumb") || lower.contains("poster")) score += 20;
+            String width = image.attr("width");
+            String height = image.attr("height");
+            try {
+                score += Math.min(40, (Integer.parseInt(width) + Integer.parseInt(height)) / 40);
+            } catch (Exception ignored) {
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                best = value;
+            }
+        }
+        return best;
+    }
+
     private String imageAttribute(Element image, String baseUrl) {
         String[] attrs = {"src", "data-src", "data-original", "data-lazy-src"};
         for (String attr : attrs) {
@@ -368,6 +441,13 @@ final class FapelloRepository {
                 .replaceAll("[^a-z0-9._~_-]+", "-")
                 .replaceAll("^-+|-+$", "");
         return ascii;
+    }
+
+    private String normalizeListing(String value) throws IOException {
+        String listing = value == null ? "" : value.trim().toLowerCase(Locale.US);
+        if (LIST_NEW.equals(listing) || LIST_HOT.equals(listing) ||
+                LIST_POPULAR.equals(listing)) return listing;
+        throw new IOException("Unknown Fapello creator listing");
     }
 
     private String humanizeSlug(String slug) {
