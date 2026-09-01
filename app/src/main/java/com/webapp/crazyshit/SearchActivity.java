@@ -309,7 +309,6 @@ public final class SearchActivity extends Activity {
         }
         if (bunkrOnly) {
             startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, query, query));
-            finish();
             return;
         }
         activeQuery = query;

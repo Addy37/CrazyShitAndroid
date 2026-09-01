@@ -15,6 +15,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -22,6 +23,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -259,6 +261,26 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         rankParams.setMargins(dp(parent, 11), dp(parent, 11), 0, 0);
         frame.addView(rank, rankParams);
 
+        TextView favoriteStar = new TextView(parent.getContext());
+        favoriteStar.setText("★");
+        favoriteStar.setTextColor(UiPalette.PRIMARY);
+        favoriteStar.setTextSize(viewType == VIEW_TYPE_CREATOR_HERO ? 20f : 18f);
+        favoriteStar.setGravity(Gravity.CENTER);
+        favoriteStar.setContentDescription("Favorite creator");
+        favoriteStar.setVisibility(View.GONE);
+        GradientDrawable favoriteBackground = new GradientDrawable();
+        favoriteBackground.setShape(GradientDrawable.OVAL);
+        favoriteBackground.setColor(Color.argb(210, 12, 12, 15));
+        favoriteBackground.setStroke(dp(parent, 1), Color.argb(190, 245, 232, 0));
+        favoriteStar.setBackground(favoriteBackground);
+        FrameLayout.LayoutParams favoriteParams = new FrameLayout.LayoutParams(
+                dp(parent, 36),
+                dp(parent, 36),
+                Gravity.TOP | Gravity.END
+        );
+        favoriteParams.setMargins(0, dp(parent, 10), dp(parent, 10), 0);
+        frame.addView(favoriteStar, favoriteParams);
+
         FrameLayout copy = new FrameLayout(parent.getContext());
         copy.setPadding(
                 dp(parent, creatorCard ? 14 : 11),
@@ -329,6 +351,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 title,
                 description,
                 rank,
+                favoriteStar,
                 arrow,
                 viewType
         );
@@ -338,7 +361,10 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
         boolean creatorCard = holder.creatorCard();
+        boolean creatorFavorite = creatorCard &&
+                CreatorFavoriteStore.contains(holder.card.getContext(), item);
         holder.title.setText(item.title);
+        holder.favoriteStar.setVisibility(creatorFavorite ? View.VISIBLE : View.GONE);
 
         if (creatorCard) {
             int rank = creatorRank(item, position);
@@ -349,7 +375,10 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
             holder.frame.setBackground(creatorPlaceholder(item.title));
             styleCreatorCard(holder, rank);
             holder.card.setContentDescription(
-                    "Rank " + rank + ", " + item.title + ". Open pictures and videos."
+                    "Rank " + rank + ", " + item.title + ". Open pictures and videos. " +
+                            (creatorFavorite
+                                    ? "Long press to remove from favorites."
+                                    : "Long press to add to favorites.")
             );
         } else {
             boolean hasDescription = item.description != null && !item.description.trim().isEmpty();
@@ -362,6 +391,33 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
         resizeForDescription(holder, !creatorCard && holder.description.getVisibility() == View.VISIBLE);
         holder.card.setOnClickListener(v -> listener.onOpen(item));
+        if (creatorCard) {
+            holder.card.setOnLongClickListener(v -> {
+                int currentPosition = holder.getBindingAdapterPosition();
+                if (currentPosition == RecyclerView.NO_POSITION) return false;
+                NativeContentItem current = items.get(currentPosition);
+                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                boolean favorite = CreatorFavoriteStore.toggle(v.getContext(), current);
+                holder.favoriteStar.setVisibility(favorite ? View.VISIBLE : View.GONE);
+                holder.card.setContentDescription(
+                        "Rank " + creatorRank(current, currentPosition) + ", " +
+                                current.title + ". Open pictures and videos. " +
+                                (favorite
+                                        ? "Long press to remove from favorites."
+                                        : "Long press to add to favorites.")
+                );
+                Toast.makeText(
+                        v.getContext(),
+                        favorite
+                                ? current.title + " added to favorites."
+                                : current.title + " removed from favorites.",
+                        Toast.LENGTH_SHORT
+                ).show();
+                return true;
+            });
+        } else {
+            holder.card.setOnLongClickListener(null);
+        }
         restoreCreatorArtwork(item);
         loadImage(holder, item);
         requestBunkrArtwork(item);
@@ -824,7 +880,9 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         Glide.with(holder.image).clear(holder.image);
         Glide.with(holder.backdrop).clear(holder.backdrop);
         holder.boundArtworkKey = "";
+        holder.favoriteStar.setVisibility(View.GONE);
         holder.card.setOnClickListener(null);
+        holder.card.setOnLongClickListener(null);
         super.onViewRecycled(holder);
     }
 
@@ -973,6 +1031,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         final TextView title;
         final TextView description;
         final TextView rank;
+        final TextView favoriteStar;
         final TextView arrow;
         final int viewType;
         String boundArtworkKey = "";
@@ -988,6 +1047,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 TextView title,
                 TextView description,
                 TextView rank,
+                TextView favoriteStar,
                 TextView arrow,
                 int viewType
         ) {
@@ -1002,6 +1062,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
             this.title = title;
             this.description = description;
             this.rank = rank;
+            this.favoriteStar = favoriteStar;
             this.arrow = arrow;
             this.viewType = viewType;
         }
