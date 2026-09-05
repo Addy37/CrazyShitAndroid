@@ -58,7 +58,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long MIN_FEED_PROGRESS_MS = 5_000L;
     private static final int SECTION_ACCENT = UiPalette.PRIMARY;
-    private static final int APP_BG = Color.rgb(13, 13, 15);
+    private static final int APP_BG = Color.BLACK;
 
     public interface Listener {
         void onOpen(NativeContentItem item);
@@ -296,12 +296,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private Holder createCardsHolder(ViewGroup parent) {
-        MaterialCardView card = baseCard(parent, 12, 6, 18, -1);
+        MaterialCardView card = baseCard(parent, 12, 8, 16, -1);
         LinearLayout column = new LinearLayout(parent.getContext());
         column.setOrientation(LinearLayout.VERTICAL);
         card.addView(column, new MaterialCardView.LayoutParams(-1, -2));
 
-        MediaViews media = addMedia(parent, column, isLandscape(parent) ? 176 : 194, -1);
+        MediaViews media = addMedia(parent, column, Math.min(280, Math.round((parent.getResources().getConfiguration().screenWidthDp - 24) * 9f / 16f)), -1);
         CopyViews copy = addCopy(parent, column, 16, 12, 14, 12, false);
         return new Holder(card, media, copy);
     }
@@ -386,11 +386,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             int fixedHeightDp
     ) {
         MaterialCardView card = new MaterialCardView(parent.getContext());
-        card.setCardBackgroundColor(Color.rgb(25, 25, 28));
+        card.setCardBackgroundColor(Color.BLACK);
         card.setRadius(dp(parent, radius));
-        card.setCardElevation(dp(parent, 1));
+        card.setCardElevation(0f);
         card.setStrokeColor(Color.rgb(50, 50, 57));
-        card.setStrokeWidth(dp(parent, 1));
+        card.setStrokeWidth(0);
         RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
                 -1,
                 fixedHeightDp > 0 ? dp(parent, fixedHeightDp) : -2
@@ -411,6 +411,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 widthDp < 0 ? -1 : dp(parent, widthDp),
                 dp(parent, heightDp)
         );
+        mediaFrame.setBackground(BrowseUi.rounded(parent.getContext(), BrowseUi.SURFACE, 16));
+        mediaFrame.setClipToOutline(true);
         host.addView(mediaFrame, mediaParams);
 
         ImageView image = new ImageView(parent.getContext());
@@ -424,10 +426,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         boolean dense = viewMode == VIEW_GRID || viewMode == VIEW_POSTERS;
         play.setTextSize(dense ? 19 : 23);
         play.setGravity(Gravity.CENTER);
-        play.setBackground(new ColorDrawable(Color.argb(130, 0, 0, 0)));
+        play.setBackground(rounded(Color.argb(190, 0, 0, 0), dp(parent, 8)));
         int size = dense ? 40 : 46;
         FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(dp(parent, size), dp(parent, size));
-        playParams.gravity = Gravity.CENTER;
+        playParams.gravity = Gravity.BOTTOM | Gravity.START;
+        playParams.setMargins(dp(parent, 8), 0, 0, dp(parent, 8));
         mediaFrame.addView(play, playParams);
 
         TextView watchBadge = new TextView(parent.getContext());
@@ -511,7 +514,16 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
-        copy.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout titleRow = new LinearLayout(parent.getContext());
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView menu = BrowseUi.action(parent.getContext(), "⋮", "Video options", v -> { });
+        menu.setTag("video_options");
+        menu.setTextSize(24);
+        menu.setTextColor(Color.WHITE);
+        menu.setBackgroundColor(Color.TRANSPARENT);
+        titleRow.addView(menu, new LinearLayout.LayoutParams(dp(parent, 48), dp(parent, 48)));
+        copy.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
 
         if (fillRemaining) {
             View spacer = new View(parent.getContext());
@@ -580,7 +592,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         boolean meme = item.isMeme();
         holder.title.setText(item.title);
         holder.info.setText(buildInfo(item));
-        boolean showDescription = viewMode != VIEW_POSTERS && item.description != null &&
+        boolean showDescription = viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&
                 !item.description.trim().isEmpty();
         holder.description.setVisibility(showDescription ? View.VISIBLE : View.GONE);
         holder.description.setText(showDescription ? item.description.trim() : "");
@@ -611,6 +623,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         loadThumbnail(holder, item);
         requestThumbnail(item);
 
+        View options = holder.card.findViewWithTag("video_options");
+        if (options != null) options.setOnClickListener(v -> listener.onLongPress(item, v));
         holder.card.setOnClickListener(v -> listener.onOpen(item));
         holder.card.setOnLongClickListener(v -> {
             listener.onLongPress(item, v);
@@ -819,6 +833,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private String buildInfo(NativeContentItem item) {
         ArrayList<String> parts = new ArrayList<>();
+        if (viewMode == VIEW_CARDS) parts.add(EfuktRepository.isEfuktUrl(item.url) ? "EFukt"
+                : FapelloRepository.isFapelloUrl(item.url) ? "Fapzone" : "CrazyShit");
         if (!item.isMeme() && item.views != null && !item.views.isEmpty()) {
             String views = viewMode == VIEW_CARDS ? item.views : compactCount(item.views);
             parts.add(views + " views");

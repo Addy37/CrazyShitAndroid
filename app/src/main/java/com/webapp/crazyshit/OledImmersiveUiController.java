@@ -296,33 +296,23 @@ final class OledImmersiveUiController {
 
     private static void styleTopBar(Activity activity, View topBar) {
         if (topBar == null) return;
-        GradientDrawable bg = new GradientDrawable();
-        if (oled(activity)) {
-            bg.setColor(Color.argb(250, 0, 0, 0));
-            bg.setStroke(dp(activity, 1), Color.rgb(20, 20, 23));
-        } else {
-            bg.setColor(Color.argb(246, 18, 18, 22));
-            bg.setStroke(dp(activity, 1), Color.rgb(38, 38, 44));
-        }
-        float radius = dp(activity, 16);
-        bg.setCornerRadii(new float[] {0f, 0f, 0f, 0f, radius, radius, radius, radius});
-        topBar.setBackground(bg);
-        topBar.setElevation(dp(activity, oled(activity) ? 1 : 3));
+        topBar.setBackgroundColor(Color.BLACK);
+        topBar.setElevation(0f);
     }
 
     private static void styleBottomNav(Activity activity, BottomNavigationView nav) {
         if (nav == null || nav.getVisibility() != View.VISIBLE) return;
         GradientDrawable bg = new GradientDrawable();
         if (oled(activity)) {
-            bg.setColor(Color.argb(252, 0, 0, 0));
-            bg.setStroke(dp(activity, 1), Color.rgb(31, 31, 35));
+            bg.setColor(BrowseUi.SURFACE);
+            bg.setStroke(0, Color.TRANSPARENT);
         } else {
             bg.setColor(Color.argb(244, 21, 21, 25));
-            bg.setStroke(dp(activity, 1), Color.rgb(48, 48, 55));
+            bg.setStroke(0, Color.TRANSPARENT);
         }
         bg.setCornerRadius(dp(activity, 30));
         nav.setBackground(bg);
-        nav.setElevation(dp(activity, oled(activity) ? 4 : 6));
+        nav.setElevation(0f);
         nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 251, 245, 6)));
         try {
             nav.setItemActiveIndicatorEnabled(true);
@@ -332,7 +322,7 @@ final class OledImmersiveUiController {
 
         ViewGroup.LayoutParams raw = nav.getLayoutParams();
         if (raw != null) {
-            raw.height = dp(activity, 60);
+            raw.height = dp(activity, 68);
             if (raw instanceof ViewGroup.MarginLayoutParams) {
                 ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) raw;
                 margins.setMargins(dp(activity, 10), dp(activity, 2), dp(activity, 10), dp(activity, 6));
@@ -352,7 +342,7 @@ final class OledImmersiveUiController {
         }
         if (state.headerTitle != null) {
             state.headerTitle.animate().cancel();
-            state.headerTitle.setTextSize(activity instanceof NativeFeedBrowserActivity ? 19f : 18f);
+            state.headerTitle.setTextSize(activity instanceof NativeFeedBrowserActivity ? 19f : 23f);
             state.headerTitle.setTranslationY(0f);
             state.headerTitle.setScaleX(1f);
             state.headerTitle.setScaleY(1f);

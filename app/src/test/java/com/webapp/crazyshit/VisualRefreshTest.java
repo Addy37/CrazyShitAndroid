@@ -1,0 +1,124 @@
+package com.webapp.crazyshit;
+
+import android.app.Activity;
+import android.app.Application;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.os.Looper;
+import android.view.View;
+import android.widget.*;
+import androidx.recyclerview.widget.RecyclerView;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.Collections;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.android.controller.ActivityController;
+import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
+import org.robolectric.util.ReflectionHelpers;
+import static org.junit.Assert.*;
+import static org.robolectric.Shadows.shadowOf;
+
+@RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class, sdk = 35, qualifiers = "w411dp-h891dp-xhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+public class VisualRefreshTest {
+    private NativeContentItem creator() {
+        return new NativeContentItem(NativeContentItem.KIND_CREATOR, "Alex Rivera",
+                "https://fapello.com/alex-rivera/", "", "", "", "", "", "Alex Rivera");
+    }
+    private void capture(View root, String name, int width, int height) throws Exception {
+        int w = BrowseUi.dp(root.getContext(), width), h = BrowseUi.dp(root.getContext(), height);
+        root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, w, h);
+        Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        root.draw(new Canvas(bitmap));
+        File dir = new File("build/reports/visual-tests"); dir.mkdirs();
+        try (FileOutputStream out = new FileOutputStream(new File(dir, name + ".png"))) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); }
+        bitmap.recycle();
+    }
+    @Test public void creatorHeaderFavoriteAndCardMenuWorkAtPhoneWidth() throws Exception {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        host.get().setTheme(R.style.Theme_CrazyShit);
+        LinearLayout root = BrowseUi.screen(host.get());
+        CreatorProfileHeader header = new CreatorProfileHeader(host.get(), "Alex Rivera", "Alex Rivera", creator().url);
+        root.addView(header);
+        TextView favorite = header.findViewWithTag("creator_favorite");
+        favorite.performClick();
+        assertTrue(CreatorFavoriteStore.contains(host.get(), creator()));
+        AtomicInteger menus = new AtomicInteger();
+        NativeFeedAdapter adapter = new NativeFeedAdapter(host.get(), new NativeFeedAdapter.Listener() {
+            public void onOpen(NativeContentItem item) { }
+            public void onLongPress(NativeContentItem item, View anchor) { menus.incrementAndGet(); }
+            public void onComments(NativeContentItem item) { }
+        });
+        adapter.setViewMode(NativeFeedAdapter.VIEW_CARDS);
+        NativeContentItem video = new NativeContentItem(NativeContentItem.KIND_MEDIA, "A sample video title that wraps onto two lines",
+                "https://crazyshit.com/video/example", "", "12K", "", "", "");
+        adapter.replace(Collections.singletonList(video));
+        RecyclerView parent = new RecyclerView(host.get());
+        NativeFeedAdapter.Holder holder = adapter.onCreateViewHolder(parent, NativeFeedAdapter.VIEW_CARDS);
+        adapter.onBindViewHolder(holder, 0);
+        holder.image.setImageResource(R.drawable.ic_nav_chaos);
+        holder.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        root.addView(holder.itemView);
+        host.get().setContentView(root);
+        capture(root, "home-card-and-creator-header", 411, 700);
+        capture(root, "compact-header-and-card", 360, 640);
+        assertTrue(favorite.getWidth() >= BrowseUi.dp(host.get(), 48));
+        assertTrue(favorite.getRight() <= header.getWidth() - header.getPaddingRight());
+        View menu = holder.itemView.findViewWithTag("video_options");
+        assertNotNull(menu); menu.performClick(); assertEquals(1, menus.get());
+        adapter.close(); host.pause().stop().destroy();
+    }
+    @Test public void creatorGalleryRendersTheSavedGridWithoutFetching() throws Exception {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        String id = BunkrGallerySessionStore.createCreator("Alex Rivera", creator().url, "Alex Rivera");
+        java.util.List<NativeContentItem> media = new java.util.ArrayList<>();
+        for (int i = 0; i < 8; i++) media.add(new NativeContentItem(i % 2 == 0 ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE,
+                "Sample " + i, "https://fapello.com/alex-rivera/" + (i + 1) + "/", "", "", "", "", ""));
+        BunkrGallerySessionStore.replace(id, media, 1, true);
+        android.content.Intent intent = new android.content.Intent(context, NativeFeedBrowserActivity.class)
+                .putExtra(NativeFeedBrowserActivity.EXTRA_TITLE, "Alex Rivera")
+                .putExtra(NativeFeedBrowserActivity.EXTRA_BUNKR_CREATOR_QUERY, "Alex Rivera");
+        android.os.Bundle state = new android.os.Bundle(); state.putString("gallery_session", id);
+        ActivityController<NativeFeedBrowserActivity> screen = Robolectric.buildActivity(NativeFeedBrowserActivity.class, intent)
+                .create(state).start().resume();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while ((boolean) ReflectionHelpers.getField(screen.get(), "restoringBrowser") && System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(10);
+        }
+        View root = ((android.view.ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
+        capture(root, "creator-gallery", 411, 891);
+        BunkrGalleryAdapter adapter = ReflectionHelpers.getField(screen.get(), "bunkrGalleryAdapter");
+        assertEquals(8, adapter.getItemCount());
+        assertEquals(Integer.valueOf(2), ReflectionHelpers.getField(screen.get(), "creatorGalleryColumns"));
+        screen.pause().stop().destroy();
+    }
+
+    @Test public void searchResultsLeaveRoomForTheKeyboardAndOpenTheCreator() throws Exception {
+        ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class).create().start().resume();
+        CreatorCatalog.remember(screen.get(), Collections.singletonList(creator()));
+        EditText input = ReflectionHelpers.getField(screen.get(), "input");
+        input.setText("Alex");
+        CreatorSuggestionsController suggestions = ReflectionHelpers.getField(screen.get(), "suggestions");
+        suggestions.refreshLocal();
+        View root = ((android.view.ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
+        capture(root, "creator-search", 411, 891);
+        capture(root, "creator-search-keyboard-space", 360, 380);
+        TextView action = ReflectionHelpers.getField(suggestions, "searchAll");
+        assertEquals(View.VISIBLE, action.getVisibility());
+        assertTrue(action.getHeight() >= BrowseUi.dp(screen.get(), 48));
+        assertEquals(View.GONE, ((View) ReflectionHelpers.getField(screen.get(), "filterBar")).getVisibility());
+        CreatorListAdapter adapter = ReflectionHelpers.getField(suggestions, "adapter");
+        CreatorListAdapter.Holder row = adapter.onCreateViewHolder(new RecyclerView(screen.get()), 0);
+        adapter.onBindViewHolder(row, 0); row.itemView.performClick();
+        assertEquals(NativeFeedBrowserActivity.class.getName(), shadowOf(screen.get()).getNextStartedActivity().getComponent().getClassName());
+        screen.pause().stop().destroy();
+    }
+}

@@ -134,6 +134,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Upload native screen renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrazyShit-visual-checks
+          path: app/build/reports/visual-tests/*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Rename APK
         run: cp app/build/outputs/apk/debug/app-debug.apk CrazyShit-debug.apk
 
