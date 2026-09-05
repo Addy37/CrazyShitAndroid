@@ -10,20 +10,19 @@ A native-first Android client for [CrazyShit.com](https://crazyshit.com/).
 
 CrazyShit.com and EFukt.com contain adult, graphic, violent, and otherwise sensitive material. This app is intended only for adults who knowingly choose to access those sites. The app shows a one-time 18+ access notice covering sensitive content, regional availability, lawful VPN use, and the project's unofficial status.
 
-## CrazyShit 2.0
+## CrazyShit 2.10
 
-Version 2.0 replaces the old WebView-first experience with a native Android interface while retaining a compatibility browser for site flows that need it.
+The app uses a native Android interface with a compatibility browser for site flows that need it.
 
 ### Main navigation
 
 - **Home** with native cards, pagination, grid/list view, comments, and related content
-- **Series** with a remembered CrazyShit / EFukt source selector and native series feeds
-- **Trending** with its own live page and retained scroll position
+- **Collections** with CrazyShit, EFukt and Fapzone sources
 - **Chaos** as the featured center tab with a randomized vertical video feed
-- **Memes** as a native static-image feed and image viewer
-- **More** for Library, Categories, My Profile, Settings, website fallback, and updates
+- **Categories** with native browse cards and feeds
+- **More** for Library, Favorite creators, Downloads, My Profile, Settings, website fallback, and updates
 
-Home, Trending, Chaos, and Memes are kept alive in a real ViewPager2 pager, so horizontal swipes follow your finger and each tab keeps its own state.
+Home, Collections, Chaos, and Categories use a ViewPager2 pager to retain tab state during horizontal swipes.
 
 ## Chaos
 

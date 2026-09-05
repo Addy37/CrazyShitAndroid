@@ -37,6 +37,18 @@ public class CreatorBackupTest {
         assertEquals("Anna", CreatorCatalog.matching(context, "anna", false, 8).get(0).title);
     }
 
+    @Test public void similarSearchNamesDoNotHideALegacyFavorite() throws Exception {
+        context.getSharedPreferences("creator_favorites", 0).edit()
+                .putStringSet("creators", new HashSet<>(Arrays.asList("mia"))).commit();
+        CreatorCatalog.remember(context, Arrays.asList(creator("Mía")));
+        assertEquals(2, CreatorCatalog.matching(context, "mia", false, 8).size());
+        List<NativeContentItem> favorites = CreatorCatalog.matching(context, "", true, 8);
+        assertEquals(1, favorites.size());
+        assertEquals("mia", favorites.get(0).title);
+        assertEquals("mia", AppBackupStore.export(context).getJSONArray("creators")
+                .getJSONObject(0).getString("name"));
+    }
+
     @Test public void roundTripMergesSavedItemsAndRestoresSettings() throws Exception {
         CreatorFavoriteStore.toggle(context, creator("Anna"));
         FavoriteStore.add(context, "First", "https://crazyshit.com/video/first");

@@ -19,16 +19,17 @@ final class CreatorCatalog {
     private CreatorCatalog() { }
 
     static String key(NativeContentItem item) {
-        return CreatorNameMatcher.normalized(item.searchQuery.isEmpty() ? item.title : item.searchQuery);
+        // Search can ignore accents and punctuation; stored creator identities must not.
+        return CreatorFavoriteStore.key(item);
     }
 
     static List<NativeContentItem> all(Context context) {
         LinkedHashMap<String, NativeContentItem> result = read(context);
         // Older versions saved favorite names only. Keep every one usable after upgrading.
         for (String name : CreatorFavoriteStore.names(context)) {
-            String key = CreatorNameMatcher.normalized(name);
-            result.putIfAbsent(key, new NativeContentItem(NativeContentItem.KIND_CREATOR,
-                    name, "", "", "", "", "", "", name));
+            NativeContentItem legacy = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                    name, "", "", "", "", "", "", name);
+            result.putIfAbsent(key(legacy), legacy);
         }
         return new ArrayList<>(result.values());
     }
