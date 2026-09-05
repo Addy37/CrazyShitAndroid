@@ -139,11 +139,11 @@ final class StableBottomNavigationController {
                     .getBoolean("oled_black_enabled", true);
 
             GradientDrawable bg = new GradientDrawable();
-            bg.setColor(oled ? Color.rgb(0, 0, 0) : Color.rgb(20, 20, 24));
-            bg.setStroke(dp(1), oled ? Color.rgb(31, 31, 35) : Color.rgb(48, 48, 55));
+            bg.setColor(BrowseUi.SURFACE);
+            bg.setStroke(0, Color.TRANSPARENT);
             bg.setCornerRadius(dp(30));
             nav.setBackground(bg);
-            nav.setElevation(dp(oled ? 4 : 6));
+            nav.setElevation(0f);
             nav.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
             nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 251, 245, 6)));
 
@@ -180,7 +180,7 @@ final class StableBottomNavigationController {
 
             ViewGroup.LayoutParams raw = nav.getLayoutParams();
             boolean changed = false;
-            int wantedHeight = dp(60);
+            int wantedHeight = dp(68);
             if (raw.height != wantedHeight) {
                 raw.height = wantedHeight;
                 changed = true;

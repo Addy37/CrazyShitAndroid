@@ -75,6 +75,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private RecyclerView recycler;
     private ViewPager2 creatorTabsPager;
     private TabLayout creatorTabs;
+    private CreatorProfileHeader creatorProfile;
     private TabLayoutMediator creatorTabsMediator;
     private SwipeRefreshLayout refresh;
     private ProgressBar progress;
@@ -148,13 +149,13 @@ public final class NativeFeedBrowserActivity extends Activity {
     private void buildUi() {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.rgb(13, 13, 15));
+        shell.setBackgroundColor(Color.BLACK);
 
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setPadding(dp(8), dp(6), dp(8), dp(6));
-        top.setBackgroundColor(Color.rgb(17, 17, 20));
+        top.setBackgroundColor(Color.BLACK);
 
         TextView back = text("‹", 34, Color.WHITE);
         back.setGravity(Gravity.CENTER);
@@ -162,7 +163,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         back.setOnClickListener(v -> finish());
         top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(52)));
 
-        TextView heading = text(title, 20, Color.WHITE);
+        TextView heading = text(isCreatorGallery() ? "Fapzone" : title, 20, Color.WHITE);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         heading.setSingleLine(true);
         heading.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -176,8 +177,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         shell.addView(top, new LinearLayout.LayoutParams(-1, dp(64)));
 
         if (isCreatorGallery()) {
+            creatorProfile = new CreatorProfileHeader(this, title, creatorQuery, baseUrl);
+            shell.addView(creatorProfile);
             creatorTabs = new TabLayout(this);
-            creatorTabs.setBackgroundColor(Color.rgb(17, 17, 20));
+            creatorTabs.setBackgroundColor(Color.BLACK);
             creatorTabs.setSelectedTabIndicatorColor(UiPalette.PRIMARY);
             creatorTabs.setTabTextColors(Color.rgb(174, 174, 182), UiPalette.PRIMARY);
             creatorTabs.setTabMode(TabLayout.MODE_FIXED);
@@ -266,7 +269,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private RecyclerView createRecycler() {
         RecyclerView next = new RecyclerView(this);
-        next.setBackgroundColor(Color.rgb(13, 13, 15));
+        next.setBackgroundColor(Color.BLACK);
         next.setClipToPadding(false);
         next.setPadding(0, dp(5), 0, dp(18));
         next.setItemAnimator(null);
@@ -987,7 +990,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         Configuration config = getResources().getConfiguration();
         boolean landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE;
         if (landscape) return config.screenWidthDp >= 900 ? 7 : 5;
-        return config.screenWidthDp >= 600 ? 5 : 3;
+        return config.screenWidthDp >= 600 ? 4 : 2;
     }
 
     private int creatorGalleryMinimumColumns() {
@@ -1219,6 +1222,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (creatorProfile != null) creatorProfile.refresh();
         if (isBunkr() && bunkrGalleryAdapter != null) {
             BunkrGallerySessionStore.Snapshot snapshot =
                     BunkrGallerySessionStore.snapshot(bunkrGallerySessionId);

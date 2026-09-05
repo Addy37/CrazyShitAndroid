@@ -90,7 +90,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         if (state != null) restoredPrimaryPage = state.getInt("primary_page", -1);
-        getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
+        getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         buildUi();
         appUpdater = new AppUpdater(this);
@@ -124,11 +124,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void buildUi() {
         overlayRoot = new FrameLayout(this);
-        overlayRoot.setBackgroundColor(Color.rgb(13, 13, 15));
+        overlayRoot.setBackgroundColor(Color.BLACK);
 
         shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.rgb(13, 13, 15));
+        shell.setBackgroundColor(Color.BLACK);
         shell.setOnApplyWindowInsetsListener((view, insets) -> {
             int left;
             int top;
@@ -197,7 +197,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         content.addView(swipeRefresh, new FrameLayout.LayoutParams(-1, -1));
 
         recycler = new RecyclerView(this);
-        recycler.setBackgroundColor(Color.rgb(13, 13, 15));
+        recycler.setBackgroundColor(Color.BLACK);
         recycler.setClipToPadding(false);
         recycler.setPadding(0, dp(5), 0, dp(18));
         recycler.setItemAnimator(null);
@@ -306,10 +306,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(10), 0, dp(4), 0);
-        bar.setBackgroundColor(Color.rgb(17, 17, 20));
+        bar.setBackgroundColor(Color.BLACK);
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(R.mipmap.ic_launcher);
+        icon.setVisibility(View.GONE);
         icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         bar.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
@@ -318,8 +319,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         labels.setPadding(dp(9), 0, dp(8), 0);
 
         headerTitle = new TextView(this);
-        headerTitle.setTextColor(Color.WHITE);
-        headerTitle.setTextSize(18);
+        headerTitle.setTextColor(UiPalette.PRIMARY);
+        headerTitle.setTextSize(23);
         headerTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         headerTitle.setSingleLine(true);
         labels.addView(headerTitle);
@@ -329,6 +330,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         headerSubtitle.setTextColor(Color.rgb(168, 168, 178));
         headerSubtitle.setTextSize(11);
         labels.addView(headerSubtitle);
+        headerSubtitle.setVisibility(View.GONE);
         bar.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
         ImageView search = new ImageView(this);
@@ -342,6 +344,14 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             openContextualSearch();
         });
         bar.addView(search, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        ImageView profile = new ImageView(this);
+        profile.setImageResource(R.drawable.ic_more_account);
+        profile.setColorFilter(Color.WHITE);
+        profile.setPadding(dp(12), dp(12), dp(12), dp(12));
+        profile.setContentDescription("My profile");
+        profile.setFocusable(true);
+        profile.setOnClickListener(v -> startActivity(new Intent(this, ProfileActivity.class)));
+        bar.addView(profile, new LinearLayout.LayoutParams(dp(48), dp(48)));
         return bar;
     }
 
@@ -417,7 +427,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         }
 
         if (primaryPagerAdapter != null) primaryPagerAdapter.setPrimaryActive(position);
-        if (headerTitle != null) headerTitle.setText(feedTitle);
+        if (headerTitle != null) headerTitle.setText(position == MainPagerAdapter.PAGE_HOME ? "CrazyShit" : feedTitle);
         if (headerSubtitle != null && primaryPagerAdapter != null) {
             if (position == MainPagerAdapter.PAGE_CHAOS) {
                 headerSubtitle.setText("Random video feed  •  Swipe up/down");
@@ -593,7 +603,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = repository.resolvePlayable(this, item.url);
+                stream = PlayableSourceRouter.resolve(this, item.url);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
@@ -614,6 +624,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, stream.mediaUrl);
         intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, stream.pageUrl);
         intent.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, stream.requestReferer);
+        intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, EfuktRepository.isEfuktUrl(stream.pageUrl)
+                ? "efukt" : FapelloRepository.isFapelloUrl(stream.pageUrl) ? "bunkr" : "crazyshit");
         intent.putExtra(PlayerActivity.EXTRA_TITLE,
                 item != null && item.title != null && !item.title.trim().isEmpty()
                         ? item.title : stream.title);

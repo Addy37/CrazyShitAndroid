@@ -17,6 +17,7 @@ import java.util.function.Consumer;
 
 /** Common spacing, focus targets and inset handling for native browsing screens. */
 final class BrowseUi {
+    static final int BACKGROUND = Color.BLACK;
     static final int SURFACE = Color.rgb(20, 20, 24);
     static final int MUTED = Color.rgb(174, 174, 184);
     private BrowseUi() { }

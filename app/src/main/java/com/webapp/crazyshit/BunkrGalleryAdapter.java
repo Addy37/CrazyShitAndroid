@@ -109,7 +109,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         AspectRatioFrameLayout tile = new AspectRatioFrameLayout(parent.getContext());
         tile.setBackgroundColor(Color.rgb(20, 20, 23));
         RecyclerView.LayoutParams tileParams = new RecyclerView.LayoutParams(-1, -2);
-        int gap = dp(parent, 1);
+        int gap = dp(parent, 3);
+        tile.setBackground(BrowseUi.rounded(parent.getContext(), BrowseUi.SURFACE, 10));
+        tile.setClipToOutline(true);
         tileParams.setMargins(gap, gap, gap, gap);
         tile.setLayoutParams(tileParams);
 
@@ -120,7 +122,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
         FrameLayout play = new FrameLayout(parent.getContext());
         GradientDrawable playBackground = new GradientDrawable();
-        playBackground.setShape(GradientDrawable.OVAL);
+        playBackground.setCornerRadius(dp(parent, 8));
         playBackground.setColor(Color.argb(185, 0, 0, 0));
         play.setBackground(playBackground);
         play.setElevation(dp(parent, 5));
@@ -128,7 +130,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 dp(parent, 42),
                 dp(parent, 42)
         );
-        playParams.gravity = Gravity.CENTER;
+        playParams.gravity = Gravity.BOTTOM | Gravity.END;
+        playParams.setMargins(0, 0, dp(parent, 6), dp(parent, 6));
         tile.addView(play, playParams);
 
         ImageView playIcon = new ImageView(parent.getContext());

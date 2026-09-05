@@ -23,6 +23,9 @@ final class CreatorSuggestionsController {
     private final LinearLayout panel;
     private final TextView hint;
     private final CreatorListAdapter adapter;
+    private final TextView searchAll;
+    private Runnable searchAction;
+    private java.util.function.Consumer<Boolean> visibilityChanged;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newFixedThreadPool(2);
     private Future<?> request;
@@ -52,6 +55,15 @@ final class CreatorSuggestionsController {
         adapter = new CreatorListAdapter(activity, open, this::refreshLocal);
         recycler.setAdapter(adapter);
         panel.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
+        searchAll = BrowseUi.action(activity, "Search all results", "Search all results", v -> {
+            if (searchAction != null) searchAction.run();
+        });
+        searchAll.setTextColor(android.graphics.Color.WHITE);
+        searchAll.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(-1, dp(48));
+        actionParams.setMargins(dp(12), dp(6), dp(12), dp(8));
+        panel.addView(searchAll, actionParams);
+        searchAll.setVisibility(View.GONE);
         input.addTextChangedListener(BrowseUi.onText(value -> show(value)));
         input.setOnFocusChangeListener((v, focused) -> { if (focused) show(input.getText().toString()); });
     }
@@ -59,9 +71,14 @@ final class CreatorSuggestionsController {
     void show(String value) {
         if (closed) return;
         active = true;
+        if (visibilityChanged != null) visibilityChanged.accept(true);
         panel.setVisibility(View.VISIBLE);
         cancel();
         String query = value.trim();
+        searchAll.setVisibility(query.length() >= 2 ? View.VISIBLE : View.GONE);
+        searchAll.setText("Search all results for " + query + "  ›");
+        searchAll.setMaxLines(1);
+        searchAll.setEllipsize(android.text.TextUtils.TruncateAt.END);
         int token = generation;
         if (query.length() < 2) {
             adapter.replace(new ArrayList<>());
@@ -100,7 +117,14 @@ final class CreatorSuggestionsController {
                 : CreatorCatalog.matching(activity, query, false, 8));
     }
 
-    void hide() { active = false; cancel(); panel.setVisibility(View.GONE); }
+    void setSearchAction(Runnable action) { searchAction = action; }
+
+    void setVisibilityListener(java.util.function.Consumer<Boolean> listener) {
+        visibilityChanged = listener;
+        listener.accept(active);
+    }
+
+    void hide() { active = false; if (visibilityChanged != null) visibilityChanged.accept(false); cancel(); panel.setVisibility(View.GONE); }
     boolean isShowing() { return active; }
 
     private void cancel() {

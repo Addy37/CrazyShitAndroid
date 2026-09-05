@@ -82,6 +82,7 @@ public final class SearchActivity extends Activity {
     private boolean bunkrOnly;
     private CreatorSuggestionsController suggestions;
     private TextView searchState;
+    private View filterBar;
     private final List<Future<?>> requests = new ArrayList<>();
     private final Map<Integer, String> errors = new LinkedHashMap<>();
     private List<NativeContentItem> crazySeries = new ArrayList<>();
@@ -103,7 +104,7 @@ public final class SearchActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         bunkrOnly = SCOPE_BUNKR.equals(getIntent().getStringExtra(EXTRA_SCOPE));
-        getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
+        getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         buildUi();
 
@@ -146,11 +147,11 @@ public final class SearchActivity extends Activity {
 
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.rgb(13, 13, 15));
+        root.setBackgroundColor(Color.BLACK);
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.rgb(13, 13, 15));
+        shell.setBackgroundColor(Color.BLACK);
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(shell, (view, insets) -> {
             androidx.core.graphics.Insets safe = insets.getInsets(
                     androidx.core.view.WindowInsetsCompat.Type.systemBars()
@@ -161,10 +162,11 @@ public final class SearchActivity extends Activity {
         });
         root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
 
-        shell.addView(buildTopBar(), new LinearLayout.LayoutParams(-1, dp(66)));
+        shell.addView(buildTopBar(), new LinearLayout.LayoutParams(-1, dp(56)));
         shell.addView(buildSearchRow(), new LinearLayout.LayoutParams(-1, dp(62)));
         if (!bunkrOnly) {
-            shell.addView(buildFilters(), new LinearLayout.LayoutParams(-1, dp(52)));
+            filterBar = buildFilters();
+            shell.addView(filterBar, new LinearLayout.LayoutParams(-1, dp(52)));
         }
 
         searchState = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
@@ -177,7 +179,7 @@ public final class SearchActivity extends Activity {
 
         recycler = new RecyclerView(this);
         recycler.setLayoutManager(new LinearLayoutManager(this));
-        recycler.setBackgroundColor(Color.rgb(13, 13, 15));
+        recycler.setBackgroundColor(Color.BLACK);
         recycler.setClipToPadding(false);
         recycler.setPadding(0, dp(4), 0, dp(22));
         recycler.setItemAnimator(null);
@@ -205,6 +207,10 @@ public final class SearchActivity extends Activity {
         LinearLayout suggestionPanel = new LinearLayout(this);
         content.addView(suggestionPanel, new FrameLayout.LayoutParams(-1, -1));
         suggestions = new CreatorSuggestionsController(this, input, suggestionPanel, this::openCreator);
+        suggestions.setSearchAction(this::runSearch);
+        suggestions.setVisibilityListener(showing -> {
+            if (filterBar != null) filterBar.setVisibility(showing ? View.GONE : View.VISIBLE);
+        });
         setContentView(root);
     }
 
@@ -213,7 +219,7 @@ public final class SearchActivity extends Activity {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(7), 0, dp(14), 0);
-        bar.setBackgroundColor(Color.rgb(17, 17, 20));
+        bar.setBackgroundColor(Color.BLACK);
 
         TextView back = new TextView(this);
         back.setText("‹");
@@ -239,6 +245,7 @@ public final class SearchActivity extends Activity {
         subtitle.setText(bunkrOnly ? "One combined media gallery" : "Everything in one place");
         subtitle.setTextColor(Color.rgb(165, 165, 176));
         subtitle.setTextSize(12f);
+        subtitle.setVisibility(View.GONE);
         labels.addView(subtitle);
         bar.addView(labels, new LinearLayout.LayoutParams(0, -1, 1f));
         bar.addView(BrowseUi.action(this, "★", "Favorite creators", v ->
@@ -254,7 +261,7 @@ public final class SearchActivity extends Activity {
         row.setPadding(dp(12), dp(8), dp(12), dp(6));
 
         input = new EditText(this);
-        input.setHint(bunkrOnly ? "Search creators or albums" : "Search CrazyShit, EFukt and Fapzone");
+        input.setHint("Search creators or videos");
         input.setHintTextColor(Color.rgb(145, 145, 155));
         input.setTextColor(Color.WHITE);
         input.setTextSize(16f);
@@ -276,19 +283,6 @@ public final class SearchActivity extends Activity {
             input.setText(""); input.requestFocus();
         }), new LinearLayout.LayoutParams(dp(48), dp(48)));
 
-        Button go = new Button(this);
-        go.setText("Search");
-        go.setTextColor(UiPalette.ON_PRIMARY);
-        go.setTextSize(13f);
-        go.setAllCaps(false);
-        go.setBackground(rounded(UiPalette.PRIMARY, dp(14)));
-        go.setOnClickListener(v -> {
-            haptic(v);
-            runSearch();
-        });
-        LinearLayout.LayoutParams goParams = new LinearLayout.LayoutParams(dp(92), -1);
-        goParams.leftMargin = dp(8);
-        row.addView(go, goParams);
         return row;
     }
 

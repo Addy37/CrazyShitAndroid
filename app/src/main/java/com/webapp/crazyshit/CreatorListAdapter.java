@@ -68,6 +68,8 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         row.setLayoutParams(params);
         ImageView avatar = new ImageView(context);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        avatar.setBackground(BrowseUi.rounded(context, BrowseUi.SURFACE, 24));
+        avatar.setClipToOutline(true);
         avatar.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         row.addView(avatar, new LinearLayout.LayoutParams(dp(48), dp(48)));
         LinearLayout labels = new LinearLayout(context);
@@ -93,6 +95,8 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         holder.name.setText(item.title);
         holder.subtitle.setText(favorite ? "Favorite · Open gallery" : "Open gallery");
         holder.star.setText(favorite ? "★" : "☆");
+        holder.star.setTextColor(favorite ? UiPalette.PRIMARY : BrowseUi.MUTED);
+        holder.star.setBackgroundColor(Color.TRANSPARENT);
         holder.star.setContentDescription((favorite ? "Unfavorite " : "Favorite ") + item.title);
         holder.itemView.setOnClickListener(v -> open.accept(item));
         android.view.View.OnClickListener toggle = v -> {

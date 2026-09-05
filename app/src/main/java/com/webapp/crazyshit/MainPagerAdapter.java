@@ -180,7 +180,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         FrameLayout container = new FrameLayout(parent.getContext());
-        container.setBackgroundColor(Color.rgb(13, 13, 15));
+        container.setBackgroundColor(Color.BLACK);
         container.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
         return new Holder(container);
     }
@@ -224,8 +224,40 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             }
         });
         page.recycler.setAdapter(page.feedAdapter);
+        page.homeSource = Math.max(0, Math.min(3, activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .getInt("home_source", 0)));
+        android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(activity);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setBackgroundColor(Color.BLACK);
+        LinearLayout sources = new LinearLayout(activity);
+        sources.setGravity(Gravity.CENTER_VERTICAL);
+        sources.setPadding(dp(12), dp(4), dp(12), dp(4));
+        String[] names = {"All", "CrazyShit", "EFukt", "Fapzone"};
+        for (int source = 0; source < names.length; source++) {
+            final int selected = source;
+            TextView chip = BrowseUi.action(activity, names[source], names[source] + " Home feed", v -> {
+                if (page.homeSource == selected) return;
+                page.homeSource = selected;
+                activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE).edit().putInt("home_source", selected).apply();
+                styleHomeSources(page);
+                page.feedAdapter.replace(java.util.Collections.emptyList());
+                page.recycler.scrollToPosition(0);
+                refresh(page.index);
+            });
+            chip.setTextSize(13);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(48));
+            params.setMarginEnd(dp(6));
+            sources.addView(chip, params);
+            page.homeChips.add(chip);
+        }
+        scroll.addView(sources);
+        FrameLayout.LayoutParams feedParams = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
+        feedParams.topMargin = dp(56);
+        page.refresh.setLayoutParams(feedParams);
+        page.root.addView(scroll, new FrameLayout.LayoutParams(-1, dp(56)));
+        styleHomeSources(page);
         page.viewMode = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getInt(prefKey, NativeFeedAdapter.VIEW_LIST);
+                .getInt(prefKey, NativeFeedAdapter.VIEW_CARDS);
         if (page.viewMode < NativeFeedAdapter.VIEW_CARDS || page.viewMode > NativeFeedAdapter.VIEW_POSTERS) {
             page.viewMode = NativeFeedAdapter.VIEW_LIST;
         }
@@ -317,7 +349,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         selector.setOrientation(LinearLayout.HORIZONTAL);
         selector.setGravity(Gravity.CENTER);
         selector.setPadding(dp(12), dp(8), dp(12), dp(8));
-        selector.setBackgroundColor(Color.rgb(17, 17, 20));
+        selector.setBackgroundColor(Color.BLACK);
 
         page.crazyShitSource = seriesSourceButton("CrazyShit");
         page.efuktSource = seriesSourceButton("EFukt");
@@ -344,7 +376,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         fapzoneModes.setOrientation(LinearLayout.HORIZONTAL);
         fapzoneModes.setGravity(Gravity.CENTER);
         fapzoneModes.setPadding(dp(12), dp(6), dp(12), dp(6));
-        fapzoneModes.setBackgroundColor(Color.rgb(17, 17, 20));
+        fapzoneModes.setBackgroundColor(Color.BLACK);
         page.fapzoneTop = fapzoneModeButton("Top 50");
         page.fapzoneNew = fapzoneModeButton("New");
         page.fapzoneHot = fapzoneModeButton("Hot");
@@ -387,7 +419,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         caption.setOrientation(LinearLayout.HORIZONTAL);
         caption.setGravity(Gravity.CENTER_VERTICAL);
         caption.setPadding(dp(17), dp(7), dp(17), dp(9));
-        caption.setBackgroundColor(Color.rgb(17, 17, 20));
+        caption.setBackgroundColor(Color.BLACK);
 
         LinearLayout captionCopy = new LinearLayout(activity);
         captionCopy.setOrientation(LinearLayout.VERTICAL);
@@ -626,14 +658,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private Page createPageShell(int index, PageKind kind, String prefKey, String baseUrl) {
         Page page = new Page(index, kind, prefKey, baseUrl);
         page.root = new FrameLayout(activity);
-        page.root.setBackgroundColor(Color.rgb(13, 13, 15));
+        page.root.setBackgroundColor(Color.BLACK);
 
         page.refresh = new SwipeRefreshLayout(activity);
         page.refresh.setColorSchemeColors(UiPalette.PRIMARY);
         page.root.addView(page.refresh, new FrameLayout.LayoutParams(-1, -1));
 
         page.recycler = new RecyclerView(activity);
-        page.recycler.setBackgroundColor(Color.rgb(13, 13, 15));
+        page.recycler.setBackgroundColor(Color.BLACK);
         page.recycler.setClipToPadding(false);
         page.recycler.setPadding(0, dp(5), 0, dp(18));
         page.recycler.setItemAnimator(null);
@@ -692,11 +724,22 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         }
     }
 
+    private void styleHomeSources(Page page) {
+        for (int i = 0; i < page.homeChips.size(); i++) {
+            TextView chip = page.homeChips.get(i);
+            boolean selected = i == page.homeSource;
+            chip.setSelected(selected);
+            chip.setTextColor(selected ? UiPalette.ON_PRIMARY : BrowseUi.MUTED);
+            chip.setBackground(BrowseUi.rounded(activity, selected ? UiPalette.PRIMARY : BrowseUi.SURFACE, 12));
+        }
+    }
+
     private void load(Page page, boolean append) {
         if (page == null || page.loading || page.endReached) return;
         if (page.kind != PageKind.FEED) append = false;
         page.loading = true;
         final int generation = page.generation;
+        final int selectedHomeSource = page.homeSource;
         final boolean appendRequest = append;
         final int requestPage = append ? page.currentPage + 1 : 1;
         if (!append && page.itemCount() == 0) page.progress.setVisibility(View.VISIBLE);
@@ -717,7 +760,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 } else if (page.kind == PageKind.CATEGORIES) {
                     result = browseRepository.fetchCategories(activity);
                 } else {
-                    result = repository.fetchFeed(activity, page.baseUrl, requestPage);
+                    result = new HomeSourceRepository().fetch(activity, selectedHomeSource, requestPage);
                 }
 
                 activity.runOnUiThread(() -> {
@@ -861,6 +904,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         int viewMode = NativeFeedAdapter.VIEW_LIST;
         int seriesSource = SERIES_SOURCE_CRAZYSHIT;
         int fapzoneMode = FapzoneCreatorRepository.MODE_TOP_50;
+        int homeSource;
+        final java.util.List<TextView> homeChips = new java.util.ArrayList<>();
         int currentPage;
         boolean loading;
         boolean endReached;
