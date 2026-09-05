@@ -33,7 +33,7 @@ final class FapelloRepository {
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final Pattern POST_PATH = Pattern.compile(
-            "(?i)^/(?:video/new/[0-9]+|[^/]+/[0-9]+)/?$"
+            "(?i)^/(?:video/(?:new|week)/[0-9]+|[^/]+/[0-9]+)/?$"
     );
     private static final Pattern POST_ID = Pattern.compile("(?i)/(?:new/)?([0-9]+)/?$");
     private static final Pattern CONTENT_URL = Pattern.compile(
@@ -172,9 +172,14 @@ final class FapelloRepository {
 
     List<NativeContentItem> parsePopularVideos(Document document, String endpoint) {
         LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
+        boolean hasVideoRoutes = document.select("a[href]").stream().anyMatch(link -> {
+            String url = normalizeUrl(link.attr("href"), endpoint);
+            return isPostUrl(url) && url.contains("/video/");
+        });
         for (Element link : document.select("a[href]")) {
             String pageUrl = normalizeUrl(link.attr("href"), endpoint);
             if (!isPostUrl(pageUrl)) continue;
+            if (hasVideoRoutes && !pageUrl.contains("/video/")) continue;
             String thumbnail = imageFrom(link, endpoint);
             String id = postId(pageUrl);
             String title = clean(link.attr("title"));

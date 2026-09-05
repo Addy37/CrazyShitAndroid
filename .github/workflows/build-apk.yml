@@ -28,25 +28,6 @@ jobs:
           grep -q 'NAV_CATEGORIES = 3' app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java
           grep -q 'NativeContentItem.KIND_MEDIA.equals(item.kind)' app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java
 
-      - name: Diagnose Home source markup
-        if: github.head_ref == 'fix/v2.11.1-home-navigation'
-        continue-on-error: true
-        run: |
-          python3 - <<'PY'
-          import urllib.request,re,concurrent.futures
-          urls=['https://fapello.com/popular_videos/week/','https://fapello.com/ajax/popular_videos/week/page-1/','https://crazyshit.com/']
-          def probe(url):
-              try:
-                  req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36'})
-                  with urllib.request.urlopen(req,timeout=15) as r: html=r.read().decode('utf-8','replace')
-                  print('HOME_PROBE',url,'bytes',len(html),'media_links',len(re.findall('/cnt/medias/',html)))
-                  if 'fapello' in url:
-                      for tag in re.findall(r'<(?:video|source)[^>]*>|<[^>]*(?:onclick|data-video)[^>]*>',html)[:15]: print('HOME_MARKUP',tag[:1300])
-                      print('HOME_LINKS',re.findall(r'href=["\']([^"\']+)["\']',html)[-45:])
-              except Exception as e: print('HOME_PROBE_ERROR',url,str(e))
-          with concurrent.futures.ThreadPoolExecutor(3) as pool: list(pool.map(probe,urls))
-          PY
-
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:

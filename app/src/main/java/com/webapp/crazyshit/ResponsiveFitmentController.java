@@ -71,7 +71,7 @@ final class ResponsiveFitmentController {
 
         if (activity instanceof NativeMainActivity) {
             fitMain(activity, landscape);
-            LandscapeUiController.apply((NativeMainActivity) activity);
+            if (landscape) LandscapeUiController.apply((NativeMainActivity) activity);
         }
     }
 

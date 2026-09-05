@@ -49,7 +49,7 @@ public class VisualRefreshTest {
                 .putInt("native_view_home", NativeFeedAdapter.VIEW_LIST).apply();
         android.os.Bundle state = new android.os.Bundle(); state.putInt("primary_page", 0);
         ActivityController<NativeMainActivity> screen = Robolectric.buildActivity(NativeMainActivity.class)
-                .create(state).start().resume();
+                .create(state).start().resume().visible();
         NativeMainActivity main = screen.get();
         UiFoundationCoordinator.onActivityCreated(main, state);
         UiFoundationCoordinator.onActivityResumed(main);
@@ -79,7 +79,7 @@ public class VisualRefreshTest {
         UiPolishController.attach(main);
         ResponsiveFitmentController.applySoon(main);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
-        View root = ((android.view.ViewGroup) main.findViewById(android.R.id.content)).getChildAt(0);
+        View root = ReflectionHelpers.getField(main, "overlayRoot");
         capture(root, "home-lifecycle", 360, 800);
         assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
         assertEquals(BrowseUi.dp(main, 76), nav.getLayoutParams().height);
@@ -90,7 +90,7 @@ public class VisualRefreshTest {
         assertEquals(5, nav.getMenu().size());
         for (int id : new int[] {1, 2, 4, 3, 5}) {
             View tab = nav.findViewById(id);
-            assertTrue(tab.getWidth() >= BrowseUi.dp(main, 48));
+            assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
             assertTrue(tab.getHeight() >= BrowseUi.dp(main, 48));
         }
         prefs.edit().putInt("native_view_home", NativeFeedAdapter.VIEW_GRID).apply();

@@ -68,4 +68,17 @@ public class HomeSourceTest {
         assertEquals("https://fapello.com/thumb.jpg", items.get(0).imageUrl);
         assertEquals("", items.get(1).imageUrl);
     }
+    @Test public void weeklyVideoRoutesArePlayableAndDoNotDuplicateCanonicalPostLinks() {
+        String url = "https://fapello.com/video/week/31913741/";
+        assertTrue(FapelloRepository.isPostUrl(url));
+        assertFalse(FapelloRepository.isPostUrl("https://other.example/video/week/31913741/"));
+        String html = "<a href='" + url + "'><img data-src='/weekly.jpg'></a>"
+                + "<a href='" + url + "'>Video</a><a href='/sample-creator/15/'>Creator post</a>";
+        List<NativeContentItem> items = new FapelloRepository().parsePopularVideos(
+                Jsoup.parse(html, FapelloRepository.BASE), FapelloRepository.BASE);
+        assertEquals(1, items.size());
+        assertEquals(url, items.get(0).url);
+        assertEquals("https://fapello.com/weekly.jpg", items.get(0).imageUrl);
+    }
+
 }
