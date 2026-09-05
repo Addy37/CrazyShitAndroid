@@ -42,10 +42,17 @@ final class CreatorFavoriteStore {
             favorite = true;
         }
         preferences.edit().putStringSet(KEY_CREATORS, favorites).apply();
+        CreatorCatalog.remember(context, java.util.Collections.singletonList(creator));
         return favorite;
     }
 
-    private static String key(NativeContentItem creator) {
+    static Set<String> names(Context context) {
+        return new HashSet<>(context.getApplicationContext()
+                .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getStringSet(KEY_CREATORS, new HashSet<>()));
+    }
+
+    static String key(NativeContentItem creator) {
         if (creator == null) return "";
         String value = clean(creator.searchQuery);
         if (value.isEmpty()) value = clean(creator.title);

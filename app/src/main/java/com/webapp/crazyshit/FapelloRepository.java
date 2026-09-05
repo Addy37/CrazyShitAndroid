@@ -44,6 +44,14 @@ final class FapelloRepository {
     );
 
     List<Model> searchModels(Context context, String query, int limit) throws IOException {
+        return searchModels(context, query, limit, true);
+    }
+
+    List<Model> searchConfirmedModels(Context context, String query, int limit) throws IOException {
+        return searchModels(context, query, limit, false);
+    }
+
+    private List<Model> searchModels(Context context, String query, int limit, boolean allowGuessedProfile) throws IOException {
         String cleanQuery = clean(query);
         if (cleanQuery.isEmpty()) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(8, limit));
@@ -63,8 +71,8 @@ final class FapelloRepository {
                     JSONObject value = values.optJSONObject(i);
                     if (value == null) continue;
                     String url = normalizeUrl(value.optString("url", ""), BASE);
-                    String name = clean(value.optString("name", cleanQuery));
-                    if (!isModelUrl(url)) continue;
+                    String name = clean(value.optString("name", ""));
+                    if (!isModelUrl(url) || name.isEmpty()) continue;
                     String image = firstJsonImage(value);
                     models.putIfAbsent(url, new Model(name, url, image));
                 }
@@ -77,7 +85,8 @@ final class FapelloRepository {
 
         // Fapello names usually map directly to a lowercase hyphenated profile slug. This also
         // keeps Fapzone useful when Fapello's optional search endpoint is temporarily unavailable.
-        if (models.isEmpty()) {
+        if (models.isEmpty() && !allowGuessedProfile && searchError != null) throw searchError;
+        if (models.isEmpty() && allowGuessedProfile) {
             String slug = slugify(cleanQuery);
             if (!slug.isEmpty()) {
                 String url = BASE + slug + "/";
@@ -271,7 +280,7 @@ final class FapelloRepository {
                 .header("Accept", json
                         ? "application/json,text/javascript,*/*;q=0.8"
                         : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-        if (json) connection.header("X-Requested-With", "XMLHttpRequest");
+        if (json) connection.timeout(6000).maxBodySize(1024 * 1024).header("X-Requested-With", "XMLHttpRequest");
         Connection.Response response = connection.execute();
         if (response.statusCode() >= 400) {
             throw new IOException("Fapello returned HTTP " + response.statusCode());

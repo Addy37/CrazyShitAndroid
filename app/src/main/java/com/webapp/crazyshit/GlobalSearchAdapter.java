@@ -87,10 +87,34 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     void replace(List<Entry> next) {
+        List<Entry> old = new ArrayList<>(entries);
+        List<Entry> replacement = next == null ? new ArrayList<>() : new ArrayList<>(next);
+        androidx.recyclerview.widget.DiffUtil.DiffResult diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(
+                new androidx.recyclerview.widget.DiffUtil.Callback() {
+                    public int getOldListSize() { return old.size(); }
+                    public int getNewListSize() { return replacement.size(); }
+                    public boolean areItemsTheSame(int a, int b) {
+                        Entry x = old.get(a), y = replacement.get(b);
+                        if (x.section != y.section) return false;
+                        if (x.section) return sectionKey(x).equals(sectionKey(y));
+                        return x.source == y.source && x.item.kind.equals(y.item.kind) && x.item.url.equals(y.item.url);
+                    }
+                    public boolean areContentsTheSame(int a, int b) {
+                        Entry x = old.get(a), y = replacement.get(b);
+                        if (x.section) return x.sectionTitle.equals(y.sectionTitle);
+                        return x.item.title.equals(y.item.title) && x.item.imageUrl.equals(y.item.imageUrl)
+                                && x.item.views.equals(y.item.views) && x.item.uploader.equals(y.item.uploader)
+                                && x.item.comments.equals(y.item.comments) && x.item.description.equals(y.item.description);
+                    }
+                });
         entries.clear();
-        if (next != null) entries.addAll(next);
-        notifyDataSetChanged();
+        entries.addAll(replacement);
+        diff.dispatchUpdatesTo(this);
         preloadDirectThumbnails();
+    }
+
+    private static String sectionKey(Entry entry) {
+        return entry.sectionTitle.replaceFirst("\\s+•\\s+\\d+$", "");
     }
 
     void close() {
@@ -109,7 +133,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     @Override
     public long getItemId(int position) {
         Entry entry = entries.get(position);
-        if (entry.section) return ("section:" + entry.sectionTitle).hashCode();
+        if (entry.section) return ("section:" + sectionKey(entry)).hashCode();
         if (entry.item == null) return position;
         return (entry.item.kind + ":" + entry.item.url + ":" + entry.source).hashCode();
     }

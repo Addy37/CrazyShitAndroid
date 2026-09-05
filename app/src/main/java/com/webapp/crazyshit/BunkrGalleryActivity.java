@@ -80,6 +80,8 @@ public final class BunkrGalleryActivity extends Activity {
     private ProgressBar initialLoading;
     private boolean chromeVisible = true;
     private ExoPlayer player;
+    private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
+    private boolean recoveryResumed;
     private int activeVideoPosition = -1;
     private volatile int requestedPhotoPosition = -1;
 
@@ -101,8 +103,21 @@ public final class BunkrGalleryActivity extends Activity {
         initialPosition = Math.max(0, getIntent().getIntExtra(EXTRA_INITIAL_POSITION, 0));
         if (albumTitle.isEmpty()) albumTitle = "Fapzone gallery";
 
-        BunkrGallerySessionStore.Snapshot snapshot =
-                BunkrGallerySessionStore.snapshot(sessionId);
+        if (state != null) {
+            sessionId = state.getString("session", sessionId);
+            initialUrl = state.getString("current_url", initialUrl);
+            initialPosition = state.getInt("current_position", initialPosition);
+        }
+        BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(sessionId);
+        if (snapshot == null && !sessionId.isEmpty()) {
+            pageIo.execute(() -> {
+                BunkrGallerySessionStore.Snapshot restored = BunkrGallerySessionStore.restore(this, sessionId);
+                runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) initializeGallery(restored); });
+            });
+        } else initializeGallery(snapshot);
+    }
+
+    private void initializeGallery(BunkrGallerySessionStore.Snapshot snapshot) {
         if (snapshot == null) {
             sessionId = isCreatorGallery()
                     ? BunkrGallerySessionStore.createCreator(albumTitle, albumUrl, creatorQuery)
@@ -434,6 +449,7 @@ public final class BunkrGalleryActivity extends Activity {
             if (player.isPlaying()) player.pause(); else player.play();
             return;
         }
+        playbackRecovery.reset();
         releasePlayer();
         String cached = adapter.resolvedUrl(position);
         if (!cached.isEmpty()) {
@@ -520,15 +536,25 @@ public final class BunkrGalleryActivity extends Activity {
         if (lower.contains(".m3u8")) media.setMimeType(MimeTypes.APPLICATION_M3U8);
         else if (lower.contains(".mpd")) media.setMimeType(MimeTypes.APPLICATION_MPD);
         player.setMediaItem(media.build());
+        playbackRecovery.bind(player, item.url);
         player.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(PlaybackException error) {
+                BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
+                adapter.setResolvedUrl(position, "");
+                if (playbackRecovery.recover(BunkrGalleryActivity.this, error, recovered -> {
+                    if (pager.getCurrentItem() != position) return;
+                    adapter.setResolvedUrl(position, recovered.stream.mediaUrl);
+                    startPlayer(position, item, recovered.stream.mediaUrl, value(recovered.stream.requestReferer));
+                    player.seekTo(recovered.position);
+                    player.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
+                }, () -> {
+                    releasePlayer(); adapter.setFailed(position, true);
+                    Toast.makeText(BunkrGalleryActivity.this, "Couldn't refresh this video. Tap it to retry.", Toast.LENGTH_SHORT).show();
+                })) return;
+                releasePlayer();
                 adapter.setFailed(position, true);
-                Toast.makeText(
-                        BunkrGalleryActivity.this,
-                        "Couldn't continue this video.",
-                        Toast.LENGTH_SHORT
-                ).show();
+                Toast.makeText(BunkrGalleryActivity.this, "Couldn't continue this video. Tap it to retry.", Toast.LENGTH_SHORT).show();
             }
         });
         player.setPlayWhenReady(true);
@@ -537,6 +563,7 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void releasePlayer() {
+        playbackRecovery.cancel();
         if (player != null) {
             player.release();
             player = null;
@@ -659,8 +686,24 @@ public final class BunkrGalleryActivity extends Activity {
         return filtered;
     }
 
+    @Override protected void onResume() { super.onResume(); recoveryResumed = true; }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        state.putString("session", sessionId);
+        if (pager != null && adapter != null) {
+            int index = pager.getCurrentItem();
+            NativeContentItem item = adapter.itemAt(index);
+            state.putInt("current_position", index);
+            state.putString("current_url", item == null ? initialUrl : item.url);
+        }
+        BunkrGallerySessionStore.persist(this, sessionId);
+        super.onSaveInstanceState(state);
+    }
+
     @Override
     protected void onPause() {
+        recoveryResumed = false;
+        BunkrGallerySessionStore.persist(this, sessionId);
         releasePlayer();
         super.onPause();
     }

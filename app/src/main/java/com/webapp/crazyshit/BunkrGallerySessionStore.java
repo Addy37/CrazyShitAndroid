@@ -119,21 +119,49 @@ final class BunkrGallerySessionStore {
         return session == null ? null : new Snapshot(session);
     }
 
+    static void persist(android.content.Context context, String id) {
+        Snapshot snapshot = snapshot(id);
+        if (snapshot == null) return;
+        android.content.Context app = context.getApplicationContext();
+        SNAPSHOT_IO.execute(() -> {
+            try {
+                org.json.JSONObject value = new org.json.JSONObject()
+                        .put("title", snapshot.title).put("album", snapshot.albumUrl)
+                        .put("query", snapshot.creatorQuery).put("page", snapshot.currentPage)
+                        .put("end", snapshot.endReached)
+                        .put("items", ContentItemCodec.encodeList(snapshot.items, 10000));
+                ScreenSnapshotStore.save(app, id, value);
+            } catch (Exception ignored) { }
+        });
+    }
+
+    static Snapshot restore(android.content.Context context, String id) {
+        Snapshot warm = snapshot(id);
+        if (warm != null) return warm;
+        org.json.JSONObject value = ScreenSnapshotStore.read(context, id);
+        if (value == null) return null;
+        synchronized (BunkrGallerySessionStore.class) {
+            Session restored = new Session(value.optString("title"), value.optString("album"), value.optString("query"));
+            restored.items.addAll(ContentItemCodec.decodeList(value.optJSONArray("items"), 10000));
+            restored.currentPage = value.optInt("page");
+            restored.endReached = value.optBoolean("end");
+            SESSIONS.put(id, restored);
+            trim();
+            return new Snapshot(restored);
+        }
+    }
+
+    private static final java.util.concurrent.ExecutorService SNAPSHOT_IO = java.util.concurrent.Executors.newSingleThreadExecutor();
+
     private static void addUnique(
             ArrayList<NativeContentItem> destination,
             List<NativeContentItem> incoming
     ) {
         if (incoming == null) return;
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (NativeContentItem existing : destination) seen.add(existing.url);
         for (NativeContentItem candidate : incoming) {
-            if (candidate == null || candidate.url == null || candidate.url.isEmpty()) continue;
-            boolean duplicate = false;
-            for (NativeContentItem existing : destination) {
-                if (candidate.url.equals(existing.url)) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (!duplicate) destination.add(candidate);
+            if (candidate != null && !candidate.url.isEmpty() && seen.add(candidate.url)) destination.add(candidate);
         }
     }
 

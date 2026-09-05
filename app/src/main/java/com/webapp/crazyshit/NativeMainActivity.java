@@ -84,10 +84,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private boolean loading;
     private boolean endReached;
     private int generation;
+    private int restoredPrimaryPage = -1;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (state != null) restoredPrimaryPage = state.getInt("primary_page", -1);
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
         buildUi();
@@ -102,7 +104,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void startAppContent() {
-        showHome();
+        if (restoredPrimaryPage >= 0 && primaryPagerAdapter != null && restoredPrimaryPage < primaryPagerAdapter.getItemCount())
+            showPrimaryPage(restoredPrimaryPage, false);
+        else showHome();
         dispatchLauncherShortcut();
         NotificationCoordinator.maybeOfferPermission(this);
     }
@@ -838,7 +842,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             return;
         }
         if (AppShortcuts.ACTION_SEARCH.equals(action)) {
-            overlayRoot.post(this::showSearchDialog);
+            overlayRoot.post(this::openContextualSearch);
             return;
         }
 
@@ -933,6 +937,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     public void reopenMiniPlayer(Intent intent) {
         startActivityForResult(intent, PLAYER_REQUEST);
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        if (primaryPager != null) state.putInt("primary_page", primaryPager.getCurrentItem());
+        super.onSaveInstanceState(state);
     }
 
     @Override

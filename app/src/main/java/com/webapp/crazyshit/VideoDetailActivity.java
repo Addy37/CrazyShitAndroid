@@ -123,6 +123,8 @@ public class VideoDetailActivity extends Activity {
     private String relatedFeedUrl;
     private String source;
     private String mediaReferer;
+    private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
+    private boolean recoveryResumed;
     private long requestedStartPosition;
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
     private boolean failureShown;
@@ -550,6 +552,7 @@ public class VideoDetailActivity extends Activity {
         if (lower.contains(".m3u8")) item.setMimeType(MimeTypes.APPLICATION_M3U8);
         else if (lower.contains(".mpd")) item.setMimeType(MimeTypes.APPLICATION_MPD);
         player.setMediaItem(item.build());
+        playbackRecovery.bind(player, pageUrl);
 
         long position = startPosition;
         if (position < 0L && rememberPositionEnabled()) {
@@ -575,7 +578,7 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onPlayerError(PlaybackException error) {
-                showPlaybackFailure();
+                if (!recoverPlayback(error)) showPlaybackFailure();
             }
 
             @Override
@@ -1331,6 +1334,7 @@ public class VideoDetailActivity extends Activity {
                 .setTitle("Couldn't play this stream")
                 .setMessage("The native player couldn't continue this video. You can open the normal webpage instead.")
                 .setNegativeButton("Close", null)
+                .setNeutralButton("Retry", (dialog, which) -> recoverPlayback(null))
                 .setPositiveButton("Open page", (dialog, which) -> openWebsite(pageUrl))
                 .show();
     }
@@ -1527,7 +1531,19 @@ public class VideoDetailActivity extends Activity {
         }
     }
 
+    private boolean recoverPlayback(PlaybackException error) {
+        if (error == null) failureShown = false;
+        return playbackRecovery.recover(this, error, recovered -> {
+            mediaUrl = recovered.stream.mediaUrl;
+            mediaReferer = recovered.stream.requestReferer;
+            try { cookies = clean(CookieManager.getInstance().getCookie(mediaUrl)); } catch (Exception ignored) { }
+            buildPlayer(recovered.position);
+            player.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
+        }, this::showPlaybackFailure);
+    }
+
     private void releasePlayer() {
+        playbackRecovery.cancel();
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
             try {
@@ -1594,6 +1610,7 @@ public class VideoDetailActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        recoveryResumed = true;
         updateSwipeEnabled();
         if (detailsScroll != null) applyDetailsBackground();
     }

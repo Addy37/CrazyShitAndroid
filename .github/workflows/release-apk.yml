@@ -9,6 +9,7 @@ on:
         default: '2.0.0'
         type: string
   push:
+    branches: [ main ]
     paths:
       - RELEASE_VERSION
 
@@ -36,7 +37,20 @@ jobs:
 
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "APP_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
-          echo "APP_VERSION_CODE=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          python3 - "$VERSION" <<'PY'
+          import os, re, sys
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
+          if not match:
+              raise SystemExit("Stable version must be major.minor.patch")
+          major, minor, patch = map(int, match.groups())
+          if minor >= 1000 or patch >= 1000:
+              raise SystemExit("Minor and patch versions must be below 1000")
+          code = major * 1_000_000 + minor * 1000 + patch
+          if not 0 < code <= 2_100_000_000:
+              raise SystemExit("Version code is outside Android limits")
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write(f"APP_VERSION_CODE={code}\n")
+          PY
           echo "APK_PRIMARY=CrazyShit.apk" >> "$GITHUB_ENV"
           echo "RELEASE_TITLE=CrazyShit v${VERSION}" >> "$GITHUB_ENV"
 
@@ -87,13 +101,23 @@ jobs:
           PY
 
       - name: Build signed release APK
-        run: gradle --no-daemon :app:assembleRelease
+        run: gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease
 
       - name: Prepare and verify release files
         run: |
           cp app/build/outputs/apk/release/app-release.apk "$APK_PRIMARY"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK_PRIMARY"
           sha256sum "$APK_PRIMARY" > SHA256SUMS.txt
+
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrazyShit-signed
+          path: |
+            CrazyShit.apk
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Publish GitHub Release
         env:

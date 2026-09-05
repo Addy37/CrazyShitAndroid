@@ -37,6 +37,7 @@ final class VideoDownloadStore {
     private static final String KEY_PREFIX = "entry_";
     private static final ExecutorService RESOLVER = Executors.newFixedThreadPool(2);
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final Set<Long> RESTARTING = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final AtomicInteger CUSTOM_ID_SEQUENCE = new AtomicInteger();
 
     private VideoDownloadStore() {
@@ -351,6 +352,71 @@ final class VideoDownloadStore {
         removeMetadata(context, entry.id);
     }
 
+    static void pause(Context context, Entry entry) {
+        if (entry == null || entry.id >= 0L || Build.VERSION.SDK_INT < 29) return;
+        AcceleratedDownloadService.pause(context, entry.id);
+        updateCustom(context, entry.id, DownloadManager.STATUS_PAUSED,
+                entry.downloadedBytes, entry.totalBytes, entry.localUri, 2);
+    }
+
+    static void recoverInterrupted(Context context) {
+        if (Build.VERSION.SDK_INT < 29) return;
+        for (Entry entry : entries(context)) {
+            if (entry.id < 0 && (entry.status == DownloadManager.STATUS_RUNNING || entry.status == DownloadManager.STATUS_PENDING)
+                    && !AcceleratedDownloadService.isActive(entry.id) && !RESTARTING.contains(entry.id)) {
+                updateCustom(context, entry.id, DownloadManager.STATUS_PAUSED,
+                        entry.downloadedBytes, entry.totalBytes, entry.localUri, 3);
+            }
+        }
+    }
+
+    static void retry(Context context, Entry entry) {
+        if (entry == null) return;
+        Context app = context.getApplicationContext();
+        if (entry.id < 0 && AcceleratedDownloadService.isActive(entry.id)) {
+            toast(app, "Finishing the pause. Try Resume in a moment."); return;
+        }
+        if (!RESTARTING.add(entry.id)) return;
+        toast(app, "Refreshing download link…");
+        RESOLVER.execute(() -> {
+            CrazyShitRepository.StreamInfo resolved = null;
+            try { if (!entry.pageUrl.isEmpty()) resolved = PlayableSourceRouter.resolve(app, entry.pageUrl); }
+            catch (Exception ignored) { }
+            CrazyShitRepository.StreamInfo stream = resolved;
+            MAIN.post(() -> {
+                try {
+                    Entry current = entry(app, entry.id);
+                    if (current == null) return;
+                    if (stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty()) {
+                        toast(app, "Couldn't refresh this link. Your saved progress is still available."); return;
+                    }
+                    String media = stream.mediaUrl;
+                    String lower = media.toLowerCase(Locale.US);
+                    if ((!lower.startsWith("https://") && !lower.startsWith("http://"))
+                            || lower.contains(".m3u8") || lower.contains(".mpd")) {
+                        toast(app, "This source doesn't provide a downloadable video file."); return;
+                    }
+                    if (entry.id >= 0L || Build.VERSION.SDK_INT < 29) {
+                        remove(app, current);
+                        enqueue(app, entry.title, entry.pageUrl, entry.imageUrl, media,
+                                defaultUserAgent(app), cookiesFor(media, entry.pageUrl), stream.requestReferer);
+                    } else {
+                        saveMetadata(app, new Entry(entry.id, entry.title, entry.pageUrl, entry.imageUrl, media,
+                                mimeType(media), entry.createdAt, DownloadManager.STATUS_PENDING,
+                                current.downloadedBytes, current.totalBytes, current.localUri, 0));
+                        AcceleratedDownloadService.start(app, entry.id, entry.title,
+                                fileName(entry.title, entry.pageUrl, mimeType(media)), media, mimeType(media),
+                                requestHeaders(media, stream.requestReferer, defaultUserAgent(app), cookiesFor(media, entry.pageUrl)));
+                    }
+                } catch (Exception error) {
+                    updateCustom(app, entry.id, DownloadManager.STATUS_PAUSED,
+                            entry.downloadedBytes, entry.totalBytes, entry.localUri, 3);
+                    toast(app, "Couldn't restart the download. Try again.");
+                } finally { RESTARTING.remove(entry.id); }
+            });
+        });
+    }
+
     static String statusText(Entry entry) {
         if (entry == null) return "Unavailable";
         switch (entry.status) {
@@ -360,11 +426,12 @@ final class VideoDownloadStore {
                 }
                 return "Downloading";
             case DownloadManager.STATUS_PAUSED:
-                return "Paused by Android";
+                return entry.id < 0L ? (AcceleratedDownloadService.isActive(entry.id) ? "Pausing…"
+                        : entry.reason == 3 ? "Interrupted · Tap Resume" : "Paused · Tap Resume") : "Paused by Android";
             case DownloadManager.STATUS_SUCCESSFUL:
                 return "Ready offline";
             case DownloadManager.STATUS_FAILED:
-                return "Download failed";
+                return "Download failed · Progress kept for retry";
             case DownloadManager.STATUS_PENDING:
             default:
                 return "Waiting to download";

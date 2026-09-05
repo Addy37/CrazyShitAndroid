@@ -1,30 +1,15 @@
-# CrazyShit v2.9.1
+# CrazyShit 2.10.0
 
-CrazyShit 2.9.1 adds creator favorites, Fapzone video downloads, and better search back behavior.
+- Creator suggestions appear while typing in Fapzone and global search, with thumbnails and favorite stars.
+- Favorite creators have their own searchable page under More, Settings and the search header.
+- Global search displays each source as it finishes and reports unavailable sources.
+- Search and gallery state survives screen recreation. Back returns to the existing search or gallery.
+- Downloads support pause/resume, interrupted job recovery, refreshed links and validated partial files on Android 10 and newer.
+- Download and search lists update changed rows without rebuilding the whole list.
+- Video playback can refresh a failed network stream while keeping its position.
+- Settings includes backup export/restore and session performance details.
+- Update instructions match private APK distribution.
 
-## Creator favorites
+Install this signed APK over your current stable app to retain saved data. Creator favorites from 2.9.1 migrate automatically.
 
-- Long-press a Fapzone creator card to favorite or unfavorite the creator
-- Shows a yellow star on favorite creator cards
-- Keeps favorites after the app closes or the phone restarts
-
-## Video downloads
-
-- Downloads Fapzone videos from the gallery tile menu
-- Adds a download button to the full-screen gallery viewer
-- Uses the existing download system and saves completed files to Android's Downloads folder
-
-## Search behavior
-
-- Keeps the Fapzone search screen in Android's activity history
-- Returns to the same search screen after swiping back from a creator gallery
-
-## Compatibility
-
-- Installs directly over CrazyShit 2.9.0
-- Uses the stable application ID and existing signing identity
-- Keeps the separate beta app unchanged
-
-## Project status
-
-This Android client is an independent community project. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com, EFukt.com, Bunkr, or Fapello.
+Resuming saved download bytes depends on the server providing byte ranges and a usable file validator. Other servers restart the transfer. Live search and playback still depend on the source sites.

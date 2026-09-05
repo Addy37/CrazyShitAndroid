@@ -30,6 +30,7 @@ public class SettingsActivity extends Activity {
 
     private SharedPreferences prefs;
     private AppUpdater appUpdater;
+    private AppBackupController backup;
     private TextView notificationStatusView;
     private boolean notificationReceiverRegistered;
     private final BroadcastReceiver notificationCheckReceiver = new BroadcastReceiver() {
@@ -49,6 +50,7 @@ public class SettingsActivity extends Activity {
         super.onCreate(state);
         prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         appUpdater = new AppUpdater(this);
+        backup = new AppBackupController(this);
         buildUi();
         if (getIntent().getBooleanExtra(EXTRA_CHECK_FOR_UPDATES, false)) {
             getIntent().removeExtra(EXTRA_CHECK_FOR_UPDATES);
@@ -122,11 +124,13 @@ public class SettingsActivity extends Activity {
                 "Check now",
                 NotificationCoordinator.statusSummary(this),
                 this::checkNotificationsNow);
+        if (!BuildConfig.PRIVATE_DISTRIBUTION) {
         addSwitch(root,
                 "App update alerts",
                 "Notify you when a new build is ready. Nothing downloads until you tap it.",
                 NotificationCoordinator.PREF_UPDATE_ALERTS,
                 true);
+        }
         addAction(root,
                 "Preview notification",
                 "Send a branded test alert and check Android notification access.",
@@ -183,6 +187,8 @@ public class SettingsActivity extends Activity {
                 true);
 
         addSection(root, "Library");
+        addAction(root, "Favorite creators", "Search and open your starred creators.", () ->
+                startActivity(new Intent(this, CreatorsActivity.class)));
         addAction(root, "Library", "Continue Watching, History and Watch Later.", () ->
                 startActivity(new Intent(this, FavoritesActivity.class)));
         addAction(root, "Clear watch history", "Remove watched and Continue Watching state from this device.", () -> {
@@ -194,8 +200,15 @@ public class SettingsActivity extends Activity {
             Toast.makeText(this, "Watch Later cleared.", Toast.LENGTH_SHORT).show();
         });
 
+        addSection(root, "Backup & restore");
+        addAction(root, "Export backup", "Save creator favorites, Watch Later and your settings.", backup::exportFile);
+        addAction(root, "Restore backup", "Add saved items from a backup and restore its settings.", backup::importFile);
+
         addSection(root, "App");
-        addAction(root, "Check for updates", "Check your current beta or stable channel and install inside the app.", () -> {
+        addAction(root, "Performance details", "View loading and scrolling timings from this session.", () ->
+                new AlertDialog.Builder(this).setTitle("Performance details").setMessage(AppPerformance.summary())
+                        .setPositiveButton("Close", null).show());
+        addAction(root, "App updates", "Version " + BuildConfig.VERSION_NAME + " · Install your private APK update.", () -> {
             if (appUpdater != null) appUpdater.check(true);
         });
         addAction(root, "Clear site data", "Sign out and remove website cookies and local storage.", () -> {
@@ -213,6 +226,11 @@ public class SettingsActivity extends Activity {
         root.addView(footer);
 
         setContentView(scroll);
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (backup != null) backup.onResult(requestCode, resultCode, data);
     }
 
     private void addSection(LinearLayout root, String text) {
