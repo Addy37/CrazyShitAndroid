@@ -470,19 +470,30 @@ final class BunkrCreatorGalleryRepository {
     }
 
     private ArrayList<NativeContentItem> interleave(
-            List<NativeContentItem>... sources
+            List<NativeContentItem> bunkr,
+            List<NativeContentItem> fapello,
+            List<NativeContentItem> wikiFeet
     ) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        int count = 0;
-        for (List<NativeContentItem> source : sources) {
-            count = Math.max(count, source == null ? 0 : source.size());
-        }
+        int count = Math.max(size(bunkr), Math.max(size(fapello), size(wikiFeet)));
         for (int i = 0; i < count; i++) {
-            for (List<NativeContentItem> source : sources) {
-                if (source != null && i < source.size()) result.add(source.get(i));
-            }
+            addAt(result, bunkr, i);
+            addAt(result, fapello, i);
+            addAt(result, wikiFeet, i);
         }
         return result;
+    }
+
+    private int size(List<NativeContentItem> items) {
+        return items == null ? 0 : items.size();
+    }
+
+    private void addAt(
+            List<NativeContentItem> output,
+            List<NativeContentItem> source,
+            int index
+    ) {
+        if (source != null && index < source.size()) output.add(source.get(index));
     }
 
     private State state(Context context, String sessionId, String query) throws IOException {
