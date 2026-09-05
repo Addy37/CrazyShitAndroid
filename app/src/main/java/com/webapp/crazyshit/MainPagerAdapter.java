@@ -53,6 +53,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private final Activity activity;
     private final Host host;
+    private HomeSourceRepository homeRepository = new HomeSourceRepository();
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final BrowseRepository browseRepository = new BrowseRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
@@ -125,6 +126,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         Page page = pageAt(position);
         if (page == null) return;
         page.generation++;
+        if (page.loadTask != null) page.loadTask.cancel(true);
+        page.empty.setVisibility(View.GONE);
         page.currentPage = 0;
         page.endReached = false;
         page.loading = false;
@@ -161,7 +164,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         chaosView.close();
         browseArtworkResolver.close();
         for (Page page : pages) {
-            if (page != null && page.browseAdapter != null) page.browseAdapter.close();
+            if (page == null) continue;
+            page.generation++;
+            if (page.loadTask != null) page.loadTask.cancel(true);
+            if (page.browseAdapter != null) page.browseAdapter.close();
+            if (page.feedAdapter != null) page.feedAdapter.close();
         }
         io.shutdownNow();
     }
@@ -236,7 +243,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         for (int source = 0; source < names.length; source++) {
             final int selected = source;
             TextView chip = BrowseUi.action(activity, names[source], names[source] + " Home feed", v -> {
-                if (page.homeSource == selected) return;
+                if (page.homeSource == selected) {
+                    if (!page.loading && page.itemCount() == 0) refresh(page.index);
+                    return;
+                }
                 page.homeSource = selected;
                 activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE).edit().putInt("home_source", selected).apply();
                 styleHomeSources(page);
@@ -255,6 +265,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         feedParams.topMargin = dp(56);
         page.refresh.setLayoutParams(feedParams);
         page.root.addView(scroll, new FrameLayout.LayoutParams(-1, dp(56)));
+        FrameLayout.LayoutParams emptyParams = (FrameLayout.LayoutParams) page.empty.getLayoutParams();
+        emptyParams.topMargin = dp(56);
+        page.empty.setLayoutParams(emptyParams);
+        page.empty.setOnClickListener(v -> refresh(page.index));
+        page.empty.setContentDescription("Retry Home feed");
         styleHomeSources(page);
         page.viewMode = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
                 .getInt(prefKey, NativeFeedAdapter.VIEW_CARDS);
@@ -744,7 +759,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         final int requestPage = append ? page.currentPage + 1 : 1;
         if (!append && page.itemCount() == 0) page.progress.setVisibility(View.VISIBLE);
 
-        io.execute(() -> {
+        page.loadTask = io.submit(() -> {
             try {
                 List<NativeContentItem> result;
                 if (page.kind == PageKind.SERIES) {
@@ -760,7 +775,17 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 } else if (page.kind == PageKind.CATEGORIES) {
                     result = browseRepository.fetchCategories(activity);
                 } else {
-                    result = new HomeSourceRepository().fetch(activity, selectedHomeSource, requestPage);
+                    result = homeRepository.fetch(activity, selectedHomeSource, requestPage,
+                            items -> {
+                                if (appendRequest) return;
+                                activity.runOnUiThread(() -> {
+                                    if (generation != page.generation || activity.isFinishing()) return;
+                                    page.feedAdapter.replace(items);
+                                    page.progress.setVisibility(View.GONE);
+                                    page.refresh.setRefreshing(false);
+                                    page.empty.setVisibility(View.GONE);
+                                });
+                            });
                 }
 
                 activity.runOnUiThread(() -> {
@@ -790,7 +815,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                 ? "Couldn't load CrazyShit Series right now."
                                 : page.kind == PageKind.CATEGORIES
                                 ? "Couldn't load Categories right now."
-                                : "This feed couldn't be rendered right now.");
+                                : "No videos returned for this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
                 });
@@ -809,7 +834,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                 ? "Couldn't load CrazyShit Series right now."
                                 : page.kind == PageKind.CATEGORIES
                                 ? "Couldn't load Categories right now."
-                                : "Couldn't load this tab right now.");
+                                : "Couldn't load this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
                 });
@@ -905,6 +930,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         int seriesSource = SERIES_SOURCE_CRAZYSHIT;
         int fapzoneMode = FapzoneCreatorRepository.MODE_TOP_50;
         int homeSource;
+        java.util.concurrent.Future<?> loadTask;
         final java.util.List<TextView> homeChips = new java.util.ArrayList<>();
         int currentPage;
         boolean loading;
@@ -924,3 +950,4 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         }
     }
 }
+

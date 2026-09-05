@@ -42,6 +42,73 @@ public class VisualRefreshTest {
         try (FileOutputStream out = new FileOutputStream(new File(dir, name + ".png"))) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); }
         bitmap.recycle();
     }
+    @Test public void fullHomeKeepsRefreshStyleAcrossLateControllersAndTabChanges() throws Exception {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        android.content.SharedPreferences prefs = context.getSharedPreferences("app_prefs", 0);
+        prefs.edit().putBoolean("access_notice_2_8_3_accepted", true)
+                .putInt("native_view_home", NativeFeedAdapter.VIEW_LIST).apply();
+        android.os.Bundle state = new android.os.Bundle(); state.putInt("primary_page", 0);
+        ActivityController<NativeMainActivity> screen = Robolectric.buildActivity(NativeMainActivity.class)
+                .create(state).start().resume().visible();
+        NativeMainActivity main = screen.get();
+        UiFoundationCoordinator.onActivityCreated(main, state);
+        UiFoundationCoordinator.onActivityResumed(main);
+        MainPagerAdapter pager = ReflectionHelpers.getField(main, "primaryPagerAdapter");
+        NativeContentItem video = new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                "A sample video with a readable title", "https://example.invalid/cnt/medias/1-sample", "", "12K", "", "");
+        ReflectionHelpers.setField(pager, "homeRepository", new HomeSourceRepository(
+                (ctx, source, page) -> Collections.singletonList(video), 1000));
+        pager.refresh(MainPagerAdapter.PAGE_HOME);
+        Object[] pages = ReflectionHelpers.getField(pager, "pages");
+        Object home = pages[MainPagerAdapter.PAGE_HOME];
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while ((boolean) ReflectionHelpers.getField(home, "loading") && System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(10);
+        }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
+        NativeFeedAdapter feed = ReflectionHelpers.getField(home, "feedAdapter");
+        assertEquals(1, feed.getItemCount());
+        assertEquals(NativeFeedAdapter.VIEW_CARDS, pager.viewMode(MainPagerAdapter.PAGE_HOME));
+        com.google.android.material.bottomnavigation.BottomNavigationView nav = ReflectionHelpers.getField(main, "bottomNavigation");
+        nav.setSelectedItemId(3);
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
+        androidx.viewpager2.widget.ViewPager2 viewPager = ReflectionHelpers.getField(main, "primaryPager");
+        assertEquals(MainPagerAdapter.PAGE_CATEGORIES, viewPager.getCurrentItem());
+        nav.setSelectedItemId(1);
+        OledImmersiveUiController.attachMain(main);
+        UiPolishController.attach(main);
+        ResponsiveFitmentController.applySoon(main);
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
+        View root = ReflectionHelpers.getField(main, "overlayRoot");
+        capture(root, "home-lifecycle", 360, 800);
+        RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
+        NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
+        assertNotNull(visibleCard);
+        visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
+        visibleCard.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) visibleCard.itemView;
+        assertEquals(0, card.getStrokeWidth());
+        assertEquals(Color.BLACK, card.getCardBackgroundColor().getDefaultColor());
+        capture(root, "home-lifecycle", 360, 800);
+        assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
+        assertEquals(BrowseUi.dp(main, 76), nav.getLayoutParams().height);
+        assertEquals(BrowseUi.dp(main, 32), nav.getItemActiveIndicatorHeight());
+        assertEquals(UiPalette.PRIMARY, nav.getItemActiveIndicatorColor().getDefaultColor());
+        assertEquals(Color.BLACK, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
+        assertTrue(nav.isItemActiveIndicatorEnabled());
+        assertEquals(5, nav.getMenu().size());
+        for (int id : new int[] {1, 2, 4, 3, 5}) {
+            View tab = nav.findViewById(id);
+            assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
+            assertTrue(tab.getHeight() >= BrowseUi.dp(main, 48));
+        }
+        prefs.edit().putInt("native_view_home", NativeFeedAdapter.VIEW_GRID).apply();
+        FeedViewStyleController.prepareVisualRefresh(main);
+        assertEquals(NativeFeedAdapter.VIEW_GRID, prefs.getInt("native_view_home", -1));
+        UiFoundationCoordinator.onActivityDestroyed(main);
+        screen.pause().stop().destroy();
+    }
+
     @Test public void creatorHeaderFavoriteAndCardMenuWorkAtPhoneWidth() throws Exception {
         ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
         host.get().setTheme(R.style.Theme_CrazyShit);
@@ -122,3 +189,4 @@ public class VisualRefreshTest {
         screen.pause().stop().destroy();
     }
 }
+

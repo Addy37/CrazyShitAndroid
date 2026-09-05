@@ -16,8 +16,8 @@ android {
         buildConfigField("boolean", "PRIVATE_DISTRIBUTION", "true")
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 2_011_000
-        versionName = System.getenv("APP_VERSION_NAME") ?: "2.11.0"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 2_011_001
+        versionName = System.getenv("APP_VERSION_NAME") ?: "2.11.1"
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
@@ -91,3 +91,4 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
 }
+

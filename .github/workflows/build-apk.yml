@@ -84,6 +84,7 @@ jobs:
           git push origin "${{ github.head_ref }}"
 
       - name: Upload browse artwork bundle
+        continue-on-error: true
         if: ${{ steps.capture_art.outputs.captured == 'true' }}
         uses: actions/upload-artifact@v4
         with:
@@ -112,6 +113,7 @@ jobs:
         run: gradle --no-daemon :app:lintDebug
 
       - name: Upload lint report
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -125,7 +127,21 @@ jobs:
       - name: Test and build debug APK
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
 
+      - name: Summarize UI regression checks
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import pathlib,xml.etree.ElementTree as E,base64
+          for path in pathlib.Path('app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              root=E.parse(path).getroot()
+              print('TEST_SUMMARY',root.attrib)
+              for failure in root.iter('failure'): print((failure.text or '')[:6000])
+          image=pathlib.Path('app/build/reports/visual-tests/home-lifecycle.png')
+          if image.exists(): print('UI_RENDER_HOME='+base64.b64encode(image.read_bytes()).decode())
+          PY
+
       - name: Upload regression test results
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -135,6 +151,7 @@ jobs:
           retention-days: 14
 
       - name: Upload native screen renders
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -147,9 +164,11 @@ jobs:
         run: cp app/build/outputs/apk/debug/app-debug.apk CrazyShit-debug.apk
 
       - name: Upload APK
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: CrazyShit-debug
           path: CrazyShit-debug.apk
           if-no-files-found: error
           retention-days: 14
+

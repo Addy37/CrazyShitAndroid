@@ -35,6 +35,36 @@ final class StableBottomNavigationController {
     private StableBottomNavigationController() {
     }
 
+    static void styleBar(BottomNavigationView nav) {
+        if (nav == null) return;
+        Context context = nav.getContext();
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.rgb(24, 24, 28));
+        bg.setStroke(BrowseUi.dp(context, 1), Color.rgb(46, 46, 52));
+        bg.setCornerRadius(BrowseUi.dp(context, 26));
+        nav.setBackground(bg);
+        nav.setElevation(0f);
+        nav.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
+        nav.setItemHorizontalTranslationEnabled(false);
+        int[][] states = { {android.R.attr.state_checked}, {} };
+        int muted = Color.rgb(168, 168, 178);
+        nav.setItemIconTintList(new ColorStateList(states, new int[] {Color.BLACK, muted}));
+        nav.setItemTextColor(new ColorStateList(states, new int[] {UiPalette.PRIMARY, muted}));
+        nav.setItemTextAppearanceActive(R.style.TextAppearance_CrazyShit_Navigation);
+        nav.setItemTextAppearanceInactive(R.style.TextAppearance_CrazyShit_Navigation);
+        nav.setItemIconSize(BrowseUi.dp(context, 24));
+        nav.setItemPaddingTop(BrowseUi.dp(context, 8));
+        nav.setItemPaddingBottom(BrowseUi.dp(context, 8));
+        nav.setItemActiveIndicatorEnabled(true);
+        nav.setItemActiveIndicatorColor(ColorStateList.valueOf(UiPalette.PRIMARY));
+        nav.setItemActiveIndicatorWidth(BrowseUi.dp(context, 56));
+        nav.setItemActiveIndicatorHeight(BrowseUi.dp(context, 32));
+        nav.setItemActiveIndicatorShapeAppearance(
+                com.google.android.material.shape.ShapeAppearanceModel.builder()
+                        .setAllCornerSizes(BrowseUi.dp(context, 16)).build());
+        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 251, 245, 6)));
+    }
+
     static void attach(NativeMainActivity activity) {
         if (activity == null || activity.isFinishing()) return;
         State state = STATES.get(activity);
@@ -130,47 +160,12 @@ final class StableBottomNavigationController {
             if (nav == null || shell == null || nav.getParent() != null) return;
             shell.addView(nav, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    dp(60)
+                    dp(76)
             ));
         }
 
         private void styleMaterialBar() {
-            boolean oled = activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                    .getBoolean("oled_black_enabled", true);
-
-            GradientDrawable bg = new GradientDrawable();
-            bg.setColor(BrowseUi.SURFACE);
-            bg.setStroke(0, Color.TRANSPARENT);
-            bg.setCornerRadius(dp(30));
-            nav.setBackground(bg);
-            nav.setElevation(0f);
-            nav.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
-            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 251, 245, 6)));
-
-            int[][] states = new int[][] {
-                    new int[] {android.R.attr.state_checked},
-                    new int[] {}
-            };
-            int active = UiPalette.PRIMARY;
-            int inactive = Color.rgb(168, 168, 178);
-            ColorStateList colors = new ColorStateList(states, new int[] {active, inactive});
-            nav.setItemIconTintList(colors);
-            nav.setItemTextColor(colors);
-
-            try {
-                nav.setItemActiveIndicatorEnabled(true);
-                nav.setItemActiveIndicatorColor(
-                        ColorStateList.valueOf(Color.argb(50, 251, 245, 6))
-                );
-            } catch (Throwable ignored) {
-            }
-
-            try {
-                nav.setItemIconSize(dp(23));
-                nav.setItemPaddingTop(dp(4));
-                nav.setItemPaddingBottom(dp(4));
-            } catch (Throwable ignored) {
-            }
+            styleBar(nav);
         }
 
         private void applyGeometry() {
@@ -180,16 +175,16 @@ final class StableBottomNavigationController {
 
             ViewGroup.LayoutParams raw = nav.getLayoutParams();
             boolean changed = false;
-            int wantedHeight = dp(68);
+            int wantedHeight = dp(76);
             if (raw.height != wantedHeight) {
                 raw.height = wantedHeight;
                 changed = true;
             }
             if (raw instanceof ViewGroup.MarginLayoutParams) {
                 ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) raw;
-                int side = dp(10);
-                int top = dp(2);
-                int bottom = dp(6);
+                int side = dp(14);
+                int top = dp(8);
+                int bottom = dp(10);
                 if (margins.leftMargin != side || margins.topMargin != top ||
                         margins.rightMargin != side || margins.bottomMargin != bottom) {
                     margins.setMargins(side, top, side, bottom);
@@ -244,3 +239,4 @@ final class StableBottomNavigationController {
         return null;
     }
 }
+

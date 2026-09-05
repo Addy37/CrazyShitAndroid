@@ -4,42 +4,67 @@ import android.content.Context;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 
-/** Home source filters use the same parsers and playback routing as the rest of the app. */
+/** Independent Home requests publish usable results as soon as each source completes. */
 final class HomeSourceRepository {
-    private static final ExecutorService IO = Executors.newFixedThreadPool(3);
+    interface SourceLoader {
+        List<NativeContentItem> fetch(Context context, int source, int page) throws Exception;
+    }
+    private static final ExecutorService IO = Executors.newFixedThreadPool(6);
+    private final SourceLoader loader;
+    private final long timeoutMillis;
+    HomeSourceRepository() {
+        this((context, source, page) -> {
+            if (source == 1) return new CrazyShitRepository().fetchFeed(context, CrazyShitRepository.HOME, page);
+            if (source == 2) return page == 1 ? new EfuktRepository().fetchLatest(context) : Collections.emptyList();
+            return new FapelloRepository().fetchPopularVideos(context, page);
+        }, 25_000L);
+    }
+    HomeSourceRepository(SourceLoader loader, long timeoutMillis) {
+        this.loader = loader;
+        this.timeoutMillis = timeoutMillis;
+    }
     List<NativeContentItem> fetch(Context context, int source, int page) throws Exception {
-        if (source == 1) return new CrazyShitRepository().fetchFeed(context, CrazyShitRepository.HOME, page);
-        if (source == 2) return page == 1 ? new EfuktRepository().fetchLatest(context) : Collections.emptyList();
-        if (source == 3) return new FapelloRepository().fetchPopularVideos(context, page);
+        return fetch(context, source, page, null);
+    }
+    List<NativeContentItem> fetch(Context context, int source, int page,
+                                  Consumer<List<NativeContentItem>> progress) throws Exception {
+        CompletionService<List<NativeContentItem>> completed = new ExecutorCompletionService<>(IO);
         List<Future<List<NativeContentItem>>> requests = new ArrayList<>();
-        for (int i = 1; i <= 3; i++) {
+        int first = source == 0 ? 1 : source;
+        int last = source == 0 ? 3 : source;
+        for (int i = first; i <= last; i++) {
             final int selected = i;
-            requests.add(IO.submit(() -> fetch(context, selected, page)));
+            requests.add(completed.submit(() -> loader.fetch(context, selected, page)));
         }
-        List<List<NativeContentItem>> groups = new ArrayList<>();
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(25);
+        LinkedHashMap<String, NativeContentItem> visible = new LinkedHashMap<>();
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         int reached = 0;
         try {
-            for (Future<List<NativeContentItem>> request : requests) {
+            for (int i = 0; i < requests.size(); i++) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) break;
+                Future<List<NativeContentItem>> request = completed.poll(remaining, TimeUnit.NANOSECONDS);
+                if (request == null) break;
                 try {
-                    List<NativeContentItem> items = request.isDone() ? request.get()
-                            : request.get(Math.max(1, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
-                    if (items != null) { groups.add(items); reached++; }
-                } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw interrupted; }
-                catch (Exception unavailable) { }
+                    List<NativeContentItem> items = request.get();
+                    if (items == null) continue;
+                    reached++;
+                    for (NativeContentItem item : items) {
+                        if (item != null && !item.isSection()) visible.putIfAbsent(item.url, item);
+                    }
+                    if (progress != null && !visible.isEmpty()) progress.accept(new ArrayList<>(visible.values()));
+                } catch (ExecutionException unavailable) {
+                    // Keep the other sources usable when one host fails.
+                }
             }
-        } finally { for (Future<?> request : requests) request.cancel(true); }
-        if (reached == 0) throw new IOException("Home sources could not be reached");
-        LinkedHashMap<String, NativeContentItem> mixed = new LinkedHashMap<>();
-        int count = 0;
-        for (List<?> group : groups) count = Math.max(count, group.size());
-        for (int row = 0; row < count; row++) for (List<NativeContentItem> group : groups) {
-            if (row < group.size()) {
-                NativeContentItem item = group.get(row);
-                if (item != null && !item.isSection()) mixed.putIfAbsent(item.url, item);
-            }
+        } finally {
+            for (Future<?> request : requests) request.cancel(true);
         }
-        return new ArrayList<>(mixed.values());
+        if (reached == 0 || (page == 1 && visible.isEmpty())) {
+            throw new IOException("No Home source returned media. Retry or select another source.");
+        }
+        return new ArrayList<>(visible.values());
     }
 }

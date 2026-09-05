@@ -301,34 +301,8 @@ final class OledImmersiveUiController {
     }
 
     private static void styleBottomNav(Activity activity, BottomNavigationView nav) {
-        if (nav == null || nav.getVisibility() != View.VISIBLE) return;
-        GradientDrawable bg = new GradientDrawable();
-        if (oled(activity)) {
-            bg.setColor(BrowseUi.SURFACE);
-            bg.setStroke(0, Color.TRANSPARENT);
-        } else {
-            bg.setColor(Color.argb(244, 21, 21, 25));
-            bg.setStroke(0, Color.TRANSPARENT);
-        }
-        bg.setCornerRadius(dp(activity, 30));
-        nav.setBackground(bg);
-        nav.setElevation(0f);
-        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 251, 245, 6)));
-        try {
-            nav.setItemActiveIndicatorEnabled(true);
-            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(Color.argb(50, 251, 245, 6)));
-        } catch (Throwable ignored) {
-        }
-
-        ViewGroup.LayoutParams raw = nav.getLayoutParams();
-        if (raw != null) {
-            raw.height = dp(activity, 68);
-            if (raw instanceof ViewGroup.MarginLayoutParams) {
-                ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) raw;
-                margins.setMargins(dp(activity, 10), dp(activity, 2), dp(activity, 10), dp(activity, 6));
-            }
-            nav.setLayoutParams(raw);
-        }
+        // The stable controller owns portrait styling and geometry across every lifecycle pass.
+        StableBottomNavigationController.styleBar(nav);
     }
 
     private static void resetHeader(Activity activity, State state) {
@@ -416,6 +390,7 @@ final class OledImmersiveUiController {
         MaterialCardView card = child instanceof MaterialCardView
                 ? (MaterialCardView) child : findCard(child);
         if (card == null || largestImage(card) == null) return;
+        if (NativeFeedAdapter.STYLE_TAG.equals(card.getTag())) return;
         boolean oled = oled(activity);
         card.setCardBackgroundColor(oled ? OLED_CARD : CLASSIC_CARD);
         card.setCardElevation(0f);
@@ -688,3 +663,4 @@ final class OledImmersiveUiController {
         }
     }
 }
+

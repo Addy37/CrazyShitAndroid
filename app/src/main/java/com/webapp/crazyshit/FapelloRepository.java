@@ -33,7 +33,7 @@ final class FapelloRepository {
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final Pattern POST_PATH = Pattern.compile(
-            "(?i)^/(?:video/new/[0-9]+|[^/]+/[0-9]+)/?$"
+            "(?i)^/(?:video/(?:new|week)/[0-9]+|[^/]+/[0-9]+)/?$"
     );
     private static final Pattern POST_ID = Pattern.compile("(?i)/(?:new/)?([0-9]+)/?$");
     private static final Pattern CONTENT_URL = Pattern.compile(
@@ -161,27 +161,36 @@ final class FapelloRepository {
 
     List<NativeContentItem> fetchPopularVideos(Context context, int page) throws IOException {
         int safePage = Math.max(1, page);
-        String endpoint = BASE + "ajax/popular_videos/week/page-" + safePage + "/";
+        String endpoint = popularVideosUrl(safePage);
         Document document = fetchDocument(context, endpoint, BASE + "popular_videos/week/");
-        LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
+        return parsePopularVideos(document, endpoint);
+    }
 
+    static String popularVideosUrl(int page) {
+        return BASE + "popular_videos/week/" + (page > 1 ? "page-" + page + "/" : "");
+    }
+
+    List<NativeContentItem> parsePopularVideos(Document document, String endpoint) {
+        LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
+        boolean hasVideoRoutes = document.select("a[href]").stream().anyMatch(link -> {
+            String url = normalizeUrl(link.attr("href"), endpoint);
+            return isPostUrl(url) && url.contains("/video/");
+        });
         for (Element link : document.select("a[href]")) {
             String pageUrl = normalizeUrl(link.attr("href"), endpoint);
             if (!isPostUrl(pageUrl)) continue;
+            if (hasVideoRoutes && !pageUrl.contains("/video/")) continue;
             String thumbnail = imageFrom(link, endpoint);
-            if (thumbnail.isEmpty()) continue;
             String id = postId(pageUrl);
-            String title = id.isEmpty() ? "Fapello video" : "Fapello video #" + id;
-            items.putIfAbsent(pageUrl, new NativeContentItem(
-                    NativeContentItem.KIND_MEDIA,
-                    title,
-                    pageUrl,
-                    thumbnail,
-                    "Fapello",
-                    "",
-                    "",
-                    "Fapello"
-            ));
+            String title = clean(link.attr("title"));
+            if (title.isEmpty()) title = id.isEmpty() ? "Fapzone video" : "Fapzone video #" + id;
+            NativeContentItem candidate = new NativeContentItem(
+                    NativeContentItem.KIND_MEDIA, title, pageUrl, thumbnail,
+                    "", "", "", "Fapzone");
+            NativeContentItem existing = items.get(pageUrl);
+            if (existing == null || (existing.imageUrl.isEmpty() && !thumbnail.isEmpty())) {
+                items.put(pageUrl, candidate);
+            }
         }
         return new ArrayList<>(items.values());
     }
@@ -552,3 +561,4 @@ final class FapelloRepository {
         }
     }
 }
+
