@@ -18,6 +18,10 @@ public class HomeSourceTest {
     private NativeContentItem item(String url) {
         return new NativeContentItem(NativeContentItem.KIND_MEDIA, "Sample video", url, "", "", "", "");
     }
+    private NativeContentItem section(String title) {
+        return new NativeContentItem(NativeContentItem.KIND_SECTION, title,
+                "section:" + title.toLowerCase(Locale.US).replace(' ', '-'), "", "", "", "");
+    }
     @Test public void fastSourcePublishesBeforeSlowSourceAndSurvivesFailure() throws Exception {
         CountDownLatch published = new CountDownLatch(1), releaseSlow = new CountDownLatch(1);
         HomeSourceRepository repo = new HomeSourceRepository((context, source, page) -> {
@@ -34,6 +38,16 @@ public class HomeSourceTest {
             releaseSlow.countDown();
             assertEquals(1, result.get(2, TimeUnit.SECONDS).size());
         } finally { releaseSlow.countDown(); host.shutdownNow(); }
+    }
+    @Test public void directCrazyShitSourceKeepsSectionHeaders() throws Exception {
+        HomeSourceRepository repo = new HomeSourceRepository((context, source, page) -> Arrays.asList(
+                section("TODAY'S CRAZY SHIT"),
+                item("https://crazyshit.com/video/one")
+        ), 1000);
+        List<NativeContentItem> result = repo.fetch(null, 1, 1);
+        assertEquals(2, result.size());
+        assertTrue(result.get(0).isSection());
+        assertEquals("TODAY'S CRAZY SHIT", result.get(0).title);
     }
     @Test public void emptyFirstPageIsRetryableButEmptyLaterPageEndsPagination() throws Exception {
         AtomicInteger calls = new AtomicInteger();
