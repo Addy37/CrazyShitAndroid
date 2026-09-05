@@ -455,7 +455,12 @@ public final class NativeFeedBrowserActivity extends Activity {
                     progress.setVisibility(View.GONE);
                     refresh.setRefreshing(false);
                     int before = itemCount();
-                    if (isBunkr()) {
+                    BunkrGallerySessionStore.Snapshot currentCreator = isCreatorGallery()
+                            ? BunkrGallerySessionStore.snapshot(requestSession) : null;
+                    if (currentCreator != null) {
+                        replaceBunkrItems(currentCreator.items);
+                        currentPage = currentCreator.currentPage;
+                    } else if (isBunkr()) {
                         if (append) appendBunkrItems(result);
                         else replaceBunkrItems(result);
                     } else if (append) {
@@ -464,9 +469,10 @@ public final class NativeFeedBrowserActivity extends Activity {
                         adapter.replace(result);
                     }
                     int added = itemCount() - before;
-                    if (!result.isEmpty() && (!append || added > 0)) currentPage = requestPage;
+                    if (currentCreator == null && !result.isEmpty() && (!append || added > 0)) currentPage = requestPage;
                     if (isCreatorGallery()) {
-                        endReached = completedCreatorBatch == null || completedCreatorBatch.endReached;
+                        endReached = currentCreator != null ? currentCreator.endReached
+                                : completedCreatorBatch == null || completedCreatorBatch.endReached;
                     } else if (result.isEmpty() || (append && added == 0) || isEfukt()) {
                         endReached = true;
                     }

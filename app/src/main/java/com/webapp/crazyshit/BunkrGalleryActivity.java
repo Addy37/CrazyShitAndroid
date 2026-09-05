@@ -360,11 +360,16 @@ public final class BunkrGalleryActivity extends Activity {
                     if (requestGeneration != generation || isFinishing()) return;
                     loadingMore = false;
                     initialLoading.setVisibility(View.GONE);
-                    int added = adapter.append(visibleResult);
-                    if (isCreatorGallery()) endReached = completed;
+                    BunkrGallerySessionStore.Snapshot currentCreator = isCreatorGallery()
+                            ? BunkrGallerySessionStore.snapshot(sessionId) : null;
+                    int added = adapter.append(currentCreator == null ? visibleResult : filterMedia(currentCreator.items));
+                    if (currentCreator != null) {
+                        currentPage = currentCreator.currentPage;
+                        endReached = currentCreator.endReached;
+                    } else if (isCreatorGallery()) endReached = completed;
                     else if (result.isEmpty() || added == 0) endReached = true;
                     else currentPage = requestPage;
-                    if (isCreatorGallery() && added > 0) currentPage = requestPage;
+                    if (currentCreator == null && isCreatorGallery() && added > 0) currentPage = requestPage;
                     if (!isCreatorGallery()) BunkrGallerySessionStore.append(
                             sessionId,
                             result,

@@ -1617,6 +1617,7 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onStop() {
+        recoveryResumed = false;
         savePlaybackState(false);
         if (player != null && !isChangingConfigurations()) player.pause();
         super.onStop();
