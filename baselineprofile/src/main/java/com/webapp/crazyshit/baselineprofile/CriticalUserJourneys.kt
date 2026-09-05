@@ -16,6 +16,8 @@ internal fun MacrobenchmarkScope.launchApp() {
 
 internal fun MacrobenchmarkScope.scrollHome() {
     device.wait(Until.hasObject(By.text("Home")), 8_000)
+    device.findObject(By.text("Home"))?.click()
+    device.waitForIdle()
     repeat(3) {
         swipeUp()
         device.waitForIdle(250)
@@ -62,7 +64,10 @@ internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
     device.findObject(By.text("Collections"))?.click()
     device.wait(Until.hasObject(By.desc("Show Fapzone collections")), 5_000)
     device.findObject(By.desc("Show Fapzone collections"))?.click()
-    val creator = device.wait(Until.findObject(By.descStartsWith("Open creator")), 30_000)
+    val creator = device.wait(
+        Until.findObject(By.descContains("Open pictures and videos")),
+        30_000
+    )
     creator?.click()
     device.wait(Until.hasObject(By.textStartsWith("All")), 20_000)
     device.findObject(By.textStartsWith("Videos"))?.click()

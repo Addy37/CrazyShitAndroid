@@ -1,6 +1,7 @@
 package com.webapp.crazyshit.baselineprofile
 
 import androidx.benchmark.macro.CompilationMode
+import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.MemoryUsageMetric
 import androidx.benchmark.macro.StartupMode
@@ -12,6 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
+@OptIn(ExperimentalMetricApi::class)
 class MainFlowsBenchmark {
     @get:Rule
     val benchmarkRule = MacrobenchmarkRule()
