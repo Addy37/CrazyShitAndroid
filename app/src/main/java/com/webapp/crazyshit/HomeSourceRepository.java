@@ -52,7 +52,9 @@ final class HomeSourceRepository {
                     if (items == null) continue;
                     reached++;
                     for (NativeContentItem item : items) {
-                        if (item != null && !item.isSection()) visible.putIfAbsent(item.url, item);
+                        if (item != null && (source != 0 || !item.isSection())) {
+                            visible.putIfAbsent(item.url, item);
+                        }
                     }
                     if (progress != null && !visible.isEmpty()) progress.accept(new ArrayList<>(visible.values()));
                 } catch (ExecutionException unavailable) {
