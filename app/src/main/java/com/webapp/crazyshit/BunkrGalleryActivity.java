@@ -306,7 +306,7 @@ public final class BunkrGalleryActivity extends Activity {
                     initialLoading.setVisibility(View.GONE);
                     currentPage = result.isEmpty() ? 0 : 1;
                     endReached = completed;
-                    BunkrGallerySessionStore.replace(
+                    if (!isCreatorGallery()) BunkrGallerySessionStore.replace(
                             sessionId,
                             result,
                             currentPage,
@@ -365,12 +365,13 @@ public final class BunkrGalleryActivity extends Activity {
                     else if (result.isEmpty() || added == 0) endReached = true;
                     else currentPage = requestPage;
                     if (isCreatorGallery() && added > 0) currentPage = requestPage;
-                    BunkrGallerySessionStore.append(
+                    if (!isCreatorGallery()) BunkrGallerySessionStore.append(
                             sessionId,
                             result,
                             currentPage,
                             endReached
                     );
+                    BunkrGallerySessionStore.persist(this, sessionId);
                     updateChrome(pager.getCurrentItem());
                     if (isCreatorGallery() && added == 0 && !endReached) {
                         initialLoading.setVisibility(View.VISIBLE);

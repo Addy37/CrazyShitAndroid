@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Small in-memory handoff between an album grid and its full-screen media viewer. */
+/** Shared gallery state, with media and paging cursors saved in one atomic snapshot. */
 final class BunkrGallerySessionStore {
     private static final int MAX_SESSIONS = 4;
     private static final LinkedHashMap<String, Session> SESSIONS = new LinkedHashMap<>();
@@ -19,6 +19,7 @@ final class BunkrGallerySessionStore {
         final int currentPage;
         final boolean endReached;
         final Map<String, String> resolvedUrls;
+        final String cursor;
 
         Snapshot(Session source) {
             title = source.title;
@@ -28,6 +29,7 @@ final class BunkrGallerySessionStore {
             currentPage = source.currentPage;
             endReached = source.endReached;
             resolvedUrls = new LinkedHashMap<>(source.resolvedUrls);
+            cursor = source.cursor;
         }
     }
 
@@ -39,6 +41,7 @@ final class BunkrGallerySessionStore {
         final LinkedHashMap<String, String> resolvedUrls = new LinkedHashMap<>();
         int currentPage;
         boolean endReached;
+        String cursor = "";
 
         Session(String title, String albumUrl, String creatorQuery) {
             this.title = title == null ? "Fapzone gallery" : title;
@@ -119,7 +122,27 @@ final class BunkrGallerySessionStore {
         return session == null ? null : new Snapshot(session);
     }
 
-    static void persist(android.content.Context context, String id) {
+    static synchronized void recordCreatorBatch(android.content.Context context, String id,
+            List<NativeContentItem> items, boolean endReached, org.json.JSONObject cursor) {
+        Session session = SESSIONS.get(id);
+        if (session == null) {
+            restore(context, id);
+            session = SESSIONS.get(id);
+        }
+        if (session == null) {
+            String query = cursor.optString("query");
+            session = new Session(query, BunkrRepository.searchUrl(query), query);
+            SESSIONS.put(id, session);
+            trim();
+        }
+        addUnique(session.items, items);
+        session.currentPage++;
+        session.endReached = endReached;
+        session.cursor = cursor.toString();
+        persist(context, id);
+    }
+
+    static synchronized void persist(android.content.Context context, String id) {
         Snapshot snapshot = snapshot(id);
         if (snapshot == null) return;
         android.content.Context app = context.getApplicationContext();
@@ -130,6 +153,7 @@ final class BunkrGallerySessionStore {
                         .put("query", snapshot.creatorQuery).put("page", snapshot.currentPage)
                         .put("end", snapshot.endReached)
                         .put("items", ContentItemCodec.encodeList(snapshot.items, 10000));
+                if (!snapshot.cursor.isEmpty()) value.put("cursor", new org.json.JSONObject(snapshot.cursor));
                 ScreenSnapshotStore.save(app, id, value);
             } catch (Exception ignored) { }
         });
@@ -141,10 +165,14 @@ final class BunkrGallerySessionStore {
         org.json.JSONObject value = ScreenSnapshotStore.read(context, id);
         if (value == null) return null;
         synchronized (BunkrGallerySessionStore.class) {
+            Snapshot newer = snapshot(id);
+            if (newer != null) return newer;
             Session restored = new Session(value.optString("title"), value.optString("album"), value.optString("query"));
             restored.items.addAll(ContentItemCodec.decodeList(value.optJSONArray("items"), 10000));
             restored.currentPage = value.optInt("page");
             restored.endReached = value.optBoolean("end");
+            org.json.JSONObject cursor = value.optJSONObject("cursor");
+            restored.cursor = cursor == null ? "" : cursor.toString();
             SESSIONS.put(id, restored);
             trim();
             return new Snapshot(restored);

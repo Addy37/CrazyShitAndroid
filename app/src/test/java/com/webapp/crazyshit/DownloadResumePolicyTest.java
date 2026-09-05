@@ -3,6 +3,14 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class DownloadResumePolicyTest {
+    @Test public void errorPagesAndPlaylistsAreNotSavedAsVideos() {
+        assertTrue(DownloadResumePolicy.isMediaResponse("video/mp4"));
+        assertTrue(DownloadResumePolicy.isMediaResponse("application/octet-stream"));
+        assertFalse(DownloadResumePolicy.isMediaResponse("text/html; charset=utf-8"));
+        assertFalse(DownloadResumePolicy.isMediaResponse("application/json"));
+        assertFalse(DownloadResumePolicy.isMediaResponse("application/vnd.apple.mpegurl"));
+        assertFalse(DownloadResumePolicy.isMediaResponse("application/dash+xml"));
+    }
     @Test public void acceptsOnlyTheRequestedBytes() {
         assertTrue(DownloadResumePolicy.validRange(206, "bytes 500-999/1000", 500, 999, 1000));
         assertFalse(DownloadResumePolicy.validRange(200, "bytes 500-999/1000", 500, 999, 1000));

@@ -8,6 +8,14 @@ final class DownloadResumePolicy {
     private static final Pattern RANGE = Pattern.compile("bytes (\\d+)-(\\d+)/(\\d+)", Pattern.CASE_INSENSITIVE);
     private DownloadResumePolicy() { }
 
+    static boolean isMediaResponse(String contentType) {
+        if (contentType == null) return true;
+        String type = contentType.toLowerCase(java.util.Locale.ROOT);
+        return !type.contains("text/html") && !type.contains("application/xhtml")
+                && !type.contains("application/json") && !type.contains("mpegurl")
+                && !type.contains("dash+xml");
+    }
+
     static boolean sameResource(String previousValidator, String validator, long previousSize, long size) {
         return previousValidator != null && !previousValidator.isEmpty()
                 && !previousValidator.startsWith("W/") && previousValidator.equals(validator)

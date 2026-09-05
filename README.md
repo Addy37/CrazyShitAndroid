@@ -97,27 +97,28 @@ The fallback WebView is retained for pages that cannot be represented reliably b
 
 It includes first-party cookies, file chooser support, HTML5 fullscreen video, popup suppression, cutout-safe layouts, and external-link handling.
 
-## Updates
+## Creator search and saved lists
 
-CrazyShit can update itself from GitHub Releases.
+- Type at least two characters in Search to see up to eight matching creators.
+- Saved and previously seen creators appear immediately; live matches follow after a short typing pause.
+- Exact and prefix matches come first. Stars save creators to **More > Favorite creators**.
+- Global search shows each source as it finishes and reports sources that could not be reached.
+- Search text, filters, galleries, selected media and scroll positions restore when Android recreates a screen. Large lists use bounded local cache snapshots.
+- **Settings > Export backup** saves favorite creators, Watch Later and selected app settings as JSON. Import previews the counts, merges saved lists and applies included settings. Cookies, account sessions, history and downloaded media are excluded.
 
-- Manual **Check for updates** remains available in Settings and More
-- **Automatic updates** are enabled by default and can be disabled in Settings
-- The app checks its current stable or beta channel, downloads a newer matching APK, verifies the package, then opens Android's installer
-- Android still shows its required final sideload installation confirmation
+## Downloads and playback recovery
 
-Public releases use the existing application ID `com.addy37.crazyshitunofficial` and the existing signing identity so CrazyShit 2.0 can upgrade earlier stable releases.
+Supported media hosts can resume saved byte ranges after a pause or interruption. Resume checks the resource validator, size and each returned byte range before appending. Hosts without this support restart the file. At most two downloads run at once, with up to four ranges per file.
 
-Beta/debug builds use the `.dev` application ID suffix and appear as **CrazyShit Beta**, allowing them to remain installed beside stable CrazyShit.
+Compatible native players can refresh a failed stream link twice and resume from the previous position. Settings includes local performance counters for launch, scrolling, first video frame and buffering. These counters stay on the device and reset when the process restarts.
 
-## Download
+## Updates and installation
 
-Public releases are distributed through GitHub Releases.
+Stable APKs are distributed through this private repository's [Releases page](https://github.com/Addy37/CrazyShitAndroid/releases). Sign in with an account that has access, download `CrazyShit.apk`, and open it in Android's installer. Android may ask you to allow **Install unknown apps** for the app opening the APK.
 
-- Latest release page: `https://github.com/Addy37/CrazyShitAndroid/releases/latest`
-- Latest APK: `https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit.apk`
+This build uses manual APK updates. Settings and More open the private release page; the app does not make anonymous update checks that cannot access private releases.
 
-Android may ask you to allow **Install unknown apps** for the app used to install the APK.
+Stable releases keep the application ID `com.addy37.crazyshitunofficial` and the existing signing identity so they can update an earlier stable installation without clearing its data. Debug builds use the `.dev` suffix and appear as **CrazyShit Beta**; they are separate test installations.
 
 ## Privacy
 

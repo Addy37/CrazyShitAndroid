@@ -74,11 +74,14 @@ public final class AcceleratedDownloadService extends Service {
             new ConcurrentHashMap<>();
     private static final java.util.Set<Long> CANCELLED_BEFORE_START =
             ConcurrentHashMap.newKeySet();
+    private static final java.util.Set<Long> STARTING = ConcurrentHashMap.newKeySet();
 
     private static final ConcurrentHashMap<Long, java.util.Set<HttpURLConnection>> CONNECTIONS = new ConcurrentHashMap<>();
     private static final java.util.Set<Long> PAUSES = ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<Long, AtomicLong> lastProgressUpdates = new ConcurrentHashMap<>();
     private final AtomicInteger activeJobs = new AtomicInteger();
+    private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+    private boolean timedOut;
 
     static void start(
             Context context,
@@ -100,19 +103,23 @@ public final class AcceleratedDownloadService extends Service {
         intent.putExtra(EXTRA_URL, url);
         intent.putExtra(EXTRA_MIME, mime);
         intent.putExtra(EXTRA_HEADERS, json.toString());
-        ContextCompat.startForegroundService(context, intent);
+        STARTING.add(id);
+        try { ContextCompat.startForegroundService(context, intent); }
+        catch (Exception error) { STARTING.remove(id); throw error; }
     }
 
     static void cancel(Context context, long id) {
         PAUSES.remove(id);
+        if (STARTING.contains(id)) CANCELLED_BEFORE_START.add(id);
         AtomicBoolean cancellation = CANCELLATIONS.get(id);
         if (cancellation != null) { cancellation.set(true); disconnectAll(id); }
         else JOBS.execute(() -> deleteRecursively(directory(context, id)));
     }
 
-    static boolean isActive(long id) { return CANCELLATIONS.containsKey(id); }
+    static boolean isActive(long id) { return STARTING.contains(id) || CANCELLATIONS.containsKey(id); }
 
     static void pause(Context context, long id) {
+        if (STARTING.contains(id)) CANCELLED_BEFORE_START.add(id);
         AtomicBoolean cancellation = CANCELLATIONS.get(id);
         if (cancellation != null) { PAUSES.add(id); cancellation.set(true); disconnectAll(id); }
     }
@@ -142,17 +149,21 @@ public final class AcceleratedDownloadService extends Service {
         String mime = clean(intent.getStringExtra(EXTRA_MIME), "video/mp4");
         Map<String, String> headers = parseHeaders(intent.getStringExtra(EXTRA_HEADERS));
         if (id >= 0L || url.isEmpty()) {
-            stopSelf(startId);
+            STARTING.remove(id);
+            if (activeJobs.get() == 0) stopSelf(startId);
             return START_NOT_STICKY;
         }
         if (CANCELLED_BEFORE_START.remove(id) || VideoDownloadStore.entry(this, id) == null) {
-            stopSelf(startId);
+            STARTING.remove(id);
+            if (activeJobs.get() == 0) stopSelf(startId);
             return START_NOT_STICKY;
         }
 
         showForeground(title, 0L, -1L);
         AtomicBoolean cancellation = new AtomicBoolean(false);
-        if (CANCELLATIONS.putIfAbsent(id, cancellation) != null) return START_NOT_STICKY;
+        AtomicBoolean previous = CANCELLATIONS.putIfAbsent(id, cancellation);
+        STARTING.remove(id);
+        if (previous != null) return START_NOT_STICKY;
         activeJobs.incrementAndGet();
         JOBS.execute(() -> runDownload(id, title, fileName, url, mime, headers, cancellation));
         return START_NOT_STICKY;
@@ -162,6 +173,13 @@ public final class AcceleratedDownloadService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    @Override public void onTimeout(int startId, int foregroundServiceType) {
+        timedOut = true;
+        for (Long id : CANCELLATIONS.keySet()) pause(this, id);
+        stopForeground(STOP_FOREGROUND_REMOVE);
+        stopSelf();
     }
 
     private void runDownload(
@@ -188,7 +206,7 @@ public final class AcceleratedDownloadService extends Service {
             JSONObject saved = null;
             try { saved = new JSONObject(new String(java.nio.file.Files.readAllBytes(checkpoint.toPath()), java.nio.charset.StandardCharsets.UTF_8)); }
             catch (Exception ignored) { }
-            int segments = probe.acceptsRanges && total > 0L
+            int segments = probe.acceptsRanges && !probe.validator.isEmpty() && total > 0L
                     ? (total >= MIN_BYTES_PER_SEGMENT * 2L ? (int) Math.min(MAX_SEGMENTS, Math.max(2L, total / MIN_BYTES_PER_SEGMENT)) : 1)
                     : 0;
             if (saved == null || !probe.acceptsRanges || !DownloadResumePolicy.sameResource(
@@ -277,10 +295,14 @@ public final class AcceleratedDownloadService extends Service {
             PAUSES.remove(id);
             lastProgressUpdates.remove(id);
             CANCELLED_BEFORE_START.remove(id);
-            if (activeJobs.decrementAndGet() <= 0) {
-                stopForeground(STOP_FOREGROUND_REMOVE);
-                stopSelf();
-            } else showForeground("Downloading videos", 0L, -1L);
+            activeJobs.decrementAndGet();
+            main.post(() -> {
+                if (timedOut) return;
+                if (activeJobs.get() <= 0) {
+                    stopForeground(STOP_FOREGROUND_REMOVE);
+                    stopSelf();
+                } else showForeground("Downloading videos", 0L, -1L);
+            });
         }
     }
 
@@ -364,6 +386,7 @@ public final class AcceleratedDownloadService extends Service {
             connection.disconnect();
             throw new RangeRejectedException();
         }
+        requireMediaResponse(connection);
         long expected = end - start + 1L;
         long received = 0L;
         try (InputStream input = new BufferedInputStream(connection.getInputStream(), BUFFER_SIZE);
@@ -396,6 +419,7 @@ public final class AcceleratedDownloadService extends Service {
             AtomicLong downloaded,
             AtomicBoolean cancellation
     ) throws Exception {
+        throwIfCancelled(cancellation);
         File parent = part.getParentFile();
         if (parent != null && !parent.mkdirs() && !parent.isDirectory()) {
             throw new IllegalStateException("No temporary download directory");
@@ -406,6 +430,7 @@ public final class AcceleratedDownloadService extends Service {
             connection.disconnect();
             throw new IllegalStateException("Download HTTP " + code);
         }
+        requireMediaResponse(connection);
         long total = knownTotal > 0L ? knownTotal : connection.getContentLengthLong();
         long received = 0L;
         try (InputStream input = new BufferedInputStream(connection.getInputStream(), BUFFER_SIZE);
@@ -431,26 +456,33 @@ public final class AcceleratedDownloadService extends Service {
             throws Exception {
         throwIfCancelled(cancellation);
         HttpURLConnection connection = open(id, address, headers);
-        connection.setRequestProperty("Range", "bytes=0-0");
-        int code = connection.getResponseCode();
-        String contentRange = connection.getHeaderField("Content-Range");
-        long total = -1L;
-        boolean acceptsRanges = code == HttpURLConnection.HTTP_PARTIAL;
-        if (contentRange != null) {
-            Matcher matcher = CONTENT_RANGE.matcher(contentRange);
-            if (matcher.find()) total = Long.parseLong(matcher.group(1));
-        }
-        if (total <= 0L && code == HttpURLConnection.HTTP_OK) {
-            total = connection.getContentLengthLong();
-        }
-        try (InputStream input = connection.getInputStream()) {
-            input.read();
-        } finally {
+        try {
+            connection.setRequestProperty("Range", "bytes=0-0");
+            int code = connection.getResponseCode();
+            if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL)
+                throw new IllegalStateException("Download HTTP " + code);
+            requireMediaResponse(connection);
+            String contentRange = connection.getHeaderField("Content-Range");
+            long total = -1L;
+            if (contentRange != null) {
+                Matcher matcher = CONTENT_RANGE.matcher(contentRange);
+                if (matcher.matches()) total = Long.parseLong(matcher.group(1));
+            }
+            if (total <= 0L && code == HttpURLConnection.HTTP_OK) total = connection.getContentLengthLong();
+            boolean acceptsRanges = DownloadResumePolicy.validRange(code, contentRange, 0L, 0L, total);
+            String validator = clean(connection.getHeaderField("ETag"), "");
+            if (validator.isEmpty() || validator.startsWith("W/"))
+                validator = clean(connection.getHeaderField("Last-Modified"), "");
+            try (InputStream input = connection.getInputStream()) { input.read(); }
+            return new Probe(acceptsRanges, total, validator);
+        } finally { connection.disconnect(); }
+    }
+
+    private void requireMediaResponse(HttpURLConnection connection) {
+        if (!DownloadResumePolicy.isMediaResponse(connection.getContentType())) {
             connection.disconnect();
+            throw new IllegalStateException("The host returned a page or playlist instead of a media file");
         }
-        String validator = clean(connection.getHeaderField("ETag"), "");
-        if (validator.isEmpty() || validator.startsWith("W/")) validator = clean(connection.getHeaderField("Last-Modified"), "");
-        return new Probe(acceptsRanges && total > 0L, total, validator);
     }
 
     private HttpURLConnection open(long id, String address, Map<String, String> headers) throws Exception {

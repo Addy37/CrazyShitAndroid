@@ -408,12 +408,9 @@ public final class NativeFeedBrowserActivity extends Activity {
         empty.setVisibility(View.GONE);
         if (isBunkr()) {
             replaceBunkrItems(new ArrayList<>());
-            BunkrGallerySessionStore.replace(
-                    bunkrGallerySessionId,
-                    new ArrayList<>(),
-                    0,
-                    false
-            );
+            bunkrGallerySessionId = isCreatorGallery()
+                    ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
+                    : BunkrGallerySessionStore.create(title, baseUrl);
             if (isCreatorGallery()) {
                 creatorGalleryRepository.reset(bunkrGallerySessionId, creatorQuery);
             }
@@ -428,6 +425,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         loading = true;
         int requestPage = append ? currentPage + 1 : 1;
         int requestGeneration = generation;
+        String requestSession = bunkrGallerySessionId;
         if (!append && itemCount() == 0) progress.setVisibility(View.VISIBLE);
 
         io.execute(() -> {
@@ -439,7 +437,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 } else if (isCreatorGallery()) {
                     creatorBatch = creatorGalleryRepository.fetchNext(
                             this,
-                            bunkrGallerySessionId,
+                            requestSession,
                             creatorQuery
                     );
                     result = creatorBatch.items;
@@ -472,7 +470,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     } else if (result.isEmpty() || (append && added == 0) || isEfukt()) {
                         endReached = true;
                     }
-                    if (isBunkr()) {
+                    if (isBunkr() && !isCreatorGallery()) {
                         if (append) {
                             BunkrGallerySessionStore.append(
                                     bunkrGallerySessionId,
@@ -490,6 +488,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                         }
                     }
                     persistBrowser();
+                    restoreScrollPositions();
                     empty.setVisibility(View.GONE);
                     if (isCreatorGallery()) {
                         updateCreatorEmptyState();
@@ -684,7 +683,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void openBunkrGallery(int position, NativeContentItem item) {
         if (item == null || bunkrGalleryAdapter == null) return;
-        BunkrGallerySessionStore.replace(
+        if (!isCreatorGallery()) BunkrGallerySessionStore.replace(
                 bunkrGallerySessionId,
                 bunkrGalleryAdapter.snapshot(),
                 currentPage,
@@ -1134,6 +1133,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private void persistBrowser() {
+        if (restoringBrowser) return;
         if (isBunkr()) { BunkrGallerySessionStore.persist(this, bunkrGallerySessionId); return; }
         try {
             org.json.JSONObject value = new org.json.JSONObject().put("page", currentPage).put("end", endReached)
@@ -1151,13 +1151,23 @@ public final class NativeFeedBrowserActivity extends Activity {
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 restoringBrowser = false;
-                if (gallery != null && !gallery.items.isEmpty()) {
+                if (creatorTabsPager != null) creatorTabsPager.setCurrentItem(restoredBrowserState.getInt("tab", 0), false);
+                if (gallery != null) {
                     replaceBunkrItems(gallery.items);
                     currentPage = gallery.currentPage; endReached = gallery.endReached;
+                    if (gallery.items.isEmpty() && !endReached) { load(false); return; }
                 } else if (feed != null) {
                     adapter.replace(ContentItemCodec.decodeList(feed.optJSONArray("items"), 2000));
                     currentPage = feed.optInt("page"); endReached = feed.optBoolean("end");
-                } else { load(false); return; }
+                } else {
+                    if (isBunkr()) {
+                        bunkrGallerySessionId = isCreatorGallery()
+                                ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
+                                : BunkrGallerySessionStore.create(title, baseUrl);
+                        if (isCreatorGallery()) creatorGalleryRepository.reset(bunkrGallerySessionId, creatorQuery);
+                    }
+                    load(false); return;
+                }
                 progress.setVisibility(View.GONE);
                 if (creatorTabsPager != null) creatorTabsPager.setCurrentItem(restoredBrowserState.getInt("tab", 0), false);
                 restoreScrollPositions();

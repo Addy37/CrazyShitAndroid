@@ -352,8 +352,11 @@ final class VideoDownloadStore {
         removeMetadata(context, entry.id);
     }
 
-    static void pause(Context context, Entry entry) {
+    static synchronized void pause(Context context, Entry entry) {
         if (entry == null || entry.id >= 0L || Build.VERSION.SDK_INT < 29) return;
+        entry = entry(context, entry.id);
+        if (entry == null || (entry.status != DownloadManager.STATUS_RUNNING
+                && entry.status != DownloadManager.STATUS_PENDING)) return;
         AcceleratedDownloadService.pause(context, entry.id);
         updateCustom(context, entry.id, DownloadManager.STATUS_PAUSED,
                 entry.downloadedBytes, entry.totalBytes, entry.localUri, 2);

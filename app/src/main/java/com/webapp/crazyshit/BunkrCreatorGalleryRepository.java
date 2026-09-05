@@ -53,7 +53,7 @@ final class BunkrCreatorGalleryRepository {
         State state = state(context, sessionId, query);
         synchronized (state) {
             Batch batch = fetchNextLocked(context.getApplicationContext(), state);
-            saveCursor(context, sessionId, state);
+            saveCursor(context, sessionId, state, batch);
             return batch;
         }
     }
@@ -339,7 +339,7 @@ final class BunkrCreatorGalleryRepository {
         }
     }
 
-    private void saveCursor(Context context, String id, State state) {
+    private void saveCursor(Context context, String id, State state, Batch batch) {
         try {
             org.json.JSONObject json = new org.json.JSONObject().put("query", state.query)
                     .put("next", state.nextSearchPage).put("searchFinished", state.searchFinished)
@@ -356,13 +356,16 @@ final class BunkrCreatorGalleryRepository {
                     .put("name", cursor.model.name).put("url", cursor.model.url)
                     .put("image", cursor.model.imageUrl).put("next", cursor.nextPage));
             json.put("pendingModels", models);
-            ScreenSnapshotStore.save(context, id + "_cursor", json);
+            BunkrGallerySessionStore.recordCreatorBatch(context, id, batch.items, batch.endReached, json);
         } catch (Exception ignored) { }
     }
 
     private State restoreCursor(Context context, String id, String query) {
         State state = new State(query);
-        org.json.JSONObject json = ScreenSnapshotStore.read(context, id + "_cursor");
+        BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.restore(context, id);
+        org.json.JSONObject json = null;
+        try { if (snapshot != null && !snapshot.cursor.isEmpty()) json = new org.json.JSONObject(snapshot.cursor); }
+        catch (org.json.JSONException ignored) { }
         if (json == null || !query.equalsIgnoreCase(json.optString("query"))) return state;
         state.nextSearchPage = Math.max(1, json.optInt("next", 1));
         state.searchFinished = json.optBoolean("searchFinished");
