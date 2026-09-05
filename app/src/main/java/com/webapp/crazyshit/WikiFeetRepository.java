@@ -77,7 +77,7 @@ final class WikiFeetRepository {
         if (cleanQuery.length() < 2) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(20, limit));
         String endpoint = searchUrl(site, cleanQuery);
-        String body = fetchBody(context, endpoint, site.baseUrl, false);
+        String body = fetchBody(context, endpoint, site.baseUrl, true);
         List<Creator> parsed = matching(parseSearch(body, site, endpoint, 100), cleanQuery, safeLimit);
         if (!parsed.isEmpty()) return parsed;
 
@@ -311,7 +311,7 @@ final class WikiFeetRepository {
                 .header("Accept", ajax
                         ? "application/json,text/html,*/*;q=0.8"
                         : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                .timeout(15_000)
+                .timeout(ajax ? 6_000 : 15_000)
                 .maxBodySize(MAX_BODY)
                 .followRedirects(true)
                 .ignoreContentType(true)
@@ -501,3 +501,4 @@ final class WikiFeetRepository {
         return value == null ? "" : value.trim();
     }
 }
+

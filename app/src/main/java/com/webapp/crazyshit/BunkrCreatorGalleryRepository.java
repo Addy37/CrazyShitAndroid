@@ -30,7 +30,7 @@ final class BunkrCreatorGalleryRepository {
     private static final int BATCH_TARGET = 48;
     private static final int MAX_MEDIA_ITEMS = 10_000;
     private static final long ALBUM_BATCH_BUDGET_MS = 16_000L;
-    private static final ExecutorService ALBUM_IO = Executors.newFixedThreadPool(6);
+    private static final ExecutorService ALBUM_IO = Executors.newFixedThreadPool(8);
     private static final LinkedHashMap<String, State> STATES =
             new LinkedHashMap<>(8, 0.75f, true);
 
@@ -296,37 +296,59 @@ final class BunkrCreatorGalleryRepository {
     }
 
     private IOException loadWikiFeetCatalog(Context context, State state) {
+        LinkedHashMap<WikiFeetRepository.Site, Future<List<WikiFeetRepository.Creator>>> requests =
+                new LinkedHashMap<>();
+        if (!state.wikiFeetCatalogLoaded) requests.put(
+                WikiFeetRepository.Site.WIKIFEET,
+                ALBUM_IO.submit(() -> new WikiFeetRepository().searchCreators(
+                        context, WikiFeetRepository.Site.WIKIFEET,
+                        state.query, WIKIFEET_CREATOR_LIMIT)));
+        if (!state.wikiFeetXCatalogLoaded) requests.put(
+                WikiFeetRepository.Site.WIKIFEET_X,
+                ALBUM_IO.submit(() -> new WikiFeetRepository().searchCreators(
+                        context, WikiFeetRepository.Site.WIKIFEET_X,
+                        state.query, WIKIFEET_CREATOR_LIMIT)));
         IOException firstError = null;
-        if (!state.wikiFeetCatalogLoaded) {
+        long deadline = SystemClock.elapsedRealtime() + 8_000L;
+        for (Map.Entry<WikiFeetRepository.Site, Future<List<WikiFeetRepository.Creator>>> request :
+                requests.entrySet()) {
+            WikiFeetRepository.Site site = request.getKey();
             try {
-                loadWikiFeetSite(context, state, WikiFeetRepository.Site.WIKIFEET);
-                state.wikiFeetCatalogLoaded = true;
-                state.wikiFeetSearchFailures = 0;
-            } catch (IOException error) {
-                firstError = error;
-                if (++state.wikiFeetSearchFailures >= 2) state.wikiFeetCatalogLoaded = true;
-            }
-        }
-        if (!state.wikiFeetXCatalogLoaded) {
-            try {
-                loadWikiFeetSite(context, state, WikiFeetRepository.Site.WIKIFEET_X);
-                state.wikiFeetXCatalogLoaded = true;
-                state.wikiFeetXSearchFailures = 0;
-            } catch (IOException error) {
-                if (firstError == null) firstError = error;
-                if (++state.wikiFeetXSearchFailures >= 2) state.wikiFeetXCatalogLoaded = true;
+                long remaining = deadline - SystemClock.elapsedRealtime();
+                if (remaining <= 0L) throw new IOException(site.label + " search timed out");
+                List<WikiFeetRepository.Creator> creators = request.getValue().get(
+                        remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
+                addWikiFeetCreators(state, site, creators);
+                if (site == WikiFeetRepository.Site.WIKIFEET) {
+                    state.wikiFeetCatalogLoaded = true;
+                    state.wikiFeetSearchFailures = 0;
+                } else {
+                    state.wikiFeetXCatalogLoaded = true;
+                    state.wikiFeetXSearchFailures = 0;
+                }
+            } catch (Exception error) {
+                request.getValue().cancel(true);
+                IOException failure = error instanceof IOException
+                        ? (IOException) error
+                        : new IOException(site.label + " search failed", error);
+                if (firstError == null) firstError = failure;
+                if (site == WikiFeetRepository.Site.WIKIFEET) {
+                    if (++state.wikiFeetSearchFailures >= 2) state.wikiFeetCatalogLoaded = true;
+                } else if (++state.wikiFeetXSearchFailures >= 2) {
+                    state.wikiFeetXCatalogLoaded = true;
+                }
             }
         }
         return firstError;
     }
 
-    private void loadWikiFeetSite(
-            Context context,
+    private void addWikiFeetCreators(
             State state,
-            WikiFeetRepository.Site site
-    ) throws IOException {
-        for (WikiFeetRepository.Creator creator : new WikiFeetRepository().searchCreators(
-                context, site, state.query, WIKIFEET_CREATOR_LIMIT)) {
+            WikiFeetRepository.Site site,
+            List<WikiFeetRepository.Creator> creators
+    ) {
+        if (creators == null) return;
+        for (WikiFeetRepository.Creator creator : creators) {
             if (creator == null || !WikiFeetRepository.isProfileUrl(creator.url, site) ||
                     !state.wikiFeetProfileUrls.add(creator.url)) continue;
             state.wikiFeetPending.addLast(new WikiFeetCursor(creator));
@@ -656,3 +678,4 @@ final class BunkrCreatorGalleryRepository {
         }
     }
 }
+
