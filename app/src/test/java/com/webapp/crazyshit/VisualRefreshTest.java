@@ -55,7 +55,7 @@ public class VisualRefreshTest {
         UiFoundationCoordinator.onActivityResumed(main);
         MainPagerAdapter pager = ReflectionHelpers.getField(main, "primaryPagerAdapter");
         NativeContentItem video = new NativeContentItem(NativeContentItem.KIND_MEDIA,
-                "A sample video with a readable title", "https://crazyshit.com/cnt/medias/1-sample", "", "12K", "", "");
+                "A sample video with a readable title", "https://example.invalid/cnt/medias/1-sample", "", "12K", "", "");
         ReflectionHelpers.setField(pager, "homeRepository", new HomeSourceRepository(
                 (ctx, source, page) -> Collections.singletonList(video), 1000));
         pager.refresh(MainPagerAdapter.PAGE_HOME);
@@ -80,6 +80,15 @@ public class VisualRefreshTest {
         ResponsiveFitmentController.applySoon(main);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         View root = ReflectionHelpers.getField(main, "overlayRoot");
+        capture(root, "home-lifecycle", 360, 800);
+        RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
+        NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
+        assertNotNull(visibleCard);
+        visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
+        visibleCard.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) visibleCard.itemView;
+        assertEquals(0, card.getStrokeWidth());
+        assertEquals(Color.BLACK, card.getCardBackgroundColor().getDefaultColor());
         capture(root, "home-lifecycle", 360, 800);
         assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
         assertEquals(BrowseUi.dp(main, 76), nav.getLayoutParams().height);

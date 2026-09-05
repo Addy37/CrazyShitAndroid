@@ -186,7 +186,7 @@ final class FapelloRepository {
             if (title.isEmpty()) title = id.isEmpty() ? "Fapzone video" : "Fapzone video #" + id;
             NativeContentItem candidate = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA, title, pageUrl, thumbnail,
-                    "Fapzone", "", "", "Fapzone");
+                    "", "", "", "Fapzone");
             NativeContentItem existing = items.get(pageUrl);
             if (existing == null || (existing.imageUrl.isEmpty() && !thumbnail.isEmpty())) {
                 items.put(pageUrl, candidate);

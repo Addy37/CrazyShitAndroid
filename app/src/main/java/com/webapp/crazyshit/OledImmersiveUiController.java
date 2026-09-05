@@ -390,6 +390,7 @@ final class OledImmersiveUiController {
         MaterialCardView card = child instanceof MaterialCardView
                 ? (MaterialCardView) child : findCard(child);
         if (card == null || largestImage(card) == null) return;
+        if (NativeFeedAdapter.STYLE_TAG.equals(card.getTag())) return;
         boolean oled = oled(activity);
         card.setCardBackgroundColor(oled ? OLED_CARD : CLASSIC_CARD);
         card.setCardElevation(0f);

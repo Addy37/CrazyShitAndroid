@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.Set;
 
 public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdapter.Holder> {
+    static final String STYLE_TAG = "native_feed_card";
     public static final int VIEW_CARDS = 0;
     public static final int VIEW_LARGE = VIEW_CARDS;
     public static final int VIEW_LIST = 1;
@@ -272,6 +273,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private Holder createSectionHolder(ViewGroup parent) {
         MaterialCardView card = new MaterialCardView(parent.getContext());
+        card.setTag(STYLE_TAG);
         card.setCardBackgroundColor(APP_BG);
         card.setCardElevation(0f);
         card.setRadius(0f);
@@ -386,6 +388,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             int fixedHeightDp
     ) {
         MaterialCardView card = new MaterialCardView(parent.getContext());
+        card.setTag(STYLE_TAG);
         card.setCardBackgroundColor(Color.BLACK);
         card.setRadius(dp(parent, radius));
         card.setCardElevation(0f);
@@ -989,3 +992,4 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         }
     }
 }
+

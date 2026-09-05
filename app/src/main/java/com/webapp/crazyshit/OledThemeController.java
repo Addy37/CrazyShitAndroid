@@ -58,8 +58,10 @@ final class OledThemeController {
 
         if (view instanceof MaterialCardView) {
             MaterialCardView card = (MaterialCardView) view;
-            card.setCardBackgroundColor(OLED_CARD);
-            if (card.getStrokeWidth() > 0) card.setStrokeColor(OLED_STROKE);
+            if (!NativeFeedAdapter.STYLE_TAG.equals(card.getTag())) {
+                card.setCardBackgroundColor(OLED_CARD);
+                if (card.getStrokeWidth() > 0) card.setStrokeColor(OLED_STROKE);
+            }
         } else if (!(view instanceof TextView) && !(view instanceof ImageView)) {
             Drawable background = view.getBackground();
             if (background instanceof ColorDrawable) {
@@ -86,3 +88,4 @@ final class OledThemeController {
         return max <= 36 && (max - min) <= 12;
     }
 }
+
