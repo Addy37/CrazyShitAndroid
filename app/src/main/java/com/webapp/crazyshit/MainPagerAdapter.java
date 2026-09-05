@@ -142,6 +142,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void onHostResume() {
         chaosView.onHostResume();
+        Page collections = pageAt(PAGE_SERIES);
+        if (collections != null && collections.seriesSource == SERIES_SOURCE_BUNKR
+                && collections.browseAdapter != null) collections.browseAdapter.notifyDataSetChanged();
         Page home = pageAt(PAGE_HOME);
         if (home != null && home.feedAdapter != null) home.feedAdapter.refreshPlaybackState();
     }

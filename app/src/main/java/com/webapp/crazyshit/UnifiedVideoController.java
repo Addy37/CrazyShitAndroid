@@ -194,6 +194,8 @@ final class UnifiedVideoController {
     private int sessionGeneration;
 
     private String mediaUrl = "";
+    private String mediaReferer = "";
+    private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private String pageUrl = "";
     private String title = "Video";
     private String views = "";
@@ -411,6 +413,8 @@ final class UnifiedVideoController {
 
         mediaUrl = nextMedia;
         pageUrl = clean(intent.getStringExtra(PlayerActivity.EXTRA_PAGE_URL));
+        mediaReferer = clean(intent.getStringExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER));
+        if (mediaReferer.isEmpty()) mediaReferer = pageUrl;
         title = clean(intent.getStringExtra(PlayerActivity.EXTRA_TITLE));
         views = clean(intent.getStringExtra(VideoDetailActivity.EXTRA_VIEWS));
         uploader = clean(intent.getStringExtra(VideoDetailActivity.EXTRA_UPLOADER));
@@ -670,10 +674,10 @@ final class UnifiedVideoController {
         DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory();
         if (!userAgent.isEmpty()) http.setUserAgent(userAgent);
         Map<String, String> headers = new LinkedHashMap<>();
-        if (!pageUrl.isEmpty()) {
-            headers.put("Referer", pageUrl);
+        if (!mediaReferer.isEmpty()) {
+            headers.put("Referer", mediaReferer);
             try {
-                Uri page = Uri.parse(pageUrl);
+                Uri page = Uri.parse(mediaReferer);
                 if (page.getScheme() != null && page.getHost() != null) {
                     headers.put("Origin", page.getScheme() + "://" + page.getHost());
                 }
@@ -692,6 +696,7 @@ final class UnifiedVideoController {
         if (lower.contains(".m3u8")) media.setMimeType(MimeTypes.APPLICATION_M3U8);
         else if (lower.contains(".mpd")) media.setMimeType(MimeTypes.APPLICATION_MPD);
         player.setMediaItem(media.build());
+        playbackRecovery.bind(player, pageUrl);
 
         long position = startPosition;
         if (position < 0L && rememberPositionEnabled()) {
@@ -719,7 +724,14 @@ final class UnifiedVideoController {
 
             @Override
             public void onPlayerError(PlaybackException error) {
-                showPlaybackFailure();
+                if (!playbackRecovery.recover(activity, error, recovered -> {
+                    releasePlayer();
+                    mediaUrl = recovered.stream.mediaUrl;
+                    mediaReferer = recovered.stream.requestReferer;
+                    cookies = cookiesFor(mediaUrl, pageUrl);
+                    buildPlayer(recovered.position);
+                    player.setPlayWhenReady(recovered.playWhenReady && hostResumed);
+                }, UnifiedVideoController.this::showPlaybackFailure)) showPlaybackFailure();
             }
         });
     }
@@ -859,7 +871,7 @@ final class UnifiedVideoController {
         io.execute(() -> {
             CrazyShitRepository.StreamInfo resolved = null;
             try {
-                resolved = repository.resolvePlayable(activity, item.url);
+                resolved = PlayableSourceRouter.resolve(activity, item.url);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo result = resolved;
@@ -873,6 +885,7 @@ final class UnifiedVideoController {
                 savePlaybackState(false);
                 releasePlayer();
                 mediaUrl = result.mediaUrl;
+                mediaReferer = result.requestReferer;
                 pageUrl = item.url;
                 title = clean(item.title).isEmpty() ? clean(result.title) : item.title;
                 if (title.isEmpty()) title = "Video";
@@ -1184,6 +1197,7 @@ final class UnifiedVideoController {
     }
 
     private void releasePlayer() {
+        playbackRecovery.cancel();
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
             try { player.release(); } catch (Exception ignored) { }

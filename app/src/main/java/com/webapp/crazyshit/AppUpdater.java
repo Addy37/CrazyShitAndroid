@@ -56,6 +56,20 @@ final class AppUpdater {
     }
 
     void check(boolean manual) {
+        if (BuildConfig.PRIVATE_DISTRIBUTION) {
+            if (manual && !activity.isFinishing()) {
+                new android.app.AlertDialog.Builder(activity)
+                        .setTitle("App updates")
+                        .setMessage("Installed: " + currentVersion() + "\n\nThis is your private app. Install the latest APK provided in ChatGPT, or download it from your private GitHub releases while signed in. Install over the current app to keep your saved data.")
+                        .setNegativeButton("Close", null)
+                        .setPositiveButton("Open releases", (dialog, which) -> {
+                            try { activity.startActivity(new Intent(Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("https://github.com/Addy37/CrazyShitAndroid/releases"))); }
+                            catch (Exception ignored) { Toast.makeText(activity, "No browser is available.", Toast.LENGTH_SHORT).show(); }
+                        }).show();
+            }
+            return;
+        }
         if (checking) {
             if (manual) Toast.makeText(activity, "Already checking for updates…", Toast.LENGTH_SHORT).show();
             return;

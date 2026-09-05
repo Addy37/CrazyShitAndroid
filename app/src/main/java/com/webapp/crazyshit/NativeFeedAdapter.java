@@ -131,6 +131,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return position >= 0 && position < items.size() && items.get(position).isSection();
     }
 
+    List<NativeContentItem> snapshot() { return new ArrayList<>(items); }
+
     public void replace(List<NativeContentItem> next) {
         items.clear();
         if (next != null) items.addAll(next);

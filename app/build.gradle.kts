@@ -13,10 +13,11 @@ android {
     defaultConfig {
         // Keep the existing release application ID so stable releases upgrade the main app.
         applicationId = "com.addy37.crazyshitunofficial"
+        buildConfigField("boolean", "PRIVATE_DISTRIBUTION", "true")
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 49
-        versionName = System.getenv("APP_VERSION_NAME") ?: "2.8.5"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 2_010_000
+        versionName = System.getenv("APP_VERSION_NAME") ?: "2.10.0"
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
@@ -58,6 +59,10 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -65,6 +70,9 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+    testImplementation("org.robolectric:robolectric:4.16")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.core:core:1.15.0")

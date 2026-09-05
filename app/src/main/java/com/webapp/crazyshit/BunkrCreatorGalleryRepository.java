@@ -50,9 +50,11 @@ final class BunkrCreatorGalleryRepository {
     }
 
     Batch fetchNext(Context context, String sessionId, String query) throws IOException {
-        State state = state(sessionId, query);
+        State state = state(context, sessionId, query);
         synchronized (state) {
-            return fetchNextLocked(context.getApplicationContext(), state);
+            Batch batch = fetchNextLocked(context.getApplicationContext(), state);
+            saveCursor(context, sessionId, state, batch);
+            return batch;
         }
     }
 
@@ -320,7 +322,7 @@ final class BunkrCreatorGalleryRepository {
         return result;
     }
 
-    private State state(String sessionId, String query) throws IOException {
+    private State state(Context context, String sessionId, String query) throws IOException {
         if (sessionId == null || sessionId.trim().isEmpty()) {
             throw new IOException("Creator gallery session was missing");
         }
@@ -329,12 +331,70 @@ final class BunkrCreatorGalleryRepository {
         synchronized (STATES) {
             State current = STATES.get(sessionId);
             if (current == null || !cleanQuery.equalsIgnoreCase(current.query)) {
-                current = new State(cleanQuery);
+                current = restoreCursor(context, sessionId, cleanQuery);
                 STATES.put(sessionId, current);
                 trimLocked();
             }
             return current;
         }
+    }
+
+    private void saveCursor(Context context, String id, State state, Batch batch) {
+        try {
+            org.json.JSONObject json = new org.json.JSONObject().put("query", state.query)
+                    .put("next", state.nextSearchPage).put("searchFinished", state.searchFinished)
+                    .put("fapelloLoaded", state.fapelloCatalogLoaded)
+                    .put("albums", new org.json.JSONArray(state.albumUrls))
+                    .put("models", new org.json.JSONArray(state.fapelloModelUrls))
+                    .put("media", new org.json.JSONArray(state.loadedMediaUrls));
+            org.json.JSONArray pending = new org.json.JSONArray();
+            for (AlbumCursor cursor : state.pending) pending.put(new org.json.JSONObject()
+                    .put("url", cursor.albumUrl).put("next", cursor.nextPage));
+            json.put("pending", pending);
+            org.json.JSONArray models = new org.json.JSONArray();
+            for (FapelloCursor cursor : state.fapelloPending) models.put(new org.json.JSONObject()
+                    .put("name", cursor.model.name).put("url", cursor.model.url)
+                    .put("image", cursor.model.imageUrl).put("next", cursor.nextPage));
+            json.put("pendingModels", models);
+            BunkrGallerySessionStore.recordCreatorBatch(context, id, batch.items, batch.endReached, json);
+        } catch (Exception ignored) { }
+    }
+
+    private State restoreCursor(Context context, String id, String query) {
+        State state = new State(query);
+        BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.restore(context, id);
+        org.json.JSONObject json = null;
+        try { if (snapshot != null && !snapshot.cursor.isEmpty()) json = new org.json.JSONObject(snapshot.cursor); }
+        catch (org.json.JSONException ignored) { }
+        if (json == null || !query.equalsIgnoreCase(json.optString("query"))) return state;
+        state.nextSearchPage = Math.max(1, json.optInt("next", 1));
+        state.searchFinished = json.optBoolean("searchFinished");
+        state.fapelloCatalogLoaded = json.optBoolean("fapelloLoaded");
+        restoreSet(json.optJSONArray("albums"), state.albumUrls);
+        restoreSet(json.optJSONArray("models"), state.fapelloModelUrls);
+        restoreSet(json.optJSONArray("media"), state.loadedMediaUrls);
+        org.json.JSONArray pending = json.optJSONArray("pending");
+        if (pending != null) for (int i = 0; i < pending.length(); i++) {
+            org.json.JSONObject item = pending.optJSONObject(i);
+            if (item == null || !BunkrRepository.isAlbumUrl(item.optString("url"))) continue;
+            AlbumCursor cursor = new AlbumCursor(item.optString("url"));
+            cursor.nextPage = Math.max(1, item.optInt("next", 1));
+            state.pending.add(cursor);
+        }
+        org.json.JSONArray models = json.optJSONArray("pendingModels");
+        if (models != null) for (int i = 0; i < models.length(); i++) {
+            org.json.JSONObject item = models.optJSONObject(i);
+            if (item == null || !FapelloRepository.isModelUrl(item.optString("url"))) continue;
+            FapelloCursor cursor = new FapelloCursor(new FapelloRepository.Model(
+                    item.optString("name"), item.optString("url"), item.optString("image")));
+            cursor.nextPage = Math.max(1, item.optInt("next", 1));
+            state.fapelloPending.add(cursor);
+        }
+        return state;
+    }
+
+    private void restoreSet(org.json.JSONArray values, Set<String> output) {
+        if (values != null) for (int i = 0; i < Math.min(10000, values.length()); i++) output.add(values.optString(i));
     }
 
     private void trimLocked() {

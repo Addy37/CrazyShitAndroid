@@ -115,6 +115,12 @@ final class LandscapeMoreDialog {
                 "LIBRARY",
                 actions(
                         new Action(
+                                R.drawable.ic_more_account,
+                                "Favorite creators",
+                                "Your starred creators, in one place",
+                                () -> activity.startActivity(new Intent(activity, CreatorsActivity.class))
+                        ),
+                        new Action(
                                 R.drawable.ic_action_download,
                                 "Downloads",
                                 "Saved videos and active downloads",

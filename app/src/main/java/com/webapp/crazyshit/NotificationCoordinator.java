@@ -549,7 +549,7 @@ final class NotificationCoordinator {
         boolean videos = prefs.getBoolean(PREF_NEW_VIDEO_ALERTS, true) &&
                 (prefs.getBoolean(PREF_CRAZYSHIT_ALERTS, true) ||
                         prefs.getBoolean(PREF_EFUKT_ALERTS, true));
-        return videos || prefs.getBoolean(PREF_UPDATE_ALERTS, true);
+        return videos || (!BuildConfig.PRIVATE_DISTRIBUTION && prefs.getBoolean(PREF_UPDATE_ALERTS, true));
     }
 
     private static int normalizedHours(int value) {

@@ -31,7 +31,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
+import java.util.concurrent.Callable;
+import java.util.Map;
+import org.json.JSONObject;
+import android.os.Parcelable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -76,6 +80,18 @@ public final class SearchActivity extends Activity {
     private String activeQuery = "";
     private int generation;
     private boolean bunkrOnly;
+    private CreatorSuggestionsController suggestions;
+    private TextView searchState;
+    private final List<Future<?>> requests = new ArrayList<>();
+    private final Map<Integer, String> errors = new LinkedHashMap<>();
+    private List<NativeContentItem> crazySeries = new ArrayList<>();
+    private int pendingSources;
+    private boolean destroyed;
+    private String snapshotId = ScreenSnapshotStore.newId();
+    private Parcelable restoredScroll;
+    private long searchStarted;
+    private boolean firstResultsRecorded;
+
 
     static Intent createBunkrSearch(Activity activity) {
         Intent intent = new Intent(activity, SearchActivity.class);
@@ -91,15 +107,39 @@ public final class SearchActivity extends Activity {
         getWindow().setNavigationBarColor(Color.BLACK);
         buildUi();
 
-        String supplied = getIntent().getStringExtra(EXTRA_QUERY);
-        if (supplied != null && !supplied.trim().isEmpty()) {
-            input.setText(supplied.trim());
+        getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        if (state != null) {
+            snapshotId = state.getString("snapshot", snapshotId);
+            try { filter = Filter.valueOf(state.getString("filter", "ALL")); } catch (Exception ignored) { }
+            refreshFilterStyles();
+            input.setText(state.getString("typed", ""));
             input.setSelection(input.length());
-            runSearch();
+            restoredScroll = state.getParcelable("scroll");
+            activeQuery = state.getString("active", "");
+            boolean showingSuggestions = state.getBoolean("suggestions", true);
+            if (!showingSuggestions) { suggestions.hide(); input.clearFocus(); }
+            if (!bunkrOnly && !activeQuery.isEmpty()) {
+                final String savedQuery = activeQuery;
+                final int token = ++generation;
+                io.execute(() -> {
+                    JSONObject snapshot = ScreenSnapshotStore.read(this, snapshotId);
+                    runOnUiThread(() -> {
+                        if (destroyed || token != generation) return;
+                        restoreSnapshot(snapshot);
+                        startGlobalSearch(savedQuery, false);
+                    });
+                });
+            }
         } else {
-            input.requestFocus();
-            if (getWindow() != null) {
-                getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+            String supplied = getIntent().getStringExtra(EXTRA_QUERY);
+            if (supplied != null && !supplied.trim().isEmpty()) {
+                input.setText(supplied.trim());
+                input.setSelection(input.length());
+                runSearch();
+            } else {
+                input.requestFocus();
+                getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
+                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
             }
         }
     }
@@ -111,26 +151,12 @@ public final class SearchActivity extends Activity {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(Color.rgb(13, 13, 15));
-        shell.setOnApplyWindowInsetsListener((view, insets) -> {
-            int left;
-            int top;
-            int right;
-            int bottom;
-            if (Build.VERSION.SDK_INT >= 30) {
-                android.graphics.Insets safe = insets.getInsets(
-                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
-                );
-                left = safe.left;
-                top = safe.top;
-                right = safe.right;
-                bottom = safe.bottom;
-            } else {
-                left = insets.getSystemWindowInsetLeft();
-                top = insets.getSystemWindowInsetTop();
-                right = insets.getSystemWindowInsetRight();
-                bottom = insets.getSystemWindowInsetBottom();
-            }
-            view.setPadding(left, top, right, bottom);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(shell, (view, insets) -> {
+            androidx.core.graphics.Insets safe = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                            | androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+                            | androidx.core.view.WindowInsetsCompat.Type.ime());
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
             return insets;
         });
         root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
@@ -141,6 +167,11 @@ public final class SearchActivity extends Activity {
             shell.addView(buildFilters(), new LinearLayout.LayoutParams(-1, dp(52)));
         }
 
+        searchState = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
+        searchState.setPadding(dp(16), dp(4), dp(16), dp(4));
+        searchState.setVisibility(View.GONE);
+        searchState.setOnClickListener(v -> { if (!activeQuery.isEmpty()) startGlobalSearch(activeQuery, false); });
+        shell.addView(searchState);
         FrameLayout content = new FrameLayout(this);
         shell.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
 
@@ -171,6 +202,9 @@ public final class SearchActivity extends Activity {
         progressParams.gravity = Gravity.CENTER;
         content.addView(progress, progressParams);
 
+        LinearLayout suggestionPanel = new LinearLayout(this);
+        content.addView(suggestionPanel, new FrameLayout.LayoutParams(-1, -1));
+        suggestions = new CreatorSuggestionsController(this, input, suggestionPanel, this::openCreator);
         setContentView(root);
     }
 
@@ -207,6 +241,9 @@ public final class SearchActivity extends Activity {
         subtitle.setTextSize(12f);
         labels.addView(subtitle);
         bar.addView(labels, new LinearLayout.LayoutParams(0, -1, 1f));
+        bar.addView(BrowseUi.action(this, "★", "Favorite creators", v ->
+                startActivity(new Intent(this, CreatorsActivity.class))),
+                new LinearLayout.LayoutParams(dp(48), dp(48)));
         return bar;
     }
 
@@ -222,7 +259,8 @@ public final class SearchActivity extends Activity {
         input.setTextColor(Color.WHITE);
         input.setTextSize(16f);
         input.setSingleLine(true);
-        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        input.setContentDescription("Search creators, albums and videos");
         input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         input.setPadding(dp(14), 0, dp(14), 0);
         input.setBackground(rounded(Color.rgb(30, 30, 35), dp(14)));
@@ -234,6 +272,9 @@ public final class SearchActivity extends Activity {
             return false;
         });
         row.addView(input, new LinearLayout.LayoutParams(0, -1, 1f));
+        row.addView(BrowseUi.action(this, "×", "Clear search", v -> {
+            input.setText(""); input.requestFocus();
+        }), new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         Button go = new Button(this);
         go.setText("Search");
@@ -283,6 +324,7 @@ public final class SearchActivity extends Activity {
             filter = (Filter) v.getTag();
             refreshFilterStyles();
             renderResults();
+            recycler.scrollToPosition(0);
         });
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(36));
         params.setMargins(dp(4), 0, dp(4), 0);
@@ -304,105 +346,105 @@ public final class SearchActivity extends Activity {
     private void runSearch() {
         String query = input.getText().toString().trim();
         if (query.length() < 2) {
-            Toast.makeText(this, "Type at least 2 characters.", Toast.LENGTH_SHORT).show();
+            input.setError("Type at least 2 characters");
             return;
         }
+        BrowseUi.hideKeyboard(this, input);
+        input.clearFocus();
         if (bunkrOnly) {
             startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, query, query));
             return;
         }
+        suggestions.hide();
+        startGlobalSearch(query, true);
+    }
+
+    private void openCreator(NativeContentItem item) {
+        BrowseUi.hideKeyboard(this, input);
+        startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, item.title,
+                item.searchQuery.isEmpty() ? item.title : item.searchQuery));
+    }
+
+    private void startGlobalSearch(String query, boolean clear) {
+        for (Future<?> request : requests) request.cancel(true);
+        requests.clear();
+        if (io instanceof java.util.concurrent.ThreadPoolExecutor)
+            ((java.util.concurrent.ThreadPoolExecutor) io).purge();
         activeQuery = query;
-        int requestGeneration = ++generation;
-        progress.setVisibility(View.VISIBLE);
-        status.setVisibility(View.GONE);
-        adapter.replace(new ArrayList<>());
+        int token = ++generation;
+        errors.clear();
+        pendingSources = 7;
+        searchStarted = android.os.SystemClock.elapsedRealtime();
+        firstResultsRecorded = false;
+        if (clear) {
+            crazyVideos.clear(); efuktVideos.clear(); crazySeries.clear(); efuktSeries.clear();
+            bunkrAlbums.clear(); categories.clear(); library.clear();
+            videos.clear(); series.clear();
+            restoredScroll = null;
+            recycler.scrollToPosition(0);
+        }
+        renderResults();
+        source(token, 0, "CrazyShit videos", () -> repository.fetchFeed(this, repository.searchUrl(query), 1));
+        source(token, 1, "EFukt videos", () -> efuktRepository.search(this, query));
+        source(token, 2, "CrazyShit series", () -> matchCatalog(browseRepository.fetchSeries(this), query));
+        source(token, 3, "EFukt series", () -> matchCatalog(efuktRepository.fetchSeries(this), query));
+        source(token, 4, "Fapzone albums", () -> bunkrRepository.searchAlbums(this, query, 1));
+        source(token, 5, "Categories", () -> matchCatalog(browseRepository.fetchCategories(this), query));
+        source(token, 6, "Your Library", () -> searchLibrary(query));
+    }
 
-        CompletableFuture<List<NativeContentItem>> crazyVideos = CompletableFuture.supplyAsync(
-                () -> fetchCrazyVideos(query), io
-        );
-        CompletableFuture<List<NativeContentItem>> efuktVideos = CompletableFuture.supplyAsync(
-                () -> fetchEfuktVideos(query), io
-        );
-        CompletableFuture<List<NativeContentItem>> crazySeries = CompletableFuture.supplyAsync(
-                () -> fetchCrazySeriesMatches(query), io
-        );
-        CompletableFuture<List<NativeContentItem>> efuktSeries = CompletableFuture.supplyAsync(
-                () -> fetchEfuktSeriesMatches(query), io
-        );
-        CompletableFuture<List<NativeContentItem>> bunkrAlbums = CompletableFuture.supplyAsync(
-                () -> fetchBunkrAlbums(query), io
-        );
-        CompletableFuture<List<NativeContentItem>> foundCategories = CompletableFuture.supplyAsync(
-                () -> fetchCategoryMatches(query), io
-        );
-        CompletableFuture<List<NativeContentItem>> foundLibrary = CompletableFuture.supplyAsync(
-                () -> searchLibrary(query), io
-        );
-
-        CompletableFuture.allOf(
-                crazyVideos, efuktVideos, crazySeries, efuktSeries, bunkrAlbums,
-                foundCategories, foundLibrary
-        ).whenComplete((ignored, error) -> runOnUiThread(() -> {
-            if (requestGeneration != generation || isFinishing()) return;
-            SearchActivity.this.crazyVideos = crazyVideos.join();
-            SearchActivity.this.efuktVideos = efuktVideos.join();
-            SearchActivity.this.efuktSeries = efuktSeries.join();
-            SearchActivity.this.bunkrAlbums = bunkrAlbums.join();
-            videos = interleave(SearchActivity.this.crazyVideos, SearchActivity.this.efuktVideos);
-            series = interleave(crazySeries.join(), SearchActivity.this.efuktSeries);
-            categories = foundCategories.join();
-            library = foundLibrary.join();
-            progress.setVisibility(View.GONE);
-            renderResults();
+    private void source(int token, int id, String title, Callable<List<NativeContentItem>> fetch) {
+        requests.add(io.submit(() -> {
+            List<NativeContentItem> items = null;
+            try { items = fetch.call(); } catch (Exception ignored) { }
+            List<NativeContentItem> result = items;
+            runOnUiThread(() -> {
+                if (destroyed || isFinishing() || token != generation) return;
+                pendingSources--;
+                if (result == null) errors.put(id, title);
+                else switch (id) {
+                    case 0: crazyVideos = result; break;
+                    case 1: efuktVideos = result; break;
+                    case 2: crazySeries = result; break;
+                    case 3: efuktSeries = result; break;
+                    case 4: bunkrAlbums = result; break;
+                    case 5: categories = result; break;
+                    case 6: library = result; break;
+                }
+                videos = interleave(crazyVideos, efuktVideos);
+                series = interleave(crazySeries, efuktSeries);
+                renderResults();
+                saveSnapshot();
+            });
         }));
     }
 
-    private List<NativeContentItem> fetchCrazyVideos(String query) {
+    private void saveSnapshot() {
         try {
-            return repository.fetchFeed(this, repository.searchUrl(query), 1);
-        } catch (Exception ignored) {
-            return new ArrayList<>();
-        }
+            JSONObject data = new JSONObject().put("query", activeQuery);
+            data.put("crazyVideos", ContentItemCodec.encodeList(crazyVideos, 100));
+            data.put("efuktVideos", ContentItemCodec.encodeList(efuktVideos, 100));
+            data.put("crazySeries", ContentItemCodec.encodeList(crazySeries, 100));
+            data.put("efuktSeries", ContentItemCodec.encodeList(efuktSeries, 100));
+            data.put("albums", ContentItemCodec.encodeList(bunkrAlbums, 100));
+            data.put("categories", ContentItemCodec.encodeList(categories, 100));
+            data.put("library", ContentItemCodec.encodeList(library, 100));
+            ScreenSnapshotStore.save(this, snapshotId, data);
+        } catch (Exception ignored) { }
     }
 
-    private List<NativeContentItem> fetchEfuktVideos(String query) {
-        try {
-            return efuktRepository.search(this, query);
-        } catch (Exception ignored) {
-            return new ArrayList<>();
-        }
-    }
-
-    private List<NativeContentItem> fetchCrazySeriesMatches(String query) {
-        try {
-            return matchCatalog(browseRepository.fetchSeries(this), query);
-        } catch (Exception ignored) {
-            return new ArrayList<>();
-        }
-    }
-
-    private List<NativeContentItem> fetchEfuktSeriesMatches(String query) {
-        try {
-            return matchCatalog(efuktRepository.fetchSeries(this), query);
-        } catch (Exception ignored) {
-            return new ArrayList<>();
-        }
-    }
-
-    private List<NativeContentItem> fetchBunkrAlbums(String query) {
-        try {
-            return bunkrRepository.searchAlbums(this, query, 1);
-        } catch (Exception ignored) {
-            return new ArrayList<>();
-        }
-    }
-
-    private List<NativeContentItem> fetchCategoryMatches(String query) {
-        try {
-            return matchCatalog(browseRepository.fetchCategories(this), query);
-        } catch (Exception ignored) {
-            return new ArrayList<>();
-        }
+    private void restoreSnapshot(JSONObject data) {
+        if (data == null || !activeQuery.equals(data.optString("query"))) return;
+        crazyVideos = ContentItemCodec.decodeList(data.optJSONArray("crazyVideos"), 100);
+        efuktVideos = ContentItemCodec.decodeList(data.optJSONArray("efuktVideos"), 100);
+        crazySeries = ContentItemCodec.decodeList(data.optJSONArray("crazySeries"), 100);
+        efuktSeries = ContentItemCodec.decodeList(data.optJSONArray("efuktSeries"), 100);
+        bunkrAlbums = ContentItemCodec.decodeList(data.optJSONArray("albums"), 100);
+        categories = ContentItemCodec.decodeList(data.optJSONArray("categories"), 100);
+        library = ContentItemCodec.decodeList(data.optJSONArray("library"), 100);
+        videos = interleave(crazyVideos, efuktVideos);
+        series = interleave(crazySeries, efuktSeries);
+        renderResults();
     }
 
     private List<NativeContentItem> interleave(
@@ -491,14 +533,31 @@ public final class SearchActivity extends Activity {
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Series", efuktSeries, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.ALL || filter == Filter.CATEGORIES) appendSection(output, "Categories", categories, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.ALL || filter == Filter.LIBRARY) appendSection(output, "Your Library", library, GlobalSearchAdapter.SOURCE_LIBRARY, 30);
+        if (!output.isEmpty() && !firstResultsRecorded && searchStarted > 0) {
+            firstResultsRecorded = true;
+            AppPerformance.record("Search first results", android.os.SystemClock.elapsedRealtime() - searchStarted);
+        }
         adapter.replace(output);
 
+        progress.setVisibility(output.isEmpty() && pendingSources > 0 ? View.VISIBLE : View.GONE);
+        String unavailable = String.join(", ", errors.values());
+        searchState.setVisibility(View.VISIBLE);
+        searchState.setText(pendingSources > 0
+                ? "Searching · " + pendingSources + " sources remaining"
+                : unavailable.isEmpty() ? "Search complete"
+                : "Unavailable: " + unavailable + " · Tap to retry");
+        searchState.setContentDescription(searchState.getText());
         if (output.isEmpty()) {
-            status.setText("No matches for “" + activeQuery + "”\n\nTry a shorter or more general search.");
-            status.setVisibility(View.VISIBLE);
+            status.setText(pendingSources > 0 ? "" : !unavailable.isEmpty()
+                    ? "Some sources could not be reached.\nTap the message above to retry."
+                    : "No matches for “" + activeQuery + "”\n\nTry a shorter or more general search.");
+            status.setVisibility(pendingSources > 0 ? View.GONE : View.VISIBLE);
         } else {
             status.setVisibility(View.GONE);
-            recycler.scrollToPosition(0);
+            if (restoredScroll != null) {
+                recycler.getLayoutManager().onRestoreInstanceState(restoredScroll);
+                restoredScroll = null;
+            }
         }
     }
 
@@ -542,7 +601,7 @@ public final class SearchActivity extends Activity {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
             runOnUiThread(() -> {
-                if (requestGeneration != generation) return;
+                if (destroyed || isFinishing() || requestGeneration != generation) return;
                 progress.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     Intent fallback = new Intent(this, WebFallbackActivity.class);
@@ -608,8 +667,28 @@ public final class SearchActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    @Override protected void onResume() {
+        super.onResume();
+        if (suggestions != null) suggestions.refreshLocal();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        state.putString("typed", input.getText().toString());
+        state.putString("active", activeQuery);
+        state.putString("filter", filter.name());
+        state.putString("snapshot", snapshotId);
+        state.putBoolean("suggestions", suggestions.isShowing());
+        state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
+        saveSnapshot();
+        super.onSaveInstanceState(state);
+    }
+
     @Override
     protected void onDestroy() {
+        destroyed = true;
+        generation++;
+        if (suggestions != null) suggestions.close();
+        if (adapter != null) adapter.close();
         io.shutdownNow();
         super.onDestroy();
     }

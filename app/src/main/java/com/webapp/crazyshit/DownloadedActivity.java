@@ -35,6 +35,11 @@ public final class DownloadedActivity extends Activity {
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private LinearLayout list;
+    private androidx.recyclerview.widget.RecyclerView recycler;
+    private DownloadsAdapter downloadsAdapter;
+    private final java.util.concurrent.ExecutorService loader = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private boolean reading;
+    private android.os.Parcelable restoredScroll;
     private TextView subtitle;
     private boolean polling;
     private String renderedState = "";
@@ -54,6 +59,8 @@ public final class DownloadedActivity extends Activity {
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
         buildUi();
+        if (state != null) restoredScroll = state.getParcelable("scroll");
+        loader.execute(() -> VideoDownloadStore.recoverInterrupted(this));
     }
 
     @Override
@@ -73,10 +80,7 @@ public final class DownloadedActivity extends Activity {
     }
 
     private void buildUi() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(13, 13, 15));
-        root.setPadding(dp(16), dp(14), dp(16), dp(22));
+        LinearLayout root = BrowseUi.screen(this);
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -103,26 +107,36 @@ public final class DownloadedActivity extends Activity {
         header.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
         root.addView(header, new LinearLayout.LayoutParams(-1, dp(62)));
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setClipToPadding(false);
-        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-        list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(0, dp(8), 0, dp(24));
-        scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        recycler = new androidx.recyclerview.widget.RecyclerView(this);
+        recycler.setLayoutManager(new androidx.recyclerview.widget.LinearLayoutManager(this));
+        recycler.setItemAnimator(null);
+        recycler.setPadding(dp(12), dp(8), dp(12), dp(16));
+        downloadsAdapter = new DownloadsAdapter();
+        recycler.setAdapter(downloadsAdapter);
+        root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         setContentView(root);
     }
 
     private void renderDownloads() {
-        List<VideoDownloadStore.Entry> entries = VideoDownloadStore.entries(this);
+        if (reading || isFinishing() || isDestroyed()) return;
+        reading = true;
+        loader.execute(() -> {
+            List<VideoDownloadStore.Entry> entries = VideoDownloadStore.entries(this);
+            main.post(() -> {
+                reading = false;
+                if (!polling || isFinishing() || isDestroyed()) return;
+                showDownloads(entries);
+            });
+        });
+    }
+
+    private void showDownloads(List<VideoDownloadStore.Entry> entries) {
         String state = stateOf(entries);
         if (state.equals(renderedState)) return;
         renderedState = state;
 
-        list.removeAllViews();
+        downloadsAdapter.replace(entries);
         int active = 0;
         int ready = 0;
         for (VideoDownloadStore.Entry entry : entries) {
@@ -131,7 +145,7 @@ public final class DownloadedActivity extends Activity {
         }
         if (entries.isEmpty()) {
             subtitle.setText("Saved videos and active downloads");
-            addEmptyState();
+            subtitle.setText("No downloads yet · Save a video from its menu");
             return;
         }
         String summary = ready + (ready == 1 ? " saved video" : " saved videos");
@@ -140,9 +154,56 @@ public final class DownloadedActivity extends Activity {
                     (active == 1 ? " active download" : " active downloads");
         }
         subtitle.setText(summary);
-        for (VideoDownloadStore.Entry entry : entries) {
-            list.addView(downloadCard(entry), cardParams());
+        if (restoredScroll != null) {
+            recycler.getLayoutManager().onRestoreInstanceState(restoredScroll);
+            restoredScroll = null;
         }
+    }
+
+    private final class DownloadsAdapter extends androidx.recyclerview.widget.RecyclerView.Adapter<DownloadHolder> {
+        private List<VideoDownloadStore.Entry> entries = new java.util.ArrayList<>();
+        void replace(List<VideoDownloadStore.Entry> next) {
+            List<VideoDownloadStore.Entry> old = entries;
+            androidx.recyclerview.widget.DiffUtil.DiffResult diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(
+                    new androidx.recyclerview.widget.DiffUtil.Callback() {
+                        public int getOldListSize() { return old.size(); }
+                        public int getNewListSize() { return next.size(); }
+                        public boolean areItemsTheSame(int a, int b) { return old.get(a).id == next.get(b).id; }
+                        public boolean areContentsTheSame(int a, int b) {
+                            return stateOf(java.util.Collections.singletonList(old.get(a)))
+                                    .equals(stateOf(java.util.Collections.singletonList(next.get(b))));
+                        }
+                    });
+            entries = new java.util.ArrayList<>(next);
+            diff.dispatchUpdatesTo(this);
+        }
+        public int getItemCount() { return entries.size(); }
+        public DownloadHolder onCreateViewHolder(android.view.ViewGroup parent, int type) {
+            FrameLayout frame = new FrameLayout(DownloadedActivity.this);
+            androidx.recyclerview.widget.RecyclerView.LayoutParams params = new androidx.recyclerview.widget.RecyclerView.LayoutParams(-1, -2);
+            params.setMargins(0, dp(5), 0, dp(5));
+            frame.setLayoutParams(params);
+            return new DownloadHolder(frame);
+        }
+        public void onBindViewHolder(DownloadHolder holder, int position) {
+            holder.frame.removeAllViews();
+            holder.frame.addView(downloadCard(entries.get(position)), new FrameLayout.LayoutParams(-1, -2));
+        }
+    }
+
+    private static final class DownloadHolder extends androidx.recyclerview.widget.RecyclerView.ViewHolder {
+        final FrameLayout frame;
+        DownloadHolder(FrameLayout frame) { super(frame); this.frame = frame; }
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
+        super.onSaveInstanceState(state);
+    }
+    @Override protected void onDestroy() {
+        main.removeCallbacksAndMessages(null);
+        loader.shutdownNow();
+        super.onDestroy();
     }
 
     private View downloadCard(VideoDownloadStore.Entry entry) {
@@ -213,25 +274,19 @@ public final class DownloadedActivity extends Activity {
 
         if (entry.status == DownloadManager.STATUS_SUCCESSFUL) {
             footer.addView(action("PLAY", () -> VideoDownloadStore.open(this, entry)),
-                    new LinearLayout.LayoutParams(-2, dp(36)));
+                    new LinearLayout.LayoutParams(-2, dp(48)));
         } else if (entry.status == DownloadManager.STATUS_FAILED) {
-            footer.addView(action("RETRY", () -> {
-                VideoDownloadStore.remove(this, entry);
-                VideoDownloadStore.downloadKnown(
-                        this,
-                        entry.title,
-                        entry.pageUrl,
-                        entry.imageUrl,
-                        entry.mediaUrl,
-                        "",
-                        ""
-                );
-                renderedState = "";
-                renderDownloads();
-            }), new LinearLayout.LayoutParams(-2, dp(36)));
+            footer.addView(action("RETRY", () -> VideoDownloadStore.retry(this, entry)),
+                    new LinearLayout.LayoutParams(-2, dp(48)));
+        } else if (entry.id < 0L && entry.status == DownloadManager.STATUS_PAUSED) {
+            footer.addView(action("RESUME", () -> VideoDownloadStore.retry(this, entry)),
+                    new LinearLayout.LayoutParams(-2, dp(48)));
+        } else if (entry.id < 0L) {
+            footer.addView(action("PAUSE", () -> VideoDownloadStore.pause(this, entry)),
+                    new LinearLayout.LayoutParams(-2, dp(48)));
         }
         footer.addView(action("REMOVE", () -> confirmRemove(entry)),
-                new LinearLayout.LayoutParams(-2, dp(36)));
+                new LinearLayout.LayoutParams(-2, dp(48)));
         copy.addView(footer, new LinearLayout.LayoutParams(-1, -2));
 
         row.setClickable(true);

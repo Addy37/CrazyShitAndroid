@@ -68,6 +68,12 @@
             android:exported="false" />
 
         <activity
+            android:name=".CreatorsActivity"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".SearchActivity"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"

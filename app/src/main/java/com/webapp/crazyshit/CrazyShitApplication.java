@@ -14,6 +14,7 @@ public final class CrazyShitApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        AppPerformance.begin();
 
         SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         SharedPreferences.Editor migration = appPrefs.edit()
@@ -69,6 +70,7 @@ public final class CrazyShitApplication extends Application {
 
             @Override
             public void onActivityStarted(Activity activity) {
+                AppPerformance.started(activity);
             }
 
             @Override
@@ -84,6 +86,7 @@ public final class CrazyShitApplication extends Application {
 
             @Override
             public void onActivityStopped(Activity activity) {
+                AppPerformance.stopped(activity);
             }
 
             @Override
