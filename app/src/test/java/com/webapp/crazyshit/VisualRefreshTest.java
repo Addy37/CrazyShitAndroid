@@ -46,7 +46,10 @@ public class VisualRefreshTest {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         android.content.SharedPreferences prefs = context.getSharedPreferences("app_prefs", 0);
         prefs.edit().putBoolean("access_notice_2_8_3_accepted", true)
-                .putInt("native_view_home", NativeFeedAdapter.VIEW_LIST).apply();
+                .putBoolean("visual_refresh_2_11_1", true)
+                .putBoolean("legacy_home_v2_10_restored", false)
+                .putInt("home_source", 0)
+                .putInt("native_view_home", NativeFeedAdapter.VIEW_CARDS).apply();
         android.os.Bundle state = new android.os.Bundle(); state.putInt("primary_page", 0);
         ActivityController<NativeMainActivity> screen = Robolectric.buildActivity(NativeMainActivity.class)
                 .create(state).start().resume().visible();
@@ -54,10 +57,12 @@ public class VisualRefreshTest {
         UiFoundationCoordinator.onActivityCreated(main, state);
         UiFoundationCoordinator.onActivityResumed(main);
         MainPagerAdapter pager = ReflectionHelpers.getField(main, "primaryPagerAdapter");
+        NativeContentItem section = new NativeContentItem(NativeContentItem.KIND_SECTION,
+                "TODAY'S CRAZY SHIT", "section:today", "", "", "", "");
         NativeContentItem video = new NativeContentItem(NativeContentItem.KIND_MEDIA,
                 "A sample video with a readable title", "https://example.invalid/cnt/medias/1-sample", "", "12K", "", "");
         ReflectionHelpers.setField(pager, "homeRepository", new HomeSourceRepository(
-                (ctx, source, page) -> Collections.singletonList(video), 1000));
+                (ctx, source, page) -> java.util.Arrays.asList(section, video), 1000));
         pager.refresh(MainPagerAdapter.PAGE_HOME);
         Object[] pages = ReflectionHelpers.getField(pager, "pages");
         Object home = pages[MainPagerAdapter.PAGE_HOME];
@@ -67,8 +72,16 @@ public class VisualRefreshTest {
         }
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         NativeFeedAdapter feed = ReflectionHelpers.getField(home, "feedAdapter");
-        assertEquals(1, feed.getItemCount());
-        assertEquals(NativeFeedAdapter.VIEW_CARDS, pager.viewMode(MainPagerAdapter.PAGE_HOME));
+        assertEquals(2, feed.getItemCount());
+        assertTrue(feed.isSectionAt(0));
+        assertEquals(NativeFeedAdapter.VIEW_LIST, pager.viewMode(MainPagerAdapter.PAGE_HOME));
+        assertEquals(1, prefs.getInt("home_source", -1));
+        assertTrue(prefs.getBoolean("legacy_home_v2_10_restored", false));
+        java.util.List<TextView> homeChips = ReflectionHelpers.getField(home, "homeChips");
+        View chipRow = (View) homeChips.get(0).getParent();
+        View sourceBar = (View) chipRow.getParent();
+        assertEquals(View.GONE, sourceBar.getVisibility());
+
         com.google.android.material.bottomnavigation.BottomNavigationView nav = ReflectionHelpers.getField(main, "bottomNavigation");
         nav.setSelectedItemId(3);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
@@ -81,20 +94,35 @@ public class VisualRefreshTest {
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         View root = ReflectionHelpers.getField(main, "overlayRoot");
         capture(root, "home-lifecycle", 360, 800);
+
+        TextView headerTitle = ReflectionHelpers.getField(main, "headerTitle");
+        TextView headerSubtitle = ReflectionHelpers.getField(main, "headerSubtitle");
+        assertEquals("Home", headerTitle.getText().toString());
+        assertEquals(Color.WHITE, headerTitle.getCurrentTextColor());
+        assertEquals(View.VISIBLE, headerSubtitle.getVisibility());
+        assertTrue(headerSubtitle.getText().toString().contains("CrazyShit"));
+        assertTrue(headerSubtitle.getText().toString().contains("List"));
+        LinearLayout shell = ReflectionHelpers.getField(main, "shell");
+        View topBar = shell.getChildAt(0);
+        assertTrue(topBar instanceof LinearLayout);
+        ImageView appIcon = (ImageView) ((LinearLayout) topBar).getChildAt(0);
+        assertEquals(View.VISIBLE, appIcon.getVisibility());
+        assertEquals(View.GONE, ((LinearLayout) topBar).getChildAt(3).getVisibility());
+
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
-        NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
+        NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(1);
         assertNotNull(visibleCard);
         visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
         visibleCard.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) visibleCard.itemView;
-        assertEquals(0, card.getStrokeWidth());
-        assertEquals(Color.BLACK, card.getCardBackgroundColor().getDefaultColor());
+        assertEquals(BrowseUi.dp(main, 1), card.getStrokeWidth());
+        assertEquals(Color.rgb(25, 25, 28), card.getCardBackgroundColor().getDefaultColor());
         capture(root, "home-lifecycle", 360, 800);
         assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
-        assertEquals(BrowseUi.dp(main, 76), nav.getLayoutParams().height);
-        assertEquals(BrowseUi.dp(main, 32), nav.getItemActiveIndicatorHeight());
-        assertEquals(UiPalette.PRIMARY, nav.getItemActiveIndicatorColor().getDefaultColor());
-        assertEquals(Color.BLACK, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
+        assertEquals(BrowseUi.dp(main, 60), nav.getLayoutParams().height);
+        assertEquals(BrowseUi.dp(main, 28), nav.getItemActiveIndicatorHeight());
+        assertEquals(Color.argb(50, 251, 245, 6), nav.getItemActiveIndicatorColor().getDefaultColor());
+        assertEquals(UiPalette.PRIMARY, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertEquals(5, nav.getMenu().size());
         for (int id : new int[] {1, 2, 4, 3, 5}) {
@@ -189,4 +217,3 @@ public class VisualRefreshTest {
         screen.pause().stop().destroy();
     }
 }
-
