@@ -110,6 +110,7 @@ jobs:
           sha256sum "$APK_PRIMARY" > SHA256SUMS.txt
 
       - name: Upload signed APK artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: CrazyShit-signed
@@ -117,7 +118,7 @@ jobs:
             CrazyShit.apk
             SHA256SUMS.txt
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 14
 
       - name: Publish GitHub Release
         env:
