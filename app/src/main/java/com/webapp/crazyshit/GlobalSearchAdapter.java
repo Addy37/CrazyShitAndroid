@@ -365,7 +365,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
         Object source = imageUrl.startsWith("file://")
                 ? imageUrl
-                : withSiteHeaders(imageUrl, item.url);
+                : withSiteHeaders(imageUrl, imageReferer(item));
         com.bumptech.glide.RequestBuilder<Drawable> request = Glide.with(image)
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
@@ -430,7 +430,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             if (item.imageUrl == null || item.imageUrl.trim().isEmpty()) continue;
             Object source = item.imageUrl.startsWith("file://")
                     ? item.imageUrl
-                    : withSiteHeaders(item.imageUrl, item.url);
+                    : withSiteHeaders(item.imageUrl, imageReferer(item));
             Glide.with(appContext)
                     .load(source)
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
@@ -459,6 +459,12 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         }
 
         return new GlideUrl(imageUrl, headers.build());
+    }
+
+    private String imageReferer(NativeContentItem item) {
+        if (item != null && WikiFeetRepository.isWikiFeetUrl(item.url) &&
+                WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
+        return item == null ? null : item.url;
     }
 
     @Override

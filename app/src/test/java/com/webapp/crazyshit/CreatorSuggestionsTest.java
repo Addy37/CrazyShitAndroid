@@ -49,9 +49,11 @@ public class CreatorSuggestionsTest {
                     catch (InterruptedException ignored) { }
                 }
                 oldFinished.countDown();
-                return Collections.singletonList(new FapelloRepository.Model("Anna", "https://fapello.com/anna/", ""));
+                return Collections.singletonList(CreatorCatalog.fromModel(
+                        new FapelloRepository.Model("Anna", "https://fapello.com/anna/", "")));
             }
-            return Collections.singletonList(new FapelloRepository.Model("Zoe", "https://fapello.com/zoe/", ""));
+            return Collections.singletonList(CreatorCatalog.fromModel(
+                    new FapelloRepository.Model("Zoe", "https://fapello.com/zoe/", "")));
         });
     }
 

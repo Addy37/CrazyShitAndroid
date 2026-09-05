@@ -59,7 +59,7 @@ public final class SearchActivity extends Activity {
     private final BrowseRepository browseRepository = new BrowseRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
-    private final ExecutorService io = Executors.newFixedThreadPool(7);
+    private final ExecutorService io = Executors.newFixedThreadPool(8);
 
     private EditText input;
     private ProgressBar progress;
@@ -74,6 +74,7 @@ public final class SearchActivity extends Activity {
     private List<NativeContentItem> series = new ArrayList<>();
     private List<NativeContentItem> efuktSeries = new ArrayList<>();
     private List<NativeContentItem> bunkrAlbums = new ArrayList<>();
+    private List<NativeContentItem> fapzoneCreators = new ArrayList<>();
     private List<NativeContentItem> categories = new ArrayList<>();
     private List<NativeContentItem> library = new ArrayList<>();
     private Filter filter = Filter.ALL;
@@ -193,7 +194,7 @@ public final class SearchActivity extends Activity {
         status.setGravity(Gravity.CENTER);
         status.setPadding(dp(26), dp(26), dp(26), dp(26));
         status.setText(bunkrOnly
-                ? "Search Fapzone\nMatching Bunkr and Fapello media opens in one gallery"
+                ? "Search Fapzone\nBunkr, Fapello, WikiFeet and WikiFeet X open in one gallery"
                 : "Search CrazyShit, EFukt, Fapzone, Collections, Categories and your Library");
         content.addView(status, new FrameLayout.LayoutParams(-1, -1));
 
@@ -367,12 +368,12 @@ public final class SearchActivity extends Activity {
         activeQuery = query;
         int token = ++generation;
         errors.clear();
-        pendingSources = 7;
+        pendingSources = 8;
         searchStarted = android.os.SystemClock.elapsedRealtime();
         firstResultsRecorded = false;
         if (clear) {
             crazyVideos.clear(); efuktVideos.clear(); crazySeries.clear(); efuktSeries.clear();
-            bunkrAlbums.clear(); categories.clear(); library.clear();
+            bunkrAlbums.clear(); fapzoneCreators.clear(); categories.clear(); library.clear();
             videos.clear(); series.clear();
             restoredScroll = null;
             recycler.scrollToPosition(0);
@@ -385,6 +386,8 @@ public final class SearchActivity extends Activity {
         source(token, 4, "Fapzone albums", () -> bunkrRepository.searchAlbums(this, query, 1));
         source(token, 5, "Categories", () -> matchCatalog(browseRepository.fetchCategories(this), query));
         source(token, 6, "Your Library", () -> searchLibrary(query));
+        source(token, 7, "Fapzone creators", () ->
+                new FapzoneCreatorSearchRepository().search(this, query, 20));
     }
 
     private void source(int token, int id, String title, Callable<List<NativeContentItem>> fetch) {
@@ -404,6 +407,10 @@ public final class SearchActivity extends Activity {
                     case 4: bunkrAlbums = result; break;
                     case 5: categories = result; break;
                     case 6: library = result; break;
+                    case 7:
+                        fapzoneCreators = result;
+                        CreatorCatalog.remember(this, result);
+                        break;
                 }
                 videos = interleave(crazyVideos, efuktVideos);
                 series = interleave(crazySeries, efuktSeries);
@@ -421,6 +428,7 @@ public final class SearchActivity extends Activity {
             data.put("crazySeries", ContentItemCodec.encodeList(crazySeries, 100));
             data.put("efuktSeries", ContentItemCodec.encodeList(efuktSeries, 100));
             data.put("albums", ContentItemCodec.encodeList(bunkrAlbums, 100));
+            data.put("creators", ContentItemCodec.encodeList(fapzoneCreators, 100));
             data.put("categories", ContentItemCodec.encodeList(categories, 100));
             data.put("library", ContentItemCodec.encodeList(library, 100));
             ScreenSnapshotStore.save(this, snapshotId, data);
@@ -434,6 +442,7 @@ public final class SearchActivity extends Activity {
         crazySeries = ContentItemCodec.decodeList(data.optJSONArray("crazySeries"), 100);
         efuktSeries = ContentItemCodec.decodeList(data.optJSONArray("efuktSeries"), 100);
         bunkrAlbums = ContentItemCodec.decodeList(data.optJSONArray("albums"), 100);
+        fapzoneCreators = ContentItemCodec.decodeList(data.optJSONArray("creators"), 100);
         categories = ContentItemCodec.decodeList(data.optJSONArray("categories"), 100);
         library = ContentItemCodec.decodeList(data.optJSONArray("library"), 100);
         videos = interleave(crazyVideos, efuktVideos);
@@ -521,6 +530,8 @@ public final class SearchActivity extends Activity {
         if (filter == Filter.ALL || filter == Filter.VIDEOS) appendSection(output, "Videos  •  CrazyShit + EFukt", videos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Videos", efuktVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.ALL || filter == Filter.BUNKR || filter == Filter.COLLECTIONS) {
+            appendSection(output, "Fapzone Creators", fapzoneCreators,
+                    GlobalSearchAdapter.SOURCE_REMOTE, 20);
             appendSection(output, "Fapzone Albums", bunkrAlbums, GlobalSearchAdapter.SOURCE_REMOTE, 30);
         }
         if (filter == Filter.ALL || filter == Filter.COLLECTIONS) appendSection(output, "Series", series, GlobalSearchAdapter.SOURCE_REMOTE, 20);
@@ -573,6 +584,10 @@ public final class SearchActivity extends Activity {
     private void openResult(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
         haptic(recycler);
+        if (item.isCreator()) {
+            openCreator(item);
+            return;
+        }
         if (item.isSeries() || item.isCategory()) {
             String source = BunkrRepository.isAlbumUrl(item.url)
                     ? NativeFeedBrowserActivity.SOURCE_BUNKR

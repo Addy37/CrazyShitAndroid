@@ -90,6 +90,6 @@ final class CreatorCatalog {
 
     static NativeContentItem fromModel(FapelloRepository.Model model) {
         return new NativeContentItem(NativeContentItem.KIND_CREATOR, model.name, model.url,
-                model.imageUrl, "", model.url, "", "Fapzone", model.name);
+                model.imageUrl, "", model.url, "", "Fapello", model.name);
     }
 }

@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Builds Fapzone creator shelves from Fapello names and matching Bunkr albums. */
+/** Builds Fapzone creator shelves whose profiles open the unified multi-source gallery. */
 final class FapzoneCreatorRepository {
     static final int MODE_TOP_50 = 0;
     static final int MODE_NEW = 1;
@@ -198,7 +198,7 @@ final class FapzoneCreatorRepository {
                 String.valueOf(rank + 1),
                 imageReferer,
                 "",
-                "Bunkr + Fapello",
+                "Bunkr + Fapello + WikiFeet + WikiFeet X",
                 model.name
         );
         return new ResolvedCreator(rank, item);
@@ -329,7 +329,7 @@ final class FapzoneCreatorRepository {
                         value.optString("rank", ""),
                         value.optString("referer", url),
                         "",
-                        "Bunkr + Fapello",
+                        "Bunkr + Fapello + WikiFeet + WikiFeet X",
                         query
                 ));
             }

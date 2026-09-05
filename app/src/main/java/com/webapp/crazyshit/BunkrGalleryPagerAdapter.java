@@ -247,7 +247,7 @@ final class BunkrGalleryPagerAdapter
                 holder.image.setImageDrawable(new ColorDrawable(Color.BLACK));
             } else {
                 Glide.with(holder.image)
-                        .load(withHeaders(preview, item.url))
+                        .load(withHeaders(preview, imageReferer(item)))
                         .fitCenter()
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
                         .dontAnimate()
@@ -340,6 +340,12 @@ final class BunkrGalleryPagerAdapter
         } catch (Exception ignored) {
         }
         return new GlideUrl(url, headers.build());
+    }
+
+    private String imageReferer(NativeContentItem item) {
+        if (item != null && WikiFeetRepository.isWikiFeetUrl(item.url) &&
+                WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
+        return item == null ? null : item.url;
     }
 
     private static String value(String value) {
