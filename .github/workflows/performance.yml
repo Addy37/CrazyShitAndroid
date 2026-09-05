@@ -15,8 +15,28 @@ permissions:
 
 jobs:
   macrobenchmark:
+    name: performance (${{ matrix.flow }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flow: startup
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupUncompiled
+            rules: Macrobenchmark
+          - flow: home-scroll
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#homeScroll
+            rules: Macrobenchmark
+          - flow: chaos-scroll
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosScroll
+            rules: Macrobenchmark
+          - flow: search
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#searchFlow
+            rules: Macrobenchmark
+          - flow: baseline-profile
+            test: com.webapp.crazyshit.baselineprofile.BaselineProfileGenerator
+            rules: BaselineProfile
 
     steps:
       - uses: actions/checkout@v6
@@ -48,15 +68,15 @@ jobs:
           profile: pixel_6
           disable-animations: true
           disk-size: 4096M
-          script: gradle --no-daemon :baselineprofile:connectedCheck
+          script: >-
+            gradle --no-daemon :baselineprofile:connectedCheck
+            "-Pandroid.testInstrumentationRunnerArguments.class=${{ matrix.test }}"
+            "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=${{ matrix.rules }}"
 
-      - name: Upload benchmark measurements and traces
+      - name: Print benchmark measurements
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: performance-baseline
-          path: |
-            baselineprofile/build/outputs/androidTest-results/**
-            baselineprofile/build/outputs/connected_android_test_additional_output/**
-          if-no-files-found: warn
-          retention-days: 30
+        run: |
+          find baselineprofile/build/outputs -type f \
+            \( -name '*.json' -o -name '*baseline-prof.txt' -o -name '*startup-prof.txt' \) \
+            -print -exec sh -c 'echo PERFORMANCE_FILE_BEGIN:$1; cat "$1"; echo PERFORMANCE_FILE_END:$1' _ {} \; \
+            2>/dev/null || true
