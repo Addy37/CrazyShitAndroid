@@ -28,6 +28,25 @@ jobs:
           grep -q 'NAV_CATEGORIES = 3' app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java
           grep -q 'NativeContentItem.KIND_MEDIA.equals(item.kind)' app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java
 
+      - name: Diagnose Home source markup
+        if: github.head_ref == 'fix/v2.11.1-home-navigation'
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import urllib.request,re,concurrent.futures
+          urls=['https://fapello.com/popular_videos/week/','https://fapello.com/ajax/popular_videos/week/page-1/','https://crazyshit.com/']
+          def probe(url):
+              try:
+                  req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36'})
+                  with urllib.request.urlopen(req,timeout=15) as r: html=r.read().decode('utf-8','replace')
+                  print('HOME_PROBE',url,'bytes',len(html),'media_links',len(re.findall('/cnt/medias/',html)))
+                  if 'fapello' in url:
+                      for tag in re.findall(r'<(?:video|source)[^>]*>|<[^>]*(?:onclick|data-video)[^>]*>',html)[:15]: print('HOME_MARKUP',tag[:1300])
+                      print('HOME_LINKS',re.findall(r'href=["\']([^"\']+)["\']',html)[-45:])
+              except Exception as e: print('HOME_PROBE_ERROR',url,str(e))
+          with concurrent.futures.ThreadPoolExecutor(3) as pool: list(pool.map(probe,urls))
+          PY
+
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
@@ -84,6 +103,7 @@ jobs:
           git push origin "${{ github.head_ref }}"
 
       - name: Upload browse artwork bundle
+        continue-on-error: true
         if: ${{ steps.capture_art.outputs.captured == 'true' }}
         uses: actions/upload-artifact@v4
         with:
@@ -112,6 +132,7 @@ jobs:
         run: gradle --no-daemon :app:lintDebug
 
       - name: Upload lint report
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -125,7 +146,21 @@ jobs:
       - name: Test and build debug APK
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
 
+      - name: Summarize UI regression checks
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import pathlib,xml.etree.ElementTree as E,base64
+          for path in pathlib.Path('app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
+              root=E.parse(path).getroot()
+              print('TEST_SUMMARY',root.attrib)
+              for failure in root.iter('failure'): print((failure.text or '')[:6000])
+          image=pathlib.Path('app/build/reports/visual-tests/home-lifecycle.png')
+          if image.exists(): print('UI_RENDER_HOME='+base64.b64encode(image.read_bytes()).decode())
+          PY
+
       - name: Upload regression test results
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -135,6 +170,7 @@ jobs:
           retention-days: 14
 
       - name: Upload native screen renders
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -147,9 +183,11 @@ jobs:
         run: cp app/build/outputs/apk/debug/app-debug.apk CrazyShit-debug.apk
 
       - name: Upload APK
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: CrazyShit-debug
           path: CrazyShit-debug.apk
           if-no-files-found: error
           retention-days: 14
+

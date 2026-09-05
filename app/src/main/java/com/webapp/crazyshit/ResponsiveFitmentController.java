@@ -100,6 +100,10 @@ final class ResponsiveFitmentController {
     }
 
     private static void fitMain(Activity activity, boolean landscape) {
+        if (!landscape && activity instanceof NativeMainActivity) {
+            StableBottomNavigationController.applyOrientation((NativeMainActivity) activity);
+            return;
+        }
         BottomNavigationView nav = findFirst(
                 activity.findViewById(android.R.id.content),
                 BottomNavigationView.class
@@ -323,3 +327,4 @@ final class ResponsiveFitmentController {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 }
+

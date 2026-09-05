@@ -92,6 +92,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (state != null) restoredPrimaryPage = state.getInt("primary_page", -1);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
+        FeedViewStyleController.prepareVisualRefresh(this);
         buildUi();
         appUpdater = new AppUpdater(this);
         configureBack();
@@ -995,3 +996,4 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }
+

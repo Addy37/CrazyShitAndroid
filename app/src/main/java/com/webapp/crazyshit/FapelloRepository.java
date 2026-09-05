@@ -161,27 +161,31 @@ final class FapelloRepository {
 
     List<NativeContentItem> fetchPopularVideos(Context context, int page) throws IOException {
         int safePage = Math.max(1, page);
-        String endpoint = BASE + "ajax/popular_videos/week/page-" + safePage + "/";
+        String endpoint = popularVideosUrl(safePage);
         Document document = fetchDocument(context, endpoint, BASE + "popular_videos/week/");
-        LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
+        return parsePopularVideos(document, endpoint);
+    }
 
+    static String popularVideosUrl(int page) {
+        return BASE + "popular_videos/week/" + (page > 1 ? "page-" + page + "/" : "");
+    }
+
+    List<NativeContentItem> parsePopularVideos(Document document, String endpoint) {
+        LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
         for (Element link : document.select("a[href]")) {
             String pageUrl = normalizeUrl(link.attr("href"), endpoint);
             if (!isPostUrl(pageUrl)) continue;
             String thumbnail = imageFrom(link, endpoint);
-            if (thumbnail.isEmpty()) continue;
             String id = postId(pageUrl);
-            String title = id.isEmpty() ? "Fapello video" : "Fapello video #" + id;
-            items.putIfAbsent(pageUrl, new NativeContentItem(
-                    NativeContentItem.KIND_MEDIA,
-                    title,
-                    pageUrl,
-                    thumbnail,
-                    "Fapello",
-                    "",
-                    "",
-                    "Fapello"
-            ));
+            String title = clean(link.attr("title"));
+            if (title.isEmpty()) title = id.isEmpty() ? "Fapzone video" : "Fapzone video #" + id;
+            NativeContentItem candidate = new NativeContentItem(
+                    NativeContentItem.KIND_MEDIA, title, pageUrl, thumbnail,
+                    "Fapzone", "", "", "Fapzone");
+            NativeContentItem existing = items.get(pageUrl);
+            if (existing == null || (existing.imageUrl.isEmpty() && !thumbnail.isEmpty())) {
+                items.put(pageUrl, candidate);
+            }
         }
         return new ArrayList<>(items.values());
     }
@@ -552,3 +556,4 @@ final class FapelloRepository {
         }
     }
 }
+

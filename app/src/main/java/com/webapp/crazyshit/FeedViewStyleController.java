@@ -33,6 +33,16 @@ final class FeedViewStyleController {
     private FeedViewStyleController() {
     }
 
+    static void prepareVisualRefresh(android.content.Context context) {
+        android.content.SharedPreferences prefs = context.getSharedPreferences("app_prefs", 0);
+        if (prefs.getBoolean("visual_refresh_2_11_1", false)) return;
+        // Older lifecycle code saved List even when the user had never selected it.
+        // Apply the approved card layout once; subsequent user choices remain untouched.
+        prefs.edit().putInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS)
+                .putInt(COLLECTION_PREF, NativeFeedAdapter.VIEW_CARDS)
+                .putBoolean("visual_refresh_2_11_1", true).apply();
+    }
+
     static void attachMain(NativeMainActivity activity) {
         if (activity == null || activity.isFinishing()) return;
         ViewPager2 pager = fieldValue(activity, "primaryPager", ViewPager2.class);
@@ -82,7 +92,7 @@ final class FeedViewStyleController {
         }
 
         int selected = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_LIST));
+                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
         AlertDialog dialog = new AlertDialog.Builder(activity)
                 .setTitle("View style")
                 .setSingleChoiceItems(LABELS, selected, null)
@@ -136,7 +146,7 @@ final class FeedViewStyleController {
 
     private static void showBrowser(NativeFeedBrowserActivity activity) {
         int selected = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(COLLECTION_PREF, NativeFeedAdapter.VIEW_LIST));
+                .getInt(COLLECTION_PREF, NativeFeedAdapter.VIEW_CARDS));
         AlertDialog dialog = new AlertDialog.Builder(activity)
                 .setTitle("View style")
                 .setSingleChoiceItems(LABELS, selected, null)
@@ -152,7 +162,7 @@ final class FeedViewStyleController {
 
     private static void applySavedMainLayout(NativeMainActivity activity) {
         int mode = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_LIST));
+                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
         applyMainMode(activity, mode);
     }
 
@@ -180,7 +190,7 @@ final class FeedViewStyleController {
 
     private static void applySavedBrowserLayout(NativeFeedBrowserActivity activity) {
         int mode = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(COLLECTION_PREF, NativeFeedAdapter.VIEW_LIST));
+                .getInt(COLLECTION_PREF, NativeFeedAdapter.VIEW_CARDS));
         applyBrowserMode(activity, mode);
     }
 
@@ -248,7 +258,7 @@ final class FeedViewStyleController {
         if (title != null && !"Home".contentEquals(title.getText())) return;
         if (subtitle == null) return;
         int mode = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_LIST));
+                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
         subtitle.setText("CrazyShit  •  " + label(mode));
     }
 
@@ -321,3 +331,4 @@ final class FeedViewStyleController {
         return null;
     }
 }
+

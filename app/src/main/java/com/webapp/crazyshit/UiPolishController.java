@@ -167,25 +167,7 @@ final class UiPolishController {
     }
 
     private static void polishNavigation(BottomNavigationView nav) {
-        if (POLISHED.containsKey(nav)) return;
-        POLISHED.put(nav, Boolean.TRUE);
-
-        int[][] states = new int[][] {
-                new int[] { android.R.attr.state_checked },
-                new int[] {}
-        };
-        int[] colors = new int[] { PRIMARY, MUTED };
-        ColorStateList tint = new ColorStateList(states, colors);
-        nav.setItemIconTintList(tint);
-        nav.setItemTextColor(tint);
-        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(48, 251, 245, 6)));
-
-        // The floating navigation layer draws its own moving indicator.
-        try {
-            Method enabled = nav.getClass().getMethod("setItemActiveIndicatorEnabled", boolean.class);
-            enabled.invoke(nav, false);
-        } catch (Exception ignored) {
-        }
+        StableBottomNavigationController.styleBar(nav);
     }
 
     private static void polishCard(NativeMainActivity activity, MaterialCardView card) {
@@ -214,3 +196,4 @@ final class UiPolishController {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 }
+
