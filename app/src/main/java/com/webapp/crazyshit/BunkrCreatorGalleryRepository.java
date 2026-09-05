@@ -98,6 +98,10 @@ final class BunkrCreatorGalleryRepository {
         }
 
         ArrayList<WikiFeetCursor> selectedWikiFeet = new ArrayList<>();
+        for (WikiFeetRepository.Site site : WikiFeetRepository.Site.values()) {
+            WikiFeetCursor cursor = pollWikiFeet(state, site);
+            if (cursor != null) selectedWikiFeet.add(cursor);
+        }
         while (!state.wikiFeetPending.isEmpty() &&
                 selectedWikiFeet.size() < WIKIFEET_CREATORS_PER_BATCH) {
             selectedWikiFeet.add(state.wikiFeetPending.removeFirst());
@@ -353,6 +357,17 @@ final class BunkrCreatorGalleryRepository {
                     !state.wikiFeetProfileUrls.add(creator.url)) continue;
             state.wikiFeetPending.addLast(new WikiFeetCursor(creator));
         }
+    }
+
+    private WikiFeetCursor pollWikiFeet(State state, WikiFeetRepository.Site site) {
+        java.util.Iterator<WikiFeetCursor> iterator = state.wikiFeetPending.iterator();
+        while (iterator.hasNext()) {
+            WikiFeetCursor cursor = iterator.next();
+            if (cursor.creator.site != site) continue;
+            iterator.remove();
+            return cursor;
+        }
+        return null;
     }
 
     private void applyPage(

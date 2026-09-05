@@ -131,14 +131,14 @@ final class WikiFeetRepository {
         JSONArray gallery = data.optJSONArray("gallery");
         ArrayList<NativeContentItem> result = new ArrayList<>();
         if (gallery == null || name.isEmpty()) return result;
-        int offset = (safePage - 1) * safeSize;
-        int start = gallery.length() - 1 - offset;
-        int end = Math.max(-1, start - safeSize);
-        for (int index = start; index > end; index--) {
+        int skip = (safePage - 1) * safeSize;
+        int active = 0;
+        for (int index = gallery.length() - 1; index >= 0 && result.size() < safeSize; index--) {
             JSONObject photo = gallery.optJSONObject(index);
             if (photo == null || photo.optInt("removed", 0) != 0) continue;
             long id = photo.optLong("pid", 0L);
             if (id <= 0L) continue;
+            if (active++ < skip) continue;
             String original = originalUrl(creator.site, name, id);
             String thumbnail = thumbnailUrl(creator.site, id);
             String dimensions = dimensions(photo);
