@@ -93,7 +93,10 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         NativeContentItem item = items.get(position);
         boolean favorite = favorites.contains(CreatorFavoriteStore.key(item));
         holder.name.setText(item.title);
-        holder.subtitle.setText(favorite ? "Favorite · Open gallery" : "Open gallery");
+        String source = item.description == null ? "" : item.description.trim();
+        holder.subtitle.setText((favorite ? "Favorite" : source).isEmpty()
+                ? "Open gallery"
+                : (favorite ? "Favorite" : source) + " · Open gallery");
         holder.star.setText(favorite ? "★" : "☆");
         holder.star.setTextColor(favorite ? UiPalette.PRIMARY : BrowseUi.MUTED);
         holder.star.setBackgroundColor(Color.TRANSPARENT);

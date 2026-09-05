@@ -10,6 +10,9 @@ final class PlayableSourceRouter {
     }
 
     static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl) throws IOException {
+        if (WikiFeetRepository.isWikiFeetUrl(pageUrl)) {
+            return new WikiFeetRepository().resolvePlayable(pageUrl);
+        }
         if (FapelloRepository.isFapelloUrl(pageUrl)) {
             return new FapelloRepository().resolvePlayable(context, pageUrl);
         }

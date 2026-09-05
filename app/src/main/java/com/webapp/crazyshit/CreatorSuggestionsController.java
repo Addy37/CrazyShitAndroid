@@ -33,12 +33,13 @@ final class CreatorSuggestionsController {
     private boolean closed;
     private boolean active = true;
     private Runnable debounce;
-    interface Lookup { List<FapelloRepository.Model> find(android.content.Context context, String query) throws Exception; }
+    interface Lookup { List<NativeContentItem> find(android.content.Context context, String query) throws Exception; }
     private final Lookup lookup;
 
     CreatorSuggestionsController(Activity activity, EditText input, LinearLayout panel,
                                  Consumer<NativeContentItem> open) {
-        this(activity, input, panel, open, (context, query) -> new FapelloRepository().searchConfirmedModels(context, query, 8));
+        this(activity, input, panel, open,
+                (context, query) -> new FapzoneCreatorSearchRepository().search(context, query, 8));
     }
 
     CreatorSuggestionsController(Activity activity, EditText input, LinearLayout panel,
@@ -90,10 +91,7 @@ final class CreatorSuggestionsController {
         debounce = () -> request = io.submit(() -> {
             String error = null;
             try {
-                List<NativeContentItem> results = new ArrayList<>();
-                for (FapelloRepository.Model model : lookup.find(activity.getApplicationContext(), query)) {
-                    results.add(CreatorCatalog.fromModel(model));
-                }
+                List<NativeContentItem> results = lookup.find(activity.getApplicationContext(), query);
                 if (!Thread.currentThread().isInterrupted()) CreatorCatalog.remember(activity, results);
             } catch (Exception failure) { error = "Live suggestions unavailable"; }
             String finalError = error;

@@ -16,13 +16,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-/** Incrementally combines matching Bunkr albums and Fapello model media for Fapzone. */
+/** Incrementally combines Bunkr, Fapello, WikiFeet and WikiFeet X media for Fapzone. */
 final class BunkrCreatorGalleryRepository {
     private static final int MAX_SESSIONS = 4;
     private static final int MAX_SEARCH_PAGES = 5;
     private static final int ALBUMS_PER_BATCH = 4;
     private static final int FAPELLO_MODELS_PER_BATCH = 2;
     private static final int FAPELLO_MODEL_LIMIT = 4;
+    private static final int WIKIFEET_CREATORS_PER_BATCH = 2;
+    private static final int WIKIFEET_CREATOR_LIMIT = 4;
+    private static final int WIKIFEET_PAGE_SIZE = 24;
     private static final int MAX_FAPELLO_PAGES = 250;
     private static final int BATCH_TARGET = 48;
     private static final int MAX_MEDIA_ITEMS = 10_000;
@@ -81,6 +84,8 @@ final class BunkrCreatorGalleryRepository {
             if (state.fapelloSearchFailures >= 2) state.fapelloCatalogLoaded = true;
         }
 
+        IOException wikiFeetCatalogError = loadWikiFeetCatalog(context, state);
+
         ArrayList<AlbumCursor> selected = new ArrayList<>();
         while (!state.pending.isEmpty() && selected.size() < ALBUMS_PER_BATCH) {
             selected.add(state.pending.removeFirst());
@@ -90,6 +95,12 @@ final class BunkrCreatorGalleryRepository {
         while (!state.fapelloPending.isEmpty() &&
                 selectedFapello.size() < FAPELLO_MODELS_PER_BATCH) {
             selectedFapello.add(state.fapelloPending.removeFirst());
+        }
+
+        ArrayList<WikiFeetCursor> selectedWikiFeet = new ArrayList<>();
+        while (!state.wikiFeetPending.isEmpty() &&
+                selectedWikiFeet.size() < WIKIFEET_CREATORS_PER_BATCH) {
+            selectedWikiFeet.add(state.wikiFeetPending.removeFirst());
         }
 
         ExecutorCompletionService<AlbumPage> completed =
@@ -130,6 +141,24 @@ final class BunkrCreatorGalleryRepository {
                 }
             });
             fapelloRequests.put(request, cursor);
+        }
+
+        LinkedHashMap<Future<WikiFeetPage>, WikiFeetCursor> wikiFeetRequests =
+                new LinkedHashMap<>();
+        for (WikiFeetCursor cursor : selectedWikiFeet) {
+            Future<WikiFeetPage> request = ALBUM_IO.submit(() -> {
+                try {
+                    return new WikiFeetPage(
+                            cursor,
+                            new WikiFeetRepository().fetchCreatorMedia(
+                                    context, cursor.creator, cursor.nextPage, WIKIFEET_PAGE_SIZE),
+                            null
+                    );
+                } catch (Exception error) {
+                    return new WikiFeetPage(cursor, new ArrayList<>(), error);
+                }
+            });
+            wikiFeetRequests.put(request, cursor);
         }
 
         ArrayList<NativeContentItem> bunkrResult = new ArrayList<>();
@@ -183,15 +212,42 @@ final class BunkrCreatorGalleryRepository {
             }
         }
 
-        ArrayList<NativeContentItem> result = interleave(bunkrResult, fapelloResult);
+        ArrayList<NativeContentItem> wikiFeetResult = new ArrayList<>();
+        for (Map.Entry<Future<WikiFeetPage>, WikiFeetCursor> request :
+                wikiFeetRequests.entrySet()) {
+            Future<WikiFeetPage> future = request.getKey();
+            try {
+                long remaining = deadline - SystemClock.elapsedRealtime();
+                WikiFeetPage page;
+                if (future.isDone()) page = future.get();
+                else if (remaining > 0L) {
+                    page = future.get(remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
+                } else {
+                    future.cancel(true);
+                    retryWikiFeet(state, request.getValue());
+                    continue;
+                }
+                applyWikiFeetPage(state, wikiFeetResult, page);
+            } catch (Exception ignored) {
+                future.cancel(true);
+                retryWikiFeet(state, request.getValue());
+            }
+        }
+
+        ArrayList<NativeContentItem> result = interleave(
+                bunkrResult, fapelloResult, wikiFeetResult);
 
         if (state.loadedMediaUrls.size() >= MAX_MEDIA_ITEMS) {
             state.pending.clear();
             state.fapelloPending.clear();
+            state.wikiFeetPending.clear();
             state.searchFinished = true;
             state.fapelloCatalogLoaded = true;
+            state.wikiFeetCatalogLoaded = true;
+            state.wikiFeetXCatalogLoaded = true;
         }
         if (result.isEmpty() && bunkrCatalogError != null && fapelloCatalogError != null &&
+                wikiFeetCatalogError != null &&
                 state.loadedMediaUrls.isEmpty()) {
             throw new IOException("Fapzone sources could not be reached", fapelloCatalogError);
         }
@@ -237,6 +293,44 @@ final class BunkrCreatorGalleryRepository {
             }
         }
         state.fapelloCatalogLoaded = true;
+    }
+
+    private IOException loadWikiFeetCatalog(Context context, State state) {
+        IOException firstError = null;
+        if (!state.wikiFeetCatalogLoaded) {
+            try {
+                loadWikiFeetSite(context, state, WikiFeetRepository.Site.WIKIFEET);
+                state.wikiFeetCatalogLoaded = true;
+                state.wikiFeetSearchFailures = 0;
+            } catch (IOException error) {
+                firstError = error;
+                if (++state.wikiFeetSearchFailures >= 2) state.wikiFeetCatalogLoaded = true;
+            }
+        }
+        if (!state.wikiFeetXCatalogLoaded) {
+            try {
+                loadWikiFeetSite(context, state, WikiFeetRepository.Site.WIKIFEET_X);
+                state.wikiFeetXCatalogLoaded = true;
+                state.wikiFeetXSearchFailures = 0;
+            } catch (IOException error) {
+                if (firstError == null) firstError = error;
+                if (++state.wikiFeetXSearchFailures >= 2) state.wikiFeetXCatalogLoaded = true;
+            }
+        }
+        return firstError;
+    }
+
+    private void loadWikiFeetSite(
+            Context context,
+            State state,
+            WikiFeetRepository.Site site
+    ) throws IOException {
+        for (WikiFeetRepository.Creator creator : new WikiFeetRepository().searchCreators(
+                context, site, state.query, WIKIFEET_CREATOR_LIMIT)) {
+            if (creator == null || !WikiFeetRepository.isProfileUrl(creator.url, site) ||
+                    !state.wikiFeetProfileUrls.add(creator.url)) continue;
+            state.wikiFeetPending.addLast(new WikiFeetCursor(creator));
+        }
     }
 
     private void applyPage(
@@ -307,17 +401,49 @@ final class BunkrCreatorGalleryRepository {
         if (cursor.failures <= 1) state.fapelloPending.addLast(cursor);
     }
 
+    private void applyWikiFeetPage(
+            State state,
+            ArrayList<NativeContentItem> destination,
+            WikiFeetPage page
+    ) {
+        if (page == null || page.cursor == null) return;
+        if (page.error != null) {
+            retryWikiFeet(state, page.cursor);
+            return;
+        }
+        if (page.items == null || page.items.isEmpty()) return;
+        for (NativeContentItem item : page.items) {
+            if (item == null || item.url == null || item.url.isEmpty() ||
+                    !state.loadedMediaUrls.add(item.url)) continue;
+            destination.add(item);
+            if (state.loadedMediaUrls.size() >= MAX_MEDIA_ITEMS) break;
+        }
+        if (page.items.size() >= WIKIFEET_PAGE_SIZE &&
+                state.loadedMediaUrls.size() < MAX_MEDIA_ITEMS) {
+            page.cursor.failures = 0;
+            page.cursor.nextPage++;
+            state.wikiFeetPending.addLast(page.cursor);
+        }
+    }
+
+    private void retryWikiFeet(State state, WikiFeetCursor cursor) {
+        if (cursor == null) return;
+        cursor.failures++;
+        if (cursor.failures <= 1) state.wikiFeetPending.addLast(cursor);
+    }
+
     private ArrayList<NativeContentItem> interleave(
-            List<NativeContentItem> bunkr,
-            List<NativeContentItem> fapello
+            List<NativeContentItem>... sources
     ) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        int bunkrSize = bunkr == null ? 0 : bunkr.size();
-        int fapelloSize = fapello == null ? 0 : fapello.size();
-        int count = Math.max(bunkrSize, fapelloSize);
+        int count = 0;
+        for (List<NativeContentItem> source : sources) {
+            count = Math.max(count, source == null ? 0 : source.size());
+        }
         for (int i = 0; i < count; i++) {
-            if (i < bunkrSize) result.add(bunkr.get(i));
-            if (i < fapelloSize) result.add(fapello.get(i));
+            for (List<NativeContentItem> source : sources) {
+                if (source != null && i < source.size()) result.add(source.get(i));
+            }
         }
         return result;
     }
@@ -344,8 +470,11 @@ final class BunkrCreatorGalleryRepository {
             org.json.JSONObject json = new org.json.JSONObject().put("query", state.query)
                     .put("next", state.nextSearchPage).put("searchFinished", state.searchFinished)
                     .put("fapelloLoaded", state.fapelloCatalogLoaded)
+                    .put("wikiFeetLoaded", state.wikiFeetCatalogLoaded)
+                    .put("wikiFeetXLoaded", state.wikiFeetXCatalogLoaded)
                     .put("albums", new org.json.JSONArray(state.albumUrls))
                     .put("models", new org.json.JSONArray(state.fapelloModelUrls))
+                    .put("wikiFeetProfiles", new org.json.JSONArray(state.wikiFeetProfileUrls))
                     .put("media", new org.json.JSONArray(state.loadedMediaUrls));
             org.json.JSONArray pending = new org.json.JSONArray();
             for (AlbumCursor cursor : state.pending) pending.put(new org.json.JSONObject()
@@ -356,6 +485,15 @@ final class BunkrCreatorGalleryRepository {
                     .put("name", cursor.model.name).put("url", cursor.model.url)
                     .put("image", cursor.model.imageUrl).put("next", cursor.nextPage));
             json.put("pendingModels", models);
+            org.json.JSONArray wikiFeet = new org.json.JSONArray();
+            for (WikiFeetCursor cursor : state.wikiFeetPending) {
+                WikiFeetRepository.Creator creator = cursor.creator;
+                wikiFeet.put(new org.json.JSONObject()
+                        .put("site", creator.site.id).put("name", creator.name)
+                        .put("url", creator.url).put("image", creator.imageUrl)
+                        .put("photos", creator.photoCount).put("next", cursor.nextPage));
+            }
+            json.put("pendingWikiFeet", wikiFeet);
             BunkrGallerySessionStore.recordCreatorBatch(context, id, batch.items, batch.endReached, json);
         } catch (Exception ignored) { }
     }
@@ -370,8 +508,11 @@ final class BunkrCreatorGalleryRepository {
         state.nextSearchPage = Math.max(1, json.optInt("next", 1));
         state.searchFinished = json.optBoolean("searchFinished");
         state.fapelloCatalogLoaded = json.optBoolean("fapelloLoaded");
+        state.wikiFeetCatalogLoaded = json.optBoolean("wikiFeetLoaded");
+        state.wikiFeetXCatalogLoaded = json.optBoolean("wikiFeetXLoaded");
         restoreSet(json.optJSONArray("albums"), state.albumUrls);
         restoreSet(json.optJSONArray("models"), state.fapelloModelUrls);
+        restoreSet(json.optJSONArray("wikiFeetProfiles"), state.wikiFeetProfileUrls);
         restoreSet(json.optJSONArray("media"), state.loadedMediaUrls);
         org.json.JSONArray pending = json.optJSONArray("pending");
         if (pending != null) for (int i = 0; i < pending.length(); i++) {
@@ -389,6 +530,20 @@ final class BunkrCreatorGalleryRepository {
                     item.optString("name"), item.optString("url"), item.optString("image")));
             cursor.nextPage = Math.max(1, item.optInt("next", 1));
             state.fapelloPending.add(cursor);
+        }
+        org.json.JSONArray wikiFeet = json.optJSONArray("pendingWikiFeet");
+        if (wikiFeet != null) for (int i = 0; i < wikiFeet.length(); i++) {
+            org.json.JSONObject item = wikiFeet.optJSONObject(i);
+            if (item == null) continue;
+            WikiFeetRepository.Site site = "wikifeetx".equals(item.optString("site"))
+                    ? WikiFeetRepository.Site.WIKIFEET_X
+                    : WikiFeetRepository.Site.WIKIFEET;
+            if (!WikiFeetRepository.isProfileUrl(item.optString("url"), site)) continue;
+            WikiFeetCursor cursor = new WikiFeetCursor(new WikiFeetRepository.Creator(
+                    site, item.optString("name"), item.optString("url"),
+                    item.optString("image"), item.optInt("photos")));
+            cursor.nextPage = Math.max(1, item.optInt("next", 1));
+            state.wikiFeetPending.add(cursor);
         }
         return state;
     }
@@ -408,14 +563,20 @@ final class BunkrCreatorGalleryRepository {
         final String query;
         final ArrayDeque<AlbumCursor> pending = new ArrayDeque<>();
         final ArrayDeque<FapelloCursor> fapelloPending = new ArrayDeque<>();
+        final ArrayDeque<WikiFeetCursor> wikiFeetPending = new ArrayDeque<>();
         final Set<String> albumUrls = new HashSet<>();
         final Set<String> fapelloModelUrls = new HashSet<>();
+        final Set<String> wikiFeetProfileUrls = new HashSet<>();
         final Set<String> loadedMediaUrls = new HashSet<>();
         int nextSearchPage = 1;
         int bunkrSearchFailures;
         int fapelloSearchFailures;
+        int wikiFeetSearchFailures;
+        int wikiFeetXSearchFailures;
         boolean searchFinished;
         boolean fapelloCatalogLoaded;
+        boolean wikiFeetCatalogLoaded;
+        boolean wikiFeetXCatalogLoaded;
 
         State(String query) {
             this.query = query == null ? "" : query.trim();
@@ -423,7 +584,9 @@ final class BunkrCreatorGalleryRepository {
 
         boolean finished() {
             return searchFinished && pending.isEmpty() &&
-                    fapelloCatalogLoaded && fapelloPending.isEmpty();
+                    fapelloCatalogLoaded && fapelloPending.isEmpty() &&
+                    wikiFeetCatalogLoaded && wikiFeetXCatalogLoaded &&
+                    wikiFeetPending.isEmpty();
         }
     }
 
@@ -465,6 +628,28 @@ final class BunkrCreatorGalleryRepository {
         final Exception error;
 
         FapelloPage(FapelloCursor cursor, List<NativeContentItem> items, Exception error) {
+            this.cursor = cursor;
+            this.items = items;
+            this.error = error;
+        }
+    }
+
+    private static final class WikiFeetCursor {
+        final WikiFeetRepository.Creator creator;
+        int nextPage = 1;
+        int failures;
+
+        WikiFeetCursor(WikiFeetRepository.Creator creator) {
+            this.creator = creator;
+        }
+    }
+
+    private static final class WikiFeetPage {
+        final WikiFeetCursor cursor;
+        final List<NativeContentItem> items;
+        final Exception error;
+
+        WikiFeetPage(WikiFeetCursor cursor, List<NativeContentItem> items, Exception error) {
             this.cursor = cursor;
             this.items = items;
             this.error = error;

@@ -159,7 +159,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
         } else {
             RequestBuilder<Drawable> request = Glide.with(holder.image)
-                    .load(withHeaders(item.imageUrl, item.url))
+                    .load(withHeaders(item.imageUrl, imageReferer(item)))
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
                     .dontAnimate()
                     .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
@@ -233,7 +233,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             NativeContentItem item = items.get(i);
             if (item.imageUrl == null || item.imageUrl.isEmpty()) continue;
             RequestBuilder<Drawable> request = Glide.with(context)
-                    .load(withHeaders(item.imageUrl, item.url))
+                    .load(withHeaders(item.imageUrl, imageReferer(item)))
                     .diskCacheStrategy(DiskCacheStrategy.ALL);
             if (adaptiveAspectRatios) request = request.dontTransform();
             else request = request.centerCrop();
@@ -271,6 +271,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         } catch (Exception ignored) {
         }
         return new GlideUrl(imageUrl, headers.build());
+    }
+
+    private String imageReferer(NativeContentItem item) {
+        if (item != null && WikiFeetRepository.isWikiFeetUrl(item.url) &&
+                WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
+        return item == null ? null : item.url;
     }
 
     static final class Holder extends RecyclerView.ViewHolder {
