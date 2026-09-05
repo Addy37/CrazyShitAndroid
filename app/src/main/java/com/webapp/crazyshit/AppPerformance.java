@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /** In-memory timings for this app session. No URLs, saved history or network reporting. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class AppPerformance {
     private static final long STARTED = SystemClock.elapsedRealtime();
     private static final Map<String, long[]> TIMINGS = new LinkedHashMap<>();

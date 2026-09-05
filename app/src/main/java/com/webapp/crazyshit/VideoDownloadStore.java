@@ -335,7 +335,7 @@ final class VideoDownloadStore {
     static synchronized void remove(Context context, Entry entry) {
         if (context == null || entry == null) return;
         if (entry.id < 0L) {
-            AcceleratedDownloadService.cancel(context, entry.id);
+            if (Build.VERSION.SDK_INT >= 29) AcceleratedDownloadService.cancel(context, entry.id);
             if (!entry.localUri.isEmpty()) {
                 try {
                     context.getContentResolver().delete(Uri.parse(entry.localUri), null, null);
@@ -376,7 +376,7 @@ final class VideoDownloadStore {
     static void retry(Context context, Entry entry) {
         if (entry == null) return;
         Context app = context.getApplicationContext();
-        if (entry.id < 0 && AcceleratedDownloadService.isActive(entry.id)) {
+        if (entry.id < 0 && Build.VERSION.SDK_INT >= 29 && AcceleratedDownloadService.isActive(entry.id)) {
             toast(app, "Finishing the pause. Try Resume in a moment."); return;
         }
         if (!RESTARTING.add(entry.id)) return;
@@ -429,7 +429,7 @@ final class VideoDownloadStore {
                 }
                 return "Downloading";
             case DownloadManager.STATUS_PAUSED:
-                return entry.id < 0L ? (AcceleratedDownloadService.isActive(entry.id) ? "Pausing…"
+                return entry.id < 0L ? (Build.VERSION.SDK_INT >= 29 && AcceleratedDownloadService.isActive(entry.id) ? "Pausing…"
                         : entry.reason == 3 ? "Interrupted · Tap Resume" : "Paused · Tap Resume") : "Paused by Android";
             case DownloadManager.STATUS_SUCCESSFUL:
                 return "Ready offline";
