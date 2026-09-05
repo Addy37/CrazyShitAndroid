@@ -171,3 +171,4 @@ jobs:
           path: CrazyShit-debug.apk
           if-no-files-found: error
           retention-days: 14
+

@@ -175,6 +175,11 @@ final class WikiFeetRepository {
             try { collectJson(new JSONTokener(value).nextValue(), site, result, limit); }
             catch (Exception ignored) { }
         }
+        String bodyTree = assignedArray(value, "tbody");
+        if (!bodyTree.isEmpty()) {
+            try { collectJson(new JSONArray(bodyTree), site, result, limit); }
+            catch (Exception ignored) { }
+        }
         Document document = Jsoup.parse(value, endpoint);
         for (Element link : document.select("#searchresults a[href], a[href]")) {
             if (result.size() >= limit) break;
@@ -219,12 +224,20 @@ final class WikiFeetRepository {
     }
 
     static String assignedObject(String body, String variable) {
+        return assignedValue(body, variable, '{', '}');
+    }
+
+    static String assignedArray(String body, String variable) {
+        return assignedValue(body, variable, '[', ']');
+    }
+
+    private static String assignedValue(String body, String variable, char open, char close) {
         if (body == null || variable == null) return "";
         int name = body.indexOf(variable);
         while (name >= 0) {
             int equals = body.indexOf('=', name + variable.length());
             if (equals < 0) return "";
-            int start = body.indexOf('{', equals + 1);
+            int start = body.indexOf(open, equals + 1);
             if (start < 0) return "";
             boolean quoted = false;
             boolean escaped = false;
@@ -241,8 +254,8 @@ final class WikiFeetRepository {
                 if (character == '\"' || character == '\'') {
                     quoted = true;
                     quote = character;
-                } else if (character == '{') depth++;
-                else if (character == '}' && --depth == 0) return body.substring(start, i + 1);
+                } else if (character == open) depth++;
+                else if (character == close && --depth == 0) return body.substring(start, i + 1);
             }
             name = body.indexOf(variable, name + variable.length());
         }
@@ -336,12 +349,19 @@ final class WikiFeetRepository {
         if (!(value instanceof JSONObject)) return;
         JSONObject object = (JSONObject) value;
         String name = firstString(object, "name", "cname", "title", "label");
-        String url = firstString(object, "url", "href", "path", "slug");
+        String url = firstString(object, "url", "href", "path", "slug", "fetchname");
         if (!url.isEmpty() && !url.startsWith("http") && !url.startsWith("/")) url = "/" + url;
         url = normalizeProfileUrl(site, url);
         if (!name.isEmpty() && isProfileUrl(url, site)) {
             String image = firstString(object, "image", "thumbnail", "thumb", "photo");
             long pid = firstLong(object, "pid", "picture_id", "photo_id");
+            if (pid <= 0L) {
+                String pictures = firstString(object, "pics");
+                if (!pictures.isEmpty()) {
+                    try { pid = Long.parseLong(pictures.split(",", 2)[0].trim()); }
+                    catch (Exception ignored) { }
+                }
+            }
             if (image.isEmpty() && pid > 0L) image = thumbnailUrl(site, pid);
             int count = (int) firstLong(object, "photos", "count", "photo_count", "pictures");
             put(output, new Creator(site, name, url, image, count));

@@ -31,6 +31,17 @@ public class WikiFeetRepositoryTest {
         assertEquals("https://wikifeet.com/Scarlett_Johansson", creators.get(0).url);
     }
 
+    @Test public void parsesScriptBackedSearchCardsAndTheirThumbnails() {
+        String html = "<script>tdata={}; tbody = [[\"CelebBox\",{" +
+                "\"cid\":42,\"fetchname\":\"Scarlett_Johansson\"," +
+                "\"name\":\"Scarlett Johansson\",\"pics\":\"9001,9000\"}]];</script>";
+        List<WikiFeetRepository.Creator> creators = WikiFeetRepository.parseSearch(
+                html, WikiFeetRepository.Site.WIKIFEET, "https://wikifeet.com/search/scarlett", 8);
+        assertEquals(1, creators.size());
+        assertEquals("https://thumbs.wikifeet.com/9001.jpg", creators.get(0).imageUrl);
+        assertEquals("https://wikifeet.com/Scarlett_Johansson", creators.get(0).url);
+    }
+
     @Test public void profileThumbnailAndPagedOriginalsUseTheSelectedSource() throws Exception {
         String html = profile("Abella Danger", 1001, 1002, 1003);
         WikiFeetRepository.Creator creator = WikiFeetRepository.parseProfile(
