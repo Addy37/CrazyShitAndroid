@@ -70,8 +70,12 @@ jobs:
                   with urllib.request.urlopen(req, timeout=20) as response:
                       body = response.read().decode('utf-8', 'replace')
                   print('WIKI_CLIENT', url, 'bytes', len(body))
-                  for match in re.finditer(r'.{0,500}(?:searchbar|autocomplete|suggest|SearchBar|fetch\\(|XMLHttpRequest).{0,1200}', body, re.I | re.S):
-                      print('WIKI_CLIENT_MATCH', re.sub(r'\\s+', ' ', match.group(0))[:2200])
+                  lowered = body.lower()
+                  for needle in ['searchbar', 'searchresults', 'autocomplete', 'xmlhttprequest', 'pics.wikifeet']:
+                      start = lowered.find(needle)
+                      if start >= 0:
+                          snippet = body[max(0, start - 1000):start + 3500]
+                          print('WIKI_CLIENT_MATCH', needle, re.sub(r'\\s+', ' ', snippet))
               except Exception as error:
                   print('WIKI_CLIENT_ERROR', url, repr(error))
           PY
