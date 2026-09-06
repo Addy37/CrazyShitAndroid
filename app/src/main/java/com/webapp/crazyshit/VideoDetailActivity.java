@@ -1214,7 +1214,7 @@ public class VideoDetailActivity extends Activity {
                         portraitFullscreen
                                 ? "Return to the video details"
                                 : "Fill the screen without rotating",
-                        () -> setPortraitFullscreen(!portraitFullscreen)
+                        () -> setPortraitFullscreen(!rotatableFullscreen)
                 ));
             }
             actions.add(VideoActionSheet.action(
