@@ -4,6 +4,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import android.app.Application;
 import android.content.Context;
 
 import org.junit.Test;
@@ -18,7 +19,7 @@ import java.net.URL;
 import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 35)
+@Config(application = Application.class, sdk = 35)
 public final class BunkrLiveProbeTest {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
