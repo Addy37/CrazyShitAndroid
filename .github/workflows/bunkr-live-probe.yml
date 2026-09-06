@@ -1,0 +1,144 @@
+name: Bunkr Live Pipeline Probe
+
+on:
+  push:
+    branches: [ fix/bunkr-integration ]
+    paths:
+      - ".github/workflows/bunkr-live-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect current Bunkr endpoints
+        run: |
+          python3 - <<'PY'
+          import html
+          import json
+          import re
+          import ssl
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          UA = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36"
+          context = ssl.create_default_context()
+
+          def request(url, method="GET", headers=None, body=None, timeout=20):
+              values = {"User-Agent": UA, "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"}
+              if headers:
+                  values.update(headers)
+              req = urllib.request.Request(url, data=body, headers=values, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
+                      data = response.read(14 * 1024 * 1024)
+                      return response.status, response.geturl(), dict(response.headers), data
+              except urllib.error.HTTPError as error:
+                  return error.code, error.geturl(), dict(error.headers), error.read(1024 * 1024)
+              except Exception as error:
+                  return 0, url, {}, (type(error).__name__ + ": " + str(error)).encode()
+
+          def title(data):
+              match = re.search(rb"<title[^>]*>(.*?)</title>", data, re.I | re.S)
+              return re.sub(r"\s+", " ", html.unescape(match.group(1).decode("utf-8", "replace"))).strip() if match else ""
+
+          def summary(label, result):
+              status, final, headers, data = result
+              print(json.dumps({
+                  "label": label,
+                  "status": status,
+                  "final": final,
+                  "type": headers.get("Content-Type", ""),
+                  "server": headers.get("Server", ""),
+                  "bytes": len(data),
+                  "title": title(data),
+              }, sort_keys=True))
+              return data
+
+          search_url = "https://balbums.st/?search=Omegle&mode=broad&page=1"
+          search_result = request(search_url, headers={"Referer": "https://balbums.st/"})
+          search_html = summary("balbums-search", search_result).decode("utf-8", "replace")
+
+          for host in ["https://bunkr-albums.io/", "https://bunkr.fi/", "https://bunkr.cr/", "https://bunkr.site/", "https://bunkr.ph/"]:
+              summary("origin", request(host))
+
+          album_urls = []
+          for match in re.finditer(r"href=[\"']([^\"']+/a/[^\"'?#]+)", search_html, re.I):
+              candidate = urllib.parse.urljoin(search_result[1], html.unescape(match.group(1)))
+              if candidate not in album_urls:
+                  album_urls.append(candidate)
+          print(json.dumps({"album_count": len(album_urls), "album_hosts": sorted({urllib.parse.urlparse(url).hostname for url in album_urls})}))
+
+          file_url = ""
+          file_referer = ""
+          for index, album_url in enumerate(album_urls[:3], 1):
+              result = request(album_url + "?page=1", headers={"Referer": "https://balbums.st/"})
+              data = summary("album-%d" % index, result)
+              text = data.decode("utf-8", "replace")
+              hrefs = re.findall(r"href=[\"']([^\"']+/(?:f|v|i|d)/[^\"'?#]+)", text, re.I)
+              print(json.dumps({
+                  "album": index,
+                  "has_album_files": "window.albumFiles" in text,
+                  "file_hrefs": len(hrefs),
+                  "data_file_ids": len(re.findall(r"data-file-id", text, re.I)),
+                  "thumbnail_hosts": sorted({urllib.parse.urlparse(html.unescape(url)).hostname for url in re.findall(r"https?://[^\"'<> ]+(?:jpg|jpeg|png|webp|avif)", text, re.I) if urllib.parse.urlparse(html.unescape(url)).hostname})[:12],
+              }, sort_keys=True))
+              if not file_url and hrefs:
+                  file_url = urllib.parse.urljoin(result[1], html.unescape(hrefs[0]))
+                  file_referer = result[1]
+
+          if file_url:
+              file_result = request(file_url, headers={"Referer": file_referer})
+              file_html = summary("file", file_result).decode("utf-8", "replace")
+              cdn = re.search(r"\bjsCDN\s*=\s*([\"'])(.*?)\1", file_html, re.I | re.S)
+              sign = re.search(r"\bsignUrl\s*=\s*([\"'])(.*?)\1", file_html, re.I | re.S)
+              data_id = re.search(r"data-file-id\s*=\s*[\"']([0-9]+)", file_html, re.I)
+              cdn_url = html.unescape(cdn.group(2).replace("\\/", "/")) if cdn else ""
+              sign_url = html.unescape(sign.group(2).replace("\\/", "/")) if sign else ""
+              print(json.dumps({
+                  "file_url": file_result[1],
+                  "cdn_host": urllib.parse.urlparse(cdn_url).hostname,
+                  "cdn_path": urllib.parse.urlparse(cdn_url).path,
+                  "sign_url": sign_url,
+                  "has_data_id": bool(data_id),
+              }, sort_keys=True))
+
+              if cdn_url and sign_url:
+                  path = urllib.parse.urlparse(cdn_url).path
+                  separator = "&" if "?" in sign_url else "?"
+                  signing = sign_url + separator + "path=" + urllib.parse.quote(path, safe="")
+                  origin = urllib.parse.urlsplit(file_result[1])
+                  signing_result = request(signing, headers={
+                      "Accept": "application/json",
+                      "Origin": origin.scheme + "://" + origin.netloc,
+                      "Referer": file_result[1],
+                  })
+                  payload = {}
+                  try:
+                      payload = json.loads(signing_result[3])
+                  except Exception:
+                      pass
+                  print(json.dumps({
+                      "sign_status": signing_result[0],
+                      "sign_final": signing_result[1],
+                      "sign_keys": sorted(payload.keys()),
+                      "has_token": bool(payload.get("token")),
+                      "has_expiry": bool(payload.get("ex")),
+                  }, sort_keys=True))
+
+                  if payload.get("token") and payload.get("ex"):
+                      signed_url = cdn_url.split("#", 1)[0].split("?", 1)[0] + "?token=" + urllib.parse.quote(str(payload["token"]), safe="") + "&ex=" + urllib.parse.quote(str(payload["ex"]), safe="")
+                      media_result = request(signed_url, headers={"Referer": file_result[1], "Range": "bytes=0-1"})
+                      print(json.dumps({
+                          "media_status": media_result[0],
+                          "media_final_host": urllib.parse.urlparse(media_result[1]).hostname,
+                          "media_type": media_result[2].get("Content-Type", ""),
+                          "accept_ranges": media_result[2].get("Accept-Ranges", ""),
+                          "content_range": media_result[2].get("Content-Range", ""),
+                      }, sort_keys=True))
+          else:
+              print(json.dumps({"error": "No file URL found in sampled albums"}))
+          PY
