@@ -297,6 +297,9 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (item == null || item.isSection()) return;
         if ((item.isSeries() || item.isCategory()) && !BunkrRepository.isAlbumUrl(item.url)) return;
         if (item.url == null || item.url.isEmpty()) return;
+        if ((rejectedUrl == null || rejectedUrl.isEmpty()) &&
+                item.imageUrl != null && !item.imageUrl.trim().isEmpty() &&
+                !failedDirectThumbnails.contains(item.url)) return;
         String rejected = rejectedUrl == null ? "" : rejectedUrl;
         if (rejected.isEmpty() && failedDirectThumbnails.contains(item.url)) rejected = item.imageUrl;
         if (resolvedThumbnails.containsKey(item.url) && rejected.isEmpty()) return;
@@ -320,6 +323,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     private void setResolvedThumbnail(String pageUrl, String thumbnailUrl) {
         if (pageUrl == null || pageUrl.isEmpty()) return;
+        thumbnailJobs.remove(pageUrl);
         if (thumbnailUrl == null || thumbnailUrl.isEmpty()) {
             // A failed first pass should not poison this SearchActivity for the rest of its life.
             requestedThumbnails.remove(pageUrl);

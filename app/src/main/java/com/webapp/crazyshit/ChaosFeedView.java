@@ -82,6 +82,8 @@ public final class ChaosFeedView extends FrameLayout {
     private static final int MAX_RECENT = 500;
     private static final int MAX_HIDDEN = 600;
     private static final int LOAD_AHEAD_AT = 5;
+    private static final int MAX_STREAM_CACHE = 32;
+    private static final long RECENT_SAVE_DELAY_MS = 750L;
     private static final long STREAM_RETRY_DELAY_MS = 450L;
     private static final long FAILED_CLIP_SKIP_DELAY_MS = 1200L;
     private static final String SITE = "https://crazyshit.com/";
@@ -95,7 +97,15 @@ public final class ChaosFeedView extends FrameLayout {
     private final Deque<String> recentUrls = new ArrayDeque<>();
     private final Set<String> recentSet = new HashSet<>();
     private final LinkedHashSet<String> hiddenUrls = new LinkedHashSet<>();
-    private final Map<String, CrazyShitRepository.StreamInfo> streamCache = new HashMap<>();
+    private final Map<String, CrazyShitRepository.StreamInfo> streamCache =
+            new LinkedHashMap<String, CrazyShitRepository.StreamInfo>(MAX_STREAM_CACHE, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(
+                        Map.Entry<String, CrazyShitRepository.StreamInfo> eldest
+                ) {
+                    return size() > MAX_STREAM_CACHE;
+                }
+            };
     private final Set<String> resolving = new HashSet<>();
     private final Set<String> unplayable = new HashSet<>();
     private final Set<String> resolveRetried = new HashSet<>();
@@ -115,6 +125,7 @@ public final class ChaosFeedView extends FrameLayout {
     private int autoAdvanceFrom = -1;
     private int consecutiveDryLoads;
     private int selectedPosition;
+    private final Runnable saveRecentRunnable = this::saveRecentNow;
 
     public ChaosFeedView(Activity activity, Host host) {
         super(activity);
@@ -138,7 +149,7 @@ public final class ChaosFeedView extends FrameLayout {
         addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
         RecyclerView rv = pagerRecycler();
-        if (rv != null) rv.setItemViewCacheSize(5);
+        if (rv != null) rv.setItemViewCacheSize(2);
 
         initialProgress = new ProgressBar(activity);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48));
@@ -164,6 +175,7 @@ public final class ChaosFeedView extends FrameLayout {
                 selectedPosition = position;
                 markSeen(position);
                 pauseNonSelected(position);
+                releaseDistantPlayers(position);
                 resolveAhead(position);
                 playSelected();
                 ChaosHolder holder = holderAt(position);
@@ -181,12 +193,14 @@ public final class ChaosFeedView extends FrameLayout {
             syncVisibleChrome();
         } else {
             pauseAll();
+            releaseVisiblePlayers();
         }
     }
 
     public void onHostResume() {
         hostResumed = true;
         if (active) {
+            resolveAhead(selectedPosition);
             playSelected();
             syncVisibleChrome();
         }
@@ -195,6 +209,8 @@ public final class ChaosFeedView extends FrameLayout {
     public void onHostPause() {
         hostResumed = false;
         pauseAll();
+        releaseVisiblePlayers();
+        flushRecent();
     }
 
     public void onConfigurationChanged() {
@@ -227,6 +243,8 @@ public final class ChaosFeedView extends FrameLayout {
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         pauseAll();
         releaseVisiblePlayers();
+        flushRecent();
+        removeCallbacks(saveRecentRunnable);
         io.shutdownNow();
     }
 
@@ -309,6 +327,8 @@ public final class ChaosFeedView extends FrameLayout {
             if (hiddenUrls.contains(item.url)) continue;
             if (!sessionUrls.add(item.url)) continue;
             items.add(item);
+            CrazyShitRepository.StreamInfo preloaded = ChaosStartupPreloader.takeResolved(item.url);
+            if (preloaded != null) streamCache.put(item.url, preloaded);
         }
     }
 
@@ -378,9 +398,9 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         io.execute(() -> {
-            CrazyShitRepository.StreamInfo stream = null;
+            CrazyShitRepository.StreamInfo stream = ChaosStartupPreloader.takeResolved(item.url);
             try {
-                stream = resolvePlayable(item);
+                if (stream == null) stream = resolvePlayable(item);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
@@ -437,6 +457,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void prepareVisible(int position) {
+        if (!active || !hostResumed) return;
         ChaosHolder holder = holderAt(position);
         if (holder == null || position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
@@ -468,6 +489,20 @@ public final class ChaosFeedView extends FrameLayout {
             if (!(raw instanceof ChaosHolder)) continue;
             ChaosHolder holder = (ChaosHolder) raw;
             if (holder.getBindingAdapterPosition() != selected) holder.pauseAndRecord();
+        }
+    }
+
+    private void releaseDistantPlayers(int selected) {
+        RecyclerView rv = pagerRecycler();
+        if (rv == null) return;
+        for (int i = 0; i < rv.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
+            if (!(raw instanceof ChaosHolder)) continue;
+            ChaosHolder holder = (ChaosHolder) raw;
+            int position = holder.getBindingAdapterPosition();
+            if (position != RecyclerView.NO_POSITION && Math.abs(position - selected) > 1) {
+                holder.releasePlayer();
+            }
         }
     }
 
@@ -522,7 +557,8 @@ public final class ChaosFeedView extends FrameLayout {
             String removed = recentUrls.removeLast();
             recentSet.remove(removed);
         }
-        saveRecent();
+        removeCallbacks(saveRecentRunnable);
+        postDelayed(saveRecentRunnable, RECENT_SAVE_DELAY_MS);
     }
 
     private void loadRecent() {
@@ -540,7 +576,12 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
-    private void saveRecent() {
+    private void flushRecent() {
+        removeCallbacks(saveRecentRunnable);
+        saveRecentNow();
+    }
+
+    private void saveRecentNow() {
         JSONArray array = new JSONArray();
         for (String url : recentUrls) array.put(url);
         activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -859,7 +900,7 @@ public final class ChaosFeedView extends FrameLayout {
         public void onBindViewHolder(@NonNull ChaosHolder holder, int position) {
             holder.bind(items.get(position), position);
             CrazyShitRepository.StreamInfo stream = streamCache.get(items.get(position).url);
-            if (stream != null) {
+            if (stream != null && active && hostResumed) {
                 holder.prepare(stream, active && hostResumed && position == selectedPosition);
             } else if (shouldResolvePosition(position)) {
                 resolveAt(position);
@@ -871,6 +912,17 @@ public final class ChaosFeedView extends FrameLayout {
             holder.pauseAndRecord();
             holder.releasePlayer();
             super.onViewRecycled(holder);
+        }
+
+        @Override
+        public void onViewDetachedFromWindow(@NonNull ChaosHolder holder) {
+            holder.pauseAndRecord();
+            int position = holder.getBindingAdapterPosition();
+            if (!active || position == RecyclerView.NO_POSITION ||
+                    Math.abs(position - selectedPosition) > 1) {
+                holder.releasePlayer();
+            }
+            super.onViewDetachedFromWindow(holder);
         }
     }
 

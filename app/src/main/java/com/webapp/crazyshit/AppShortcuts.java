@@ -22,12 +22,16 @@ final class AppShortcuts {
     private static final String ID_CONTINUE = "continue";
     private static final String ID_SEARCH = "search";
     private static final String ID_WATCH_LATER = "watch_later";
+    private static final String PREFS = "launcher_shortcuts";
+    private static final String KEY_PUBLISHED_VERSION = "published_version";
 
     private AppShortcuts() {
     }
 
     static void publish(Context context) {
         if (context == null || Build.VERSION.SDK_INT < 25) return;
+        if (context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getLong(KEY_PUBLISHED_VERSION, -1L) == BuildConfig.VERSION_CODE) return;
         ShortcutManager manager = context.getSystemService(ShortcutManager.class);
         if (manager == null) return;
 
@@ -76,6 +80,10 @@ final class AppShortcuts {
         }
         try {
             manager.setDynamicShortcuts(published);
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putLong(KEY_PUBLISHED_VERSION, BuildConfig.VERSION_CODE)
+                    .apply();
         } catch (Exception ignored) {
         }
     }

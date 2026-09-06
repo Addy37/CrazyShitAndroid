@@ -83,7 +83,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         });
         chaosView.setActive(false);
 
-        for (Page page : pages) if (page != null) load(page, false);
     }
 
     public String titleFor(int position) {
@@ -136,6 +135,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void setPrimaryActive(int position) {
         chaosView.setActive(position == PAGE_CHAOS);
+        if (position == PAGE_CHAOS) return;
+        Page page = pageAt(position);
+        if (page != null && page.itemCount() == 0 && !page.loading && !page.endReached) {
+            load(page, false);
+        }
     }
 
     public boolean isBunkrCollectionsSelected() {
@@ -950,4 +954,3 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         }
     }
 }
-

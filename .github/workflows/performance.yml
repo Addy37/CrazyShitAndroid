@@ -17,13 +17,16 @@ jobs:
   macrobenchmark:
     name: performance (${{ matrix.flow }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
           - flow: startup
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupUncompiled
+            rules: Macrobenchmark
+          - flow: startup-profile
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupBaselineProfile
             rules: Macrobenchmark
           - flow: home-scroll
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#homeScroll
@@ -33,6 +36,9 @@ jobs:
             rules: Macrobenchmark
           - flow: search
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#searchFlow
+            rules: Macrobenchmark
+          - flow: creator-gallery-playback
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#creatorGalleryAndPlayback
             rules: Macrobenchmark
           - flow: baseline-profile
             test: com.webapp.crazyshit.baselineprofile.BaselineProfileGenerator
@@ -68,10 +74,15 @@ jobs:
           profile: pixel_6
           disable-animations: true
           disk-size: 4096M
-          script: >-
-            gradle --no-daemon :baselineprofile:connectedCheck
-            "-Pandroid.testInstrumentationRunnerArguments.class=${{ matrix.test }}"
-            "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=${{ matrix.rules }}"
+          script: |
+            if [ "${{ matrix.rules }}" = "BaselineProfile" ]; then
+              benchmark_task=:baselineprofile:connectedNonMinifiedReleaseAndroidTest
+            else
+              benchmark_task=:baselineprofile:connectedBenchmarkReleaseAndroidTest
+            fi
+            gradle --no-daemon "$benchmark_task" \
+              "-Pandroid.testInstrumentationRunnerArguments.class=${{ matrix.test }}" \
+              "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=${{ matrix.rules }}"
 
       - name: Print benchmark measurements
         if: always()

@@ -28,6 +28,7 @@ class BaselineProfileGenerator {
         scrollHome()
         openAndScrollChaos()
         search()
+        device.pressBack()
         openCreatorProfileAndGallery()
     }
 }

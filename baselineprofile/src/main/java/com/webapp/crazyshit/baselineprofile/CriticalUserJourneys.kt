@@ -59,7 +59,6 @@ private fun MacrobenchmarkScope.swipeUp() {
 }
 
 internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
-    device.pressBack()
     device.wait(Until.hasObject(By.text("Collections")), 5_000)
     device.findObject(By.text("Collections"))?.click()
     device.wait(Until.hasObject(By.desc("Show Fapzone collections")), 5_000)

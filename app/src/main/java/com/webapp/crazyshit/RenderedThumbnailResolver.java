@@ -76,7 +76,6 @@ final class RenderedThumbnailResolver {
         this.context = context.getApplicationContext();
         this.callback = callback;
         this.cachePrefs = this.context.getSharedPreferences("native_thumbnail_cache", Context.MODE_PRIVATE);
-        createWebView();
     }
 
     void request(String pageUrl) {
@@ -179,7 +178,7 @@ final class RenderedThumbnailResolver {
     }
 
     private void startNext() {
-        if (closed || busy || webView == null) return;
+        if (closed || busy) return;
         currentPage = queue.poll();
         if (currentPage == null) return;
         busy = true;
@@ -206,7 +205,12 @@ final class RenderedThumbnailResolver {
     }
 
     private void loadRenderedPage(String page) {
-        if (closed || !busy || webView == null || page == null || !page.equals(currentPage)) return;
+        if (closed || !busy || page == null || !page.equals(currentPage)) return;
+        if (webView == null) {
+            createWebView();
+            main.postDelayed(() -> loadRenderedPage(page), 50L);
+            return;
+        }
         try {
             webView.stopLoading();
             webView.loadUrl(page);
