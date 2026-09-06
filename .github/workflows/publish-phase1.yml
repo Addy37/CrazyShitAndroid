@@ -1,6 +1,7 @@
 name: Publish 3.0 Phase 1 APK
 
 on:
+  workflow_dispatch:
   push:
     branches: [ perf/3.0-phase-1, "release/**" ]
     paths:
