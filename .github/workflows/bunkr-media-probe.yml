@@ -1,0 +1,114 @@
+name: Bunkr Media Pipeline Probe
+
+on:
+  push:
+    branches: [ fix/bunkr-integration ]
+    paths:
+      - ".github/workflows/bunkr-media-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  media:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect current file and signing responses
+        run: |
+          python3 - <<'PY'
+          import html
+          import json
+          import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          UA = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36"
+
+          def fetch(url, headers=None, data=None):
+              values = {"User-Agent": UA, "Accept": "text/html,application/json;q=0.9,*/*;q=0.8"}
+              if headers:
+                  values.update(headers)
+              request = urllib.request.Request(url, headers=values, data=data)
+              try:
+                  with urllib.request.urlopen(request, timeout=25) as response:
+                      return response.status, response.geturl(), dict(response.headers), response.read(2 * 1024 * 1024)
+              except urllib.error.HTTPError as error:
+                  return error.code, error.geturl(), dict(error.headers), error.read(1024 * 1024)
+              except Exception as error:
+                  return 0, url, {}, (type(error).__name__ + ": " + str(error)).encode()
+
+          slug = "hzbCieUFyPcVf"
+          album = "https://bunkr.cr/a/AT2qgyJj?advanced=1"
+          selected = None
+          for origin in ["https://bunkr.fi", "https://bunkr.cr", "https://bunkr.site", "https://bunkr.ph"]:
+              result = fetch(origin + "/f/" + slug, {"Referer": album})
+              text = result[3].decode("utf-8", "replace")
+              print(json.dumps({
+                  "origin": origin,
+                  "status": result[0],
+                  "final": result[1],
+                  "type": result[2].get("Content-Type", ""),
+                  "bytes": len(result[3]),
+                  "title": (re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S).group(1).strip() if re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S) else ""),
+                  "has_js_cdn": bool(re.search(r"\bjsCDN\s*=", text, re.I)),
+                  "has_sign_url": bool(re.search(r"\bsignUrl\s*=", text, re.I)),
+                  "has_data_id": bool(re.search(r"data-file-id", text, re.I)),
+              }, sort_keys=True))
+              if selected is None and result[0] == 200 and re.search(r"\bjsCDN\s*=", text, re.I):
+                  selected = result, text
+
+          if selected is None:
+              raise SystemExit("No current file page exposed media data")
+
+          result, text = selected
+          cdn = re.search(r"\bjsCDN\s*=\s*([\"'])(.*?)\1", text, re.I | re.S)
+          sign = re.search(r"\bsignUrl\s*=\s*([\"'])(.*?)\1", text, re.I | re.S)
+          data_id = re.search(r"data-file-id\s*=\s*[\"']([0-9]+)", text, re.I)
+          cdn_url = html.unescape(cdn.group(2).replace("\\/", "/")) if cdn else ""
+          sign_url = html.unescape(sign.group(2).replace("\\/", "/")) if sign else ""
+          page_url = result[1]
+          page_parts = urllib.parse.urlsplit(page_url)
+          print(json.dumps({
+              "page_url": page_url,
+              "cdn_host": urllib.parse.urlsplit(cdn_url).hostname,
+              "cdn_path": urllib.parse.urlsplit(cdn_url).path,
+              "sign_scheme": urllib.parse.urlsplit(sign_url).scheme,
+              "sign_host": urllib.parse.urlsplit(sign_url).hostname,
+              "sign_path": urllib.parse.urlsplit(sign_url).path,
+              "data_id": data_id.group(1) if data_id else "",
+          }, sort_keys=True))
+
+          if cdn_url and sign_url:
+              path = urllib.parse.urlsplit(cdn_url).path
+              signing_url = sign_url + ("&" if "?" in sign_url else "?") + "path=" + urllib.parse.quote(path, safe="")
+              signing = fetch(signing_url, {
+                  "Accept": "application/json",
+                  "Origin": page_parts.scheme + "://" + page_parts.netloc,
+                  "Referer": page_url,
+              })
+              payload = {}
+              try:
+                  payload = json.loads(signing[3])
+              except Exception:
+                  pass
+              print(json.dumps({
+                  "sign_status": signing[0],
+                  "sign_final_host": urllib.parse.urlsplit(signing[1]).hostname,
+                  "sign_type": signing[2].get("Content-Type", ""),
+                  "sign_keys": sorted(payload.keys()),
+                  "has_token": bool(payload.get("token")),
+                  "has_expiry": bool(payload.get("ex")),
+              }, sort_keys=True))
+              if payload.get("token") and payload.get("ex"):
+                  media_url = cdn_url.split("#", 1)[0].split("?", 1)[0] + "?token=" + urllib.parse.quote(str(payload["token"]), safe="") + "&ex=" + urllib.parse.quote(str(payload["ex"]), safe="")
+                  media = fetch(media_url, {"Referer": page_url, "Range": "bytes=0-1"})
+                  print(json.dumps({
+                      "media_status": media[0],
+                      "media_final_host": urllib.parse.urlsplit(media[1]).hostname,
+                      "media_type": media[2].get("Content-Type", ""),
+                      "content_range": media[2].get("Content-Range", ""),
+                      "accept_ranges": media[2].get("Accept-Ranges", ""),
+                      "bytes_read": len(media[3]),
+                  }, sort_keys=True))
+          PY
