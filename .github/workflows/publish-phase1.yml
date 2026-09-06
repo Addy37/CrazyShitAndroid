@@ -2,7 +2,7 @@ name: Publish 3.0 Phase 1 APK
 
 on:
   push:
-    branches: [ perf/3.0-phase-1 ]
+    branches: [ perf/3.0-phase-1, "release/**" ]
     paths:
       - ".github/workflows/publish-phase1.yml"
 
