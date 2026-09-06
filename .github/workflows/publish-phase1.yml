@@ -14,18 +14,20 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      APP_VERSION_NAME: 3.0.0-phase1.1-beta.1
-      APP_VERSION_CODE: 3000002
-      APK_NAME: CrazyShit-3.0.0-phase1.1-beta.1.apk
-      RELEASE_TAG: v3.0.0-phase1.1-beta.1
+      APP_VERSION_NAME: 3.0.0-phase1.1-beta.3
+      APP_VERSION_CODE: 3000004
+      APK_NAME: CrazyShit-3.0.0-phase1.1-beta.3.apk
+      RELEASE_TAG: v3.0.0-phase1.1-beta.3
       RELEASE_NOTES: |
-        CrazyShit 3.0 Performance Phase 1.1.
+        CrazyShit 3.0 Performance Phase 1.1 Beta 3.
 
-        This prerelease retains the Phase 1 performance work and fixes black video thumbnails on Home. The Home parser now ignores CrazyShit's blank sizing tile and uses the real thumbnail URL directly, without restoring duplicate page requests.
+        This prerelease retains the Phase 1.1 performance and Home thumbnail fixes. Normal phone browsing stays portrait, while the native full-screen video control now releases the portrait lock for horizontal and portrait videos. Exiting full-screen restores portrait and the existing navigation state.
 
         Validation:
         - 36 release unit tests passed
         - Live CrazyShit Home markup verified
+        - Native full-screen rotation regression fixed
+        - Phone browsing portrait lock retained
         - Home parser regression fixture passed
         - Release APK signature verified
         - Macrobenchmarks passed for startup, Home, Chaos, search, creator profiles, galleries, and playback
@@ -96,6 +98,6 @@ jobs:
             "$APK_NAME" \
             SHA256SUMS.txt \
             --target "$GITHUB_SHA" \
-            --title "CrazyShit 3.0 Performance Phase 1.1" \
+            --title "CrazyShit 3.0 Performance Phase 1.1 Beta 3" \
             --notes "$RELEASE_NOTES" \
             --prerelease
