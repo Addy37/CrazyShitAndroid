@@ -62,7 +62,6 @@ final class BrowseArtworkResolver {
     BrowseArtworkResolver(Context context) {
         this.activity = context instanceof Activity ? (Activity) context : null;
         this.context = context.getApplicationContext();
-        createWebView();
     }
 
     void request(String pageUrl, String pathMarker, Callback callback) {
@@ -71,7 +70,8 @@ final class BrowseArtworkResolver {
         main.post(() -> {
             if (closed) return;
             queue.offer(new Request(pageUrl, pathMarker, callback));
-            startNext();
+            if (webView == null) createWebView();
+            else startNext();
         });
     }
 

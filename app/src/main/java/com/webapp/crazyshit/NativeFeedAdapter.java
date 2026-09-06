@@ -69,6 +69,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private final Context context;
     private final List<NativeContentItem> items = new ArrayList<>();
+    private final Set<String> itemUrls = new HashSet<>();
     private final Listener listener;
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
@@ -136,7 +137,14 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     public void replace(List<NativeContentItem> next) {
         items.clear();
-        if (next != null) items.addAll(next);
+        itemUrls.clear();
+        if (next != null) {
+            for (NativeContentItem item : next) {
+                if (item == null) continue;
+                items.add(item);
+                itemUrls.add(item.url);
+            }
+        }
         reloadPlaybackStates();
         notifyDataSetChanged();
         preloadRange(0, Math.min(12, items.size()));
@@ -151,14 +159,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             if (item == null) continue;
             if (item.isSection() && item.title.equalsIgnoreCase(lastSection)) continue;
 
-            boolean duplicate = false;
-            for (NativeContentItem old : items) {
-                if (old.url.equals(item.url)) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (duplicate) continue;
+            if (!itemUrls.add(item.url)) continue;
 
             items.add(item);
             if (item.isSection()) lastSection = item.title;
@@ -192,11 +193,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     public void refreshPlaybackState() {
         if (closed) return;
         reloadPlaybackStates();
-        notifyDataSetChanged();
+        notifyItemRangeChanged(0, items.size(), "playback");
     }
 
     public void setResolvedThumbnail(String pageUrl, String thumbnailUrl) {
         if (closed || pageUrl == null || pageUrl.isEmpty()) return;
+        thumbnailJobs.remove(pageUrl);
         if (thumbnailUrl == null || thumbnailUrl.isEmpty()) {
             requestedThumbnails.remove(pageUrl);
             return;
@@ -232,7 +234,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private void requestThumbnail(NativeContentItem item, String rejectedUrl) {
         if (closed || item == null || item.isSection() || item.url == null || item.url.isEmpty()) return;
-        if ((rejectedUrl == null || rejectedUrl.isEmpty()) && item.isMeme() &&
+        if ((rejectedUrl == null || rejectedUrl.isEmpty()) &&
                 item.imageUrl != null && !item.imageUrl.trim().isEmpty() &&
                 !failedDirectThumbnails.contains(item.url)) return;
         String rejected = rejectedUrl == null ? "" : rejectedUrl;
@@ -580,6 +582,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         }
         if (!payloads.isEmpty() && payloads.contains("thumbnail")) {
             loadThumbnail(holder, item);
+            return;
+        }
+        if (!payloads.isEmpty() && payloads.contains("playback")) {
+            bindPlaybackState(holder, item);
             return;
         }
         bind(holder, position);
@@ -992,4 +998,3 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         }
     }
 }
-

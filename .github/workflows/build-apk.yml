@@ -124,18 +124,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Test and build debug APK
-        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Test and build debug and release APKs
+        run: gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
 
       - name: Summarize UI regression checks
         if: always()
         run: |
           python3 - <<'PY'
           import pathlib,xml.etree.ElementTree as E,base64
-          for path in pathlib.Path('app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'):
-              root=E.parse(path).getroot()
-              print('TEST_SUMMARY',root.attrib)
-              for failure in root.iter('failure'): print((failure.text or '')[:6000])
+          for suite in ('testDebugUnitTest', 'testReleaseUnitTest'):
+              for path in pathlib.Path('app/build/test-results', suite).glob('TEST-*.xml'):
+                  root=E.parse(path).getroot()
+                  print('TEST_SUMMARY', suite, root.attrib)
+                  for failure in root.iter('failure'): print((failure.text or '')[:6000])
           image=pathlib.Path('app/build/reports/visual-tests/home-lifecycle.png')
           if image.exists(): print('UI_RENDER_HOME='+base64.b64encode(image.read_bytes()).decode())
           PY
@@ -146,7 +147,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: CrazyShit-tests
-          path: app/build/test-results/testDebugUnitTest/
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/test-results/testReleaseUnitTest/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -161,7 +164,9 @@ jobs:
           retention-days: 14
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk CrazyShit-debug.apk
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk CrazyShit-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk CrazyShit-3.0-phase1-release.apk
 
       - name: Upload APK
         continue-on-error: true
@@ -172,3 +177,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload release APK
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrazyShit-3.0-phase1-release
+          path: CrazyShit-3.0-phase1-release.apk
+          if-no-files-found: error
+          retention-days: 14

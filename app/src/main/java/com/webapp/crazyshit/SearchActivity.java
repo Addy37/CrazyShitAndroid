@@ -127,8 +127,7 @@ public final class SearchActivity extends Activity {
                     JSONObject snapshot = ScreenSnapshotStore.read(this, snapshotId);
                     runOnUiThread(() -> {
                         if (destroyed || token != generation) return;
-                        restoreSnapshot(snapshot);
-                        startGlobalSearch(savedQuery, false);
+                        if (!restoreSnapshot(snapshot)) startGlobalSearch(savedQuery, false);
                     });
                 });
             }
@@ -415,7 +414,7 @@ public final class SearchActivity extends Activity {
                 videos = interleave(crazyVideos, efuktVideos);
                 series = interleave(crazySeries, efuktSeries);
                 renderResults();
-                saveSnapshot();
+                if (pendingSources == 0) saveSnapshot();
             });
         }));
     }
@@ -423,6 +422,7 @@ public final class SearchActivity extends Activity {
     private void saveSnapshot() {
         try {
             JSONObject data = new JSONObject().put("query", activeQuery);
+            data.put("complete", pendingSources == 0);
             data.put("crazyVideos", ContentItemCodec.encodeList(crazyVideos, 100));
             data.put("efuktVideos", ContentItemCodec.encodeList(efuktVideos, 100));
             data.put("crazySeries", ContentItemCodec.encodeList(crazySeries, 100));
@@ -435,8 +435,8 @@ public final class SearchActivity extends Activity {
         } catch (Exception ignored) { }
     }
 
-    private void restoreSnapshot(JSONObject data) {
-        if (data == null || !activeQuery.equals(data.optString("query"))) return;
+    private boolean restoreSnapshot(JSONObject data) {
+        if (data == null || !activeQuery.equals(data.optString("query"))) return false;
         crazyVideos = ContentItemCodec.decodeList(data.optJSONArray("crazyVideos"), 100);
         efuktVideos = ContentItemCodec.decodeList(data.optJSONArray("efuktVideos"), 100);
         crazySeries = ContentItemCodec.decodeList(data.optJSONArray("crazySeries"), 100);
@@ -447,7 +447,9 @@ public final class SearchActivity extends Activity {
         library = ContentItemCodec.decodeList(data.optJSONArray("library"), 100);
         videos = interleave(crazyVideos, efuktVideos);
         series = interleave(crazySeries, efuktSeries);
+        pendingSources = data.optBoolean("complete", false) ? 0 : pendingSources;
         renderResults();
+        return data.optBoolean("complete", false);
     }
 
     private List<NativeContentItem> interleave(

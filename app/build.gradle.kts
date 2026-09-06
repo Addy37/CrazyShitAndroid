@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("androidx.baselineprofile")
 }
 
 android {
@@ -53,9 +54,8 @@ android {
         }
         release {
             isMinifyEnabled = false
-            signingConfigs.findByName("release")?.let {
-                signingConfig = it
-            }
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -81,13 +81,21 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("androidx.work:work-runtime:2.11.2")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("org.jsoup:jsoup:1.23.1")
     implementation("com.github.bumptech.glide:glide:4.16.0")
     implementation("com.github.bumptech.glide:avif-integration:4.16.0")
+
+    baselineProfile(project(":baselineprofile"))
 
     val media3Version = "1.9.4"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
+}
+
+baselineProfile {
+    automaticGenerationDuringBuild = false
+    dexLayoutOptimization = true
 }

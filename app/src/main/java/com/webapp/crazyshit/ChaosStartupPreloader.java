@@ -11,13 +11,15 @@ import java.util.Random;
 /**
  * One-shot process startup cache used to overlap the splash animation with useful Chaos work.
  * The first regular item is exposed as soon as its feed metadata arrives, then its playable page
- * is resolved once during the remaining splash time to warm DNS/TLS/page caches before Chaos asks
- * for the same clip. Shit Show keeps its proven WebView warmup path once native Chaos exists.
+ * is resolved once during the remaining splash time and handed to Chaos when ready. Shit Show
+ * keeps its proven WebView warmup path once native Chaos exists.
  */
 final class ChaosStartupPreloader {
     private static final int STARTER_ITEMS = 1;
     private static final Object LOCK = new Object();
     private static final ArrayList<NativeContentItem> READY = new ArrayList<>();
+    private static final java.util.HashMap<String, CrazyShitRepository.StreamInfo> RESOLVED =
+            new java.util.HashMap<>();
 
     private static boolean started;
     private static boolean finished;
@@ -57,6 +59,13 @@ final class ChaosStartupPreloader {
         }
     }
 
+    static CrazyShitRepository.StreamInfo takeResolved(String pageUrl) {
+        if (pageUrl == null || pageUrl.isEmpty()) return null;
+        synchronized (LOCK) {
+            return RESOLVED.remove(pageUrl);
+        }
+    }
+
     private static void load(Context context) {
         CrazyShitRepository repository = new CrazyShitRepository();
         NativeContentItem first = null;
@@ -92,11 +101,17 @@ final class ChaosStartupPreloader {
             }
 
             // Warm the exact first clip while the branded intro is still on screen. The native
-            // feed keeps the original story/page URL and resolves it normally again if necessary,
-            // so this cannot change comments, sharing, history, or Shit Show routing semantics.
+            // feed keeps the original story/page URL and resolves it normally if the handoff is
+            // not ready, so comments, sharing, history, and Shit Show routing stay unchanged.
             if (first != null) {
                 try {
-                    repository.resolvePlayable(context, first.url);
+                    CrazyShitRepository.StreamInfo stream =
+                            repository.resolvePlayable(context, first.url);
+                    if (stream != null) {
+                        synchronized (LOCK) {
+                            RESOLVED.put(first.url, stream);
+                        }
+                    }
                 } catch (Exception ignored) {
                 }
             }

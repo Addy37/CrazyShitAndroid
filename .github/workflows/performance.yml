@@ -1,0 +1,91 @@
+name: Android Performance Baseline
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "app/**"
+      - "baselineprofile/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/performance.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  macrobenchmark:
+    name: performance (${{ matrix.flow }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flow: startup
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupUncompiled
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: home-scroll
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#homeScroll
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: chaos-scroll
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosScroll
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: search
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#searchFlow
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: creator-gallery-playback
+            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#creatorGalleryAndPlayback
+            rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
+          - flow: baseline-profile
+            test: com.webapp.crazyshit.baselineprofile.BaselineProfileGenerator
+            rules: BaselineProfile
+            task: :baselineprofile:connectedNonMinifiedReleaseAndroidTest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "8.7"
+          cache-provider: basic
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Macrobenchmarks
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          disk-size: 4096M
+          script: >-
+            gradle --no-daemon ${{ matrix.task }}
+            "-Pandroid.testInstrumentationRunnerArguments.class=${{ matrix.test }}"
+            "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=${{ matrix.rules }}"
+
+      - name: Print benchmark measurements
+        if: always()
+        run: |
+          find baselineprofile/build/outputs -type f \
+            \( -name '*.json' -o -name '*baseline-prof.txt' -o -name '*startup-prof.txt' \) \
+            -print -exec sh -c 'echo PERFORMANCE_FILE_BEGIN:$1; cat "$1"; echo PERFORMANCE_FILE_END:$1' _ {} \; \
+            2>/dev/null || true
