@@ -16,17 +16,27 @@ final class PhoneOrientationPolicy {
     private static final int LARGE_SCREEN_MIN_WIDTH_DP = 600;
     private static final Set<Activity> FULLSCREEN_ACTIVITIES =
             Collections.newSetFromMap(new WeakHashMap<>());
+    private static final Set<Activity> PORTRAIT_LOCKED_ACTIVITIES =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     private PhoneOrientationPolicy() {
     }
 
     static void applyBrowsingOrientation(Activity activity) {
         if (activity == null || activity.isFinishing() || activity instanceof PlayerActivity) return;
-        if (!isPhoneSized(activity)) return;
+        if (!isPhoneSized(activity)) {
+            if (PORTRAIT_LOCKED_ACTIVITIES.remove(activity)) {
+                activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            }
+            return;
+        }
 
-        int orientation = FULLSCREEN_ACTIVITIES.contains(activity)
+        boolean fullscreen = FULLSCREEN_ACTIVITIES.contains(activity);
+        int orientation = fullscreen
                 ? ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
                 : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+        if (fullscreen) PORTRAIT_LOCKED_ACTIVITIES.remove(activity);
+        else PORTRAIT_LOCKED_ACTIVITIES.add(activity);
         if (activity.getRequestedOrientation() != orientation) {
             activity.setRequestedOrientation(orientation);
         }
@@ -35,6 +45,7 @@ final class PhoneOrientationPolicy {
     static void enterFullscreenVideo(Activity activity) {
         if (activity == null || activity.isFinishing()) return;
         FULLSCREEN_ACTIVITIES.add(activity);
+        PORTRAIT_LOCKED_ACTIVITIES.remove(activity);
         if (activity.getRequestedOrientation() != ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR) {
             activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
         }
@@ -43,6 +54,8 @@ final class PhoneOrientationPolicy {
     static void exitFullscreenVideo(Activity activity) {
         if (activity == null) return;
         FULLSCREEN_ACTIVITIES.remove(activity);
+        if (isPhoneSized(activity)) PORTRAIT_LOCKED_ACTIVITIES.add(activity);
+        else PORTRAIT_LOCKED_ACTIVITIES.remove(activity);
         int orientation = isPhoneSized(activity)
                 ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
@@ -53,6 +66,7 @@ final class PhoneOrientationPolicy {
 
     static void onActivityDestroyed(Activity activity) {
         FULLSCREEN_ACTIVITIES.remove(activity);
+        PORTRAIT_LOCKED_ACTIVITIES.remove(activity);
     }
 
     static boolean isPhoneSized(Activity activity) {
