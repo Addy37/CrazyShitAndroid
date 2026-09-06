@@ -319,7 +319,7 @@ public class VideoDetailActivity extends Activity {
         });
         portraitFullscreenButton.setOnClickListener(v -> {
             haptic(v);
-            setPortraitFullscreen(!portraitFullscreen);
+            setPortraitFullscreen(!rotatableFullscreen);
         });
         updatePortraitFullscreenButton();
         playerView.hideController();
@@ -1417,13 +1417,14 @@ public class VideoDetailActivity extends Activity {
         portraitFullscreenButton.setVisibility(
                 portraitVideo && portraitOrientation ? View.VISIBLE : View.GONE
         );
+        boolean fullscreen = portraitFullscreen || rotatableFullscreen;
         portraitFullscreenButton.setImageResource(
-                portraitFullscreen
+                fullscreen
                         ? R.drawable.ic_action_fullscreen_exit
                         : R.drawable.ic_action_fullscreen
         );
         portraitFullscreenButton.setContentDescription(
-                portraitFullscreen ? "Exit portrait fullscreen" : "Portrait fullscreen"
+                fullscreen ? "Exit fullscreen" : "Fullscreen"
         );
     }
 
