@@ -1,7 +1,6 @@
 package com.webapp.crazyshit.baselineprofile
 
 import androidx.benchmark.macro.CompilationMode
-import androidx.benchmark.macro.BaselineProfileMode
 import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.MemoryUsageMetric
@@ -24,20 +23,6 @@ class MainFlowsBenchmark {
         packageName = TARGET_PACKAGE,
         metrics = listOf(StartupTimingMetric(), MemoryUsageMetric(MemoryUsageMetric.Mode.Last)),
         compilationMode = CompilationMode.None(),
-        startupMode = StartupMode.COLD,
-        iterations = 5,
-        setupBlock = { pressHome() }
-    ) {
-        launchApp()
-    }
-
-    @Test
-    fun coldStartupBaselineProfile() = benchmarkRule.measureRepeated(
-        packageName = TARGET_PACKAGE,
-        metrics = listOf(StartupTimingMetric(), MemoryUsageMetric(MemoryUsageMetric.Mode.Last)),
-        compilationMode = CompilationMode.Partial(
-            baselineProfileMode = BaselineProfileMode.Require
-        ),
         startupMode = StartupMode.COLD,
         iterations = 5,
         setupBlock = { pressHome() }

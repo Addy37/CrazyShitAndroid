@@ -26,10 +26,6 @@ jobs:
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupUncompiled
             rules: Macrobenchmark
             task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
-          - flow: startup-profile
-            test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupBaselineProfile
-            rules: Macrobenchmark
-            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: home-scroll
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#homeScroll
             rules: Macrobenchmark

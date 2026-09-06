@@ -18,17 +18,4 @@ class BaselineProfileGenerator {
     ) {
         launchApp()
     }
-
-    @Test
-    fun criticalUserJourneys() = baselineProfileRule.collect(
-        packageName = TARGET_PACKAGE,
-        includeInStartupProfile = false
-    ) {
-        launchApp()
-        scrollHome()
-        openAndScrollChaos()
-        search()
-        device.pressBack()
-        openCreatorProfileAndGallery()
-    }
 }

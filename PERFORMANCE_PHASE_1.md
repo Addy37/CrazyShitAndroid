@@ -33,6 +33,19 @@ These are the pre-change `benchmarkRelease` medians from the API 35 CI emulator.
 
 The app does not call `reportFullyDrawn`, so StartupTimingMetric reports time to initial display only. CI emulator timing is noisy and should be used for relative regression checks, not device-level performance claims.
 
+## Post-change measurements
+
+| Flow | Startup display | Frame P50 | Frame P95 | Heap | Anonymous RSS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cold startup, uncompiled | 1,982.7 ms (-33.7%) | n/a | n/a | 11.2 MiB (-42.9%) | 127.4 MiB (-9.7%) |
+| Home scroll | n/a | 322.0 ms (-5.4%) | 755.6 ms (-24.7%) | 9.8 MiB (-64.4%) | 147.7 MiB (-23.6%) |
+| Chaos scroll | n/a | 324.3 ms (+0.8%) | 440.1 ms (-5.5%) | 9.9 MiB (-74.4%) | 146.6 MiB (-25.6%) |
+| Search | n/a | 316.8 ms (+45.9%) | 1,459.3 ms (+60.2%) | 11.1 MiB (-61.1%) | 151.8 MiB (-17.5%) |
+
+Lower values are better. Startup and memory improved in this run. Home and Chaos tail frame time also improved. Search frame time regressed, while its memory fell. Search uses eight live network sources, so this emulator result includes server and response-order variance. It remains a recorded regression signal for a fixed-device follow-up rather than proof of a rendering gain.
+
+The creator profile, gallery, and playback flow was also added as a separate Macrobenchmark. Its first recorded run completed with a 405.6 ms frame P50, 1,697.9 ms frame P95, 10.1 MiB heap, and 148.9 MiB anonymous RSS. It has no pre-change comparison because it was added after the initial baseline snapshot.
+
 ## Audit findings and changes
 
 | Area | Finding | Phase 1 action |
@@ -63,7 +76,7 @@ The app does not call `reportFullyDrawn`, so StartupTimingMetric reports time to
 
 ## Baseline Profile coverage
 
-The app profile and generator cover:
+The checked-in app profile covers:
 
 - cold startup and splash handoff
 - Home and Chaos scrolling
@@ -72,8 +85,15 @@ The app profile and generator cover:
 - gallery media selection
 - video detail and Chaos playback
 
-The release build consumes `app/src/main/baseline-prof.txt`. The generator can refresh the profile from live flows through the `:baselineprofile` module.
+The release build consumes `app/src/main/baseline-prof.txt`. The generator validates startup profile collection through the `:baselineprofile` module. Separate Macrobenchmarks exercise Home, Chaos, search, creator profiles, galleries, and playback without combining every live network flow into one profile-capture process.
 
 ## Verification
 
-Final CI run details, tests, benchmark output, and the release APK are recorded in the pull request.
+- Debug unit tests: 35 passed, 0 failed
+- Release unit tests: 35 passed, 0 failed
+- Debug APK: assembled
+- Release APK: assembled as `CrazyShit-3.0-phase1-release.apk`
+- Android lint: the existing `NotificationCoordinator` notification-permission finding remains; no Phase 1 file added a lint error
+- GitHub artifact uploads: blocked by the repository's full Actions artifact quota, so the assembled APK is not downloadable from this run
+
+Final CI run links and benchmark output are recorded in the pull request.
