@@ -84,8 +84,20 @@ jobs:
                   "has_album_files": "window.albumFiles" in text,
                   "file_hrefs": len(hrefs),
                   "data_file_ids": len(re.findall(r"data-file-id", text, re.I)),
+                  "parser_id_matches": len(re.findall(r"\bid\s*:\s*[0-9]+", text, re.I)),
+                  "quoted_id_matches": len(re.findall(r"[\"']id[\"']\s*:\s*[0-9]+", text, re.I)),
                   "thumbnail_hosts": sorted({urllib.parse.urlparse(html.unescape(url)).hostname for url in re.findall(r"https?://[^\"'<> ]+(?:jpg|jpeg|png|webp|avif)", text, re.I) if urllib.parse.urlparse(html.unescape(url)).hostname})[:12],
               }, sort_keys=True))
+              marker = text.find("window.albumFiles")
+              if marker >= 0:
+                  script_end = text.find("</script>", marker)
+                  snippet = text[marker:script_end if script_end >= 0 else marker + 5000]
+                  keys = sorted(set(re.findall(r"(?:^|[,{])\s*[\"']?([A-Za-z_$][A-Za-z0-9_$]*)[\"']?\s*:", snippet)))
+                  print(json.dumps({
+                      "album": index,
+                      "album_file_keys": keys,
+                      "script_prefix": re.sub(r"https?://[^\"' ]+", "<url>", snippet[:1200]),
+                  }, sort_keys=True))
               if not file_url and hrefs:
                   file_url = urllib.parse.urljoin(result[1], html.unescape(hrefs[0]))
                   file_referer = result[1]
