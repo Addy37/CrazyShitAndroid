@@ -497,7 +497,8 @@ public final class CrazyShitRepository {
         String lower = value.toLowerCase(Locale.US);
         if (!lower.startsWith("http://") && !lower.startsWith("https://")) return false;
         if (lower.startsWith("data:")) return false;
-        if (lower.contains("spacer") || lower.contains("blank.gif") || lower.contains("placeholder")) return false;
+        if (lower.contains("spacer") || lower.contains("blank.gif") ||
+                lower.contains("blank-tile") || lower.contains("placeholder")) return false;
         return !lower.contains("logo") && !lower.contains("sprite") && !lower.contains("avatar");
     }
 

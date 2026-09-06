@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Application;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -93,6 +94,37 @@ public class HomeSourceTest {
         assertEquals(1, items.size());
         assertEquals(url, items.get(0).url);
         assertEquals("https://fapello.com/weekly.jpg", items.get(0).imageUrl);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test public void homeFeedSkipsSizingTileAndUsesRealThumbnail() throws Exception {
+        String page = "https://crazyshit.com/";
+        String media = "https://crazyshit.com/cnt/medias/220038-fighting-fridays-457";
+        String thumbnail = "https://media.crazyshit.com/thumbs/2026/09/b91275e4.jpg";
+        String html = "<div class='container_box'>"
+                + "<div class='row heading'><h3 class='title'>today's crazy shit</h3></div>"
+                + "<div class='row tiles'><div class='tile'>"
+                + "<a href='" + media + "' title='FIGHTING FRIDAYS #457' class='thumb'>"
+                + "<img src='https://static.crazyshit.com/static/images/blank-tile.png' class='size-helper'>"
+                + "<div class='image-container'><img src='" + thumbnail
+                + "' alt='FIGHTING FRIDAYS #457' class='image-thumb'></div></a>"
+                + "<div class='meta'><h3 class='title'><a href='" + media
+                + "'>FIGHTING FRIDAYS #457</a></h3>"
+                + "<div class='stat views'><span>25,900</span></div>"
+                + "<div class='stat comments'><span>17</span></div></div>"
+                + "</div></div></div>";
+
+        CrazyShitRepository repository = new CrazyShitRepository();
+        Method parse = CrazyShitRepository.class.getDeclaredMethod(
+                "parseHomeFeed", org.jsoup.nodes.Document.class, int.class);
+        parse.setAccessible(true);
+        List<NativeContentItem> items = (List<NativeContentItem>) parse.invoke(
+                repository, Jsoup.parse(html, page), 1);
+
+        assertEquals(2, items.size());
+        assertTrue(items.get(0).isSection());
+        assertEquals(media, items.get(1).url);
+        assertEquals(thumbnail, items.get(1).imageUrl);
     }
 
 }
