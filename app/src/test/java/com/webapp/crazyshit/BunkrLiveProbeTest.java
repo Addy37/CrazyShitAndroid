@@ -6,11 +6,10 @@ import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 
-import androidx.test.core.app.ApplicationProvider;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import java.net.HttpURLConnection;
@@ -27,7 +26,7 @@ public final class BunkrLiveProbeTest {
 
     @Test
     public void liveSearchAlbumThumbnailAndVideoPipeline() throws Exception {
-        Context context = ApplicationProvider.getApplicationContext();
+        Context context = RuntimeEnvironment.getApplication();
         BunkrRepository repository = new BunkrRepository();
 
         List<NativeContentItem> albums = repository.searchAlbums(context, "Omegle", 1);
