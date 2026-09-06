@@ -1,0 +1,44 @@
+name: Bunkr Payload Probe
+
+on:
+  push:
+    branches: [ fix/bunkr-integration ]
+    paths:
+      - ".github/workflows/bunkr-payload-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  payload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read live album payload shape
+        run: |
+          python3 - <<'PY'
+          import json
+          import re
+          import urllib.request
+
+          url = "https://bunkr.cr/a/sJUZqUC8?page=1"
+          request = urllib.request.Request(url, headers={
+              "User-Agent": "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36",
+              "Referer": "https://balbums.st/",
+          })
+          with urllib.request.urlopen(request, timeout=20) as response:
+              text = response.read(14 * 1024 * 1024).decode("utf-8", "replace")
+
+          occurrences = [match.start() for match in re.finditer(r"window\.albumFiles", text, re.I)]
+          print(json.dumps({"bytes": len(text), "occurrences": occurrences}))
+          for index, position in enumerate(occurrences):
+              sample = text[max(0, position - 160):position + 1800]
+              print("CONTEXT_%d=%s" % (index, json.dumps(sample)))
+
+          for pattern in [
+              r"window\.albumFiles\s*=\s*([^;\n]{0,500})",
+              r"albumFiles\s*=\s*([^;\n]{0,500})",
+              r"album[_-]?files\s*[:=]\s*([^;\n]{0,500})",
+          ]:
+              matches = re.findall(pattern, text, re.I)
+              print("PATTERN=%s MATCHES=%s" % (pattern, json.dumps(matches[:10])))
+          PY
