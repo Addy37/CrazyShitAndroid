@@ -13,17 +13,19 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      APP_VERSION_NAME: 3.0.0-phase1-beta.1
-      APP_VERSION_CODE: 3000001
-      APK_NAME: CrazyShit-3.0.0-phase1-beta.1.apk
-      RELEASE_TAG: v3.0.0-phase1-beta.1
+      APP_VERSION_NAME: 3.0.0-phase1.1-beta.1
+      APP_VERSION_CODE: 3000002
+      APK_NAME: CrazyShit-3.0.0-phase1.1-beta.1.apk
+      RELEASE_TAG: v3.0.0-phase1.1-beta.1
       RELEASE_NOTES: |
-        CrazyShit 3.0 Performance Phase 1.
+        CrazyShit 3.0 Performance Phase 1.1.
 
-        This prerelease improves startup, feed and thumbnail work, pagination, restored search state, Chaos player lifecycle, and memory use without changing the UI, navigation, or feature set.
+        This prerelease retains the Phase 1 performance work and fixes black video thumbnails on Home. The Home parser now ignores CrazyShit's blank sizing tile and uses the real thumbnail URL directly, without restoring duplicate page requests.
 
         Validation:
-        - 35 release unit tests passed
+        - 36 release unit tests passed
+        - Live CrazyShit Home markup verified
+        - Home parser regression fixture passed
         - Release APK signature verified
         - Macrobenchmarks passed for startup, Home, Chaos, search, creator profiles, galleries, and playback
         - Startup profile generation passed
@@ -93,6 +95,6 @@ jobs:
             "$APK_NAME" \
             SHA256SUMS.txt \
             --target "$GITHUB_SHA" \
-            --title "CrazyShit 3.0 Performance Phase 1" \
+            --title "CrazyShit 3.0 Performance Phase 1.1" \
             --notes "$RELEASE_NOTES" \
             --prerelease

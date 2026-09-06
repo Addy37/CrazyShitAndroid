@@ -89,11 +89,28 @@ The release build consumes `app/src/main/baseline-prof.txt`. The generator valid
 
 ## Verification
 
-- Debug unit tests: 35 passed, 0 failed
-- Release unit tests: 35 passed, 0 failed
+- Debug unit tests: 36 passed, 0 failed
+- Release unit tests: 36 passed, 0 failed
 - Debug APK: assembled
 - Release APK: assembled as `CrazyShit-3.0-phase1-release.apk`
 - Android lint: the existing `NotificationCoordinator` notification-permission finding remains; no Phase 1 file added a lint error
 - GitHub artifact uploads: blocked by the repository's full Actions artifact quota, so the assembled APK is not downloadable from this run
 
 Final CI run links and benchmark output are recorded in the pull request.
+
+## Phase 1.1 Home thumbnail regression
+
+The live Home markup places `https://static.crazyshit.com/static/images/blank-tile.png`
+before each real `/thumbs/...jpg` image. The feed parser accepted that sizing tile as a
+thumbnail. Phase 1 then trusted the nonblank URL and correctly skipped its heavier page
+resolver, leaving the card image black.
+
+Phase 1.1 rejects the specific `blank-tile` sizing asset during feed parsing. The parser
+then maps the real thumbnail from the same Home response. Glide keeps using its shared
+memory and disk caches, view-sized decoding, lifecycle cancellation, and direct
+asynchronous request. No delay, retry loop, extra page request, or adapter-wide refresh
+was added.
+
+The regression fixture mirrors the current Home card markup and verifies that the sizing
+tile is skipped in favor of the real thumbnail. Debug and release suites now contain 36
+tests each.
