@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 /** Balbums album discovery plus native Bunkr album and playable-file support. */
 public final class BunkrRepository {
     public static final String INDEX = "https://balbums.st/";
+    public static final String DEFAULT_PAGE_ORIGIN = "https://bunkr.fi";
     public static final String MOST_FILES_ALBUMS =
             INDEX + "?search=&mode=broad&per=20&sort=files&page=1";
 
@@ -35,6 +36,7 @@ public final class BunkrRepository {
             "https://apidl.bunkr.ru/api/_001_v2"
     };
     private static final String[] PAGE_ORIGINS = {
+            DEFAULT_PAGE_ORIGIN,
             "https://bunkr.cr",
             "https://bunkr.site",
             "https://bunkr.ph"
@@ -86,6 +88,9 @@ public final class BunkrRepository {
     private static final Pattern DOUBLE_THUMB_EXTENSION = Pattern.compile(
             "(?i)\\.(?:mp4|m4v|webm|mov|mkv|ts|m3u8|mpd|jpe?g|png|webp|gif|bmp|avif|heic|heif)" +
                     "(\\.(?:jpe?g|png|webp|gif|avif))$"
+    );
+    private static final Pattern BUNKR_PAGE_HOST = Pattern.compile(
+            "(?i)(?:[a-z0-9-]+\\.)*bunkr+\\.[a-z0-9-]+"
     );
 
     public List<NativeContentItem> fetchAlbums(Context context, int page) throws IOException {
@@ -351,7 +356,7 @@ public final class BunkrRepository {
 
     public static boolean isBunkrUrl(String url) {
         String host = host(url);
-        return host.matches("(?:app\\.)?bunkr+\\.[a-z0-9]+") || host.contains("bunkr.");
+        return BUNKR_PAGE_HOST.matcher(host).matches();
     }
 
     public static boolean isAlbumUrl(String url) {
@@ -952,7 +957,7 @@ public final class BunkrRepository {
             URI uri = new URI(url);
             return uri.getScheme() + "://" + uri.getHost();
         } catch (Exception ignored) {
-            return "https://bunkr.cr";
+            return DEFAULT_PAGE_ORIGIN;
         }
     }
 

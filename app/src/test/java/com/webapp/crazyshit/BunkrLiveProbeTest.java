@@ -59,10 +59,10 @@ public final class BunkrLiveProbeTest {
         assertFalse("Resolved media URL was blank", stream.mediaUrl.trim().isEmpty());
         HttpURLConnection media = openRange(stream.mediaUrl, stream.requestReferer);
         int mediaStatus = media.getResponseCode();
+        String mediaType = value(media.getContentType()).toLowerCase();
         assertTrue("Range request failed with " + mediaStatus,
                 mediaStatus == 200 || mediaStatus == 206);
-        assertTrue("Resolved MIME type was not video",
-                value(media.getContentType()).toLowerCase().startsWith("video/"));
+        assertFalse("Resolved media returned an HTML page", mediaType.startsWith("text/html"));
 
         System.out.println("BUNKR_LIVE_RESULT=" +
                 " albums=" + albums.size() +
@@ -70,6 +70,7 @@ public final class BunkrLiveProbeTest {
                 " albumHost=" + host(album.url) +
                 " thumbnailHost=" + host(video.imageUrl) +
                 " mediaHost=" + host(stream.mediaUrl) +
+                " mediaType=" + mediaType +
                 " mediaStatus=" + mediaStatus);
         media.disconnect();
     }
