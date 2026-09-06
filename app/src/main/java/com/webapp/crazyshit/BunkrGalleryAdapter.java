@@ -260,7 +260,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private GlideUrl withHeaders(String imageUrl, String pageUrl) {
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
                 .addHeader("User-Agent", USER_AGENT)
-                .addHeader("Referer", pageUrl == null ? "https://bunkr.cr/" : pageUrl)
+                .addHeader("Referer", pageUrl == null
+                        ? BunkrRepository.DEFAULT_PAGE_ORIGIN + "/" : pageUrl)
                 .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
         try {
             String cookies = CookieManager.getInstance().getCookie(imageUrl);
