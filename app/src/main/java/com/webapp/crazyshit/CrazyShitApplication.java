@@ -37,7 +37,13 @@ public final class CrazyShitApplication extends Application {
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
+            public void onActivityPreCreated(Activity activity, Bundle savedInstanceState) {
+                PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+            }
+
+            @Override
             public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
+                PhoneOrientationPolicy.applyBrowsingOrientation(activity);
                 UiFoundationCoordinator.onActivityCreated(activity, savedInstanceState);
             }
 
@@ -48,6 +54,7 @@ public final class CrazyShitApplication extends Application {
 
             @Override
             public void onActivityResumed(Activity activity) {
+                PhoneOrientationPolicy.applyBrowsingOrientation(activity);
                 NotificationCoordinator.onAppForeground(activity);
                 UiFoundationCoordinator.onActivityResumed(activity);
             }
@@ -68,6 +75,7 @@ public final class CrazyShitApplication extends Application {
 
             @Override
             public void onActivityDestroyed(Activity activity) {
+                PhoneOrientationPolicy.onActivityDestroyed(activity);
                 UiFoundationCoordinator.onActivityDestroyed(activity);
             }
         });

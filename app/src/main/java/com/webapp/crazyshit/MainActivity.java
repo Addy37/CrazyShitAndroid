@@ -447,7 +447,7 @@ public class MainActivity extends Activity {
                 videoFrame.setVisibility(View.VISIBLE);
                 webFrame.setVisibility(View.GONE);
                 getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
+                PhoneOrientationPolicy.enterFullscreenVideo(MainActivity.this);
                 setFullscreenUi(true);
                 configurePip(true);
                 updateBackCallback();
@@ -1179,7 +1179,7 @@ public class MainActivity extends Activity {
         customViewCallback = null;
         configurePip(false);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        PhoneOrientationPolicy.exitFullscreenVideo(this);
         setFullscreenUi(false);
         updateBackCallback();
     }
