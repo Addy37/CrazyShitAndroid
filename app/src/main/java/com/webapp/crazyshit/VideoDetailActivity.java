@@ -319,7 +319,7 @@ public class VideoDetailActivity extends Activity {
         });
         portraitFullscreenButton.setOnClickListener(v -> {
             haptic(v);
-            setPortraitFullscreen(!rotatableFullscreen);
+            setRotatableFullscreen(!rotatableFullscreen);
         });
         updatePortraitFullscreenButton();
         playerView.hideController();
@@ -1415,7 +1415,7 @@ public class VideoDetailActivity extends Activity {
         boolean portraitOrientation = getResources().getConfiguration().orientation
                 != Configuration.ORIENTATION_LANDSCAPE;
         portraitFullscreenButton.setVisibility(
-                portraitVideo && portraitOrientation ? View.VISIBLE : View.GONE
+                portraitOrientation ? View.VISIBLE : View.GONE
         );
         boolean fullscreen = portraitFullscreen || rotatableFullscreen;
         portraitFullscreenButton.setImageResource(
@@ -1433,7 +1433,7 @@ public class VideoDetailActivity extends Activity {
         boolean portrait = getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE;
         boolean enabled = getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean("swipe_down_minimize", true);
-        playerContainer.setSwipeEnabled(portrait && enabled && !minimizing && !portraitFullscreen);
+        playerContainer.setSwipeEnabled(portrait && enabled && !minimizing && !rotatableFullscreen);
     }
 
     private void setFullscreenUi(boolean enabled) {
