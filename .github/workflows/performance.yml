@@ -25,24 +25,31 @@ jobs:
           - flow: startup
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupUncompiled
             rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: startup-profile
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#coldStartupBaselineProfile
             rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: home-scroll
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#homeScroll
             rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: chaos-scroll
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#chaosScroll
             rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: search
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#searchFlow
             rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: creator-gallery-playback
             test: com.webapp.crazyshit.baselineprofile.MainFlowsBenchmark#creatorGalleryAndPlayback
             rules: Macrobenchmark
+            task: :baselineprofile:connectedBenchmarkReleaseAndroidTest
           - flow: baseline-profile
             test: com.webapp.crazyshit.baselineprofile.BaselineProfileGenerator
             rules: BaselineProfile
+            task: :baselineprofile:connectedNonMinifiedReleaseAndroidTest
 
     steps:
       - uses: actions/checkout@v6
@@ -74,15 +81,10 @@ jobs:
           profile: pixel_6
           disable-animations: true
           disk-size: 4096M
-          script: |
-            if [ "${{ matrix.rules }}" = "BaselineProfile" ]; then
-              benchmark_task=:baselineprofile:connectedNonMinifiedReleaseAndroidTest
-            else
-              benchmark_task=:baselineprofile:connectedBenchmarkReleaseAndroidTest
-            fi
-            gradle --no-daemon "$benchmark_task" \
-              "-Pandroid.testInstrumentationRunnerArguments.class=${{ matrix.test }}" \
-              "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=${{ matrix.rules }}"
+          script: >-
+            gradle --no-daemon ${{ matrix.task }}
+            "-Pandroid.testInstrumentationRunnerArguments.class=${{ matrix.test }}"
+            "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=${{ matrix.rules }}"
 
       - name: Print benchmark measurements
         if: always()
