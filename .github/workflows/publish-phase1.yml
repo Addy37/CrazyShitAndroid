@@ -27,6 +27,7 @@ jobs:
         - Live CrazyShit Home markup verified
         - Phone browsing portrait policy included
         - Full-screen video sensor rotation retained
+        - Portrait state restored after full-screen exit
         - Home parser regression fixture passed
         - Release APK signature verified
         - Macrobenchmarks passed for startup, Home, Chaos, search, creator profiles, galleries, and playback
