@@ -1,0 +1,52 @@
+name: Home Thumbnail Markup Probe
+
+on:
+  push:
+    branches: [ perf/3.0-phase-1 ]
+    paths:
+      - ".github/workflows/home-thumbnail-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect current Home image attributes
+        run: |
+          python3 - <<'PY'
+          import html
+          import re
+          import urllib.parse
+          import urllib.request
+
+          base = "https://crazyshit.com/"
+          headers = {
+              "User-Agent": "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+              "Referer": base,
+          }
+
+          def fetch(url):
+              request = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  return response.read().decode("utf-8", "replace")
+
+          source = fetch(base)
+          links = re.findall(r'href=["\']([^"\']*/cnt/medias/[^"\']+)["\']', source, re.I)
+          first = urllib.parse.urljoin(base, html.unescape(links[0]))
+          marker = links[0]
+          position = source.find(marker)
+          print("HOME_CARD_BEGIN")
+          print(source[max(0, position - 2500):position + 2500])
+          print("HOME_CARD_END")
+          detail = fetch(first)
+          print("DETAIL_URL", first)
+          for match in re.finditer(
+              r'<(?:meta|img|video|source)\b[^>]*(?:og:image|twitter:image|poster|data-src|data-original|data-lazy-src|srcset|src)[^>]*>',
+              detail,
+              re.I,
+          ):
+              print("DETAIL_IMAGE", match.group(0)[:1200])
+          PY
