@@ -17,8 +17,8 @@ android {
         buildConfigField("boolean", "PRIVATE_DISTRIBUTION", "true")
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_000_000
-        versionName = System.getenv("APP_VERSION_NAME") ?: "3.0.0"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_000_001
+        versionName = System.getenv("APP_VERSION_NAME") ?: "3.0.1"
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
