@@ -164,6 +164,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         chaosView.onConfigurationChanged();
     }
 
+    public boolean exitChaosFullscreenForBack() {
+        return chaosView.exitSensorFullscreenForBack();
+    }
+
     public void close() {
         chaosView.close();
         browseArtworkResolver.close();
