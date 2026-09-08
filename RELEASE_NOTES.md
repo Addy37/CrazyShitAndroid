@@ -1,8 +1,6 @@
-# CrazyShit 2.12.1
+# CrazyShit 3.0.0
 
-- Restore the v2.10.0 Home presentation with the app icon, Home title, CrazyShit list subtitle and compact horizontal video rows.
-- Bring back CrazyShit section headers such as TODAY'S CRAZY SHIT, including views and comment counts in the compact list.
-- Remove the All, CrazyShit, EFukt and Fapzone source pills from Home while keeping the newer source integrations available elsewhere in the app.
-- Restore the smaller outlined v2.10 bottom navigation pill and yellow active-tab treatment.
-- Keep the current 2.12 search, Fapzone, WikiFeet, playback, navigation and performance improvements intact.
-- Preserve later Home view-style choices after the one-time migration to the classic List layout.
+- Add compact source badges to Fapzone gallery thumbnails for Bunkr, Fapello, WikiFeet and WikiFeet X media.
+- Add sensor-triggered fullscreen for active Chaos videos and opened Fapzone media while normal app screens remain portrait locked.
+- Preserve the current Chaos and Fapzone paging position, playback state and image gestures through rotation.
+- Include the 3.0 performance work, expanded Fapzone sources and the restored classic Home presentation.
