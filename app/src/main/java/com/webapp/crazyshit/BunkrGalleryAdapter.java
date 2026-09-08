@@ -130,12 +130,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 7
         ));
         source.setElevation(dp(parent, 5));
+        source.setAlpha(0.85f);
         FrameLayout.LayoutParams sourceParams = new FrameLayout.LayoutParams(
-                dp(parent, 30),
-                dp(parent, 30)
+                dp(parent, 26),
+                dp(parent, 26)
         );
-        sourceParams.gravity = Gravity.TOP | Gravity.START;
-        sourceParams.setMargins(dp(parent, 6), dp(parent, 6), 0, 0);
+        sourceParams.gravity = Gravity.BOTTOM | Gravity.START;
+        sourceParams.setMargins(dp(parent, 6), 0, 0, dp(parent, 6));
         tile.addView(source, sourceParams);
 
         ImageView sourceIcon = new ImageView(parent.getContext());
@@ -152,11 +153,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         sourceVariant.setIncludeFontPadding(false);
         sourceVariant.setText("X");
         sourceVariant.setTextColor(Color.WHITE);
-        sourceVariant.setTextSize(8);
+        sourceVariant.setTextSize(7);
         sourceVariant.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         FrameLayout.LayoutParams variantParams = new FrameLayout.LayoutParams(
-                dp(parent, 13),
-                dp(parent, 13)
+                dp(parent, 12),
+                dp(parent, 12)
         );
         variantParams.gravity = Gravity.BOTTOM | Gravity.END;
         source.addView(sourceVariant, variantParams);
