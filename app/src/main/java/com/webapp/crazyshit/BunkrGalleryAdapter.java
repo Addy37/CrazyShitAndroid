@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -11,6 +12,7 @@ import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -28,6 +30,7 @@ import com.bumptech.glide.request.target.Target;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /** Dense mixed-media grid used for Bunkr albums. */
@@ -120,6 +123,24 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         image.setBackgroundColor(Color.rgb(20, 20, 23));
         tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
+        TextView source = new TextView(parent.getContext());
+        GradientDrawable sourceBackground = new GradientDrawable();
+        sourceBackground.setShape(GradientDrawable.OVAL);
+        sourceBackground.setColor(Color.argb(205, 0, 0, 0));
+        source.setBackground(sourceBackground);
+        source.setElevation(dp(parent, 5));
+        source.setGravity(Gravity.CENTER);
+        source.setIncludeFontPadding(false);
+        source.setTextSize(12);
+        source.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        FrameLayout.LayoutParams sourceParams = new FrameLayout.LayoutParams(
+                dp(parent, 26),
+                dp(parent, 26)
+        );
+        sourceParams.gravity = Gravity.TOP | Gravity.START;
+        sourceParams.setMargins(dp(parent, 6), dp(parent, 6), 0, 0);
+        tile.addView(source, sourceParams);
+
         FrameLayout play = new FrameLayout(parent.getContext());
         GradientDrawable playBackground = new GradientDrawable();
         playBackground.setCornerRadius(dp(parent, 8));
@@ -140,7 +161,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         playIcon.setPadding(dp(parent, 11), dp(parent, 11), dp(parent, 9), dp(parent, 11));
         play.addView(playIcon, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(tile, image, play);
+        return new Holder(tile, image, source, play);
     }
 
     @Override
@@ -150,8 +171,15 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ? aspectRatios.getOrDefault(item.url, 1f)
                 : 1f);
         holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
+        SourceBadge source = sourceBadge(item);
+        holder.source.setVisibility(source == null ? View.GONE : View.VISIBLE);
+        if (source != null) {
+            holder.source.setText(source.label);
+            holder.source.setTextColor(source.color);
+        }
         holder.itemView.setContentDescription(
-                (item.isVideo() ? "Video, " : "Photo, ") + item.title
+                (item.isVideo() ? "Video, " : "Photo, ") + item.title +
+                        (source == null ? "" : ", source " + source.name)
         );
 
         if (item.imageUrl == null || item.imageUrl.isEmpty()) {
@@ -280,15 +308,53 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         return item == null ? null : item.url;
     }
 
+    private SourceBadge sourceBadge(NativeContentItem item) {
+        if (item == null) return null;
+        if (FapelloRepository.isFapelloUrl(item.url)) {
+            return new SourceBadge("F", "Fapello", Color.rgb(255, 92, 138));
+        }
+        if (WikiFeetRepository.isWikiFeetUrl(item.url) ||
+                WikiFeetRepository.isWikiFeetUrl(item.uploader)) {
+            if (containsIgnoreCase(item.uploader, "wikifeetx") ||
+                    containsIgnoreCase(item.views, "wikifeet x") ||
+                    containsIgnoreCase(item.description, "wikifeet x")) {
+                return new SourceBadge("X", "WikiFeet X", Color.rgb(206, 147, 216));
+            }
+            return new SourceBadge("W", "WikiFeet", Color.rgb(100, 181, 246));
+        }
+        if (BunkrRepository.isBunkrUrl(item.url)) {
+            return new SourceBadge("B", "Bunkr", Color.rgb(255, 179, 0));
+        }
+        return null;
+    }
+
+    private boolean containsIgnoreCase(String value, String query) {
+        return value != null && value.toLowerCase(Locale.US).contains(query);
+    }
+
+    private static final class SourceBadge {
+        final String label;
+        final String name;
+        final int color;
+
+        SourceBadge(String label, String name, int color) {
+            this.label = label;
+            this.name = name;
+            this.color = color;
+        }
+    }
+
     static final class Holder extends RecyclerView.ViewHolder {
         final AspectRatioFrameLayout tile;
         final ImageView image;
+        final TextView source;
         final View play;
 
-        Holder(AspectRatioFrameLayout itemView, ImageView image, View play) {
+        Holder(AspectRatioFrameLayout itemView, ImageView image, TextView source, View play) {
             super(itemView);
             this.tile = itemView;
             this.image = image;
+            this.source = source;
             this.play = play;
         }
     }
