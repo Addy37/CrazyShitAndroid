@@ -38,21 +38,22 @@ final class SensorMediaOrientationListener implements SensorEventListener {
     private Position stablePosition;
     private Position pendingPosition;
 
-    private final Runnable dispatchPending = () -> {
-        if (!enabled || pendingPosition == null) return;
-        Position current = classify(lastDegrees);
-        if (isFlat() || current != pendingPosition) {
-            clearPending();
-            return;
-        }
-        stablePosition = pendingPosition;
-        pendingPosition = null;
-        callback.onPositionChanged(stablePosition);
-    };
+    private final Runnable dispatchPending;
 
     SensorMediaOrientationListener(Activity activity, Callback callback) {
         this.activity = activity;
         this.callback = callback;
+        dispatchPending = () -> {
+            if (!enabled || pendingPosition == null) return;
+            Position current = classify(lastDegrees);
+            if (isFlat() || current != pendingPosition) {
+                clearPending();
+                return;
+            }
+            stablePosition = pendingPosition;
+            pendingPosition = null;
+            this.callback.onPositionChanged(stablePosition);
+        };
         sensorManager = (SensorManager) activity.getSystemService(Context.SENSOR_SERVICE);
         accelerometer = sensorManager == null
                 ? null
