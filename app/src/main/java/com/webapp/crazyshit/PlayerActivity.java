@@ -6,7 +6,6 @@ import android.app.PictureInPictureParams;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -75,6 +74,9 @@ public class PlayerActivity extends Activity {
     private boolean failureShown;
     private boolean minimizing;
     private boolean dragMinimize;
+    private boolean resumed;
+    private boolean sensorFullscreen;
+    private SensorMediaOrientationListener orientationListener;
     private float dragStartY;
     private float dragLastY;
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
@@ -101,7 +103,8 @@ public class PlayerActivity extends Activity {
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
+        PhoneOrientationPolicy.applyBrowsingOrientation(this);
+        orientationListener = new SensorMediaOrientationListener(this, this::onPhysicalOrientation);
 
         buildUi();
         buildPlayer();
@@ -679,6 +682,10 @@ public class PlayerActivity extends Activity {
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        if (orientationListener != null) {
+            if (isInPictureInPictureMode) orientationListener.disable();
+            else if (resumed) orientationListener.enable();
+        }
         resetMinimizeTransform();
         if (gestureLabel != null) gestureLabel.setVisibility(View.GONE);
         if (playerView != null) playerView.setUseController(!isInPictureInPictureMode);
@@ -726,6 +733,16 @@ public class PlayerActivity extends Activity {
                     View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                     : View.SYSTEM_UI_FLAG_VISIBLE);
+        }
+    }
+
+    private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
+        if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
+            sensorFullscreen = true;
+            PhoneOrientationPolicy.enterSensorFullscreen(this);
+        } else if (sensorFullscreen) {
+            sensorFullscreen = false;
+            PhoneOrientationPolicy.exitFullscreenVideo(this);
         }
     }
 
@@ -792,6 +809,22 @@ public class PlayerActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        resumed = true;
+        if (orientationListener != null && !isInPictureInPictureMode()) {
+            orientationListener.enable();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        resumed = false;
+        if (orientationListener != null) orientationListener.disable();
+        super.onPause();
+    }
+
+    @Override
     protected void onStop() {
         savePosition();
         recordHistory(false);
@@ -801,6 +834,7 @@ public class PlayerActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (orientationListener != null) orientationListener.disable();
         if (Build.VERSION.SDK_INT >= 33 && systemBackCallback != null) {
             try {
                 getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(systemBackCallback);
