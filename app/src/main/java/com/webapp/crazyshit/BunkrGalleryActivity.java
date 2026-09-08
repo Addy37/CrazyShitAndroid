@@ -2,14 +2,18 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -79,6 +83,10 @@ public final class BunkrGalleryActivity extends Activity {
     private TextView itemMetaView;
     private ProgressBar initialLoading;
     private boolean chromeVisible = true;
+    private boolean restoreChromeAfterLandscape;
+    private boolean landscapeFullscreen;
+    private boolean sensorFullscreen;
+    private SensorMediaOrientationListener orientationListener;
     private ExoPlayer player;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
@@ -90,6 +98,7 @@ public final class BunkrGalleryActivity extends Activity {
         super.onCreate(state);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
+        orientationListener = new SensorMediaOrientationListener(this, this::onPhysicalOrientation);
 
         sessionId = value(getIntent().getStringExtra(EXTRA_SESSION_ID));
         albumTitle = value(getIntent().getStringExtra(EXTRA_TITLE));
@@ -134,6 +143,7 @@ public final class BunkrGalleryActivity extends Activity {
         }
 
         buildUi();
+        applyViewerOrientation(getResources().getConfiguration().orientation);
         if (snapshot == null || snapshot.items.isEmpty()) {
             loadInitialPage();
         } else {
@@ -619,6 +629,62 @@ public final class BunkrGalleryActivity extends Activity {
         }
     }
 
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyViewerOrientation(newConfig.orientation);
+    }
+
+    private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
+        if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
+            sensorFullscreen = true;
+            PhoneOrientationPolicy.enterSensorFullscreen(this);
+        } else if (sensorFullscreen) {
+            sensorFullscreen = false;
+            PhoneOrientationPolicy.exitFullscreenVideo(this);
+        }
+    }
+
+    private void applyViewerOrientation(int orientation) {
+        boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
+        if (topBar == null || bottomBar == null) {
+            setSystemBars(landscape);
+            return;
+        }
+        if (landscape && !landscapeFullscreen) {
+            landscapeFullscreen = true;
+            restoreChromeAfterLandscape = chromeVisible;
+            if (chromeVisible) setChromeVisible(false);
+        } else if (!landscape && landscapeFullscreen) {
+            landscapeFullscreen = false;
+            if (restoreChromeAfterLandscape) setChromeVisible(true);
+            restoreChromeAfterLandscape = false;
+        }
+        setSystemBars(landscape);
+    }
+
+    private void setSystemBars(boolean fullscreen) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller == null) return;
+            int types = WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars();
+            if (fullscreen) {
+                controller.hide(types);
+                controller.setSystemBarsBehavior(
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                );
+            } else {
+                controller.show(types);
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(fullscreen
+                    ? View.SYSTEM_UI_FLAG_FULLSCREEN |
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    : View.SYSTEM_UI_FLAG_VISIBLE);
+        }
+    }
+
     private void showMenu(View anchor) {
         NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
         PopupMenu menu = new PopupMenu(this, anchor);
@@ -692,7 +758,12 @@ public final class BunkrGalleryActivity extends Activity {
         return filtered;
     }
 
-    @Override protected void onResume() { super.onResume(); recoveryResumed = true; }
+    @Override
+    protected void onResume() {
+        super.onResume();
+        recoveryResumed = true;
+        if (orientationListener != null) orientationListener.enable();
+    }
 
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putString("session", sessionId);
@@ -709,6 +780,7 @@ public final class BunkrGalleryActivity extends Activity {
     @Override
     protected void onPause() {
         recoveryResumed = false;
+        if (orientationListener != null) orientationListener.disable();
         BunkrGallerySessionStore.persist(this, sessionId);
         releasePlayer();
         super.onPause();
@@ -717,6 +789,7 @@ public final class BunkrGalleryActivity extends Activity {
     @Override
     protected void onDestroy() {
         generation++;
+        if (orientationListener != null) orientationListener.disable();
         releasePlayer();
         pageIo.shutdownNow();
         mediaIo.shutdownNow();

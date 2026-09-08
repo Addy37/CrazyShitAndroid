@@ -111,6 +111,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Set<String> resolveRetried = new HashSet<>();
     private final Random random = new Random();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
+    private final SensorMediaOrientationListener orientationListener;
 
     private ViewPager2 pager;
     private ChaosAdapter adapter;
@@ -122,6 +123,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean poolLoading;
     private boolean autoAdvancePending;
     private boolean chaosMuted;
+    private boolean sensorFullscreen;
     private int autoAdvanceFrom = -1;
     private int consecutiveDryLoads;
     private int selectedPosition;
@@ -131,6 +133,7 @@ public final class ChaosFeedView extends FrameLayout {
         super(activity);
         this.activity = activity;
         this.host = host;
+        orientationListener = new SensorMediaOrientationListener(activity, this::onPhysicalOrientation);
         setBackgroundColor(Color.BLACK);
         loadRecent();
         loadHidden();
@@ -195,6 +198,8 @@ public final class ChaosFeedView extends FrameLayout {
             pauseAll();
             releaseVisiblePlayers();
         }
+        updateOrientationListener();
+        if (!active) exitSensorFullscreen();
     }
 
     public void onHostResume() {
@@ -204,6 +209,7 @@ public final class ChaosFeedView extends FrameLayout {
             playSelected();
             syncVisibleChrome();
         }
+        updateOrientationListener();
     }
 
     public void onHostPause() {
@@ -211,6 +217,7 @@ public final class ChaosFeedView extends FrameLayout {
         pauseAll();
         releaseVisiblePlayers();
         flushRecent();
+        orientationListener.disable();
     }
 
     public void onConfigurationChanged() {
@@ -231,6 +238,8 @@ public final class ChaosFeedView extends FrameLayout {
     resolveRetried.clear();
     // Keep sessionUrls so Refresh cannot immediately deal the same clips back again.
     items.clear();
+    updateOrientationListener();
+    exitSensorFullscreen();
     adapter.notifyDataSetChanged();
     initialProgress.setVisibility(View.VISIBLE);
     empty.setVisibility(View.GONE);
@@ -240,6 +249,8 @@ public final class ChaosFeedView extends FrameLayout {
 }
 
     public void close() {
+        orientationListener.disable();
+        exitSensorFullscreen();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         pauseAll();
         releaseVisiblePlayers();
@@ -294,6 +305,7 @@ public final class ChaosFeedView extends FrameLayout {
                 empty.setVisibility(View.GONE);
                 resolveAhead(selectedPosition);
                 if (active && hostResumed) playSelected();
+                updateOrientationListener();
                 tryPendingAutoAdvance();
             }
 
@@ -635,6 +647,8 @@ public final class ChaosFeedView extends FrameLayout {
         Toast.makeText(activity, "Won't show this clip again.", Toast.LENGTH_SHORT).show();
 
         if (items.isEmpty()) {
+            updateOrientationListener();
+            exitSensorFullscreen();
             selectedPosition = 0;
             initialProgress.setVisibility(View.VISIBLE);
             loadMorePool();
@@ -647,6 +661,33 @@ public final class ChaosFeedView extends FrameLayout {
         markSeen(target);
         resolveAhead(target);
         playSelected();
+    }
+
+    private void updateOrientationListener() {
+        if (active && hostResumed && !items.isEmpty()) orientationListener.enable();
+        else orientationListener.disable();
+    }
+
+    private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
+        if (!active || !hostResumed || items.isEmpty()) return;
+        if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
+            sensorFullscreen = true;
+            PhoneOrientationPolicy.enterSensorFullscreen(activity);
+        } else if (sensorFullscreen) {
+            exitSensorFullscreen();
+        }
+    }
+
+    private void exitSensorFullscreen() {
+        if (!sensorFullscreen) return;
+        sensorFullscreen = false;
+        PhoneOrientationPolicy.exitFullscreenVideo(activity);
+    }
+
+    boolean exitSensorFullscreenForBack() {
+        if (!sensorFullscreen) return false;
+        exitSensorFullscreen();
+        return true;
     }
 
     private void setChaosMuted(boolean muted) {
