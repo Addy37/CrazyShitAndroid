@@ -1,5 +1,3 @@
-# CrazyShit 3.0.1
+# CrazyShit 3.0.2
 
-- Replace the temporary letter badges with the Bunkr, Fapello and WikiFeet site icons.
-- Mark WikiFeet X media with the WikiFeet icon plus a compact X indicator.
-- Keep the existing Fapzone gallery layout, paging, video markers and media gestures unchanged.
+- Make Fapzone source icons smaller, move them to the bottom-left, and add slight transparency.
