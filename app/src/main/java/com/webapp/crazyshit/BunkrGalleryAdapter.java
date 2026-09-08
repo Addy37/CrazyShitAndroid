@@ -123,23 +123,43 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         image.setBackgroundColor(Color.rgb(20, 20, 23));
         tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
-        TextView source = new TextView(parent.getContext());
-        GradientDrawable sourceBackground = new GradientDrawable();
-        sourceBackground.setShape(GradientDrawable.OVAL);
-        sourceBackground.setColor(Color.argb(205, 0, 0, 0));
-        source.setBackground(sourceBackground);
+        FrameLayout source = new FrameLayout(parent.getContext());
+        source.setBackground(BrowseUi.rounded(
+                parent.getContext(),
+                Color.argb(215, 0, 0, 0),
+                7
+        ));
         source.setElevation(dp(parent, 5));
-        source.setGravity(Gravity.CENTER);
-        source.setIncludeFontPadding(false);
-        source.setTextSize(12);
-        source.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         FrameLayout.LayoutParams sourceParams = new FrameLayout.LayoutParams(
-                dp(parent, 26),
-                dp(parent, 26)
+                dp(parent, 30),
+                dp(parent, 30)
         );
         sourceParams.gravity = Gravity.TOP | Gravity.START;
         sourceParams.setMargins(dp(parent, 6), dp(parent, 6), 0, 0);
         tile.addView(source, sourceParams);
+
+        ImageView sourceIcon = new ImageView(parent.getContext());
+        sourceIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        sourceIcon.setPadding(dp(parent, 3), dp(parent, 3), dp(parent, 3), dp(parent, 3));
+        source.addView(sourceIcon, new FrameLayout.LayoutParams(-1, -1));
+
+        TextView sourceVariant = new TextView(parent.getContext());
+        GradientDrawable variantBackground = new GradientDrawable();
+        variantBackground.setShape(GradientDrawable.OVAL);
+        variantBackground.setColor(Color.rgb(190, 24, 93));
+        sourceVariant.setBackground(variantBackground);
+        sourceVariant.setGravity(Gravity.CENTER);
+        sourceVariant.setIncludeFontPadding(false);
+        sourceVariant.setText("X");
+        sourceVariant.setTextColor(Color.WHITE);
+        sourceVariant.setTextSize(8);
+        sourceVariant.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        FrameLayout.LayoutParams variantParams = new FrameLayout.LayoutParams(
+                dp(parent, 13),
+                dp(parent, 13)
+        );
+        variantParams.gravity = Gravity.BOTTOM | Gravity.END;
+        source.addView(sourceVariant, variantParams);
 
         FrameLayout play = new FrameLayout(parent.getContext());
         GradientDrawable playBackground = new GradientDrawable();
@@ -161,7 +181,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         playIcon.setPadding(dp(parent, 11), dp(parent, 11), dp(parent, 9), dp(parent, 11));
         play.addView(playIcon, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(tile, image, source, play);
+        return new Holder(tile, image, source, sourceIcon, sourceVariant, play);
     }
 
     @Override
@@ -174,8 +194,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         SourceBadge source = sourceBadge(item);
         holder.source.setVisibility(source == null ? View.GONE : View.VISIBLE);
         if (source != null) {
-            holder.source.setText(source.label);
-            holder.source.setTextColor(source.color);
+            holder.sourceIcon.setImageResource(source.drawableRes);
+            holder.sourceVariant.setVisibility(source.wikiFeetX ? View.VISIBLE : View.GONE);
+        } else {
+            holder.sourceIcon.setImageDrawable(null);
+            holder.sourceVariant.setVisibility(View.GONE);
         }
         holder.itemView.setContentDescription(
                 (item.isVideo() ? "Video, " : "Photo, ") + item.title +
@@ -311,19 +334,19 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private SourceBadge sourceBadge(NativeContentItem item) {
         if (item == null) return null;
         if (FapelloRepository.isFapelloUrl(item.url)) {
-            return new SourceBadge("F", "Fapello", Color.rgb(255, 92, 138));
+            return new SourceBadge(R.drawable.ic_source_fapello, "Fapello", false);
         }
         if (WikiFeetRepository.isWikiFeetUrl(item.url) ||
                 WikiFeetRepository.isWikiFeetUrl(item.uploader)) {
             if (containsIgnoreCase(item.uploader, "wikifeetx") ||
                     containsIgnoreCase(item.views, "wikifeet x") ||
                     containsIgnoreCase(item.description, "wikifeet x")) {
-                return new SourceBadge("X", "WikiFeet X", Color.rgb(206, 147, 216));
+                return new SourceBadge(R.drawable.ic_source_wikifeet, "WikiFeet X", true);
             }
-            return new SourceBadge("W", "WikiFeet", Color.rgb(100, 181, 246));
+            return new SourceBadge(R.drawable.ic_source_wikifeet, "WikiFeet", false);
         }
         if (BunkrRepository.isBunkrUrl(item.url)) {
-            return new SourceBadge("B", "Bunkr", Color.rgb(255, 179, 0));
+            return new SourceBadge(R.drawable.ic_source_bunkr, "Bunkr", false);
         }
         return null;
     }
@@ -333,28 +356,39 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private static final class SourceBadge {
-        final String label;
+        final int drawableRes;
         final String name;
-        final int color;
+        final boolean wikiFeetX;
 
-        SourceBadge(String label, String name, int color) {
-            this.label = label;
+        SourceBadge(int drawableRes, String name, boolean wikiFeetX) {
+            this.drawableRes = drawableRes;
             this.name = name;
-            this.color = color;
+            this.wikiFeetX = wikiFeetX;
         }
     }
 
     static final class Holder extends RecyclerView.ViewHolder {
         final AspectRatioFrameLayout tile;
         final ImageView image;
-        final TextView source;
+        final FrameLayout source;
+        final ImageView sourceIcon;
+        final TextView sourceVariant;
         final View play;
 
-        Holder(AspectRatioFrameLayout itemView, ImageView image, TextView source, View play) {
+        Holder(
+                AspectRatioFrameLayout itemView,
+                ImageView image,
+                FrameLayout source,
+                ImageView sourceIcon,
+                TextView sourceVariant,
+                View play
+        ) {
             super(itemView);
             this.tile = itemView;
             this.image = image;
             this.source = source;
+            this.sourceIcon = sourceIcon;
+            this.sourceVariant = sourceVariant;
             this.play = play;
         }
     }
