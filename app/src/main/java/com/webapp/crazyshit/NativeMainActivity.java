@@ -886,6 +886,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void handleBackNavigation() {
+        if (screen == Screen.CHAOS && primaryPagerAdapter != null
+                && primaryPagerAdapter.exitChaosFullscreenForBack()) {
+            return;
+        }
         if (legacyContent != null && legacyContent.getVisibility() == View.VISIBLE) {
             showHome();
             return;
@@ -996,4 +1000,3 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }
-
