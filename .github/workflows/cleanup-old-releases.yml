@@ -1,0 +1,56 @@
+name: One-time release cleanup
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/cleanup-old-releases.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete superseded releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          inventory="$(mktemp)"
+          remaining="$(mktemp)"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' | jq -s '.' > "$inventory"
+
+          for keep in v3.0.2 v2.9.1; do
+            jq -e --arg tag "$keep" '
+              [.[] | select(
+                .tag_name == $tag and
+                .draft == false and
+                .prerelease == false and
+                (([.assets[].name] | index("CrazyShit.apk")) != null)
+              )] | length == 1
+            ' "$inventory" >/dev/null
+          done
+
+          delete_count="$(jq '[.[] | select(.tag_name != "v3.0.2" and .tag_name != "v2.9.1")] | length' "$inventory")"
+          if [ "$delete_count" -lt 1 ]; then
+            echo "No superseded releases found."
+            exit 0
+          fi
+
+          echo "Deleting $delete_count superseded releases."
+          while IFS=$'\t' read -r id tag; do
+            echo "Deleting release $tag"
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/${id}"
+            sleep 0.25
+          done < <(jq -r '.[] | select(.tag_name != "v3.0.2" and .tag_name != "v2.9.1") | [.id, .tag_name] | @tsv' "$inventory")
+
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' | jq -s '.' > "$remaining"
+          jq -e '
+            length == 2 and
+            ([.[].tag_name] | sort) == (["v2.9.1", "v3.0.2"] | sort)
+          ' "$remaining" >/dev/null
+          echo "Release cleanup complete. Retained v3.0.2 and v2.9.1."
