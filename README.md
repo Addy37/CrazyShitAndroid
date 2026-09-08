@@ -1,166 +1,154 @@
-# CrazyShit for Android
+<p align="center">
+  <img src="app/src/main/res/drawable-nodpi/splash_wordmark_transparent.webp" alt="CrazyShit for Android" width="720">
+</p>
 
-[![Latest APK downloads](https://img.shields.io/github/downloads/Addy37/CrazyShitAndroid/latest/CrazyShit.apk?label=latest%20APK%20downloads&labelColor=0D0D0F&color=FBF506)](https://github.com/Addy37/CrazyShitAndroid/releases/latest)
+<h1 align="center">CrazyShit for Android</h1>
 
-A native-first Android client for [CrazyShit.com](https://crazyshit.com/).
+<p align="center">
+  A fast, native Android client for CrazyShit, EFukt, Bunkr, Fapello, and WikiFeet content.
+</p>
 
-> **Independent project:** This app is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
+<p align="center">
+  <a href="https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit.apk"><img src="https://img.shields.io/badge/Download-Latest_APK-FBF506?style=for-the-badge&logo=android&logoColor=0D0D0F&labelColor=0D0D0F" alt="Download latest APK"></a>
+  <a href="https://github.com/Addy37/CrazyShitAndroid/releases"><img src="https://img.shields.io/badge/Release-Latest-F97316?style=for-the-badge&logo=github&logoColor=white&labelColor=0D0D0F" alt="Latest release"></a>
+</p>
 
-## Content warning
+<p align="center">
+  <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=black" alt="Android 8.0 or newer">
+  <img src="https://img.shields.io/badge/UI-Native_Android-FBF506?style=flat-square&labelColor=0D0D0F" alt="Native Android interface">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-F97316?style=flat-square&labelColor=0D0D0F" alt="MIT License"></a>
+</p>
 
-CrazyShit.com and EFukt.com contain adult, graphic, violent, and otherwise sensitive material. This app is intended only for adults who knowingly choose to access those sites. The app shows a one-time 18+ access notice covering sensitive content, regional availability, lawful VPN use, and the project's unofficial status.
+> [!WARNING]
+> This project is intended for adults 18 and older. Connected sources may contain explicit, graphic, violent, or sensitive material. Content availability depends on your region, provider, and each source's current status.
 
-## CrazyShit 2.10
+> [!NOTE]
+> This is an independent community project. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com, EFukt.com, Bunkr, Fapello, WikiFeet, or their owners.
 
-The app uses a native Android interface with a compatibility browser for site flows that need it.
+## Android browsing without the browser clutter
 
-### Main navigation
+CrazyShit combines native feeds, galleries, search, playback, downloads, and personal lists in one OLED-friendly Android interface. A compatibility browser remains available only for account actions and pages that require the original website.
 
-- **Home** with native cards, pagination, grid/list view, comments, and related content
-- **Collections** with CrazyShit, EFukt and Fapzone sources
-- **Chaos** as the featured center tab with a randomized vertical video feed
-- **Categories** with native browse cards and feeds
-- **More** for Library, Favorite creators, Downloads, My Profile, Settings, website fallback, and updates
+| Experience | What you get |
+| --- | --- |
+| **Home** | Native cards, pagination, list and grid layouts, comments, related media, and state retention |
+| **Chaos** | Random vertical video feed with autoplay, session history, preloading, and next or previous swiping |
+| **Fapzone** | Combined creator and gallery browsing across Bunkr, Fapello, WikiFeet, and WikiFeet X |
+| **Player** | Media3 playback, picture-in-picture, mini-player, resume, speed controls, seeking, brightness, volume, and zoom modes |
+| **Library** | Continue Watching, History, Watch Later, favorite creators, and local backups |
+| **Downloads** | Resumable downloads for supported hosts with validation before interrupted files continue |
 
-Home, Collections, Chaos, and Categories use a ViewPager2 pager to retain tab state during horizontal swipes.
+## What changed in 3.0
+
+- Faster startup, feed rendering, thumbnail loading, scrolling, and player preparation
+- Restored classic Home presentation with the current performance work retained
+- Expanded Fapzone coverage with Bunkr, Fapello, WikiFeet, and WikiFeet X
+- Source icons on gallery thumbnails so mixed galleries remain easy to scan
+- Portrait-locked phone browsing with sensor-triggered fullscreen for active Chaos videos and opened Fapzone media
+- Rotation that keeps playback, gallery position, page state, and image gestures intact
+- Local performance counters for launch, scrolling, first frame, and buffering
+- Baseline profile coverage for common startup, browsing, search, gallery, and playback paths
+
+## Sources
+
+| Source | Available in the app |
+| --- | --- |
+| **CrazyShit** | Home, categories, search, comments, related media, profiles, and Chaos |
+| **EFukt** | Collections, search results, native playback, and Chaos |
+| **Bunkr** | Creator search, albums, mixed image and video galleries, and downloads |
+| **Fapello** | Creator search and combined creator galleries |
+| **WikiFeet / WikiFeet X** | Creator search and image galleries with source identification |
+
+Source response times vary. The app shows each search source as it finishes and reports sources it cannot reach.
 
 ## Chaos
 
-Chaos is the app's full-screen random video feed.
+Chaos is the featured full-screen feed.
 
-- Swipe up for the next video
-- Swipe down to return to previous videos in the current stack
-- Autoplay the active item and pause offscreen items
-- Resolve upcoming videos ahead of time for quicker transitions
-- Mix Home, Trending, Videos, User Uploads, Categories, Shit Show, and EFukt sources
-- Prevent duplicates within the current session
-- Remember up to 500 recently viewed URLs and strongly prefer unseen videos on later visits
-- Save to Watch Later, open supported comments, share, or open full details
-- Feed Chaos playback into normal History and Continue Watching
-- Rotate to landscape for immersive fullscreen playback
-- Keep vertical next/previous swiping active while landscape
-- Rotate back to restore the normal app interface
+- Swipe up for the next video and down for earlier videos in the current stack
+- Autoplay only the active item and pause offscreen players
+- Prepare upcoming media before you reach it
+- Mix supported feeds while limiting duplicates
+- Prefer media you have not recently watched
+- Save to Watch Later, share, open comments, or view full details
+- Continue vertical swiping after rotating into horizontal fullscreen
+- Return to the same feed position after rotation or leaving fullscreen
 
-## Memes
+## Galleries and playback
 
-Memes are treated as images, not videos.
+Fapzone galleries support mixed photos and videos without sending you to a separate browser page.
 
-- Native meme feed
-- Full-image fit instead of video-thumbnail cropping
-- Dedicated static image viewer
-- Share and Open Page actions
-- No Media3 player or fake video controls
+- Swipe left and right through gallery media
+- Pinch or double-tap to zoom images
+- Show source and video indicators directly on thumbnails
+- Download supported videos
+- Return to the same search, creator, gallery, and scroll position
 
-## Library
+The native player supports picture-in-picture, playback resume, a mini-player, playback speeds from 0.5x to 2x, double-tap seeking, horizontal seek gestures, brightness and volume gestures, and Fit, Fill, or Zoom display modes.
 
-Library is available from More and contains three live swipeable pages:
+## Search, favorites, and backup
 
-- Continue Watching
-- History
-- Watch Later
+- Predictive creator matches begin after two characters
+- Exact and prefix matches appear first
+- Favorite creators live under **More > Favorite creators**
+- Search results appear as each source responds
+- **Settings > Export backup** saves favorite creators, Watch Later, and selected settings as JSON
+- Import previews the backup counts before merging saved lists and applying settings
 
-Library cards include thumbnails, playback progress, timestamps, and local remove/delete controls. Watch Later and playback history are stored locally on the device.
+Backups exclude cookies, account sessions, history, and downloaded media.
 
-## Native video experience
+## Install
 
-Selecting a compatible video opens a native video detail screen with Media3 / ExoPlayer playback, metadata, comments, and related videos.
+This app uses private APK distribution.
 
-Playback features include:
+1. Sign in to GitHub with an account that can access this repository.
+2. Download [`CrazyShit.apk`](https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit.apk).
+3. Open the APK and approve **Install unknown apps** if Android asks.
 
-- Picture-in-Picture
-- Resume playback position
-- In-app mini-player
-- Swipe down to minimize
-- Playback speeds from 0.5x to 2x
-- Double-tap left/right to seek 10 seconds
-- Horizontal swipe seeking
-- Left-side brightness gesture
-- Right-side volume gesture
-- Fit, Fill, and Zoom modes
-- Fullscreen rotation
-- Share and Watch Later
+Stable builds keep the application ID `com.addy37.crazyshitunofficial` and the existing signing identity, so a newer stable APK installs over an older stable version without clearing app data. Debug builds use the `.dev` suffix and install separately as **CrazyShit Beta**.
 
-The app only attempts to play media URLs already exposed by CrazyShit.com or EFukt.com to the current device/session. It does not bypass DRM, encryption, paywalls, authentication, or access controls.
+## Privacy and access
 
-## Comments and account
+The Android client does not run its own analytics, telemetry, advertising network, account backend, or media proxy. It connects directly to supported websites and their media hosts. Their cookies, analytics, advertising, privacy terms, and third-party services may still apply.
 
-- Native comment list and reply threading
-- Native comment composer when the site session allows posting
-- Dedicated sign-in flow that shares the website cookies used by the app
-- My Profile opens the profile associated with the signed-in site session
-- Website fallback remains available for unsupported account or interactive flows
+The app does not bypass DRM, encryption, paywalls, authentication, or source access controls. It only requests media URLs exposed to the current device and session.
 
-## Compatibility browser
+Read [PRIVACY.md](PRIVACY.md) for the complete privacy notes and [NOTICE.md](NOTICE.md) for rights-holder contact information.
 
-The fallback WebView is retained for pages that cannot be represented reliably by the native parser or need full website behavior.
+<details>
+<summary><strong>Building from source</strong></summary>
 
-It includes first-party cookies, file chooser support, HTML5 fullscreen video, popup suppression, cutout-safe layouts, and external-link handling.
-
-## Creator search and saved lists
-
-- Type at least two characters in Search to see up to eight matching creators.
-- Saved and previously seen creators appear immediately; live matches follow after a short typing pause.
-- Exact and prefix matches come first. Stars save creators to **More > Favorite creators**.
-- Global search shows each source as it finishes and reports sources that could not be reached.
-- Search text, filters, galleries, selected media and scroll positions restore when Android recreates a screen. Large lists use bounded local cache snapshots.
-- **Settings > Export backup** saves favorite creators, Watch Later and selected app settings as JSON. Import previews the counts, merges saved lists and applies included settings. Cookies, account sessions, history and downloaded media are excluded.
-
-## Downloads and playback recovery
-
-Supported media hosts can resume saved byte ranges after a pause or interruption. Resume checks the resource validator, size and each returned byte range before appending. Hosts without this support restart the file. At most two downloads run at once, with up to four ranges per file.
-
-Compatible native players can refresh a failed stream link twice and resume from the previous position. Settings includes local performance counters for launch, scrolling, first video frame and buffering. These counters stay on the device and reset when the process restarts.
-
-## Updates and installation
-
-Stable APKs are distributed through this private repository's [Releases page](https://github.com/Addy37/CrazyShitAndroid/releases). Sign in with an account that has access, download `CrazyShit.apk`, and open it in Android's installer. Android may ask you to allow **Install unknown apps** for the app opening the APK.
-
-This build uses manual APK updates. Settings and More open the private release page; the app does not make anonymous update checks that cannot access private releases.
-
-Stable releases keep the application ID `com.addy37.crazyshitunofficial` and the existing signing identity so they can update an earlier stable installation without clearing its data. Debug builds use the `.dev` suffix and appear as **CrazyShit Beta**; they are separate test installations.
-
-## Privacy
-
-The Android client does not operate its own analytics, telemetry, ad network, account backend, or proxy. It connects directly to CrazyShit.com and media hosts used by the website, so the website's own cookies, analytics, advertising, privacy terms, and third-party services may still apply.
-
-See [PRIVACY.md](PRIVACY.md) for more information.
-
-## Credits and ownership
-
-- Website, site content, branding, and user submissions: CrazyShit.com, EFukt.com, and their respective owners
-- Android platform and WebView: Android Open Source Project / Google
-- Material Components: Google / Android Open Source ecosystem
-- Media playback: AndroidX Media3 / ExoPlayer
-- Native HTML parsing: Jsoup
-- Image loading: Glide
-- Community Android client source: Addy37, licensed under the MIT License
-
-No CrazyShit.com videos or user uploads are bundled with this repository or APK. Content is loaded from the live website at runtime.
-
-## Legal / trademark notice
-
-The use of the name **CrazyShit** identifies the website this client connects to. This project makes no claim to CrazyShit.com branding, site content, or other third-party intellectual property.
-
-If a rights holder has a concern about this client, see [NOTICE.md](NOTICE.md).
-
-## Building
-
-GitHub Actions validates the Android project on pushes and pull requests. A separate workflow builds, signs, verifies, hashes, and publishes the stable APK.
-
-Toolchain:
+### Requirements
 
 - Android API 35
-- Gradle 8.7
 - Java 17
-- Material Components
-- AndroidX RecyclerView
-- AndroidX ViewPager2
-- AndroidX SwipeRefreshLayout
-- AndroidX Browser / Custom Tabs
+- Gradle 8.7
+
+### Main libraries
+
 - AndroidX Media3 / ExoPlayer
+- Material Components
+- RecyclerView and ViewPager2
+- SwipeRefreshLayout
+- AndroidX Browser / Custom Tabs
 - Jsoup
 - Glide
 
-## License
+GitHub Actions validates pushes and pull requests. Release workflows build, sign, verify, hash, and attach the stable APK.
 
-Original Android client code in this repository is licensed under the [MIT License](LICENSE). That license does not apply to CrazyShit.com, its branding, its site content, user-submitted media, or other third-party material.
+</details>
+
+<details>
+<summary><strong>Credits, ownership, and license</strong></summary>
+
+- Website content, branding, and user submissions belong to their respective source owners.
+- Android, WebView, Material Components, and AndroidX come from Google and the Android Open Source Project.
+- Media playback uses AndroidX Media3 / ExoPlayer.
+- HTML parsing uses Jsoup. Image loading uses Glide.
+- The community Android client source is maintained by Addy37.
+
+No website videos or user uploads are bundled with this repository or APK. Live sources provide content at runtime.
+
+Original Android client code is licensed under the [MIT License](LICENSE). That license does not apply to third-party branding, websites, media, or user submissions.
+
+</details>
