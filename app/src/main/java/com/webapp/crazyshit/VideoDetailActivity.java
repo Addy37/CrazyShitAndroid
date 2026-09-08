@@ -133,6 +133,8 @@ public class VideoDetailActivity extends Activity {
     private boolean portraitVideo;
     private boolean portraitFullscreen;
     private boolean rotatableFullscreen;
+    private boolean sensorFullscreen;
+    private SensorMediaOrientationListener orientationListener;
     private int thumbnailResolverCursor;
     private int relatedLoadGeneration;
     private int relatedPlayGeneration;
@@ -209,6 +211,7 @@ public class VideoDetailActivity extends Activity {
         getWindow().setNavigationBarColor(Color.BLACK);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         PhoneOrientationPolicy.applyBrowsingOrientation(this);
+        orientationListener = new SensorMediaOrientationListener(this, this::onPhysicalOrientation);
 
         buildUi();
         buildPlayer(requestedStartPosition);
@@ -1389,6 +1392,7 @@ public class VideoDetailActivity extends Activity {
                 != Configuration.ORIENTATION_LANDSCAPE;
         portraitFullscreen = enabled && portraitVideo && portraitOrientation;
         rotatableFullscreen = portraitFullscreen;
+        sensorFullscreen = false;
         if (rotatableFullscreen) {
             PhoneOrientationPolicy.enterFullscreenVideo(this);
         } else {
@@ -1400,6 +1404,7 @@ public class VideoDetailActivity extends Activity {
 
     private void setRotatableFullscreen(boolean enabled) {
         rotatableFullscreen = enabled;
+        sensorFullscreen = false;
         if (enabled) {
             PhoneOrientationPolicy.enterFullscreenVideo(this);
         } else {
@@ -1408,6 +1413,22 @@ public class VideoDetailActivity extends Activity {
         }
         applyOrientation(getResources().getConfiguration().orientation);
         if (playerView != null) playerView.showController();
+    }
+
+    private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
+        if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
+            sensorFullscreen = true;
+            rotatableFullscreen = true;
+            portraitFullscreen = false;
+            PhoneOrientationPolicy.enterSensorFullscreen(this);
+            applyOrientation(getResources().getConfiguration().orientation);
+        } else if (sensorFullscreen) {
+            sensorFullscreen = false;
+            rotatableFullscreen = false;
+            portraitFullscreen = false;
+            PhoneOrientationPolicy.exitFullscreenVideo(this);
+            applyOrientation(getResources().getConfiguration().orientation);
+        }
     }
 
     private void updatePortraitFullscreenButton() {
@@ -1632,8 +1653,15 @@ public class VideoDetailActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
+        if (orientationListener != null) orientationListener.enable();
         updateSwipeEnabled();
         if (detailsScroll != null) applyDetailsBackground();
+    }
+
+    @Override
+    protected void onPause() {
+        if (orientationListener != null) orientationListener.disable();
+        super.onPause();
     }
 
     @Override
@@ -1646,6 +1674,7 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (orientationListener != null) orientationListener.disable();
         abortRelatedBackPreview();
         if (portraitFullscreen ||
                 getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
