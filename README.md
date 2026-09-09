@@ -97,13 +97,14 @@ The native player supports picture-in-picture, playback resume, a mini-player, p
 
 Backups exclude cookies, account sessions, history, and downloaded media.
 
-## Install
+## Install and update
 
-This app uses private APK distribution.
+Stable APKs are distributed publicly through GitHub Releases. A GitHub account is not required.
 
-1. Sign in to GitHub with an account that can access this repository.
-2. Download [`CrazyShit.apk`](https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit.apk).
-3. Open the APK and approve **Install unknown apps** if Android asks.
+1. Download [`CrazyShit.apk`](https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit.apk).
+2. Open the APK and approve **Install unknown apps** if Android asks.
+
+The app checks the public GitHub release feed for newer stable versions when update alerts are enabled. You can also check manually from the app.
 
 Stable builds keep the application ID `com.addy37.crazyshitunofficial` and the existing signing identity, so a newer stable APK installs over an older stable version without clearing app data. Debug builds use the `.dev` suffix and install separately as **CrazyShit Beta**.
 
