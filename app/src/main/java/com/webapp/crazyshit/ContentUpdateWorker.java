@@ -58,7 +58,7 @@ public final class ContentUpdateWorker extends Worker {
         String efuktStatus = prefs.getBoolean(NotificationCoordinator.PREF_EFUKT_ALERTS, true)
                 ? "Waiting to check"
                 : "Off";
-        String updateStatus = (!BuildConfig.PRIVATE_DISTRIBUTION && prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true))
+        String updateStatus = prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)
                 ? "Waiting to check"
                 : "Off";
 
@@ -118,8 +118,7 @@ public final class ContentUpdateWorker extends Worker {
 
         if (!alerts.isEmpty()) NotificationCoordinator.showNewVideoNotifications(context, alerts);
 
-        if (BuildConfig.PRIVATE_DISTRIBUTION) updateStatus = "Manual APK updates";
-        if ((!BuildConfig.PRIVATE_DISTRIBUTION && prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true))) {
+        if (prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)) {
             attempted++;
             try {
                 checkForAppUpdate(context);

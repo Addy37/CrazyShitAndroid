@@ -1,3 +1,5 @@
-# CrazyShit 3.0.2
+# CrazyShit 3.0.3
 
-- Make Fapzone source icons smaller, move them to the bottom-left, and add slight transparency.
+- Restore in-app update checks now that the repository and releases are public.
+- Restore optional background alerts when a new app version is available.
+- Replace the obsolete private APK updater message with current public-release wording.

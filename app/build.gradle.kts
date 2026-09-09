@@ -14,11 +14,10 @@ android {
     defaultConfig {
         // Keep the existing release application ID so stable releases upgrade the main app.
         applicationId = "com.addy37.crazyshitunofficial"
-        buildConfigField("boolean", "PRIVATE_DISTRIBUTION", "true")
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_000_001
-        versionName = System.getenv("APP_VERSION_NAME") ?: "3.0.1"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_000_003
+        versionName = System.getenv("APP_VERSION_NAME") ?: "3.0.3"
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")

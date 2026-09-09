@@ -124,13 +124,11 @@ public class SettingsActivity extends Activity {
                 "Check now",
                 NotificationCoordinator.statusSummary(this),
                 this::checkNotificationsNow);
-        if (!BuildConfig.PRIVATE_DISTRIBUTION) {
         addSwitch(root,
                 "App update alerts",
                 "Notify you when a new build is ready. Nothing downloads until you tap it.",
                 NotificationCoordinator.PREF_UPDATE_ALERTS,
                 true);
-        }
         addAction(root,
                 "Preview notification",
                 "Send a branded test alert and check Android notification access.",
@@ -208,7 +206,7 @@ public class SettingsActivity extends Activity {
         addAction(root, "Performance details", "View loading and scrolling timings from this session.", () ->
                 new AlertDialog.Builder(this).setTitle("Performance details").setMessage(AppPerformance.summary())
                         .setPositiveButton("Close", null).show());
-        addAction(root, "App updates", "Version " + BuildConfig.VERSION_NAME + " · Install your private APK update.", () -> {
+        addAction(root, "App updates", "Version " + BuildConfig.VERSION_NAME + " · Check for updates.", () -> {
             if (appUpdater != null) appUpdater.check(true);
         });
         addAction(root, "Clear site data", "Sign out and remove website cookies and local storage.", () -> {
