@@ -11,6 +11,7 @@
 <p align="center">
   <a href="https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit.apk"><img src="https://img.shields.io/badge/Download-Latest_APK-FBF506?style=for-the-badge&logo=android&logoColor=0D0D0F&labelColor=0D0D0F" alt="Download latest APK"></a>
   <a href="https://github.com/Addy37/CrazyShitAndroid/releases"><img src="https://img.shields.io/badge/Release-Latest-F97316?style=for-the-badge&logo=github&logoColor=white&labelColor=0D0D0F" alt="Latest release"></a>
+  <a href="https://github.com/Addy37/CrazyShitAndroid/releases"><img src="https://img.shields.io/github/downloads/Addy37/CrazyShitAndroid/CrazyShit.apk?style=for-the-badge&label=APK%20Downloads&labelColor=0D0D0F&color=F97316&displayAssetName=false" alt="Total APK downloads"></a>
 </p>
 
 <p align="center">
