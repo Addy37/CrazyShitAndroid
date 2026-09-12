@@ -1,5 +1,6 @@
-# CrazyShit 3.0.3
+# CrazyShit 3.0.4
 
-- Restore in-app update checks now that the repository and releases are public.
-- Restore optional background alerts when a new app version is available.
-- Replace the obsolete private APK updater message with current public-release wording.
+- Add native feedback under More for feature requests, bug reports, and general feedback.
+- Let users optionally include a star rating with their message.
+- Include app and device details automatically to make bug reports easier to investigate.
+- Add My Feedback so users can see submission status and developer replies.
