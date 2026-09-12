@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "CrazyShitAndroid"
 include(":app")
 include(":baselineprofile")
+include(":feedbackadmin")

@@ -1,0 +1,39 @@
+name: Build Private Feedback Admin APK
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'feedbackadmin/**'
+      - 'supabase/functions/feedback-admin/**'
+      - 'settings.gradle.kts'
+      - '.github/workflows/build-feedback-admin.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.7'
+          cache-provider: basic
+      - name: Build private admin APK
+        run: gradle --no-daemon :feedbackadmin:assembleDebug
+      - name: Prepare APK
+        run: cp feedbackadmin/build/outputs/apk/debug/feedbackadmin-debug.apk CrazyShit-Admin.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CrazyShit-Admin
+          path: CrazyShit-Admin.apk
+          if-no-files-found: error
+          retention-days: 14
