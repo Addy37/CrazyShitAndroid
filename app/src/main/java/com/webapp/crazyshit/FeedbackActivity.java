@@ -290,7 +290,7 @@ public final class FeedbackActivity extends Activity {
     private MaterialButton button(String value) {
         MaterialButton button = new MaterialButton(this);
         button.setText(value);
-        button.setTextAllCaps(false);
+        button.setAllCaps(false);
         button.setTextColor(Color.WHITE);
         button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(SURFACE));
         button.setCornerRadius(dp(14));
