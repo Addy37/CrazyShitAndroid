@@ -19,6 +19,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
+      FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
 
     steps:
       - name: Check out project

@@ -172,6 +172,9 @@ final class LandscapeMoreDialog {
                 content,
                 "APP",
                 actions(
+                        new Action(R.drawable.ic_action_feedback, "Send feedback",
+                                "Suggest a feature, report a problem or rate the app",
+                                () -> activity.startActivity(new Intent(activity, FeedbackActivity.class))),
                         new Action(R.drawable.ic_more_website, "Open full website",
                                 "Use the compatibility browser",
                                 () -> {

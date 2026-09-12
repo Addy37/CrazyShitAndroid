@@ -18,6 +18,16 @@ android {
         targetSdk = 35
         versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_000_003
         versionName = System.getenv("APP_VERSION_NAME") ?: "3.0.3"
+        buildConfigField(
+            "String",
+            "FEEDBACK_ENDPOINT",
+            "\"${System.getenv("FEEDBACK_ENDPOINT") ?: ""}\""
+        )
+        buildConfigField(
+            "String",
+            "FEEDBACK_ANON_KEY",
+            "\"${System.getenv("FEEDBACK_ANON_KEY") ?: ""}\""
+        )
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
