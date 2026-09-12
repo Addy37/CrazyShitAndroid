@@ -58,6 +58,12 @@
             android:exported="false" />
 
         <activity
+            android:name=".FeedbackActivity"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".FavoritesActivity"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />

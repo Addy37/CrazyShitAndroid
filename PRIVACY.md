@@ -2,7 +2,20 @@
 
 ## Summary
 
-CrazyShit for Android is a lightweight Android WebView wrapper with an optional native Media3 / ExoPlayer video player. The wrapper itself does not operate analytics, advertising, telemetry, accounts, or a remote backend.
+CrazyShit for Android is a lightweight Android client with an optional native Media3 / ExoPlayer video player. The app does not operate analytics, advertising, telemetry, or required user accounts. Its optional feedback feature uses a project-operated backend as described below.
+
+## Optional feedback
+
+If you choose to send feedback, the app sends the following information to the project's feedback service:
+
+- The message, category, and optional rating you submit
+- App version
+- Android version
+- Device manufacturer and model
+- The app section where feedback was opened
+- A random installation ID
+
+The service hashes the installation ID before storing it. The ID lets you view developer replies under **My feedback** without creating an account. It is not used for advertising or cross-app tracking. Feedback remains on the service until the project owner deletes it. Clearing app data or uninstalling the app can prevent you from viewing earlier submissions.
 
 ## Website data
 
@@ -38,7 +51,7 @@ The wrapper may interact with:
 - Files you explicitly download from the website
 - Links you choose to open in external apps or your browser
 
-The wrapper does not send this data to a separate server operated by this project.
+Except for information you intentionally submit through the optional feedback feature, the app does not send this data to a separate server operated by this project.
 
 ## Permissions
 
