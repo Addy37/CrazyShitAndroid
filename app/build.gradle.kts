@@ -16,8 +16,8 @@ android {
         applicationId = "com.addy37.crazyshitunofficial"
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_000_003
-        versionName = System.getenv("APP_VERSION_NAME") ?: "3.0.3"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_000_004
+        versionName = System.getenv("APP_VERSION_NAME") ?: "3.0.4"
         buildConfigField(
             "String",
             "FEEDBACK_ENDPOINT",
