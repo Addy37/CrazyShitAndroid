@@ -47,6 +47,30 @@ jobs:
               "Referer": BASE,
           }
 
+          try:
+              cold_headers = {
+                  "User-Agent": headers["User-Agent"],
+                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                  "Accept-Encoding": "identity",
+                  "Referer": PROFILE,
+              }
+              cold_request = urllib.request.Request(
+                  BASE + "ajax/model/sonya-blaze-1/page-1/",
+                  headers=cold_headers
+              )
+              cold_response = urllib.request.urlopen(cold_request, timeout=25)
+              cold_raw = cold_response.read()
+              print("FAPELLO_COLD status", cold_response.status, "bytes", len(cold_raw),
+                    "server", cold_response.headers.get("server"),
+                    "cf", bool(cold_response.headers.get("cf-ray")),
+                    "set_cookie", bool(cold_response.headers.get("set-cookie")))
+          except urllib.error.HTTPError as cold_error:
+              cold_raw = cold_error.read()
+              print("FAPELLO_COLD status", cold_error.code, "bytes", len(cold_raw),
+                    "server", cold_error.headers.get("server"),
+                    "cf", bool(cold_error.headers.get("cf-ray")),
+                    "prefix", repr(cold_raw[:120].decode("utf-8", "replace")))
+
           class Tags(HTMLParser):
               def __init__(self):
                   super().__init__(); self.rows=[]; self.links=[]
