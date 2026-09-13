@@ -1,8 +1,7 @@
-# CrazyShit 3.0.5
+# CrazyShit 3.0.6
 
-- Restore live Fapello creator search and canonical creator profiles.
-- Restore Fapello image galleries, video thumbnails, playback, and full-resolution media.
-- Add current Fapello pagination with duplicate and repeated-page protection.
-- Report blocked, rate-limited, malformed, and failed Fapello responses instead of empty galleries.
-- Filter Fapello account, editorial, menu, and legal pages from New, Hot, and Popular creators.
-- Keep Bunkr, WikiFeet, and other Fapzone sources working when Fapello returns an error.
+- Add remote source configuration backed by Supabase.
+- Allow supported source domains, routes, headers, selectors, CDN hosts, timeout/retry values, fallbacks, and source availability to be updated without publishing a new APK.
+- Keep bundled source defaults as the safe fallback when remote configuration is unavailable or invalid.
+- Add versioned publishing and rollback support through CrazyShit Admin Source Control.
+- Preserve the Fapello repair and existing Fapzone behavior from 3.0.5.
