@@ -71,7 +71,7 @@ final class FapzoneCreatorRepository {
         for (int page = 1; page <= LIVE_PAGES && models.size() < LIVE_ITEMS; page++) {
             try {
                 List<FapelloRepository.Model> pageModels =
-                        fapello.fetchModelListing(appContext, listing, page);
+                        fapello.fetchModelListing(context, listing, page);
                 if (pageModels == null || pageModels.isEmpty()) break;
                 for (FapelloRepository.Model model : pageModels) {
                     if (model == null || !FapelloRepository.isModelUrl(model.url)) continue;
@@ -98,7 +98,7 @@ final class FapzoneCreatorRepository {
         for (int index = 0; index < ordered.size(); index++) {
             int rank = index;
             FapelloRepository.Model model = ordered.get(index);
-            completed.submit(() -> resolve(appContext, rank, model));
+            completed.submit(() -> resolve(context, rank, model));
         }
 
         ArrayList<ResolvedCreator> resolved = new ArrayList<>();

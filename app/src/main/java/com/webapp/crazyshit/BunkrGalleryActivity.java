@@ -73,6 +73,7 @@ public final class BunkrGalleryActivity extends Activity {
     private int currentPage;
     private boolean endReached;
     private boolean loadingMore;
+    private boolean fapelloFailureShown;
     private int generation;
 
     private ViewPager2 pager;
@@ -316,6 +317,9 @@ public final class BunkrGalleryActivity extends Activity {
                 boolean completed = creatorBatch == null
                         ? result.isEmpty()
                         : creatorBatch.endReached;
+                FapelloSourceException fapelloFailure = creatorBatch == null
+                        ? null
+                        : creatorBatch.fapelloFailure;
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     initialLoading.setVisibility(View.GONE);
@@ -330,7 +334,8 @@ public final class BunkrGalleryActivity extends Activity {
                     BunkrGallerySessionStore.Snapshot fresh =
                             BunkrGallerySessionStore.snapshot(sessionId);
                     if (fresh != null && !fresh.items.isEmpty()) showSnapshot(fresh);
-                    else Toast.makeText(
+                    if (fapelloFailure != null) showFapelloFailure(fapelloFailure);
+                    else if (fresh == null || fresh.items.isEmpty()) Toast.makeText(
                             this,
                             isCreatorGallery()
                                     ? "No matching pictures or videos loaded. Try again."
@@ -342,9 +347,12 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     initialLoading.setVisibility(View.GONE);
+                    FapelloSourceException failure = fapelloFailure(error);
                     Toast.makeText(
                             this,
-                            isCreatorGallery()
+                            failure != null
+                                    ? failure.userMessage()
+                                    : isCreatorGallery()
                                     ? "Couldn't build this creator gallery. Try again."
                                     : "Couldn't load this album.",
                             Toast.LENGTH_LONG
@@ -372,6 +380,9 @@ public final class BunkrGalleryActivity extends Activity {
                         : creatorBatch.items;
                 List<NativeContentItem> visibleResult = filterMedia(result);
                 boolean completed = creatorBatch != null && creatorBatch.endReached;
+                FapelloSourceException fapelloFailure = creatorBatch == null
+                        ? null
+                        : creatorBatch.fapelloFailure;
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     loadingMore = false;
@@ -394,6 +405,7 @@ public final class BunkrGalleryActivity extends Activity {
                     );
                     BunkrGallerySessionStore.persist(this, sessionId);
                     updateChrome(pager.getCurrentItem());
+                    if (fapelloFailure != null) showFapelloFailure(fapelloFailure);
                     if (isCreatorGallery() && added == 0 && !endReached) {
                         initialLoading.setVisibility(View.VISIBLE);
                         pager.post(this::loadMore);
@@ -413,6 +425,23 @@ public final class BunkrGalleryActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void showFapelloFailure(FapelloSourceException failure) {
+        if (failure == null || fapelloFailureShown) return;
+        fapelloFailureShown = true;
+        Toast.makeText(this, failure.userMessage(), Toast.LENGTH_LONG).show();
+    }
+
+    private FapelloSourceException fapelloFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof FapelloSourceException) {
+                return (FapelloSourceException) current;
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private void onMediaTap(int position, NativeContentItem item) {
