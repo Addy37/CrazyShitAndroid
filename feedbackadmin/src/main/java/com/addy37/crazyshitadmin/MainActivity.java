@@ -183,13 +183,13 @@ public final class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     if (item == null) {
                         org.json.JSONObject defaults = bundledDefaults();
-                        editor.setText(defaults == null ? "" : defaults.toString(2));
+                        editor.setText(prettyJson(defaults));
                         status.setText("No configuration is published. Bundled defaults are ready to validate.");
                         return;
                     }
                     currentVersion[0] = item.optLong("config_version");
                     org.json.JSONObject config = item.optJSONObject("config");
-                    editor.setText(config == null ? "" : config.toString(2));
+                    editor.setText(prettyJson(config));
                     status.setText(configStatus(item));
                 });
             } catch (Exception error) {
@@ -326,6 +326,12 @@ public final class MainActivity extends AppCompatActivity {
 
     private static String message(Exception error) {
         return error.getMessage() == null ? "Request failed" : error.getMessage();
+    }
+
+    private static String prettyJson(org.json.JSONObject value) {
+        if (value == null) return "";
+        try { return value.toString(2); }
+        catch (org.json.JSONException ignored) { return value.toString(); }
     }
 
     private org.json.JSONObject bundledDefaults() {
