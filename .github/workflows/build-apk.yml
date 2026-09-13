@@ -108,6 +108,13 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Run gated Fapello live smoke test
+        env:
+          FAPELLO_LIVE_TEST: "1"
+        run: >-
+          gradle --no-daemon :app:testDebugUnitTest
+          --tests com.webapp.crazyshit.FapelloLiveSmokeTest
+
       # 2.8 starts by measuring the existing lint debt without blocking beta builds. The repository
       # currently has a large set of pre-existing lint findings. Once those are baselined/cleaned,
       # this audit can become a hard gate for new issues.
