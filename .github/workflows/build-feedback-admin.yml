@@ -1,6 +1,14 @@
 name: Build Private Feedback Admin APK
 
 on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-feedback-admin.yml'
+      - 'feedbackadmin/**'
+      - 'supabase/functions/app-config-admin/**'
+      - 'supabase/functions/_shared/**'
+      - 'supabase/migrations/*source_config.sql'
   workflow_dispatch:
   pull_request:
     paths:
@@ -19,7 +27,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      ADMIN_SOURCE_CONFIG_ENDPOINT: ${{ secrets.ADMIN_SOURCE_CONFIG_ENDPOINT }}
+      ADMIN_SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config-admin
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v5
