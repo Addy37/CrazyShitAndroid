@@ -1,0 +1,11 @@
+[functions.feedback]
+verify_jwt = false
+
+[functions.feedback-admin]
+verify_jwt = false
+
+[functions.app-config]
+verify_jwt = false
+
+[functions.app-config-admin]
+verify_jwt = false

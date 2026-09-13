@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -94,20 +95,23 @@ public final class BunkrRepository {
     );
 
     public List<NativeContentItem> fetchAlbums(Context context, int page) throws IOException {
+        requireEnabled();
         int safePage = Math.max(1, page);
-        String url = safePage == 1 ? INDEX : INDEX + "?page=" + safePage;
+        String url = safePage == 1 ? indexUrl() : indexUrl() + "?page=" + safePage;
         return parseAlbumIndex(fetchDocument(context, url));
     }
 
     public List<NativeContentItem> fetchAlbumsByFileCount(Context context, int page)
             throws IOException {
+        requireEnabled();
         int safePage = Math.max(1, page);
-        String url = INDEX + "?search=&mode=broad&per=20&sort=files&page=" + safePage;
+        String url = indexUrl() + "?search=&mode=broad&per=20&sort=files&page=" + safePage;
         return parseAlbumIndex(fetchDocument(context, url));
     }
 
     public List<NativeContentItem> searchAlbums(Context context, String query, int page)
             throws IOException {
+        requireEnabled();
         return parseAlbumIndex(fetchDocument(context, searchUrl(query, page)));
     }
 
@@ -122,12 +126,13 @@ public final class BunkrRepository {
         } catch (Exception ignored) {
             encoded = query == null ? "" : query.trim();
         }
-        return INDEX + "?search=" + encoded + "&mode=broad&page=" + Math.max(1, page);
+        return indexUrl() + "?search=" + encoded + "&mode=broad&page=" + Math.max(1, page);
     }
 
     public List<NativeContentItem> fetchAlbum(Context context, String albumUrl, int page)
             throws IOException {
-        String canonical = normalizeUrl(albumUrl, INDEX);
+        requireEnabled();
+        String canonical = normalizeUrl(albumUrl, indexUrl());
         Matcher album = ALBUM_PATH.matcher(canonical);
         if (!album.find()) throw new IOException("Not a Bunkr album URL");
 
@@ -162,7 +167,8 @@ public final class BunkrRepository {
 
     /** Returns the first real file thumbnail, including artwork from image-only albums. */
     public String fetchAlbumArtwork(Context context, String albumUrl) throws IOException {
-        String canonical = normalizeUrl(albumUrl, INDEX);
+        requireEnabled();
+        String canonical = normalizeUrl(albumUrl, indexUrl());
         Matcher album = ALBUM_PATH.matcher(canonical);
         if (!album.find()) throw new IOException("Not a Bunkr album URL");
 
@@ -222,7 +228,8 @@ public final class BunkrRepository {
 
     public CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl)
             throws IOException {
-        String canonical = normalizeUrl(pageUrl, INDEX);
+        requireEnabled();
+        String canonical = normalizeUrl(pageUrl, indexUrl());
         if (isDirectAsset(canonical)) {
             return new CrazyShitRepository.StreamInfo(canonical, pageUrl, fileTitle(canonical));
         }
@@ -236,7 +243,7 @@ public final class BunkrRepository {
         String cdnUrl = scriptValue(doc, JS_CDN);
         String signUrl = scriptValue(doc, SIGN_URL);
         if (!cdnUrl.isEmpty()) {
-            if (signUrl.isEmpty()) signUrl = DEFAULT_SIGN_URL;
+            if (signUrl.isEmpty()) signUrl = signUrl();
             try {
                 String signed = requestSignedCdnUrl(
                         context,
@@ -260,13 +267,11 @@ public final class BunkrRepository {
         // Older mirrors still use Bunkr's legacy download API.
         String dataId = dataFileId(doc);
         if (!dataId.isEmpty()) {
-            for (String endpoint : API_ENDPOINTS) {
+            for (String endpoint : apiEndpoints()) {
                 try {
                     String mediaUrl = requestDownloadUrl(context, endpoint, dataId);
                     if (!mediaUrl.isEmpty() && !isMaintenanceVideo(mediaUrl)) {
-                        String downloadRoot = endpoint.contains("apidl.bunkr.ru")
-                                ? "https://get.bunkrr.su"
-                                : DOWNLOAD_ROOT;
+                        String downloadRoot = downloadRootFor(endpoint);
                         return new CrazyShitRepository.StreamInfo(
                                 mediaUrl,
                                 resolvedPageUrl,
@@ -282,7 +287,8 @@ public final class BunkrRepository {
 
         // Some older Bunkr mirrors still expose the real source directly. Only use this after the
         // signed API path, since page scripts also mention Bunkr's maintenance placeholder video.
-        for (Element media : doc.select("video[src],video source[src],source[type*=video][src]")) {
+        for (Element media : doc.select(bunkrSelector(
+                "video[src],video source[src],source[type*=video][src]", "video"))) {
             String candidate = normalizeUrl(media.absUrl("src"), resolvedPageUrl);
             if (isDirectMedia(candidate) && !isMaintenanceVideo(candidate)) {
                 return new CrazyShitRepository.StreamInfo(candidate, resolvedPageUrl, title);
@@ -300,9 +306,9 @@ public final class BunkrRepository {
         }
 
         if (isImageName(title)) {
-            for (Element image : doc.select(
-                    "main img[src],.lightgallery img[src],img[data-src],picture source[src]"
-            )) {
+            for (Element image : doc.select(bunkrSelector(
+                    "main img[src],.lightgallery img[src],img[data-src],picture source[src]", "image"
+            ))) {
                 String candidate = image.hasAttr("data-src")
                         ? normalizeUrl(image.attr("data-src"), resolvedPageUrl)
                         : normalizeUrl(image.absUrl("src"), resolvedPageUrl);
@@ -351,12 +357,19 @@ public final class BunkrRepository {
 
     public static boolean isBalbumsUrl(String url) {
         String host = host(url);
-        return "balbums.st".equals(host) || host.endsWith(".balbums.st");
+        String configured = host(indexUrl());
+        return host.equals(configured) || host.endsWith("." + configured);
     }
 
     public static boolean isBunkrUrl(String url) {
         String host = host(url);
-        return BUNKR_PAGE_HOST.matcher(host).matches();
+        SourceConfig.Bunkr config = config();
+        if (config == null) return BUNKR_PAGE_HOST.matcher(host).matches();
+        for (String origin : pageOrigins()) {
+            String allowed = host(origin);
+            if (host.equals(allowed) || host.endsWith("." + allowed)) return true;
+        }
+        return false;
     }
 
     public static boolean isAlbumUrl(String url) {
@@ -369,8 +382,8 @@ public final class BunkrRepository {
 
     private List<NativeContentItem> parseAlbumIndex(Document doc) {
         LinkedHashMap<String, NativeContentItem> albums = new LinkedHashMap<>();
-        for (Element link : doc.select("a[href*=/a/]")) {
-            String url = normalizeUrl(link.absUrl("href"), INDEX);
+        for (Element link : doc.select(bunkrSelector("a[href*=/a/]", "albums"))) {
+            String url = normalizeUrl(link.absUrl("href"), indexUrl());
             if (!isAlbumUrl(url)) continue;
             Element card = cardScope(link);
             String title = clean(link.attr("title"));
@@ -505,19 +518,17 @@ public final class BunkrRepository {
 
     private String requestDownloadUrl(Context context, String endpoint, String dataId)
             throws IOException {
-        String downloadRoot = endpoint.contains("apidl.bunkr.ru")
-                ? "https://get.bunkrr.su"
-                : DOWNLOAD_ROOT;
+        String downloadRoot = downloadRootFor(endpoint);
         String referer = downloadRoot + "/file/" + dataId;
         Connection connection = Jsoup.connect(endpoint)
-                .userAgent(USER_AGENT)
+                .userAgent(userAgent())
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json")
                 .header("Origin", downloadRoot)
-                .referrer(referer)
+                .referrer(referer(referer))
                 .requestBody("{\"id\":\"" + dataId + "\"}")
                 .method(Connection.Method.POST)
-                .timeout(12000)
+                .timeout(requestTimeoutMs())
                 .maxBodySize(1024 * 1024)
                 .ignoreContentType(true)
                 .ignoreHttpErrors(false)
@@ -545,7 +556,7 @@ public final class BunkrRepository {
             }
             url = normalizeUrl(url, endpoint);
             return needsSignature
-                    ? requestSignedCdnUrl(context, referer, url, DEFAULT_SIGN_URL)
+                    ? requestSignedCdnUrl(context, referer, url, signUrl())
                     : url;
         } catch (Exception error) {
             if (error instanceof IOException) throw (IOException) error;
@@ -588,13 +599,13 @@ public final class BunkrRepository {
         String requestUrl = signUrl + (signUrl.contains("?") ? "&" : "?") +
                 "path=" + encodedPath;
         IOException last = null;
-        for (int attempt = 0; attempt < 2; attempt++) {
+        for (int attempt = 0; attempt < retryCount() + 1; attempt++) {
             Connection connection = Jsoup.connect(requestUrl)
-                    .userAgent(USER_AGENT)
+                    .userAgent(userAgent())
                     .header("Accept", "application/json")
                     .header("Origin", origin(pageUrl))
-                    .referrer(pageUrl)
-                    .timeout(4000)
+                    .referrer(referer(pageUrl))
+                    .timeout(signTimeoutMs())
                     .maxBodySize(1024 * 1024)
                     .ignoreContentType(true)
                     .ignoreHttpErrors(false)
@@ -628,7 +639,7 @@ public final class BunkrRepository {
         String requestedOrigin = origin(preferredUrl);
         if (isBunkrUrl(requestedOrigin)) origins.put(requestedOrigin, true);
         if (!preferredPageOrigin.isEmpty()) origins.put(preferredPageOrigin, true);
-        for (String candidate : PAGE_ORIGINS) origins.put(candidate, true);
+        for (String candidate : pageOrigins()) origins.put(candidate, true);
 
         IOException last = null;
         for (String candidate : origins.keySet()) {
@@ -649,16 +660,24 @@ public final class BunkrRepository {
     }
 
     private Document fetchDocument(Context context, String url) throws IOException {
-        Connection connection = Jsoup.connect(url)
-                .userAgent(USER_AGENT)
-                .referrer(isBunkrUrl(url) ? origin(url) + "/" : INDEX)
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-                .timeout(12000)
-                .maxBodySize(12 * 1024 * 1024)
-                .followRedirects(true)
-                .ignoreHttpErrors(false);
-        addCookies(context, connection, url);
-        return connection.get();
+        IOException last = null;
+        for (int attempt = 0; attempt < retryCount() + 1; attempt++) {
+            Connection connection = Jsoup.connect(url)
+                    .userAgent(userAgent())
+                    .referrer(referer(isBunkrUrl(url) ? origin(url) + "/" : indexUrl()))
+                    .timeout(requestTimeoutMs())
+                    .maxBodySize(12 * 1024 * 1024)
+                    .followRedirects(true)
+                    .ignoreHttpErrors(false);
+            SourceConfig.Bunkr config = config();
+            if (config == null) connection.header("Accept",
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+            else applyHeaders(connection, config.requestHeaders);
+            addCookies(context, connection, url);
+            try { return connection.get(); }
+            catch (IOException error) { last = error; }
+        }
+        throw last == null ? new IOException("Bunkr request failed") : last;
     }
 
     private void addCookies(Context context, Connection connection, String url) {
@@ -822,7 +841,7 @@ public final class BunkrRepository {
         if (cleanPath.startsWith("http://") || cleanPath.startsWith("https://")) {
             return cleanPath;
         }
-        String base = normalizeUrl(unescapeScriptUrl(endpoint), DOWNLOAD_ROOT);
+        String base = normalizeUrl(unescapeScriptUrl(endpoint), downloadRoot());
         if (base.isEmpty()) return "";
         return origin(base) + (cleanPath.startsWith("/") ? cleanPath : "/" + cleanPath);
     }
@@ -898,7 +917,14 @@ public final class BunkrRepository {
             String host = uri.getHost();
             if (!"https".equalsIgnoreCase(uri.getScheme()) || host == null) return false;
             host = host.toLowerCase(Locale.US);
-            return "cdn.cr".equals(host) || host.endsWith(".cdn.cr");
+            SourceConfig.Bunkr config = config();
+            if (config == null) return "cdn.cr".equals(host) || host.endsWith(".cdn.cr");
+            String configuredSignHost = host(config.signUrl);
+            if (host.equals(configuredSignHost)) return true;
+            for (String allowed : config.cdnHosts) {
+                if (host.equals(allowed) || host.endsWith("." + allowed)) return true;
+            }
+            return false;
         } catch (Exception ignored) {
             return false;
         }
@@ -957,7 +983,7 @@ public final class BunkrRepository {
             URI uri = new URI(url);
             return uri.getScheme() + "://" + uri.getHost();
         } catch (Exception ignored) {
-            return DEFAULT_PAGE_ORIGIN;
+            return defaultPageOrigin();
         }
     }
 
@@ -971,6 +997,107 @@ public final class BunkrRepository {
 
     private String clean(String value) {
         return value == null ? "" : value.replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
+    }
+
+    private static SourceConfig.Bunkr config() {
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        return current == null ? null : current.bunkr;
+    }
+
+    private static void requireEnabled() throws IOException {
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        SourceConfig.Bunkr config = config();
+        if (current != null && current.sourceKillSwitchesEnabled && config != null && !config.enabled) {
+            throw new IOException("Bunkr is temporarily unavailable");
+        }
+    }
+
+    private static String indexUrl() {
+        SourceConfig.Bunkr config = config();
+        return config == null ? INDEX : config.indexUrl;
+    }
+
+    static String mostFilesAlbumsUrl() {
+        return indexUrl() + "?search=&mode=broad&per=20&sort=files&page=1";
+    }
+
+    private static String defaultPageOrigin() {
+        List<String> origins = pageOrigins();
+        return origins.isEmpty() ? DEFAULT_PAGE_ORIGIN : origins.get(0);
+    }
+
+    private static List<String> pageOrigins() {
+        SourceConfig.Bunkr config = config();
+        if (config == null) return java.util.Arrays.asList(PAGE_ORIGINS);
+        ArrayList<String> result = new ArrayList<>(config.pageOrigins);
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        if (current == null || current.fallbacksEnabled) result.addAll(config.fallbackOrigins);
+        return result;
+    }
+
+    private static List<String> apiEndpoints() {
+        SourceConfig.Bunkr config = config();
+        return config == null ? java.util.Arrays.asList(API_ENDPOINTS) : config.apiEndpoints;
+    }
+
+    private static String signUrl() {
+        SourceConfig.Bunkr config = config();
+        return config == null ? DEFAULT_SIGN_URL : config.signUrl;
+    }
+
+    private static String downloadRoot() {
+        SourceConfig.Bunkr config = config();
+        String value = config == null ? DOWNLOAD_ROOT : config.downloadRoot;
+        return value.replaceAll("/+$", "");
+    }
+
+    private static String downloadRootFor(String endpoint) {
+        SourceConfig.Bunkr config = config();
+        String configured = downloadRoot();
+        if (config != null && !configured.equals(DOWNLOAD_ROOT)) return configured;
+        return endpoint != null && endpoint.contains("apidl.bunkr.ru")
+                ? "https://get.bunkrr.su" : configured;
+    }
+
+    private static String userAgent() {
+        SourceConfig.Bunkr config = config();
+        return config == null ? USER_AGENT : config.userAgent;
+    }
+
+    private static String referer(String fallback) {
+        SourceConfig.Bunkr config = config();
+        return config != null && !config.refererOverride.isEmpty()
+                ? config.refererOverride : fallback;
+    }
+
+    private static int requestTimeoutMs() {
+        SourceConfig.Bunkr config = config();
+        return config == null ? 12_000 : config.requestTimeoutMs;
+    }
+
+    private static int signTimeoutMs() {
+        SourceConfig.Bunkr config = config();
+        return config == null ? 4_000 : config.signTimeoutMs;
+    }
+
+    private static int retryCount() {
+        SourceConfig.Bunkr config = config();
+        return config == null ? 1 : config.retryCount;
+    }
+
+    private static String bunkrSelector(String fallback, String kind) {
+        SourceConfig.Bunkr config = config();
+        if (config == null) return fallback;
+        if ("albums".equals(kind)) return config.albumLinksSelector;
+        if ("video".equals(kind)) return config.directVideoSelector;
+        if ("image".equals(kind)) return config.directImageSelector;
+        return fallback;
+    }
+
+    private static void applyHeaders(Connection connection, Map<String, String> headers) {
+        for (Map.Entry<String, String> header : headers.entrySet()) {
+            connection.header(header.getKey(), header.getValue());
+        }
     }
 
     public static final class CreatorArtwork {

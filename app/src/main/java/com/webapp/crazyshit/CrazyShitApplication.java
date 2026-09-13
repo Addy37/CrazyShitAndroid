@@ -15,6 +15,8 @@ public final class CrazyShitApplication extends Application {
     public void onCreate() {
         super.onCreate();
         AppPerformance.begin();
+        RemoteSourceConfigManager.initialize(this);
+        RemoteSourceConfigManager.refreshInBackground(this);
 
         SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         boolean needsMigration = appPrefs.getBoolean("minimize_on_back", true)
