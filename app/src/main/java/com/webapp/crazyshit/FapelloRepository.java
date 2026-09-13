@@ -419,8 +419,10 @@ final class FapelloRepository {
             boolean video = type.contains("video") || isVideoUrl(content) || isVideoUrl(target);
             putMedia(items, mediaItem(model, target, thumbnail, video, modelSlug(model.url)));
         }
-        for (String key : object.keySet()) {
-            collectStructuredMediaValue(object.opt(key), model, endpoint, items, depth + 1);
+        java.util.Iterator<String> keys = object.keys();
+        while (keys.hasNext()) {
+            collectStructuredMediaValue(
+                    object.opt(keys.next()), model, endpoint, items, depth + 1);
         }
     }
 
