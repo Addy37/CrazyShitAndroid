@@ -1,0 +1,21 @@
+{
+  "results": {
+    "models": [
+      {
+        "name": "Sample Creator",
+        "url": "/sample-creator/",
+        "thumbnail": {"url": "//cdn.fapello.com/content/sample/avatar_300px.webp"}
+      },
+      {
+        "name": "Sample Creator",
+        "profile_url": "https://fapello.com/sample-creator/",
+        "image": "https://cdn.fapello.com/content/sample/avatar.webp"
+      },
+      {
+        "name": "Second Sample",
+        "url": "https://fapello.com/second-sample/",
+        "thumb": "/content/second/avatar.jpg"
+      }
+    ]
+  }
+}

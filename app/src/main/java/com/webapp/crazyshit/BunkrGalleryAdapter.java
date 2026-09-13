@@ -329,12 +329,15 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private String imageReferer(NativeContentItem item) {
         if (item != null && WikiFeetRepository.isWikiFeetUrl(item.url) &&
                 WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
+        if (item != null && !FapelloRepository.isPostUrl(item.url) &&
+                FapelloRepository.isModelUrl(item.uploader)) return item.uploader;
         return item == null ? null : item.url;
     }
 
     private SourceBadge sourceBadge(NativeContentItem item) {
         if (item == null) return null;
-        if (FapelloRepository.isFapelloUrl(item.url)) {
+        if (FapelloRepository.isFapelloUrl(item.url) ||
+                FapelloRepository.isModelUrl(item.uploader)) {
             return new SourceBadge(R.drawable.ic_source_fapello, "Fapello", false);
         }
         if (WikiFeetRepository.isWikiFeetUrl(item.url) ||

@@ -37,10 +37,20 @@ final class BunkrCreatorGalleryRepository {
     static final class Batch {
         final ArrayList<NativeContentItem> items;
         final boolean endReached;
+        final FapelloSourceException fapelloFailure;
 
         Batch(ArrayList<NativeContentItem> items, boolean endReached) {
+            this(items, endReached, null);
+        }
+
+        Batch(
+                ArrayList<NativeContentItem> items,
+                boolean endReached,
+                FapelloSourceException fapelloFailure
+        ) {
             this.items = items;
             this.endReached = endReached;
+            this.fapelloFailure = fapelloFailure;
         }
     }
 
@@ -66,18 +76,20 @@ final class BunkrCreatorGalleryRepository {
             String fapelloProfileUrl, String creatorName) throws IOException {
         State state = state(context, sessionId, query, fapelloProfileUrl, creatorName);
         synchronized (state) {
-            Batch batch = fetchNextLocked(context.getApplicationContext(), state);
+            Batch batch = fetchNextLocked(context, state);
             saveCursor(context, sessionId, state, batch);
             return batch;
         }
     }
 
     private Batch fetchNextLocked(Context context, State state) throws IOException {
-        if (state.finished()) return new Batch(new ArrayList<>(), true);
+        if (state.finished()) return new Batch(new ArrayList<>(), true, state.lastFapelloFailure);
+
+        Context appContext = context.getApplicationContext();
 
         IOException bunkrCatalogError = null;
         try {
-            loadAlbumsIfNeeded(context, state);
+            loadAlbumsIfNeeded(appContext, state);
             state.bunkrSearchFailures = 0;
         } catch (IOException error) {
             bunkrCatalogError = error;
@@ -91,11 +103,13 @@ final class BunkrCreatorGalleryRepository {
             state.fapelloSearchFailures = 0;
         } catch (IOException error) {
             fapelloCatalogError = error;
+            state.lastFapelloFailure = fapelloFailure(error);
             state.fapelloSearchFailures++;
-            if (state.fapelloSearchFailures >= 2) state.fapelloCatalogLoaded = true;
+            if (!retryableFapello(state.lastFapelloFailure) ||
+                    state.fapelloSearchFailures >= 2) state.fapelloCatalogLoaded = true;
         }
 
-        IOException wikiFeetCatalogError = loadWikiFeetCatalog(context, state);
+        IOException wikiFeetCatalogError = loadWikiFeetCatalog(appContext, state);
 
         ArrayList<AlbumCursor> selected = new ArrayList<>();
         while (!state.pending.isEmpty() && selected.size() < ALBUMS_PER_BATCH) {
@@ -127,7 +141,7 @@ final class BunkrCreatorGalleryRepository {
                 try {
                     return new AlbumPage(
                             cursor,
-                            repository.fetchAlbum(context, cursor.albumUrl, cursor.nextPage),
+                            repository.fetchAlbum(appContext, cursor.albumUrl, cursor.nextPage),
                             null
                     );
                 } catch (Exception error) {
@@ -144,7 +158,7 @@ final class BunkrCreatorGalleryRepository {
                 try {
                     return new FapelloPage(
                             cursor,
-                            new FapelloRepository().fetchModelMedia(
+                            new FapelloRepository().fetchModelMediaPage(
                                     context,
                                     cursor.model,
                                     cursor.nextPage
@@ -152,7 +166,7 @@ final class BunkrCreatorGalleryRepository {
                             null
                     );
                 } catch (Exception error) {
-                    return new FapelloPage(cursor, new ArrayList<>(), error);
+                    return new FapelloPage(cursor, null, error);
                 }
             });
             fapelloRequests.put(request, cursor);
@@ -166,7 +180,7 @@ final class BunkrCreatorGalleryRepository {
                     return new WikiFeetPage(
                             cursor,
                             new WikiFeetRepository().fetchCreatorMedia(
-                                    context, cursor.creator, cursor.nextPage, WIKIFEET_PAGE_SIZE),
+                                    appContext, cursor.creator, cursor.nextPage, WIKIFEET_PAGE_SIZE),
                             null
                     );
                 } catch (Exception error) {
@@ -217,12 +231,17 @@ final class BunkrCreatorGalleryRepository {
                     page = future.get(remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
                 } else {
                     future.cancel(true);
+                    state.lastFapelloFailure = new FapelloSourceException(
+                            FapelloSourceException.Reason.NETWORK,
+                            "Fapello request timed out"
+                    );
                     retryFapello(state, request.getValue());
                     continue;
                 }
                 applyFapelloPage(state, fapelloResult, page);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
                 future.cancel(true);
+                state.lastFapelloFailure = fapelloFailure(error);
                 retryFapello(state, request.getValue());
             }
         }
@@ -266,7 +285,7 @@ final class BunkrCreatorGalleryRepository {
                 state.loadedMediaUrls.isEmpty()) {
             throw new IOException("Fapzone sources could not be reached", fapelloCatalogError);
         }
-        return new Batch(result, state.finished());
+        return new Batch(result, state.finished(), state.lastFapelloFailure);
     }
 
     private void loadAlbumsIfNeeded(Context context, State state) throws IOException {
@@ -424,18 +443,29 @@ final class BunkrCreatorGalleryRepository {
     ) {
         if (page == null || page.cursor == null) return;
         if (page.error != null) {
+            state.lastFapelloFailure = fapelloFailure(page.error);
             retryFapello(state, page.cursor);
             return;
         }
-        if (page.items == null || page.items.isEmpty()) return;
+        FapelloRepository.MediaPage media = page.media;
+        if (media == null) {
+            state.lastFapelloFailure = new FapelloSourceException(
+                    FapelloSourceException.Reason.MALFORMED,
+                    "Fapello returned no media page"
+            );
+            return;
+        }
+        state.lastFapelloFailure = null;
 
-        for (NativeContentItem item : page.items) {
+        int added = 0;
+        for (NativeContentItem item : media.items) {
             if (item == null || item.url == null || item.url.isEmpty() ||
                     !state.loadedMediaUrls.add(item.url)) continue;
             destination.add(item);
+            added++;
             if (state.loadedMediaUrls.size() >= MAX_MEDIA_ITEMS) break;
         }
-        if (state.loadedMediaUrls.size() < MAX_MEDIA_ITEMS &&
+        if (added > 0 && media.hasNext && state.loadedMediaUrls.size() < MAX_MEDIA_ITEMS &&
                 page.cursor.nextPage < MAX_FAPELLO_PAGES) {
             page.cursor.failures = 0;
             page.cursor.nextPage++;
@@ -445,8 +475,29 @@ final class BunkrCreatorGalleryRepository {
 
     private void retryFapello(State state, FapelloCursor cursor) {
         if (cursor == null) return;
+        if (!retryableFapello(state.lastFapelloFailure)) return;
         cursor.failures++;
         if (cursor.failures <= 1) state.fapelloPending.addLast(cursor);
+    }
+
+    private boolean retryableFapello(FapelloSourceException failure) {
+        return failure == null || failure.reason == FapelloSourceException.Reason.NETWORK ||
+                failure.reason == FapelloSourceException.Reason.HTTP;
+    }
+
+    private FapelloSourceException fapelloFailure(Exception error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof FapelloSourceException) {
+                return (FapelloSourceException) current;
+            }
+            current = current.getCause();
+        }
+        return new FapelloSourceException(
+                FapelloSourceException.Reason.NETWORK,
+                "Fapello request failed",
+                error
+        );
     }
 
     private void applyWikiFeetPage(
@@ -649,6 +700,7 @@ final class BunkrCreatorGalleryRepository {
         boolean fapelloCatalogLoaded;
         boolean wikiFeetCatalogLoaded;
         boolean wikiFeetXCatalogLoaded;
+        FapelloSourceException lastFapelloFailure;
 
         State(String query) {
             this.query = query == null ? "" : query.trim();
@@ -696,12 +748,16 @@ final class BunkrCreatorGalleryRepository {
 
     private static final class FapelloPage {
         final FapelloCursor cursor;
-        final List<NativeContentItem> items;
+        final FapelloRepository.MediaPage media;
         final Exception error;
 
-        FapelloPage(FapelloCursor cursor, List<NativeContentItem> items, Exception error) {
+        FapelloPage(
+                FapelloCursor cursor,
+                FapelloRepository.MediaPage media,
+                Exception error
+        ) {
             this.cursor = cursor;
-            this.items = items;
+            this.media = media;
             this.error = error;
         }
     }

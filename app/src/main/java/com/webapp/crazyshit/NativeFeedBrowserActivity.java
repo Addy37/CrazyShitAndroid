@@ -89,6 +89,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private boolean memeMode;
     private boolean loading;
     private boolean endReached;
+    private boolean fapelloFailureShown;
     private int currentPage;
     private int generation;
     private int creatorGalleryColumns;
@@ -421,6 +422,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void reload() {
         generation++;
+        fapelloFailureShown = false;
         currentPage = 0;
         loading = false;
         endReached = false;
@@ -520,6 +522,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                     empty.setVisibility(View.GONE);
                     if (isCreatorGallery()) {
                         updateCreatorEmptyState();
+                        showFapelloFailure(completedCreatorBatch == null
+                                ? null
+                                : completedCreatorBatch.fapelloFailure);
                     } else if (itemCount() == 0) {
                         empty.setText(isCreatorGallery()
                                 ? "No matching pictures or videos loaded.\nTap to try again."
@@ -537,6 +542,11 @@ public final class NativeFeedBrowserActivity extends Activity {
                     refresh.setRefreshing(false);
                     if (isCreatorGallery()) {
                         updateCreatorEmptyState();
+                        FapelloSourceException failure = fapelloFailure(e);
+                        if (failure != null && itemCount() == 0) {
+                            empty.setText(failure.userMessage() + "\nTap to try again.");
+                            empty.setVisibility(View.VISIBLE);
+                        }
                         if (itemCount() > 0) {
                             Toast.makeText(
                                     this,
@@ -555,6 +565,28 @@ public final class NativeFeedBrowserActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void showFapelloFailure(FapelloSourceException failure) {
+        if (failure == null || fapelloFailureShown) return;
+        fapelloFailureShown = true;
+        if (itemCount() == 0) {
+            empty.setText(failure.userMessage() + "\nTap to try again.");
+            empty.setVisibility(View.VISIBLE);
+        } else {
+            Toast.makeText(this, failure.userMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private FapelloSourceException fapelloFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof FapelloSourceException) {
+                return (FapelloSourceException) current;
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private void replaceBunkrItems(List<NativeContentItem> items) {
