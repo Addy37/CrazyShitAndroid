@@ -186,10 +186,14 @@ final class FapzoneCreatorRepository {
             }
         }
 
-        String cardUrl = album == null ? model.url : album.url;
+        // Keep the exact Fapello profile on the card. The creator gallery uses it directly
+        // instead of having to rediscover or guess the profile slug from the display name.
+        String cardUrl = model.url;
         String bunkrPreview = album == null ? "" : clean(album.imageUrl);
         String imageUrl = chooseThumbnail(fapelloPreview, bunkrPreview);
-        String imageReferer = imageUrl.equals(fapelloPreview) ? model.url : cardUrl;
+        String imageReferer = imageUrl.equals(fapelloPreview)
+                ? model.url
+                : album == null ? model.url : album.url;
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_CREATOR,
                 model.name,
@@ -369,7 +373,7 @@ final class FapzoneCreatorRepository {
     }
 
     private String cacheName(int mode) {
-        return "fapzone_creator_feed_v1_" + mode;
+        return "fapzone_creator_feed_v2_" + mode;
     }
 
     private int parseRank(String value) {

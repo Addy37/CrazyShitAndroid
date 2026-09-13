@@ -356,7 +356,8 @@ public final class SearchActivity extends Activity {
     private void openCreator(NativeContentItem item) {
         BrowseUi.hideKeyboard(this, input);
         startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, item.title,
-                item.searchQuery.isEmpty() ? item.title : item.searchQuery));
+                item.searchQuery.isEmpty() ? item.title : item.searchQuery,
+                FapelloRepository.isModelUrl(item.url) ? item.url : ""));
     }
 
     private void startGlobalSearch(String query, boolean clear) {

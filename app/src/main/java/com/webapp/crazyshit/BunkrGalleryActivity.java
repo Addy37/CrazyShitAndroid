@@ -44,6 +44,7 @@ public final class BunkrGalleryActivity extends Activity {
     public static final String EXTRA_TITLE = "bunkr_gallery_title";
     public static final String EXTRA_ALBUM_URL = "bunkr_gallery_album_url";
     public static final String EXTRA_CREATOR_QUERY = "bunkr_gallery_creator_query";
+    public static final String EXTRA_FAPELLO_PROFILE_URL = "bunkr_gallery_fapello_profile_url";
     public static final String EXTRA_MEDIA_FILTER = "bunkr_gallery_media_filter";
     public static final String EXTRA_INITIAL_URL = "bunkr_gallery_initial_url";
     public static final String EXTRA_INITIAL_POSITION = "bunkr_gallery_initial_position";
@@ -65,6 +66,7 @@ public final class BunkrGalleryActivity extends Activity {
     private String albumTitle;
     private String albumUrl;
     private String creatorQuery;
+    private String fapelloProfileUrl;
     private String mediaFilter;
     private String initialUrl;
     private int initialPosition;
@@ -104,6 +106,7 @@ public final class BunkrGalleryActivity extends Activity {
         albumTitle = value(getIntent().getStringExtra(EXTRA_TITLE));
         albumUrl = value(getIntent().getStringExtra(EXTRA_ALBUM_URL));
         creatorQuery = value(getIntent().getStringExtra(EXTRA_CREATOR_QUERY));
+        fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL));
         mediaFilter = value(getIntent().getStringExtra(EXTRA_MEDIA_FILTER));
         if (!FILTER_PICTURES.equals(mediaFilter) && !FILTER_VIDEOS.equals(mediaFilter)) {
             mediaFilter = FILTER_ALL;
@@ -132,7 +135,8 @@ public final class BunkrGalleryActivity extends Activity {
                     ? BunkrGallerySessionStore.createCreator(albumTitle, albumUrl, creatorQuery)
                     : BunkrGallerySessionStore.create(albumTitle, albumUrl);
             if (isCreatorGallery()) {
-                creatorGalleryRepository.reset(sessionId, creatorQuery);
+                creatorGalleryRepository.reset(
+                        sessionId, creatorQuery, fapelloProfileUrl, albumTitle);
             }
         } else {
             albumTitle = snapshot.title;
@@ -303,7 +307,8 @@ public final class BunkrGalleryActivity extends Activity {
         pageIo.execute(() -> {
             try {
                 BunkrCreatorGalleryRepository.Batch creatorBatch = isCreatorGallery()
-                        ? creatorGalleryRepository.fetchNext(this, sessionId, creatorQuery)
+                        ? creatorGalleryRepository.fetchNext(
+                                this, sessionId, creatorQuery, fapelloProfileUrl, albumTitle)
                         : null;
                 List<NativeContentItem> result = creatorBatch == null
                         ? repository.fetchAlbum(this, albumUrl, 1)
@@ -359,7 +364,8 @@ public final class BunkrGalleryActivity extends Activity {
         pageIo.execute(() -> {
             try {
                 BunkrCreatorGalleryRepository.Batch creatorBatch = isCreatorGallery()
-                        ? creatorGalleryRepository.fetchNext(this, sessionId, creatorQuery)
+                        ? creatorGalleryRepository.fetchNext(
+                                this, sessionId, creatorQuery, fapelloProfileUrl, albumTitle)
                         : null;
                 List<NativeContentItem> result = creatorBatch == null
                         ? repository.fetchAlbum(this, albumUrl, requestPage)

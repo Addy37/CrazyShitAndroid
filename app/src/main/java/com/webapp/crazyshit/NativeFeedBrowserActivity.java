@@ -49,6 +49,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_MEME_MODE = "browser_meme_mode";
     public static final String EXTRA_SOURCE = "browser_source";
     public static final String EXTRA_BUNKR_CREATOR_QUERY = "browser_bunkr_creator_query";
+    public static final String EXTRA_FAPELLO_PROFILE_URL = "browser_fapello_profile_url";
     public static final String SOURCE_CRAZYSHIT = "crazyshit";
     public static final String SOURCE_EFUKT = "efukt";
     public static final String SOURCE_BUNKR = "bunkr";
@@ -84,6 +85,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private String baseUrl;
     private String source;
     private String creatorQuery;
+    private String fapelloProfileUrl;
     private boolean memeMode;
     private boolean loading;
     private boolean endReached;
@@ -111,6 +113,15 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     public static Intent createCreatorGallery(Activity activity, String title, String query) {
+        return createCreatorGallery(activity, title, query, "");
+    }
+
+    public static Intent createCreatorGallery(
+            Activity activity,
+            String title,
+            String query,
+            String fapelloProfileUrl
+    ) {
         String cleanQuery = query == null ? "" : query.trim();
         Intent intent = create(
                 activity,
@@ -120,6 +131,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                 SOURCE_BUNKR
         );
         intent.putExtra(EXTRA_BUNKR_CREATOR_QUERY, cleanQuery);
+        if (FapelloRepository.isModelUrl(fapelloProfileUrl)) {
+            intent.putExtra(EXTRA_FAPELLO_PROFILE_URL, fapelloProfileUrl);
+        }
         return intent;
     }
 
@@ -131,6 +145,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         memeMode = getIntent().getBooleanExtra(EXTRA_MEME_MODE, false);
         source = value(getIntent().getStringExtra(EXTRA_SOURCE), SOURCE_CRAZYSHIT);
         creatorQuery = value(getIntent().getStringExtra(EXTRA_BUNKR_CREATOR_QUERY), "");
+        fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL), "");
         if (!creatorQuery.isEmpty()) {
             source = SOURCE_BUNKR;
             baseUrl = BunkrRepository.searchUrl(creatorQuery);
@@ -201,7 +216,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                 bunkrGallerySessionId = isCreatorGallery()
                         ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
                         : BunkrGallerySessionStore.create(title, baseUrl);
-                if (isCreatorGallery()) creatorGalleryRepository.reset(bunkrGallerySessionId, creatorQuery);
+                if (isCreatorGallery()) creatorGalleryRepository.reset(
+                        bunkrGallerySessionId, creatorQuery, fapelloProfileUrl, title);
             }
             if (isCreatorGallery()) buildCreatorTabs();
             else {
@@ -415,7 +431,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                     ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
                     : BunkrGallerySessionStore.create(title, baseUrl);
             if (isCreatorGallery()) {
-                creatorGalleryRepository.reset(bunkrGallerySessionId, creatorQuery);
+                creatorGalleryRepository.reset(
+                        bunkrGallerySessionId, creatorQuery, fapelloProfileUrl, title);
             }
         } else {
             adapter.replace(new ArrayList<>());
@@ -441,7 +458,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                     creatorBatch = creatorGalleryRepository.fetchNext(
                             this,
                             requestSession,
-                            creatorQuery
+                            creatorQuery,
+                            fapelloProfileUrl,
+                            title
                     );
                     result = creatorBatch.items;
                 } else if (isBunkr()) {
@@ -703,6 +722,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         intent.putExtra(BunkrGalleryActivity.EXTRA_TITLE, title);
         intent.putExtra(BunkrGalleryActivity.EXTRA_ALBUM_URL, baseUrl);
         intent.putExtra(BunkrGalleryActivity.EXTRA_CREATOR_QUERY, creatorQuery);
+        intent.putExtra(BunkrGalleryActivity.EXTRA_FAPELLO_PROFILE_URL, fapelloProfileUrl);
         intent.putExtra(
                 BunkrGalleryActivity.EXTRA_MEDIA_FILTER,
                 !isCreatorGallery() || activeCreatorTab() == CREATOR_TAB_ALL
@@ -1173,7 +1193,8 @@ public final class NativeFeedBrowserActivity extends Activity {
                         bunkrGallerySessionId = isCreatorGallery()
                                 ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
                                 : BunkrGallerySessionStore.create(title, baseUrl);
-                        if (isCreatorGallery()) creatorGalleryRepository.reset(bunkrGallerySessionId, creatorQuery);
+                        if (isCreatorGallery()) creatorGalleryRepository.reset(
+                                bunkrGallerySessionId, creatorQuery, fapelloProfileUrl, title);
                     }
                     load(false); return;
                 }

@@ -102,7 +102,7 @@ final class FapelloRepository {
         String safeListing = normalizeListing(listing);
         int safePage = Math.max(1, page);
         String listingRoot = LIST_NEW.equals(safeListing) ? BASE : BASE + safeListing + "/";
-        String endpoint = listingRoot + (safePage > 1 ? "page-" + safePage + "/" : "");
+        String endpoint = listingUrl(safeListing, safePage);
         Document document = fetchDocument(context, endpoint, listingRoot);
         LinkedHashMap<String, Model> models = new LinkedHashMap<>();
 
@@ -116,6 +116,15 @@ final class FapelloRepository {
             models.putIfAbsent(url, new Model(name, url, listingImage(link, endpoint)));
         }
         return new ArrayList<>(models.values());
+    }
+
+    static String listingUrl(String listing, int page) throws IOException {
+        String safeListing = normalizeListingValue(listing);
+        int safePage = Math.max(1, page);
+        if (LIST_NEW.equals(safeListing)) {
+            return BASE + (safePage > 1 ? "page-" + safePage + "/" : "");
+        }
+        return BASE + safeListing + (safePage > 1 ? "-" + safePage : "") + "/";
     }
 
     List<NativeContentItem> fetchModelMedia(Context context, Model model, int page)
@@ -462,6 +471,10 @@ final class FapelloRepository {
     }
 
     private String normalizeListing(String value) throws IOException {
+        return normalizeListingValue(value);
+    }
+
+    private static String normalizeListingValue(String value) throws IOException {
         String listing = value == null ? "" : value.trim().toLowerCase(Locale.US);
         if (LIST_NEW.equals(listing) || LIST_HOT.equals(listing) ||
                 LIST_POPULAR.equals(listing)) return listing;
@@ -561,4 +574,3 @@ final class FapelloRepository {
         }
     }
 }
-

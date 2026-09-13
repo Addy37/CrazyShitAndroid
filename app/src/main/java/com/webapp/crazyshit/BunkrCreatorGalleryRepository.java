@@ -45,15 +45,26 @@ final class BunkrCreatorGalleryRepository {
     }
 
     void reset(String sessionId, String query) {
+        reset(sessionId, query, "", query);
+    }
+
+    void reset(String sessionId, String query, String fapelloProfileUrl, String creatorName) {
         if (sessionId == null || sessionId.trim().isEmpty()) return;
         synchronized (STATES) {
-            STATES.put(sessionId, new State(query));
+            State state = new State(query);
+            seedFapelloProfile(state, fapelloProfileUrl, creatorName);
+            STATES.put(sessionId, state);
             trimLocked();
         }
     }
 
     Batch fetchNext(Context context, String sessionId, String query) throws IOException {
-        State state = state(context, sessionId, query);
+        return fetchNext(context, sessionId, query, "", query);
+    }
+
+    Batch fetchNext(Context context, String sessionId, String query,
+            String fapelloProfileUrl, String creatorName) throws IOException {
+        State state = state(context, sessionId, query, fapelloProfileUrl, creatorName);
         synchronized (state) {
             Batch batch = fetchNextLocked(context.getApplicationContext(), state);
             saveCursor(context, sessionId, state, batch);
@@ -496,7 +507,8 @@ final class BunkrCreatorGalleryRepository {
         if (source != null && index < source.size()) output.add(source.get(index));
     }
 
-    private State state(Context context, String sessionId, String query) throws IOException {
+    private State state(Context context, String sessionId, String query,
+            String fapelloProfileUrl, String creatorName) throws IOException {
         if (sessionId == null || sessionId.trim().isEmpty()) {
             throw new IOException("Creator gallery session was missing");
         }
@@ -506,11 +518,23 @@ final class BunkrCreatorGalleryRepository {
             State current = STATES.get(sessionId);
             if (current == null || !cleanQuery.equalsIgnoreCase(current.query)) {
                 current = restoreCursor(context, sessionId, cleanQuery);
+                seedFapelloProfile(current, fapelloProfileUrl, creatorName);
                 STATES.put(sessionId, current);
                 trimLocked();
             }
             return current;
         }
+    }
+
+    private void seedFapelloProfile(State state, String profileUrl, String creatorName) {
+        if (state == null || !FapelloRepository.isModelUrl(profileUrl) ||
+                !state.fapelloModelUrls.add(profileUrl)) return;
+        String name = creatorName == null || creatorName.trim().isEmpty()
+                ? state.query
+                : creatorName.trim();
+        state.fapelloPending.addFirst(new FapelloCursor(
+                new FapelloRepository.Model(name, profileUrl, "")));
+        state.fapelloCatalogLoaded = true;
     }
 
     private void saveCursor(Context context, String id, State state, Batch batch) {
@@ -704,4 +728,3 @@ final class BunkrCreatorGalleryRepository {
         }
     }
 }
-
