@@ -76,14 +76,14 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private ViewPager2 primaryPager;
     private MainPagerAdapter primaryPagerAdapter;
     private AppUpdater appUpdater;
+
+    private Screen screen = Screen.HOME;
     private final Runnable ratingPromptCheck = () -> {
         if (screen != Screen.HOME || primaryPager == null
                 || primaryPager.getCurrentItem() != MainPagerAdapter.PAGE_HOME
                 || (miniPlayer != null && miniPlayer.isVisible())) return;
         RatingFeedbackPrompt.maybeShow(this);
     };
-
-    private Screen screen = Screen.HOME;
     private String feedBaseUrl = CrazyShitRepository.HOME;
     private String feedTitle = "Home";
     private int currentPage;
