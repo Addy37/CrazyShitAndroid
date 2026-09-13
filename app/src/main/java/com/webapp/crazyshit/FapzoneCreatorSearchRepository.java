@@ -100,11 +100,13 @@ final class FapzoneCreatorSearchRepository {
 
     private static final class CreatorGroup {
         private NativeContentItem preferred;
+        private String fapelloProfileUrl = "";
         private final Set<String> sources = new LinkedHashSet<>();
 
         CreatorGroup(NativeContentItem first) { add(first); }
 
         void add(NativeContentItem item) {
+            if (FapelloRepository.isModelUrl(item.url)) fapelloProfileUrl = item.url;
             if (preferred == null || (preferred.imageUrl.isEmpty() && !item.imageUrl.isEmpty())) {
                 preferred = item;
             } else {
@@ -116,7 +118,8 @@ final class FapzoneCreatorSearchRepository {
 
         NativeContentItem item() {
             return new NativeContentItem(NativeContentItem.KIND_CREATOR, preferred.title,
-                    preferred.url, preferred.imageUrl, "", preferred.uploader, "",
+                    fapelloProfileUrl.isEmpty() ? preferred.url : fapelloProfileUrl,
+                    preferred.imageUrl, "", preferred.uploader, "",
                     sourceLabel(), preferred.searchQuery);
         }
 
