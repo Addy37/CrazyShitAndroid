@@ -569,6 +569,7 @@ public class VideoDetailActivity extends Activity {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
                 if (playbackState == Player.STATE_READY) {
+                    RatingFeedbackPrompt.recordSuccessfulPlayback(VideoDetailActivity.this, mediaUrl);
                     String readyPageUrl = pageUrl;
                     playerView.postDelayed(() -> {
                         if (supportsComments() && readyPageUrl.equals(pageUrl)) {
@@ -1334,6 +1335,7 @@ public class VideoDetailActivity extends Activity {
     private void showPlaybackFailure() {
         if (failureShown || isFinishing()) return;
         failureShown = true;
+        RatingFeedbackPrompt.recordPlaybackError(this);
         new AlertDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
                 .setMessage("The native player couldn't continue this video. You can open the normal webpage instead.")

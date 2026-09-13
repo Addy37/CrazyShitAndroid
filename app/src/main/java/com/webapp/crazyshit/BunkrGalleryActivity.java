@@ -555,6 +555,14 @@ public final class BunkrGalleryActivity extends Activity {
         playbackRecovery.bind(player, item.url);
         player.addListener(new Player.Listener() {
             @Override
+            public void onPlaybackStateChanged(int playbackState) {
+                if (playbackState == Player.STATE_READY) {
+                    RatingFeedbackPrompt.recordSuccessfulPlayback(
+                            BunkrGalleryActivity.this, mediaUrl);
+                }
+            }
+
+            @Override
             public void onPlayerError(PlaybackException error) {
                 BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
                 adapter.setResolvedUrl(position, "");
@@ -565,9 +573,11 @@ public final class BunkrGalleryActivity extends Activity {
                     player.seekTo(recovered.position);
                     player.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
                 }, () -> {
+                    RatingFeedbackPrompt.recordPlaybackError(BunkrGalleryActivity.this);
                     releasePlayer(); adapter.setFailed(position, true);
                     Toast.makeText(BunkrGalleryActivity.this, "Couldn't refresh this video. Tap it to retry.", Toast.LENGTH_SHORT).show();
                 })) return;
+                RatingFeedbackPrompt.recordPlaybackError(BunkrGalleryActivity.this);
                 releasePlayer();
                 adapter.setFailed(position, true);
                 Toast.makeText(BunkrGalleryActivity.this, "Couldn't continue this video. Tap it to retry.", Toast.LENGTH_SHORT).show();

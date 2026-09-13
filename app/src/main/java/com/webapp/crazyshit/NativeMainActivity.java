@@ -78,6 +78,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private AppUpdater appUpdater;
 
     private Screen screen = Screen.HOME;
+    private final Runnable ratingPromptCheck = () -> {
+        if (screen != Screen.HOME || primaryPager == null
+                || primaryPager.getCurrentItem() != MainPagerAdapter.PAGE_HOME
+                || (miniPlayer != null && miniPlayer.isVisible())) return;
+        RatingFeedbackPrompt.maybeShow(this);
+    };
     private String feedBaseUrl = CrazyShitRepository.HOME;
     private String feedTitle = "Home";
     private int currentPage;
@@ -110,6 +116,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         else showHome();
         dispatchLauncherShortcut();
         NotificationCoordinator.maybeOfferPermission(this);
+        scheduleRatingPromptCheck();
     }
 
     @Override
@@ -442,6 +449,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
         }
         applyChaosFullscreenChrome();
+        if (position == MainPagerAdapter.PAGE_HOME) scheduleRatingPromptCheck();
+    }
+
+    private void scheduleRatingPromptCheck() {
+        if (overlayRoot == null) return;
+        overlayRoot.removeCallbacks(ratingPromptCheck);
+        overlayRoot.postDelayed(ratingPromptCheck, 1400L);
     }
 
     private void applyChaosFullscreenChrome() {
@@ -964,6 +978,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onPause() {
         super.onPause();
+        if (overlayRoot != null) overlayRoot.removeCallbacks(ratingPromptCheck);
         if (miniPlayer != null) miniPlayer.onPause();
         if (primaryPagerAdapter != null) primaryPagerAdapter.onHostPause();
     }
@@ -977,6 +992,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             appUpdater.onHostResume();
         }
         applyChaosFullscreenChrome();
+        scheduleRatingPromptCheck();
     }
 
     @Override

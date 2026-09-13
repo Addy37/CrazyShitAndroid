@@ -218,7 +218,9 @@ public class PlayerActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
-                if (playbackState == Player.STATE_ENDED) {
+                if (playbackState == Player.STATE_READY) {
+                    RatingFeedbackPrompt.recordSuccessfulPlayback(PlayerActivity.this, mediaUrl);
+                } else if (playbackState == Player.STATE_ENDED) {
                     if (rememberPositionEnabled()) {
                         getSharedPreferences("player_positions", MODE_PRIVATE)
                                 .edit()
@@ -568,6 +570,7 @@ public class PlayerActivity extends Activity {
     private void showPlaybackFailure() {
         if (failureShown || isFinishing()) return;
         failureShown = true;
+        RatingFeedbackPrompt.recordPlaybackError(this);
         new AlertDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
                 .setMessage("This video isn't exposing a stream the native player can use. You can open the normal webpage instead.")

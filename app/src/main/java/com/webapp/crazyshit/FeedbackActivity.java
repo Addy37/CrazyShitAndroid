@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Locale;
 
 public final class FeedbackActivity extends Activity {
+    public static final String EXTRA_PRESELECTED_RATING = "preselected_rating";
+    public static final String EXTRA_SOURCE = "feedback_source";
     private static final int MUTED = Color.rgb(172, 172, 181);
     private static final int SURFACE = Color.rgb(24, 24, 28);
 
@@ -30,10 +32,18 @@ public final class FeedbackActivity extends Activity {
     private MaterialButton submit;
     private String selectedType = "feature_request";
     private int selectedRating;
+    private String submissionSection = "More";
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        selectedRating = Math.max(0, Math.min(5,
+                getIntent().getIntExtra(EXTRA_PRESELECTED_RATING, 0)));
+        String source = getIntent().getStringExtra(EXTRA_SOURCE);
+        if (source != null && !source.trim().isEmpty()) {
+            submissionSection = source.trim();
+            selectedType = "general_feedback";
+        }
         showComposer();
     }
 
@@ -187,7 +197,7 @@ public final class FeedbackActivity extends Activity {
         }
         submit.setEnabled(false);
         submit.setText("Sending...");
-        FeedbackRepository.submit(this, selectedType, copy, selectedRating, "More", (id, error) ->
+        FeedbackRepository.submit(this, selectedType, copy, selectedRating, submissionSection, (id, error) ->
                 runOnUiThread(() -> {
                     submit.setEnabled(true);
                     submit.setText("Send feedback");
@@ -197,6 +207,7 @@ public final class FeedbackActivity extends Activity {
                     }
                     message.setText("");
                     selectedRating = 0;
+                    RatingFeedbackPrompt.markFeedbackSubmitted(this);
                     Toast.makeText(this, "Feedback sent. Thank you.", Toast.LENGTH_LONG).show();
                     showHistory();
                 }));
