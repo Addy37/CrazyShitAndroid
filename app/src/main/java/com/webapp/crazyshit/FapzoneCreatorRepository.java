@@ -68,21 +68,37 @@ final class FapzoneCreatorRepository {
 
         LinkedHashMap<String, FapelloRepository.Model> models = new LinkedHashMap<>();
         IOException listingError = null;
+        boolean usedBrowserFallback = false;
+        boolean attemptedBrowserFallback = false;
         for (int page = 1; page <= LIVE_PAGES && models.size() < LIVE_ITEMS; page++) {
+            List<FapelloRepository.Model> pageModels = null;
             try {
-                List<FapelloRepository.Model> pageModels =
-                        fapello.fetchModelListing(appContext, listing, page);
-                if (pageModels == null || pageModels.isEmpty()) break;
-                for (FapelloRepository.Model model : pageModels) {
-                    if (model == null || !FapelloRepository.isModelUrl(model.url)) continue;
-                    models.putIfAbsent(model.url, model);
-                    if (models.size() >= LIVE_ITEMS) break;
-                }
+                pageModels = fapello.fetchModelListing(appContext, listing, page);
             } catch (IOException error) {
                 listingError = error;
-                if (models.isEmpty()) continue;
+            }
+            if ((pageModels == null || pageModels.isEmpty()) && models.isEmpty() &&
+                    !attemptedBrowserFallback) {
+                attemptedBrowserFallback = true;
+                try {
+                    pageModels = FapelloWebViewFetcher.fetchModelListing(context, listing, page);
+                    usedBrowserFallback = true;
+                } catch (IOException browserError) {
+                    listingError = browserError;
+                }
+            }
+            if (pageModels == null || pageModels.isEmpty()) {
+                if (models.isEmpty() && !attemptedBrowserFallback) continue;
                 break;
             }
+            for (FapelloRepository.Model model : pageModels) {
+                if (model == null || !FapelloRepository.isModelUrl(model.url)) continue;
+                models.putIfAbsent(model.url, model);
+                if (models.size() >= LIVE_ITEMS) break;
+            }
+            // One browser-rendered page is enough to restore the shelf without making the user
+            // wait for several sequential hidden page loads.
+            if (usedBrowserFallback) break;
         }
         if (models.isEmpty()) {
             if (!stale.isEmpty()) return stale;
