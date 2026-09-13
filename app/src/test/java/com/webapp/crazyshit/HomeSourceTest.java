@@ -83,6 +83,14 @@ public class HomeSourceTest {
         assertEquals("https://fapello.com/thumb.jpg", items.get(0).imageUrl);
         assertEquals("", items.get(1).imageUrl);
     }
+
+    @Test public void creatorListingsUseObservedPublicPaginationRoutes() throws Exception {
+        assertEquals("https://fapello.com/", FapelloRepository.listingUrl("new", 1));
+        assertEquals("https://fapello.com/page-2/", FapelloRepository.listingUrl("new", 2));
+        assertEquals("https://fapello.com/hot/", FapelloRepository.listingUrl("hot", 1));
+        assertEquals("https://fapello.com/hot-2/", FapelloRepository.listingUrl("hot", 2));
+        assertEquals("https://fapello.com/popular-3/", FapelloRepository.listingUrl("popular", 3));
+    }
     @Test public void weeklyVideoRoutesArePlayableAndDoNotDuplicateCanonicalPostLinks() {
         String url = "https://fapello.com/video/week/31913741/";
         assertTrue(FapelloRepository.isPostUrl(url));

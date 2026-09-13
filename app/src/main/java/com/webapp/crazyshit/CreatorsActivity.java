@@ -59,7 +59,8 @@ public final class CreatorsActivity extends Activity {
         adapter = new CreatorListAdapter(this, item -> {
             BrowseUi.hideKeyboard(this, input);
             startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, item.title,
-                    item.searchQuery.isEmpty() ? item.title : item.searchQuery));
+                    item.searchQuery.isEmpty() ? item.title : item.searchQuery,
+                    FapelloRepository.isModelUrl(item.url) ? item.url : ""));
         }, this::render);
         recycler.setAdapter(adapter);
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
