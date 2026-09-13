@@ -19,6 +19,11 @@ android {
             "ADMIN_FEEDBACK_ENDPOINT",
             "\"${System.getenv("ADMIN_FEEDBACK_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/feedback-admin"}\""
         )
+        buildConfigField(
+            "String",
+            "ADMIN_SOURCE_CONFIG_ENDPOINT",
+            "\"${System.getenv("ADMIN_SOURCE_CONFIG_ENDPOINT") ?: ""}\""
+        )
     }
 
     buildTypes {
@@ -29,6 +34,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    sourceSets.getByName("main").assets.srcDir("../app/src/main/assets")
 }
 
 dependencies {

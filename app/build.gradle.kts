@@ -28,6 +28,16 @@ android {
             "FEEDBACK_ANON_KEY",
             "\"${System.getenv("FEEDBACK_ANON_KEY") ?: ""}\""
         )
+        buildConfigField(
+            "String",
+            "SOURCE_CONFIG_ENDPOINT",
+            "\"${System.getenv("SOURCE_CONFIG_ENDPOINT") ?: ""}\""
+        )
+        buildConfigField(
+            "String",
+            "SOURCE_CONFIG_PUBLISHABLE_KEY",
+            "\"${System.getenv("SUPABASE_PUBLISHABLE_KEY") ?: ""}\""
+        )
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")

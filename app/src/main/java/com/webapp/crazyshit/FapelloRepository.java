@@ -71,11 +71,12 @@ final class FapelloRepository {
     );
 
     List<Model> searchModels(Context context, String query, int limit) throws IOException {
+        requireEnabled();
         String cleanQuery = clean(query);
         if (cleanQuery.isEmpty()) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(8, limit));
         String endpoint = searchUrl(cleanQuery, safeLimit);
-        return limitModels(parseSearchResponse(fetchBody(context, endpoint, BASE, true)), safeLimit);
+        return limitModels(parseSearchResponse(fetchBody(context, endpoint, baseUrl(), true)), safeLimit);
     }
 
     List<Model> searchConfirmedModels(Context context, String query, int limit) throws IOException {
@@ -86,8 +87,11 @@ final class FapelloRepository {
         String cleanQuery = cleanStatic(query);
         int safeLimit = Math.max(1, Math.min(8, limit));
         if (cleanQuery.isEmpty()) throw new IOException("Fapello creator name was missing");
-        return BASE + "search_v2/?ajax=1&q=" + encodeStatic(cleanQuery) +
+        SourceConfig.Fapello config = config();
+        if (config == null) return BASE + "search_v2/?ajax=1&q=" + encodeStatic(cleanQuery) +
                 "&type=models&limit=" + safeLimit + "&offset=0";
+        return config.baseUrl + route(config.searchRoute,
+                "query", encodeStatic(cleanQuery), "limit", String.valueOf(safeLimit), "offset", "0");
     }
 
     List<Model> parseSearchResponse(String body) throws IOException {
@@ -139,7 +143,7 @@ final class FapelloRepository {
         }
         if (!(value instanceof JSONObject)) return;
         JSONObject object = (JSONObject) value;
-        String url = normalizeUrl(first(object, "url", "profile_url", "profileUrl", "href"), BASE);
+        String url = normalizeUrl(first(object, "url", "profile_url", "profileUrl", "href"), baseUrl());
         String name = clean(first(object, "name", "title", "username", "model"));
         if (isModelUrl(url) && !name.isEmpty()) {
             models.putIfAbsent(canonicalKey(url), new Model(name, canonicalModelUrl(url), firstJsonImage(object)));
@@ -155,9 +159,10 @@ final class FapelloRepository {
     }
 
     List<Model> fetchModelListing(Context context, String listing, int page) throws IOException {
+        requireEnabled();
         String safeListing = normalizeListing(listing);
         int safePage = Math.max(1, page);
-        String listingRoot = LIST_NEW.equals(safeListing) ? BASE : BASE + safeListing + "/";
+        String listingRoot = LIST_NEW.equals(safeListing) ? baseUrl() : baseUrl() + safeListing + "/";
         String endpoint = listingUrl(safeListing, safePage);
         Document document = fetchDocument(context, endpoint, listingRoot);
         List<Model> models = parseModelListing(document, endpoint);
@@ -178,7 +183,7 @@ final class FapelloRepository {
         LinkedHashMap<String, Model> models = new LinkedHashMap<>();
         if (document == null) return new ArrayList<>();
 
-        for (Element link : document.select("a[href]")) {
+        for (Element link : document.select(fapelloSelector("a[href]", "creator"))) {
             String text = clean(link.text());
             Matcher creatorText = CREATOR_LINK_TEXT.matcher(text);
             if (!creatorText.matches()) continue;
@@ -194,7 +199,7 @@ final class FapelloRepository {
         // it as a supplement admits routes such as /upload/, /posts/ and /2257/ as creators.
         if (models.isEmpty()) {
             LinkedHashMap<String, List<Element>> profileLinks = new LinkedHashMap<>();
-            for (Element link : document.select("a[href]")) {
+            for (Element link : document.select(fapelloSelector("a[href]", "creator"))) {
                 String url = normalizeUrl(link.attr("href"), endpoint);
                 if (!isModelUrl(url)) continue;
                 profileLinks.computeIfAbsent(canonicalKey(url), ignored -> new ArrayList<>()).add(link);
@@ -214,10 +219,19 @@ final class FapelloRepository {
     static String listingUrl(String listing, int page) throws IOException {
         String safeListing = normalizeListingValue(listing);
         int safePage = Math.max(1, page);
-        if (LIST_NEW.equals(safeListing)) {
-            return BASE + (safePage > 1 ? "page-" + safePage + "/" : "");
+        SourceConfig.Fapello config = config();
+        if (config == null) {
+            if (LIST_NEW.equals(safeListing)) return BASE + (safePage > 1 ? "page-" + safePage + "/" : "");
+            return BASE + safeListing + (safePage > 1 ? "-" + safePage : "") + "/";
         }
-        return BASE + safeListing + (safePage > 1 ? "-" + safePage : "") + "/";
+        String template;
+        if (LIST_NEW.equals(safeListing)) template = safePage == 1
+                ? config.listingNewFirstRoute : config.listingNewPageRoute;
+        else if (LIST_HOT.equals(safeListing)) template = safePage == 1
+                ? config.listingHotFirstRoute : config.listingHotPageRoute;
+        else template = safePage == 1
+                    ? config.listingPopularFirstRoute : config.listingPopularPageRoute;
+        return config.baseUrl + route(template, "page", String.valueOf(safePage));
     }
 
     List<NativeContentItem> fetchModelMedia(Context context, Model model, int page)
@@ -226,6 +240,7 @@ final class FapelloRepository {
     }
 
     MediaPage fetchModelMediaPage(Context context, Model model, int page) throws IOException {
+        requireEnabled();
         if (model == null || !isModelUrl(model.url)) {
             throw new FapelloSourceException(
                     FapelloSourceException.Reason.MALFORMED,
@@ -285,15 +300,22 @@ final class FapelloRepository {
     static String modelMediaUrl(String modelUrl, int page) throws IOException {
         String canonical = canonicalModelUrl(modelUrl);
         if (!isModelUrl(canonical)) throw new IOException("Fapello model page was invalid");
-        return BASE + "ajax/model/" + modelSlug(canonical) + "/page-" +
+        SourceConfig.Fapello config = config();
+        if (config == null) return BASE + "ajax/model/" + modelSlug(canonical) + "/page-" +
                 Math.max(1, page) + "/";
+        return config.baseUrl + route(config.creatorMediaRoute,
+                "slug", modelSlug(canonical), "page", String.valueOf(Math.max(1, page)));
     }
 
     static String modelProfilePageUrl(String modelUrl, int page) throws IOException {
         String canonical = canonicalModelUrl(modelUrl);
         if (!isModelUrl(canonical)) throw new IOException("Fapello model page was invalid");
         int safePage = Math.max(1, page);
-        return safePage == 1 ? canonical : canonical + "page-" + safePage + "/";
+        SourceConfig.Fapello config = config();
+        if (config == null) return safePage == 1 ? canonical : canonical + "page-" + safePage + "/";
+        String template = safePage == 1 ? config.creatorProfileFirstRoute : config.creatorProfilePageRoute;
+        return config.baseUrl + route(template,
+                "slug", modelSlug(canonical), "page", String.valueOf(safePage));
     }
 
     MediaPage parseModelMedia(Document document, Model model, int page, String endpoint) {
@@ -302,7 +324,8 @@ final class FapelloRepository {
         String resolvedEndpoint = clean(document.location()).isEmpty() ? endpoint : document.location();
         int postCardCount = 0;
 
-        for (Element element : document.select("a[href],a[data-href],a[data-url],[data-post],[data-permalink]")) {
+        for (Element element : document.select(fapelloSelector(
+                "a[href],a[data-href],a[data-url],[data-post],[data-permalink]", "media"))) {
             String pageUrl = firstNormalizedUrl(
                     element,
                     resolvedEndpoint,
@@ -320,7 +343,7 @@ final class FapelloRepository {
                     isVideoCard(element, pageUrl), modelSlug(model.url)));
         }
 
-        for (Element video : document.select("video,source")) {
+        for (Element video : document.select(fapelloSelector("video,source", "video"))) {
             String mediaUrl = firstNormalizedUrl(video, resolvedEndpoint, "src", "data-src", "data-url");
             if (!isDirectMedia(mediaUrl)) continue;
             Element owner = "source".equalsIgnoreCase(video.tagName()) ? video.parent() : video;
@@ -329,7 +352,7 @@ final class FapelloRepository {
             putMedia(items, mediaItem(model, maximizeMediaUrl(mediaUrl), poster, true, modelSlug(model.url)));
         }
 
-        for (Element image : document.select("img")) {
+        for (Element image : document.select(fapelloSelector("img", "images"))) {
             boolean explicitMedia = image.hasAttr("data-full") || image.hasAttr("data-original") ||
                     image.hasAttr("data-url") || image.hasAttr("data-src") ||
                     image.hasAttr("data-lazy-src");
@@ -452,7 +475,7 @@ final class FapelloRepository {
         for (Element script : document.select("script:not([type=application/ld+json])")) {
             String data = script.data();
             if (data.isEmpty() || data.length() > 2_000_000) continue;
-            Matcher matcher = SCRIPT_MEDIA_URL.matcher(data);
+            Matcher matcher = scriptMediaPattern().matcher(data);
             int found = 0;
             while (matcher.find() && found++ < 500) {
                 String url = normalizeUrl(matcher.group(), endpoint);
@@ -465,23 +488,29 @@ final class FapelloRepository {
     }
 
     List<NativeContentItem> fetchPopularVideos(Context context, int page) throws IOException {
+        requireEnabled();
         int safePage = Math.max(1, page);
         String endpoint = popularVideosUrl(safePage);
-        Document document = fetchDocument(context, endpoint, BASE + "popular_videos/week/");
+        Document document = fetchDocument(context, endpoint, popularVideosUrl(1));
         return parsePopularVideos(document, endpoint);
     }
 
     static String popularVideosUrl(int page) {
-        return BASE + "popular_videos/week/" + (page > 1 ? "page-" + page + "/" : "");
+        int safePage = Math.max(1, page);
+        SourceConfig.Fapello config = config();
+        if (config == null) return BASE + "popular_videos/week/" +
+                (safePage > 1 ? "page-" + safePage + "/" : "");
+        String template = safePage == 1 ? config.popularVideosFirstRoute : config.popularVideosPageRoute;
+        return config.baseUrl + route(template, "page", String.valueOf(safePage));
     }
 
     List<NativeContentItem> parsePopularVideos(Document document, String endpoint) {
         LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
-        boolean hasVideoRoutes = document.select("a[href]").stream().anyMatch(link -> {
+        boolean hasVideoRoutes = document.select(fapelloSelector("a[href]", "media")).stream().anyMatch(link -> {
             String url = normalizeUrl(link.attr("href"), endpoint);
             return isPostUrl(url) && url.contains("/video/");
         });
-        for (Element link : document.select("a[href]")) {
+        for (Element link : document.select(fapelloSelector("a[href]", "media"))) {
             String pageUrl = normalizeUrl(link.attr("href"), endpoint);
             if (!isPostUrl(pageUrl)) continue;
             if (hasVideoRoutes && !pageUrl.contains("/video/")) continue;
@@ -502,23 +531,24 @@ final class FapelloRepository {
 
     CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl)
             throws IOException {
-        String canonical = normalizeUrl(pageUrl, BASE);
+        requireEnabled();
+        String canonical = normalizeUrl(pageUrl, baseUrl());
         if (isDirectMedia(canonical)) {
             return new CrazyShitRepository.StreamInfo(
                     maximizeMediaUrl(canonical),
                     pageUrl,
                     fileTitle(canonical),
-                    BASE
+                    baseUrl()
             );
         }
         if (!isPostUrl(canonical)) throw new IOException("Not a Fapello media page");
 
-        Document document = fetchDocument(context, canonical, BASE);
+        Document document = fetchDocument(context, canonical, baseUrl());
         try {
             return parsePlayable(document, canonical);
         } catch (FapelloSourceException parserError) {
             if (parserError.reason != FapelloSourceException.Reason.PARSER) throw parserError;
-            document = fetchRenderedDocument(context, canonical, BASE);
+            document = fetchRenderedDocument(context, canonical, baseUrl());
             return parsePlayable(document, canonical);
         }
     }
@@ -534,7 +564,9 @@ final class FapelloRepository {
                 ? document.title()
                 : document.selectFirst("h1,h2").text());
 
-        String mediaUrl = attribute(document, "meta[property=og:video][content]", "content");
+        String mediaUrl = configurableAttribute(document,
+                fapelloSelector("", "playableVideo"), "content", "src", "data-src");
+        if (mediaUrl.isEmpty()) mediaUrl = attribute(document, "meta[property=og:video][content]", "content");
         if (mediaUrl.isEmpty()) mediaUrl = attribute(document, "meta[property=og:video:url][content]", "content");
         if (mediaUrl.isEmpty()) mediaUrl = attribute(document, "meta[property=og:video:secure_url][content]", "content");
         if (mediaUrl.isEmpty()) mediaUrl = attribute(document, "meta[name=twitter:player:stream][content]", "content");
@@ -543,11 +575,16 @@ final class FapelloRepository {
         if (mediaUrl.isEmpty()) mediaUrl = attribute(document, "video[src]", "src");
         if (mediaUrl.isEmpty()) mediaUrl = attribute(document, "video[data-src]", "data-src");
         if (mediaUrl.isEmpty()) {
-            Matcher content = CONTENT_URL.matcher(document.html());
+            Matcher content = contentUrlPattern().matcher(document.html());
             if (content.find()) mediaUrl = content.group(1);
         }
         mediaUrl = maximizeMediaUrl(normalizeUrl(mediaUrl, resolvedPage));
 
+        if (mediaUrl.isEmpty()) {
+            mediaUrl = configurableAttribute(document,
+                    fapelloSelector("", "playableImage"), "content", "data-full",
+                    "data-original", "data-src", "src");
+        }
         if (mediaUrl.isEmpty()) {
             Element centered = document.selectFirst(".uk-align-center");
             if (centered != null) {
@@ -579,7 +616,14 @@ final class FapelloRepository {
 
     static boolean isFapelloUrl(String value) {
         String host = host(value);
-        return host.equals("fapello.com") || host.endsWith(".fapello.com");
+        SourceConfig.Fapello config = config();
+        if (config == null) return host.equals("fapello.com") || host.endsWith(".fapello.com");
+        if (sameConfiguredHost(host, config.baseUrl)) return true;
+        for (String fallback : config.fallbackDomains) if (sameConfiguredHost(host, fallback)) return true;
+        for (String cdnHost : config.cdnHosts) {
+            if (host.equals(cdnHost) || host.endsWith("." + cdnHost)) return true;
+        }
+        return false;
     }
 
     static boolean isModelUrl(String value) {
@@ -600,13 +644,26 @@ final class FapelloRepository {
         if (!isFapelloUrl(value)) return false;
         try {
             String path = new URI(value).getPath();
-            return path != null && POST_PATH.matcher(path).matches();
+            return path != null && postPathPattern().matcher(path).matches();
         } catch (Exception ignored) {
             return false;
         }
     }
 
     private String fetchBody(Context context, String url, String referer, boolean json)
+            throws IOException {
+        IOException last = null;
+        for (String candidate : requestCandidates(url)) {
+            try {
+                return fetchBodyOnce(context, candidate, rebaseReferer(referer, candidate), json);
+            } catch (IOException error) {
+                last = error;
+            }
+        }
+        throw last == null ? new IOException("Fapello request failed") : last;
+    }
+
+    private String fetchBodyOnce(Context context, String url, String referer, boolean json)
             throws IOException {
         try {
             Connection connection = connection(context, url, referer)
@@ -615,12 +672,15 @@ final class FapelloRepository {
                             ? "application/json,text/javascript,*/*;q=0.8"
                             : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
             if (json) {
-                connection.timeout(8000)
-                        .maxBodySize(1024 * 1024)
-                        .header("X-Requested-With", "XMLHttpRequest")
-                        .header("Origin", "https://fapello.com")
-                        .header("Sec-Fetch-Dest", "empty")
-                        .header("Sec-Fetch-Mode", "cors");
+                SourceConfig.Fapello config = config();
+                connection.timeout(config == null ? 8000 : config.ajaxTimeoutMs)
+                        .maxBodySize(1024 * 1024);
+                if (config == null) {
+                    connection.header("X-Requested-With", "XMLHttpRequest")
+                            .header("Origin", "https://fapello.com")
+                            .header("Sec-Fetch-Dest", "empty")
+                            .header("Sec-Fetch-Mode", "cors");
+                } else applyHeaders(connection, config.ajaxHeaders);
             }
             Connection.Response response = execute(connection, url);
             String body = response.body();
@@ -649,18 +709,26 @@ final class FapelloRepository {
     }
 
     private Document fetchDocument(Context context, String url, String referer) throws IOException {
+        IOException last = null;
+        for (String candidate : requestCandidates(url)) {
+            try {
+                return fetchDocumentOnce(context, candidate, rebaseReferer(referer, candidate));
+            } catch (IOException error) {
+                last = error;
+            }
+        }
+        throw last == null ? new IOException("Fapello page request failed") : last;
+    }
+
+    private Document fetchDocumentOnce(Context context, String url, String referer) throws IOException {
         try {
-            Connection.Response response = execute(
-                    connection(context, url, referer)
-                            .header(
-                                    "Accept",
-                                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
-                            )
-                            .header("Upgrade-Insecure-Requests", "1")
-                            .header("Sec-Fetch-Dest", "document")
-                            .header("Sec-Fetch-Mode", "navigate"),
-                    url
-            );
+            Connection connection = connection(context, url, referer);
+            if (config() == null) connection
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+                    .header("Upgrade-Insecure-Requests", "1")
+                    .header("Sec-Fetch-Dest", "document")
+                    .header("Sec-Fetch-Mode", "navigate");
+            Connection.Response response = execute(connection, url);
             String body = response.body();
             validateResponse(
                     response.statusCode(),
@@ -695,7 +763,9 @@ final class FapelloRepository {
     }
 
     private Connection.Response execute(Connection connection, String url) throws IOException {
-        try {
+        int attempts = Math.max(1, (config() == null ? 1 : config().retryCount + 1));
+        IOException last = null;
+        for (int attempt = 0; attempt < attempts; attempt++) try {
             Connection.Response response = connection.execute();
             if (BuildConfig.DEBUG) {
                 String path = "/";
@@ -715,12 +785,13 @@ final class FapelloRepository {
         } catch (FapelloSourceException error) {
             throw error;
         } catch (IOException error) {
-            throw new FapelloSourceException(
-                    FapelloSourceException.Reason.NETWORK,
-                    "Fapello network request failed",
-                    error
-            );
+            last = error;
         }
+        throw new FapelloSourceException(
+                FapelloSourceException.Reason.NETWORK,
+                "Fapello network request failed",
+                last
+        );
     }
 
     static void validateResponse(
@@ -784,7 +855,7 @@ final class FapelloRepository {
         if (response == null || response.cookies().isEmpty()) return;
         try {
             CookieManager manager = CookieManager.getInstance();
-            String url = response.url() == null ? BASE : response.url().toString();
+            String url = response.url() == null ? baseUrl() : response.url().toString();
             for (Map.Entry<String, String> cookie : response.cookies().entrySet()) {
                 manager.setCookie(url, cookie.getKey() + "=" + cookie.getValue() + "; Path=/; Secure");
             }
@@ -794,19 +865,25 @@ final class FapelloRepository {
     }
 
     private Connection connection(Context context, String url, String referer) {
+        SourceConfig.Fapello config = config();
+        String requestReferer = config != null && !config.refererOverride.isEmpty()
+                ? config.refererOverride
+                : referer == null || referer.isEmpty() ? baseUrl() : referer;
         Connection connection = Jsoup.connect(url)
                 .userAgent(browserUserAgent(context))
-                .referrer(referer == null || referer.isEmpty() ? BASE : referer)
-                .header("Accept-Encoding", "gzip, deflate")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Cache-Control", "no-cache")
-                .header("Pragma", "no-cache")
-                .header("DNT", "1")
-                .header("Sec-Fetch-Site", "same-origin")
-                .timeout(15000)
+                .referrer(requestReferer)
+                .timeout(config == null ? 15000 : config.requestTimeoutMs)
                 .maxBodySize(10 * 1024 * 1024)
                 .followRedirects(true)
                 .ignoreHttpErrors(true);
+        if (config == null) {
+            connection.header("Accept-Encoding", "gzip, deflate")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .header("Cache-Control", "no-cache")
+                    .header("Pragma", "no-cache")
+                    .header("DNT", "1")
+                    .header("Sec-Fetch-Site", "same-origin");
+        } else applyHeaders(connection, config.requestHeaders);
         try {
             String cookies = CookieManager.getInstance().getCookie(url);
             if ((cookies == null || cookies.isEmpty()) && referer != null) {
@@ -821,6 +898,8 @@ final class FapelloRepository {
     }
 
     static String browserUserAgent(Context context) {
+        SourceConfig.Fapello config = config();
+        if (config != null && !USER_AGENT.equals(config.userAgent)) return config.userAgent;
         if (context != null) {
             try {
                 String current = WebSettings.getDefaultUserAgent(context);
@@ -828,7 +907,7 @@ final class FapelloRepository {
             } catch (Exception ignored) {
             }
         }
-        return USER_AGENT;
+        return config == null ? USER_AGENT : config.userAgent;
     }
 
     private String firstJsonImage(JSONObject value) {
@@ -838,7 +917,7 @@ final class FapelloRepository {
             String image = candidate instanceof JSONObject
                     ? ((JSONObject) candidate).optString("url", "")
                     : candidate instanceof String ? (String) candidate : "";
-            image = normalizeUrl(image, BASE);
+            image = normalizeUrl(image, baseUrl());
             if (isImageUrl(image)) return image;
         }
         return "";
@@ -924,7 +1003,7 @@ final class FapelloRepository {
             }
         }
         if (!document.select("video,source,[data-post],[data-permalink]").isEmpty()) return true;
-        return SCRIPT_MEDIA_URL.matcher(document.html()).find();
+        return scriptMediaPattern().matcher(document.html()).find();
     }
 
     private String imageFrom(Element root, String baseUrl) {
@@ -1034,7 +1113,8 @@ final class FapelloRepository {
         } catch (Exception ignored) {
         }
         Set<String> candidates = new java.util.LinkedHashSet<>();
-        for (Element link : document.select("link[rel=next][href],a[rel=next][href],a[href]")) {
+        for (Element link : document.select(fapelloSelector(
+                "link[rel=next][href],a[rel=next][href],a[href]", "next"))) {
             String rel = clean(link.attr("rel"));
             String text = clean(link.text());
             String value = normalizeUrl(link.attr("href"), endpoint);
@@ -1164,21 +1244,23 @@ final class FapelloRepository {
 
     private static String origin(String value) {
         try {
-            URI uri = new URI(value == null ? BASE : value);
+            URI uri = new URI(value == null ? baseUrl() : value);
             if (uri.getScheme() != null && uri.getHost() != null) {
                 return uri.getScheme() + "://" + uri.getHost();
             }
         } catch (Exception ignored) {
         }
-        return "https://fapello.com";
+        String configured = baseUrl();
+        int slash = configured.indexOf('/', "https://".length());
+        return slash < 0 ? configured : configured.substring(0, slash);
     }
 
     static String canonicalModelUrl(String value) {
-        String normalized = normalizeUrl(value, BASE);
+        String normalized = normalizeUrl(value, baseUrl());
         if (!isModelUrl(normalized)) return "";
         try {
             URI uri = new URI(normalized);
-            return "https://fapello.com" + uri.getPath().replaceAll("/+$", "") + "/";
+            return origin(baseUrl()) + uri.getPath().replaceAll("/+$", "") + "/";
         } catch (Exception ignored) {
             return "";
         }
@@ -1237,6 +1319,121 @@ final class FapelloRepository {
 
     private String clean(String value) {
         return cleanStatic(value);
+    }
+
+    private static SourceConfig.Fapello config() {
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        return current == null ? null : current.fapello;
+    }
+
+    private static String baseUrl() {
+        SourceConfig.Fapello config = config();
+        return config == null ? BASE : config.baseUrl;
+    }
+
+    private static void requireEnabled() throws FapelloSourceException {
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        SourceConfig.Fapello config = config();
+        if (current != null && current.sourceKillSwitchesEnabled && config != null && !config.enabled) {
+            throw new FapelloSourceException(
+                    FapelloSourceException.Reason.HTTP,
+                    "Fapello is temporarily unavailable"
+            );
+        }
+    }
+
+    private static String route(String template, String... replacements) {
+        String result = template == null ? "" : template;
+        for (int index = 0; index + 1 < replacements.length; index += 2) {
+            result = result.replace("{" + replacements[index] + "}", replacements[index + 1]);
+        }
+        return result;
+    }
+
+    private static String fapelloSelector(String fallback, String kind) {
+        SourceConfig.Fapello config = config();
+        if (config == null) return fallback;
+        switch (kind) {
+            case "creator": return config.creatorLinksSelector;
+            case "media": return config.mediaLinksSelector;
+            case "video": return config.videoSourcesSelector;
+            case "images": return config.imagesSelector;
+            case "next": return config.nextPageLinksSelector;
+            case "playableVideo": return config.playableVideoSelector;
+            case "playableImage": return config.playableImageSelector;
+            default: return fallback;
+        }
+    }
+
+    private static Pattern postPathPattern() {
+        SourceConfig.Fapello config = config();
+        return config == null ? POST_PATH : config.postPathPattern;
+    }
+
+    private static Pattern contentUrlPattern() {
+        SourceConfig.Fapello config = config();
+        return config == null ? CONTENT_URL : config.contentUrlPattern;
+    }
+
+    private static Pattern scriptMediaPattern() {
+        SourceConfig.Fapello config = config();
+        return config == null ? SCRIPT_MEDIA_URL : config.scriptMediaUrlPattern;
+    }
+
+    private static String configurableAttribute(Document document, String selector, String... attributes) {
+        if (document == null || selector == null || selector.trim().isEmpty()) return "";
+        for (Element element : document.select(selector)) {
+            for (String attribute : attributes) {
+                String value = element.attr(attribute);
+                if (value != null && !value.trim().isEmpty()) return value;
+            }
+        }
+        return "";
+    }
+
+    private static void applyHeaders(Connection connection, Map<String, String> headers) {
+        if (connection == null || headers == null) return;
+        for (Map.Entry<String, String> header : headers.entrySet()) {
+            connection.header(header.getKey(), header.getValue());
+        }
+    }
+
+    private static boolean sameConfiguredHost(String candidate, String configuredUrl) {
+        String configured = host(configuredUrl);
+        return !configured.isEmpty() &&
+                (candidate.equals(configured) || candidate.endsWith("." + configured));
+    }
+
+    private static List<String> requestCandidates(String value) {
+        ArrayList<String> candidates = new ArrayList<>();
+        candidates.add(value);
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        if (current != null && !current.fallbacksEnabled) return candidates;
+        SourceConfig.Fapello config = config();
+        if (config == null || config.fallbackDomains.isEmpty()) return candidates;
+        try {
+            URI source = new URI(value);
+            String path = source.getRawPath() == null ? "/" : source.getRawPath();
+            if (source.getRawQuery() != null) path += "?" + source.getRawQuery();
+            for (String fallback : config.fallbackDomains) {
+                String root = fallback.replaceAll("/+$", "");
+                String candidate = root + (path.startsWith("/") ? path : "/" + path);
+                if (!candidate.equals(value)) candidates.add(candidate);
+            }
+        } catch (Exception ignored) { }
+        return candidates;
+    }
+
+    private static String rebaseReferer(String referer, String candidate) {
+        if (referer == null || referer.trim().isEmpty()) return origin(candidate) + "/";
+        if (!isFapelloUrl(referer)) return referer;
+        try {
+            URI source = new URI(referer);
+            String path = source.getRawPath() == null ? "/" : source.getRawPath();
+            return origin(candidate) + path;
+        } catch (Exception ignored) {
+            return origin(candidate) + "/";
+        }
     }
 
     static final class MediaPage {

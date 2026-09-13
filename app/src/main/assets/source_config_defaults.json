@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "configVersion": 1,
+  "updatedAt": "2026-09-13T00:00:00Z",
+  "global": { "sourceKillSwitchesEnabled": true, "fallbacksEnabled": true },
+  "sources": {
+    "fapello": {
+      "enabled": true,
+      "baseUrl": "https://fapello.com/",
+      "fallbackDomains": [],
+      "userAgent": "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36",
+      "requestHeaders": {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "DNT": "1",
+        "Sec-Fetch-Site": "same-origin",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate"
+      },
+      "ajaxHeaders": {
+        "Accept": "application/json,text/javascript,*/*;q=0.8",
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": "https://fapello.com",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors"
+      },
+      "refererOverride": "",
+      "requestTimeoutMs": 15000,
+      "ajaxTimeoutMs": 8000,
+      "retryCount": 1,
+      "routes": {
+        "search": "search_v2/?ajax=1&q={query}&type=models&limit={limit}&offset={offset}",
+        "creatorMedia": "ajax/model/{slug}/page-{page}/",
+        "creatorProfileFirst": "{slug}/",
+        "creatorProfilePage": "{slug}/page-{page}/",
+        "listingNewFirst": "",
+        "listingNewPage": "page-{page}/",
+        "listingHotFirst": "hot/",
+        "listingHotPage": "hot-{page}/",
+        "listingPopularFirst": "popular/",
+        "listingPopularPage": "popular-{page}/",
+        "popularVideosFirst": "popular_videos/week/",
+        "popularVideosPage": "popular_videos/week/page-{page}/"
+      },
+      "selectors": {
+        "creatorLinks": "a[href]",
+        "mediaLinks": "a[href],a[data-href],a[data-url],[data-post],[data-permalink]",
+        "videoSources": "video,source",
+        "images": "img",
+        "nextPageLinks": "link[rel=next][href],a[rel=next][href],a[href]",
+        "playableVideo": "meta[property=og:video][content],meta[property=og:video:url][content],meta[property=og:video:secure_url][content],meta[name=twitter:player:stream][content],video source[src],video source[data-src],video[src],video[data-src]",
+        "playableImage": ".uk-align-center,meta[property=og:image][content]"
+      },
+      "patterns": {
+        "postPath": "(?i)^/(?:video/(?:[^/]+/)?[0-9]+|[^/]+/[0-9]+)/?$",
+        "contentUrl": "(?is)[\\\"']contentUrl[\\\"']\\s*:\\s*[\\\"'](https?://[^\\\"']+)[\\\"']",
+        "scriptMediaUrl": "(?is)(?:https?:)?(?:\\\\/|/){2}[^\\s\\\"'<>]+?\\.(?:jpe?g|png|webp|avif|gif|mp4|webm|m4v|mov|m3u8|mpd)(?:\\?[^\\s\\\"'<>]*)?"
+      },
+      "cdnHosts": ["cdn.fapello.com", "video.fapello.com"]
+    },
+    "bunkr": {
+      "enabled": true,
+      "indexUrl": "https://balbums.st/",
+      "pageOrigins": ["https://bunkr.fi", "https://bunkr.cr", "https://bunkr.site", "https://bunkr.ph"],
+      "fallbackOrigins": ["https://bunkrr.su"],
+      "apiEndpoints": ["https://dl.bunkr.cr/api/_001_v2", "https://apidl.bunkr.ru/api/_001_v2"],
+      "signUrl": "https://glb-apisign.cdn.cr/sign",
+      "downloadRoot": "https://dl.bunkr.cr/",
+      "userAgent": "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36",
+      "requestHeaders": { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8" },
+      "refererOverride": "",
+      "requestTimeoutMs": 12000,
+      "signTimeoutMs": 4000,
+      "retryCount": 1,
+      "selectors": {
+        "albumLinks": "a[href*=/a/]",
+        "directVideo": "video[src],video source[src],source[type*=video][src]",
+        "directImage": "main img[src],.lightgallery img[src],img[data-src],picture source[src]"
+      },
+      "cdnHosts": ["cdn.cr", "scdn.st", "bunkr.ru", "bunkrr.su"]
+    },
+    "wikifeet": {
+      "enabled": true,
+      "baseUrl": "https://wikifeet.com/",
+      "fallbackDomains": [],
+      "pictureHost": "pics.wikifeet.com",
+      "thumbnailHost": "thumbs.wikifeet.com",
+      "userAgent": "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36",
+      "requestHeaders": { "Accept-Encoding": "identity", "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
+      "ajaxHeaders": { "Accept": "application/json,text/html,*/*;q=0.8", "X-Requested-With": "XMLHttpRequest" },
+      "refererOverride": "",
+      "requestTimeoutMs": 15000,
+      "ajaxTimeoutMs": 6000,
+      "retryCount": 1,
+      "searchRoute": "search/{query}",
+      "searchSelector": "#searchresults a[href], a[href]"
+    },
+    "wikifeetx": {
+      "enabled": true,
+      "baseUrl": "https://wikifeetx.com/",
+      "fallbackDomains": [],
+      "pictureHost": "pics.wikifeet.com",
+      "thumbnailHost": "thumbs.wikifeet.com",
+      "userAgent": "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36",
+      "requestHeaders": { "Accept-Encoding": "identity", "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
+      "ajaxHeaders": { "Accept": "application/json,text/html,*/*;q=0.8", "X-Requested-With": "XMLHttpRequest" },
+      "refererOverride": "",
+      "requestTimeoutMs": 15000,
+      "ajaxTimeoutMs": 6000,
+      "retryCount": 1,
+      "searchRoute": "search/{query}",
+      "searchSelector": "#searchresults a[href], a[href]"
+    }
+  }
+}

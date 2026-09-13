@@ -33,10 +33,27 @@ final class AdminRepository {
         }
     }
 
+    static final class ConfigVersion {
+        final long version;
+        final long basedOnVersion;
+        final String updatedAt;
+        final String action;
+        final boolean active;
+
+        ConfigVersion(JSONObject value) {
+            version = value.optLong("config_version");
+            basedOnVersion = value.optLong("based_on_version");
+            updatedAt = value.optString("updated_at");
+            action = value.optString("action", "publish");
+            active = value.optBoolean("is_active");
+        }
+    }
+
     private AdminRepository() {}
 
     static List<Item> list(String token) throws Exception {
-        JSONObject result = request(token, new JSONObject().put("action", "list"));
+        JSONObject result = request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token,
+                new JSONObject().put("action", "list"));
         JSONArray rows = result.optJSONArray("items");
         List<Item> items = new ArrayList<>();
         if (rows != null) {
@@ -46,18 +63,57 @@ final class AdminRepository {
     }
 
     static void update(String token, String id, String status, String reply) throws Exception {
-        request(token, new JSONObject()
+        request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token, new JSONObject()
                 .put("action", "update")
                 .put("id", id)
                 .put("status", status)
                 .put("developer_reply", reply));
     }
 
-    private static JSONObject request(String token, JSONObject body) throws Exception {
+    static JSONObject currentConfig(String token) throws Exception {
+        JSONObject result = request(BuildConfig.ADMIN_SOURCE_CONFIG_ENDPOINT, token,
+                new JSONObject().put("action", "current"));
+        return result.optJSONObject("item");
+    }
+
+    static List<ConfigVersion> configHistory(String token) throws Exception {
+        JSONObject result = request(BuildConfig.ADMIN_SOURCE_CONFIG_ENDPOINT, token,
+                new JSONObject().put("action", "history"));
+        JSONArray rows = result.optJSONArray("items");
+        List<ConfigVersion> items = new ArrayList<>();
+        if (rows != null) for (int index = 0; index < rows.length(); index++) {
+            items.add(new ConfigVersion(rows.getJSONObject(index)));
+        }
+        return items;
+    }
+
+    static long validateConfig(String token, JSONObject config) throws Exception {
+        JSONObject result = request(BuildConfig.ADMIN_SOURCE_CONFIG_ENDPOINT, token,
+                new JSONObject().put("action", "validate").put("config", config));
+        if (!result.optBoolean("valid")) throw new IllegalStateException("Configuration was rejected.");
+        return result.optLong("configVersion");
+    }
+
+    static long publishConfig(String token, JSONObject config) throws Exception {
+        JSONObject result = request(BuildConfig.ADMIN_SOURCE_CONFIG_ENDPOINT, token,
+                new JSONObject().put("action", "publish").put("config", config));
+        return result.optLong("configVersion");
+    }
+
+    static long rollbackConfig(String token, long version) throws Exception {
+        JSONObject result = request(BuildConfig.ADMIN_SOURCE_CONFIG_ENDPOINT, token,
+                new JSONObject().put("action", "rollback").put("configVersion", version));
+        return result.optLong("configVersion");
+    }
+
+    private static JSONObject request(String endpoint, String token, JSONObject body) throws Exception {
         if (token == null || token.trim().isEmpty()) throw new SecurityException("Admin token required.");
+        if (endpoint == null || endpoint.trim().isEmpty()) {
+            throw new IllegalStateException("The admin endpoint is not configured.");
+        }
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL(BuildConfig.ADMIN_FEEDBACK_ENDPOINT).openConnection();
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(12_000);
             connection.setReadTimeout(20_000);

@@ -344,7 +344,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     return;
                 }
                 String url = page.seriesSource == SERIES_SOURCE_BUNKR
-                        ? BunkrRepository.MOST_FILES_ALBUMS
+                        ? BunkrRepository.mostFilesAlbumsUrl()
                         : page.seriesSource == SERIES_SOURCE_EFUKT
                         ? EfuktRepository.SERIES
                         : BrowseRepository.SERIES;
