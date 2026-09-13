@@ -185,6 +185,27 @@ public final class FapelloRepositoryTest {
         assertEquals(1L, images);
     }
 
+    @Test public void creatorListingsIgnoreNavigationAndEditorialPages() throws Exception {
+        String endpoint = FapelloRepository.listingUrl(FapelloRepository.LIST_HOT, 1);
+        List<FapelloRepository.Model> models = repository.parseModelListing(
+                document("creator-listing.html", endpoint), endpoint);
+
+        assertEquals(2, models.size());
+        assertEquals("Britney Spears", models.get(0).name);
+        assertEquals("https://fapello.com/britney-spears-1/", models.get(0).url);
+        assertEquals("Anya Taylor-Joy", models.get(1).name);
+        assertEquals("https://fapello.com/anya-taylor-joy/", models.get(1).url);
+    }
+
+    @Test public void utilityRoutesAreNeverAcceptedAsCreatorProfiles() {
+        for (String slug : new String[]{
+                "upload", "daily-search-ranking", "posts", "2257", "what-is-fapello"
+        }) {
+            assertFalse(slug, FapelloRepository.isModelUrl("https://fapello.com/" + slug + "/"));
+        }
+        assertTrue(FapelloRepository.isModelUrl("https://fapello.com/anya-taylor-joy/"));
+    }
+
     private void assertReason(int status, FapelloSourceException.Reason reason) throws Exception {
         try {
             FapelloRepository.validateResponse(status, "text/html", "origin", "", "response", false);

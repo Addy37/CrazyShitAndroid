@@ -62,6 +62,13 @@ final class FapelloRepository {
                     + "attention required[^<]{0,80}cloudflare|just a moment[^<]{0,120}cloudflare|"
                     + "cloudflare[^<]{0,120}(?:blocked|forbidden|challenge))"
     );
+    private static final Pattern RESERVED_MODEL_SLUG = Pattern.compile(
+            "(?i)^(?:search|search_v2|s|new|hot|videos|trending|popular|ajax|video|welcome|"
+                    + "login|signup|sign-up|tags|random|forum|report|dmca|contacts|language|"
+                    + "privacy|terms|add-model|upload|posts|comments|recent-comments|2257|"
+                    + "what-is-fapello|daily-search-ranking|popular-videos|popular_videos|"
+                    + "video-player|forgot-password)$"
+    );
 
     List<Model> searchModels(Context context, String query, int limit) throws IOException {
         String cleanQuery = clean(query);
@@ -182,20 +189,24 @@ final class FapelloRepository {
                     new Model(name, canonicalModelUrl(url), listingImage(link, endpoint)));
         }
 
-        LinkedHashMap<String, List<Element>> profileLinks = new LinkedHashMap<>();
-        for (Element link : document.select("a[href]")) {
-            String url = normalizeUrl(link.attr("href"), endpoint);
-            if (!isModelUrl(url)) continue;
-            profileLinks.computeIfAbsent(canonicalKey(url), ignored -> new ArrayList<>()).add(link);
-        }
-        for (Map.Entry<String, List<Element>> entry : profileLinks.entrySet()) {
-            if (models.containsKey(entry.getKey())) continue;
-            List<Element> links = entry.getValue();
-            String name = fallbackCreatorName(links);
-            String image = fallbackCreatorImage(links, endpoint);
-            if (name.isEmpty() || (links.size() < 2 && image.isEmpty())) continue;
-            String url = canonicalModelUrl(normalizeUrl(links.get(0).attr("href"), endpoint));
-            models.put(entry.getKey(), new Model(name, url, image));
+        // Current listing pages include navigation and legal links alongside creator cards.
+        // Only use the broad legacy fallback when no explicit creator card was found. Running
+        // it as a supplement admits routes such as /upload/, /posts/ and /2257/ as creators.
+        if (models.isEmpty()) {
+            LinkedHashMap<String, List<Element>> profileLinks = new LinkedHashMap<>();
+            for (Element link : document.select("a[href]")) {
+                String url = normalizeUrl(link.attr("href"), endpoint);
+                if (!isModelUrl(url)) continue;
+                profileLinks.computeIfAbsent(canonicalKey(url), ignored -> new ArrayList<>()).add(link);
+            }
+            for (Map.Entry<String, List<Element>> entry : profileLinks.entrySet()) {
+                List<Element> links = entry.getValue();
+                String name = fallbackCreatorName(links);
+                String image = fallbackCreatorImage(links, endpoint);
+                if (name.isEmpty() || (links.size() < 2 && image.isEmpty())) continue;
+                String url = canonicalModelUrl(normalizeUrl(links.get(0).attr("href"), endpoint));
+                models.put(entry.getKey(), new Model(name, url, image));
+            }
         }
         return new ArrayList<>(models.values());
     }
@@ -579,19 +590,7 @@ final class FapelloRepository {
             String[] parts = path.replaceAll("^/+|/+$", "").split("/");
             if (parts.length != 1 || parts[0].isEmpty()) return false;
             String lower = parts[0].toLowerCase(Locale.US);
-            return !lower.equals("search") && !lower.equals("search_v2") &&
-                    !lower.equals("new") && !lower.equals("hot") &&
-                    !lower.equals("videos") && !lower.equals("trending") &&
-                    !lower.equals("popular") && !lower.startsWith("top-") &&
-                    !lower.equals("ajax") && !lower.equals("video") &&
-                    !lower.equals("welcome") && !lower.equals("login") &&
-                    !lower.equals("signup") && !lower.equals("sign-up") &&
-                    !lower.equals("tags") && !lower.equals("random") &&
-                    !lower.equals("forum") && !lower.equals("report") &&
-                    !lower.equals("dmca") && !lower.equals("contacts") &&
-                    !lower.equals("language") && !lower.equals("privacy") &&
-                    !lower.equals("terms") && !lower.equals("add-model") &&
-                    !lower.equals("s");
+            return !RESERVED_MODEL_SLUG.matcher(lower).matches() && !lower.startsWith("top-");
         } catch (Exception ignored) {
             return false;
         }

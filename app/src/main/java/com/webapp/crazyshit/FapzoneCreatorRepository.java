@@ -373,7 +373,8 @@ final class FapzoneCreatorRepository {
     }
 
     private String cacheName(int mode) {
-        return "fapzone_creator_feed_v2_" + mode;
+        // v3 discards cards cached before static Fapello routes were excluded from listings.
+        return "fapzone_creator_feed_v3_" + mode;
     }
 
     private int parseRank(String value) {
