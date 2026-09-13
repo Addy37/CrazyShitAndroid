@@ -91,6 +91,23 @@ public class HomeSourceTest {
         assertEquals("https://fapello.com/hot-2/", FapelloRepository.listingUrl("hot", 2));
         assertEquals("https://fapello.com/popular-3/", FapelloRepository.listingUrl("popular", 3));
     }
+
+    @Test public void creatorListingAcceptsCurrentAndCompactCardMarkup() {
+        String html = "<main>"
+                + "<article><a href='/alice-smith/'>Alice Smith</a>"
+                + "<a href='/alice-smith/'>+ 4 photos</a>"
+                + "<a href='/alice-smith/'>View all content from Alice Smith</a></article>"
+                + "<article><a href='/zoe-jones/'><img data-src='/zoe.jpg'>Zoe Jones</a></article>"
+                + "<nav><a href='/login/'>Log In</a><a href='/forum/'>Forum</a></nav>"
+                + "</main>";
+        List<FapelloRepository.Model> models = new FapelloRepository().parseModelListing(
+                Jsoup.parse(html, FapelloRepository.BASE), FapelloRepository.BASE);
+        assertEquals(2, models.size());
+        assertEquals("Alice Smith", models.get(0).name);
+        assertEquals("https://fapello.com/alice-smith/", models.get(0).url);
+        assertEquals("Zoe Jones", models.get(1).name);
+        assertEquals("https://fapello.com/zoe.jpg", models.get(1).imageUrl);
+    }
     @Test public void weeklyVideoRoutesArePlayableAndDoNotDuplicateCanonicalPostLinks() {
         String url = "https://fapello.com/video/week/31913741/";
         assertTrue(FapelloRepository.isPostUrl(url));

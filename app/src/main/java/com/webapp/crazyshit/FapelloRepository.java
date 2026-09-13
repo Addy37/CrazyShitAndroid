@@ -42,6 +42,9 @@ final class FapelloRepository {
     private static final Pattern DIRECT_MEDIA = Pattern.compile(
             "(?i)\\.(?:jpe?g|png|webp|avif|gif|bmp|heic|heif|mp4|webm|m4v|mov|m3u8|mpd)(?:$|[?#])"
     );
+    private static final Pattern CREATOR_LINK_TEXT = Pattern.compile(
+            "(?i)^(?:see|view)\\s+(?:all\\s+)?content\\s+(?:of|from)\\s+(.+)$"
+    );
 
     List<Model> searchModels(Context context, String query, int limit) throws IOException {
         return searchModels(context, query, limit, true);
@@ -104,16 +107,37 @@ final class FapelloRepository {
         String listingRoot = LIST_NEW.equals(safeListing) ? BASE : BASE + safeListing + "/";
         String endpoint = listingUrl(safeListing, safePage);
         Document document = fetchDocument(context, endpoint, listingRoot);
+        return parseModelListing(document, endpoint);
+    }
+
+    List<Model> parseModelListing(Document document, String endpoint) {
         LinkedHashMap<String, Model> models = new LinkedHashMap<>();
 
         for (Element link : document.select("a[href]")) {
             String text = clean(link.text());
-            String prefix = "See all content of ";
-            if (!text.regionMatches(true, 0, prefix, 0, prefix.length())) continue;
-            String name = clean(text.substring(prefix.length()));
+            Matcher creatorText = CREATOR_LINK_TEXT.matcher(text);
+            if (!creatorText.matches()) continue;
+            String name = clean(creatorText.group(1));
             String url = normalizeUrl(link.attr("href"), endpoint);
             if (name.isEmpty() || !isModelUrl(url)) continue;
             models.putIfAbsent(url, new Model(name, url, listingImage(link, endpoint)));
+        }
+
+        // Some Fapello responses omit or rename the "See all content" link. Group repeated
+        // profile links from each creator card so the feed still works across those variants.
+        LinkedHashMap<String, List<Element>> profileLinks = new LinkedHashMap<>();
+        for (Element link : document.select("a[href]")) {
+            String url = normalizeUrl(link.attr("href"), endpoint);
+            if (!isModelUrl(url)) continue;
+            profileLinks.computeIfAbsent(url, ignored -> new ArrayList<>()).add(link);
+        }
+        for (java.util.Map.Entry<String, List<Element>> entry : profileLinks.entrySet()) {
+            if (models.containsKey(entry.getKey())) continue;
+            List<Element> links = entry.getValue();
+            String name = fallbackCreatorName(links);
+            String image = fallbackCreatorImage(links, endpoint);
+            if (name.isEmpty() || (links.size() < 2 && image.isEmpty())) continue;
+            models.put(entry.getKey(), new Model(name, entry.getKey(), image));
         }
         return new ArrayList<>(models.values());
     }
@@ -275,7 +299,14 @@ final class FapelloRepository {
                     !lower.equals("new") && !lower.equals("hot") &&
                     !lower.equals("videos") && !lower.equals("trending") &&
                     !lower.equals("popular") && !lower.startsWith("top-") &&
-                    !lower.equals("ajax") && !lower.equals("video");
+                    !lower.equals("ajax") && !lower.equals("video") &&
+                    !lower.equals("welcome") && !lower.equals("login") &&
+                    !lower.equals("signup") && !lower.equals("sign-up") &&
+                    !lower.equals("tags") && !lower.equals("random") &&
+                    !lower.equals("forum") && !lower.equals("report") &&
+                    !lower.equals("dmca") && !lower.equals("contacts") &&
+                    !lower.equals("language") && !lower.equals("privacy") &&
+                    !lower.equals("terms") && !lower.equals("add-model");
         } catch (Exception ignored) {
             return false;
         }
@@ -320,7 +351,10 @@ final class FapelloRepository {
         Connection connection = Jsoup.connect(url)
                 .userAgent(USER_AGENT)
                 .referrer(referer == null || referer.isEmpty() ? BASE : referer)
-                .header("Accept-Encoding", "identity")
+                .header("Accept-Encoding", "gzip, deflate")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Cache-Control", "no-cache")
+                .header("Pragma", "no-cache")
                 .timeout(15000)
                 .maxBodySize(10 * 1024 * 1024)
                 .followRedirects(true)
@@ -336,6 +370,39 @@ final class FapelloRepository {
         } catch (Exception ignored) {
         }
         return connection;
+    }
+
+    private String fallbackCreatorName(List<Element> links) {
+        if (links == null) return "";
+        for (Element link : links) {
+            String[] values = {link.text(), link.attr("title"), link.attr("aria-label")};
+            for (String value : values) {
+                String candidate = clean(value);
+                Matcher creatorText = CREATOR_LINK_TEXT.matcher(candidate);
+                if (creatorText.matches()) candidate = clean(creatorText.group(1));
+                String lower = candidate.toLowerCase(Locale.US);
+                if (candidate.isEmpty() || candidate.length() > 80 || lower.equals("image") ||
+                        lower.equals("post") || lower.startsWith("follow") ||
+                        lower.startsWith("+") || lower.matches("[0-9]+\\s+likes?")) continue;
+                return candidate;
+            }
+        }
+        return "";
+    }
+
+    private String fallbackCreatorImage(List<Element> links, String endpoint) {
+        if (links == null) return "";
+        for (Element link : links) {
+            String image = imageFrom(link, endpoint);
+            if (!image.isEmpty()) return image;
+            Element parent = link.parent();
+            for (int depth = 0; parent != null && depth < 3; depth++) {
+                image = imageFrom(parent, endpoint);
+                if (!image.isEmpty()) return image;
+                parent = parent.parent();
+            }
+        }
+        return "";
     }
 
     private String firstJsonImage(JSONObject value) {
