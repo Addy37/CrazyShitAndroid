@@ -100,6 +100,12 @@ final class FapelloRepository {
         }
         try {
             Object root = new org.json.JSONTokener(value).nextValue();
+            if (!(root instanceof JSONObject) && !(root instanceof JSONArray)) {
+                throw new FapelloSourceException(
+                        FapelloSourceException.Reason.MALFORMED,
+                        "Fapello search did not return a JSON object or array"
+                );
+            }
             LinkedHashMap<String, Model> models = new LinkedHashMap<>();
             collectSearchModels(root, models, 0);
             return new ArrayList<>(models.values());
