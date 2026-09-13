@@ -1455,6 +1455,7 @@ public final class ChaosFeedView extends FrameLayout {
                 public void onPlaybackStateChanged(int state) {
                     if (player != createdPlayer) return;
                     if (state == Player.STATE_READY) {
+                        RatingFeedbackPrompt.recordSuccessfulPlayback(activity, nextStream.mediaUrl);
                         failurePending = false;
                         root.removeCallbacks(skipFailedClipRunnable);
                         loading.setVisibility(View.GONE);
@@ -1824,6 +1825,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void showFinalFailure() {
+            RatingFeedbackPrompt.recordPlaybackError(activity);
             loading.setVisibility(View.GONE);
             failurePending = true;
             failure.setText("Couldn't play this one\nMoving to the next video…");

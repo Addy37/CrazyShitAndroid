@@ -173,6 +173,7 @@ public final class NativeMiniPlayer {
                 @Override
                 public void onPlaybackStateChanged(int playbackState) {
                     if (playbackState == Player.STATE_READY) {
+                        RatingFeedbackPrompt.recordSuccessfulPlayback(activity, mediaUrl);
                         playerReady = true;
                         if (travelActive) {
                             maybeFinishTravelPoster();
