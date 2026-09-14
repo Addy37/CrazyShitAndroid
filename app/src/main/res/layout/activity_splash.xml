@@ -3,17 +3,33 @@
     android:id="@+id/splashRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000"
+    android:background="#05070B"
     android:clipChildren="false"
     android:clipToPadding="false">
 
     <View
-        android:id="@+id/splashGlow"
+        android:layout_width="360dp"
+        android:layout_height="180dp"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="-112dp"
+        android:alpha="0.88"
+        android:background="@drawable/splash_cyan_arc" />
+
+    <View
         android:layout_width="420dp"
-        android:layout_height="260dp"
+        android:layout_height="210dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="-138dp"
+        android:alpha="0.72"
+        android:background="@drawable/splash_cyan_arc" />
+
+    <View
+        android:id="@+id/splashGlow"
+        android:layout_width="440dp"
+        android:layout_height="300dp"
         android:layout_gravity="center"
         android:alpha="0"
-        android:background="@drawable/splash_orange_glow" />
+        android:background="@drawable/splash_cyan_glow" />
 
     <View
         android:id="@+id/splashSweep"
@@ -23,15 +39,59 @@
         android:alpha="0"
         android:background="@drawable/splash_light_streak" />
 
-    <ImageView
+    <LinearLayout
         android:id="@+id/splashWordmark"
-        android:layout_width="match_parent"
-        android:layout_height="320dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:layout_marginStart="12dp"
-        android:layout_marginEnd="12dp"
-        android:contentDescription="@null"
-        android:scaleType="fitCenter"
-        android:src="@drawable/splash_wordmark_transparent" />
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp">
+
+        <ImageView
+            android:layout_width="188dp"
+            android:layout_height="188dp"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_zerofilter_mark" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="-6dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif"
+                android:text="Zero"
+                android:textColor="#22D3EE"
+                android:textSize="42sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-light"
+                android:text="Filter"
+                android:textColor="#F3F4F6"
+                android:textSize="42sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.22"
+            android:text="@string/zerofilter_tagline"
+            android:textAllCaps="true"
+            android:textColor="#B8C4D1"
+            android:textSize="10sp" />
+
+    </LinearLayout>
 
 </FrameLayout>
