@@ -1,9 +1,12 @@
 package com.addy37.crazyshitadmin;
 
+import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -29,51 +32,53 @@ public final class AnalyticsActivity extends AppCompatActivity {
     private ProgressBar progress;
     private MaterialButton refresh;
 
-    @Override
-    protected void onCreate(Bundle state) {
+    @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         buildUi();
         load();
     }
 
     private void buildUi() {
-        LinearLayout root = vertical(16);
-        root.setBackgroundColor(color(R.color.app_background));
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(color(R.color.app_background));
 
+        LinearLayout page = vertical(18);
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = text("Analytics", 28, Color.WHITE);
-        header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        MaterialButton close = button("Back");
-        close.setOnClickListener(v -> finish());
-        header.addView(close);
-        root.addView(header);
-
-        TextView detail = text(
-                "Aggregate trends only. No search terms, media URLs, or individual viewing histories are stored.",
-                13, color(R.color.app_on_surface_variant));
-        detail.setPadding(0, dp(4), 0, dp(8));
-        root.addView(detail);
+        LinearLayout titles = vertical(0);
+        TextView eyebrow = label("AUDIENCE INSIGHTS");
+        TextView title = text("Analytics", 30, Color.WHITE);
+        title.setTypeface(null, Typeface.BOLD);
+        TextView detail = text("See what people use without tracking individual viewing histories.",
+                14, color(R.color.app_on_surface_variant));
+        titles.addView(eyebrow);
+        titles.addView(title);
+        titles.addView(detail);
+        header.addView(titles, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        refresh = compactButton("Refresh");
+        refresh.setOnClickListener(v -> load());
+        header.addView(refresh);
+        page.addView(header);
 
         LinearLayout statusRow = new LinearLayout(this);
         statusRow.setGravity(Gravity.CENTER_VERTICAL);
-        status = text("Loading analytics…", 13, color(R.color.app_on_surface_variant));
+        statusRow.setPadding(0, dp(12), 0, dp(4));
+        status = text("Loading live analytics…", 13, color(R.color.app_on_surface_variant));
         statusRow.addView(status, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         progress = new ProgressBar(this);
-        statusRow.addView(progress, new LinearLayout.LayoutParams(dp(32), dp(32)));
-        refresh = button("Refresh");
-        refresh.setVisibility(android.view.View.GONE);
-        refresh.setOnClickListener(v -> load());
-        statusRow.addView(refresh);
-        root.addView(statusRow);
+        statusRow.addView(progress, new LinearLayout.LayoutParams(dp(30), dp(30)));
+        page.addView(statusRow);
 
         content = vertical(0);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.addView(content);
-        root.addView(scroll, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        setContentView(root);
+        page.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        shell.addView(page, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        shell.addView(bottomNav());
+        setContentView(shell);
     }
 
     private void load() {
@@ -83,9 +88,9 @@ public final class AnalyticsActivity extends AppCompatActivity {
             finish();
             return;
         }
-        progress.setVisibility(android.view.View.VISIBLE);
-        refresh.setVisibility(android.view.View.GONE);
-        status.setText("Loading analytics…");
+        progress.setVisibility(View.VISIBLE);
+        refresh.setEnabled(false);
+        status.setText("Loading live analytics…");
         network.execute(() -> {
             try {
                 AdminRepository.AnalyticsDashboard dashboard = AdminRepository.analytics(token);
@@ -98,8 +103,8 @@ public final class AnalyticsActivity extends AppCompatActivity {
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
-                    progress.setVisibility(android.view.View.GONE);
-                    refresh.setVisibility(android.view.View.VISIBLE);
+                    progress.setVisibility(View.GONE);
+                    refresh.setEnabled(true);
                     status.setText("Could not load analytics: " + message(error));
                 });
             }
@@ -107,78 +112,82 @@ public final class AnalyticsActivity extends AppCompatActivity {
     }
 
     private void render(AdminRepository.AnalyticsDashboard dashboard) {
-        progress.setVisibility(android.view.View.GONE);
-        refresh.setVisibility(android.view.View.VISIBLE);
-        status.setText(dashboard.generatedAt.isEmpty()
-                ? "Updated now"
-                : "Updated from live Supabase data");
+        progress.setVisibility(View.GONE);
+        refresh.setEnabled(true);
+        status.setText("Live Supabase data updated now");
         content.removeAllViews();
 
         LinearLayout users = new LinearLayout(this);
         users.setOrientation(LinearLayout.HORIZONTAL);
         users.addView(metric("Today", dashboard.dailyUsers), weighted());
-        users.addView(metric("This week", dashboard.weeklyUsers), weighted());
-        users.addView(metric("This month", dashboard.monthlyUsers), weighted());
-        content.addView(card("ACTIVE USERS", users));
+        users.addView(metric("Week", dashboard.weeklyUsers), weighted());
+        users.addView(metric("Month", dashboard.monthlyUsers), weighted());
+        content.addView(card("ACTIVE USERS", "Anonymous active installs", users));
 
-        addRankingCard("TRENDING CREATORS", dashboard.creators, true,
+        addRankingCard("TRENDING CREATORS", "Who users are opening most", dashboard.creators, true,
                 "Creator interest will appear after users open Fapzone creator galleries.");
-        addRankingCard("MOST USED SECTIONS", dashboard.sections, false,
+        addRankingCard("MOST USED SECTIONS", "Where users spend their time", dashboard.sections, false,
                 "Section usage will appear after analytics-enabled app sessions begin.");
-        addRankingCard("SOURCE INTEREST", dashboard.sources, false,
+        addRankingCard("SOURCE INTEREST", "Which content sources attract attention", dashboard.sources, false,
                 "Source usage will appear after users open source-specific content.");
-        addRankingCard("APP VERSIONS", dashboard.versions, false,
+        addRankingCard("APP VERSIONS", "How quickly users adopt releases", dashboard.versions, false,
                 "Version adoption will appear after analytics-enabled users open the app.");
 
         if (dashboard.dailyUsers == 0 && dashboard.weeklyUsers == 0 && dashboard.monthlyUsers == 0) {
             TextView waiting = text(
-                    "No analytics-enabled users have reported yet. Data starts filling in after the analytics release is installed and used.",
+                    "No analytics-enabled users have reported yet. Data begins filling in as users open the latest app.",
                     14, color(R.color.app_on_surface_variant));
-            waiting.setPadding(dp(4), dp(8), dp(4), dp(20));
+            waiting.setPadding(dp(4), dp(12), dp(4), dp(20));
             content.addView(waiting);
         }
     }
 
     private void addRankingCard(
             String title,
+            String subtitle,
             List<AdminRepository.AnalyticsRow> rows,
             boolean creator,
             String emptyText
     ) {
         LinearLayout body = vertical(0);
         if (rows.isEmpty()) {
-            TextView empty = text(emptyText, 13, color(R.color.app_on_surface_variant));
-            body.addView(empty);
+            body.addView(text(emptyText, 13, color(R.color.app_on_surface_variant)));
         } else {
-            int limit = Math.min(rows.size(), creator ? 15 : 10);
+            int limit = Math.min(rows.size(), creator ? 12 : 8);
+            long max = Math.max(1L, rows.get(0).uniqueUsers);
             for (int index = 0; index < limit; index++) {
                 AdminRepository.AnalyticsRow row = rows.get(index);
+                LinearLayout block = vertical(0);
+                block.setPadding(0, dp(7), 0, dp(7));
+
                 LinearLayout line = new LinearLayout(this);
                 line.setGravity(Gravity.CENTER_VERTICAL);
-                line.setPadding(0, dp(7), 0, dp(7));
-
-                String label = creator
-                        ? (index + 1) + ". " + row.value
-                        : friendly(row.value);
-                TextView name = text(label, 15, color(R.color.app_on_surface));
+                String nameValue = creator ? (index + 1) + ". " + row.value : friendly(row.value);
+                TextView name = text(nameValue, 15, color(R.color.app_on_surface));
                 if (index < 3) name.setTypeface(null, Typeface.BOLD);
                 line.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
-                String numbers;
-                if (creator) {
-                    numbers = row.uniqueUsers + " users/week" +
-                            (row.usersToday > 0 ? "\n" + row.usersToday + " today" : "") +
-                            "\n" + row.eventCount + " opens";
-                } else {
-                    numbers = row.uniqueUsers + " users\n" + row.eventCount + " opens";
-                }
-                TextView count = text(numbers, 12, color(R.color.app_on_surface_variant));
-                count.setGravity(Gravity.END);
-                line.addView(count);
-                body.addView(line);
+                String numbers = creator
+                        ? String.format(Locale.US, "%,d users · %,d opens", row.uniqueUsers, row.eventCount)
+                        : String.format(Locale.US, "%,d users · %,d opens", row.uniqueUsers, row.eventCount);
+                TextView counts = text(numbers, 12, color(R.color.app_on_surface_variant));
+                counts.setGravity(Gravity.END);
+                line.addView(counts);
+                block.addView(line);
+
+                ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+                bar.setMax(1000);
+                bar.setProgress((int) Math.min(1000L, (row.uniqueUsers * 1000L) / max));
+                bar.setProgressTintList(ColorStateList.valueOf(color(R.color.app_primary)));
+                bar.setProgressBackgroundTintList(ColorStateList.valueOf(color(R.color.app_surface_variant)));
+                LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(5));
+                barParams.setMargins(0, dp(5), 0, 0);
+                block.addView(bar, barParams);
+                body.addView(block);
             }
         }
-        content.addView(card(title, body));
+        content.addView(card(title, subtitle, body));
     }
 
     private LinearLayout metric(String label, long value) {
@@ -194,19 +203,23 @@ public final class AnalyticsActivity extends AppCompatActivity {
         return block;
     }
 
-    private MaterialCardView card(String title, LinearLayout body) {
+    private MaterialCardView card(String title, String subtitle, LinearLayout body) {
         MaterialCardView card = new MaterialCardView(this);
         card.setCardBackgroundColor(color(R.color.app_surface));
         card.setStrokeColor(color(R.color.app_surface_variant));
         card.setStrokeWidth(dp(1));
-        card.setRadius(dp(16));
-        LinearLayout wrapper = vertical(14);
-        TextView heading = text(title, 12, color(R.color.app_on_surface_variant));
-        heading.setTypeface(null, Typeface.BOLD);
-        heading.setPadding(0, 0, 0, dp(6));
+        card.setRadius(dp(20));
+        card.setCardElevation(0);
+
+        LinearLayout wrapper = vertical(16);
+        TextView heading = label(title);
         wrapper.addView(heading);
+        TextView detail = text(subtitle, 13, color(R.color.app_on_surface_variant));
+        detail.setPadding(0, dp(2), 0, dp(12));
+        wrapper.addView(detail);
         wrapper.addView(body);
         card.addView(wrapper);
+
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(8), 0, dp(8));
@@ -214,8 +227,46 @@ public final class AnalyticsActivity extends AppCompatActivity {
         return card;
     }
 
+    private LinearLayout bottomNav() {
+        LinearLayout nav = new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setPadding(dp(8), dp(8), dp(8), dp(8));
+        nav.setBackgroundColor(color(R.color.app_surface));
+        nav.addView(navButton("Dashboard", "dashboard", false), weighted());
+        nav.addView(navButton("Analytics", "analytics", true), weighted());
+        nav.addView(navButton("Sources", "sources", false), weighted());
+        nav.addView(navButton("Feedback", "feedback", false), weighted());
+        return nav;
+    }
+
+    private MaterialButton navButton(String title, String destination, boolean active) {
+        MaterialButton button = new MaterialButton(this);
+        button.setText(title);
+        button.setTextSize(11);
+        button.setAllCaps(false);
+        button.setMinHeight(dp(46));
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        button.setCornerRadius(dp(14));
+        button.setBackgroundTintList(ColorStateList.valueOf(active
+                ? color(R.color.app_primary) : color(R.color.app_surface_variant)));
+        button.setTextColor(active ? color(R.color.app_on_primary) : color(R.color.app_on_surface_variant));
+        if (!active) button.setOnClickListener(v -> navigate(destination));
+        return button;
+    }
+
+    private void navigate(String destination) {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.putExtra(MainActivity.EXTRA_DESTINATION, destination);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
+        finish();
+    }
+
     private LinearLayout.LayoutParams weighted() {
-        return new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        params.setMargins(dp(3), 0, dp(3), 0);
+        return params;
     }
 
     private LinearLayout vertical(int paddingDp) {
@@ -225,10 +276,22 @@ public final class AnalyticsActivity extends AppCompatActivity {
         return layout;
     }
 
-    private MaterialButton button(String value) {
+    private TextView label(String value) {
+        TextView result = text(value, 11, color(R.color.app_primary));
+        result.setTypeface(null, Typeface.BOLD);
+        result.setLetterSpacing(0.08f);
+        return result;
+    }
+
+    private MaterialButton compactButton(String value) {
         MaterialButton button = new MaterialButton(this);
         button.setText(value);
         button.setTextColor(color(R.color.app_on_primary));
+        button.setAllCaps(false);
+        button.setCornerRadius(dp(14));
+        button.setMinHeight(dp(42));
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
         return button;
     }
 
@@ -272,8 +335,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void toast(String value) { Toast.makeText(this, value, Toast.LENGTH_LONG).show(); }
 
-    @Override
-    protected void onDestroy() {
+    @Override protected void onDestroy() {
         network.shutdownNow();
         super.onDestroy();
     }
