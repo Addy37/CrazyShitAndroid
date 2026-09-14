@@ -24,7 +24,7 @@ on:
       - '.github/workflows/build-feedback-admin.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -33,6 +33,63 @@ jobs:
       ADMIN_SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config-admin
     steps:
       - uses: actions/checkout@v6
+
+      - name: Apply admin UI refinement
+        if: github.event_name == 'push'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          main_path = Path('feedbackadmin/src/main/java/com/addy37/crazyshitadmin/MainActivity.java')
+          analytics_path = Path('feedbackadmin/src/main/java/com/addy37/crazyshitadmin/AnalyticsActivity.java')
+          gradle_path = Path('feedbackadmin/build.gradle.kts')
+
+          main = main_path.read_text()
+          main = main.replace(
+              'content.addView(panel("FEEDBACK", "What users are telling you", feedbackBody));',
+              'content.addView(panel("FEEDBACK", "New and total user submissions", feedbackBody));'
+          )
+          main = main.replace(
+              'nav.setPadding(dp(8), dp(8), dp(8), dp(8));\n        nav.setBackgroundColor(color(R.color.app_surface));',
+              'nav.setPadding(dp(6), dp(7), dp(6), dp(7));\n        nav.setBackgroundColor(color(R.color.app_surface));',
+              1
+          )
+          old_main_nav = '''        button.setText(title);\n        button.setTextSize(11);\n        button.setAllCaps(false);\n        button.setMinHeight(dp(46));\n        button.setInsetTop(0);\n        button.setInsetBottom(0);\n        button.setCornerRadius(dp(14));'''
+          new_main_nav = '''        button.setText(title);\n        button.setTextSize(10);\n        button.setAllCaps(false);\n        button.setSingleLine(true);\n        button.setMaxLines(1);\n        button.setMinWidth(0);\n        button.setPadding(dp(2), 0, dp(2), 0);\n        button.setMinHeight(dp(44));\n        button.setInsetTop(0);\n        button.setInsetBottom(0);\n        button.setCornerRadius(dp(13));'''
+          if old_main_nav not in main and new_main_nav not in main:
+              raise SystemExit('Main navigation block did not match expected source')
+          main = main.replace(old_main_nav, new_main_nav, 1)
+          main_path.write_text(main)
+
+          analytics = analytics_path.read_text()
+          analytics = analytics.replace(
+              'nav.setPadding(dp(8), dp(8), dp(8), dp(8));\n        nav.setBackgroundColor(color(R.color.app_surface));',
+              'nav.setPadding(dp(6), dp(7), dp(6), dp(7));\n        nav.setBackgroundColor(color(R.color.app_surface));',
+              1
+          )
+          old_analytics_nav = '''        button.setText(title);\n        button.setTextSize(11);\n        button.setAllCaps(false);\n        button.setMinHeight(dp(46));\n        button.setInsetTop(0);\n        button.setInsetBottom(0);\n        button.setCornerRadius(dp(14));'''
+          new_analytics_nav = '''        button.setText(title);\n        button.setTextSize(10);\n        button.setAllCaps(false);\n        button.setSingleLine(true);\n        button.setMaxLines(1);\n        button.setMinWidth(0);\n        button.setPadding(dp(2), 0, dp(2), 0);\n        button.setMinHeight(dp(44));\n        button.setInsetTop(0);\n        button.setInsetBottom(0);\n        button.setCornerRadius(dp(13));'''
+          if old_analytics_nav not in analytics and new_analytics_nav not in analytics:
+              raise SystemExit('Analytics navigation block did not match expected source')
+          analytics = analytics.replace(old_analytics_nav, new_analytics_nav, 1)
+          analytics_path.write_text(analytics)
+
+          gradle = gradle_path.read_text()
+          gradle = gradle.replace('versionCode = 3', 'versionCode = 4')
+          gradle = gradle.replace('versionName = "1.2.0"', 'versionName = "1.2.1"')
+          gradle_path.write_text(gradle)
+          PY
+
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add feedbackadmin/src/main/java/com/addy37/crazyshitadmin/MainActivity.java \
+                    feedbackadmin/src/main/java/com/addy37/crazyshitadmin/AnalyticsActivity.java \
+                    feedbackadmin/build.gradle.kts
+            git commit -m "Refine admin dashboard navigation [skip ci]"
+            git push
+          fi
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
