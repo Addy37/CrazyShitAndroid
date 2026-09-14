@@ -11,7 +11,7 @@ android {
     defaultConfig {
         applicationId = "com.addy37.crazyshitadmin"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
         buildConfigField(
