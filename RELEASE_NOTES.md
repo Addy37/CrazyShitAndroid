@@ -1,8 +1,7 @@
-# CrazyShit 3.0.7
+# CrazyShit 3.0.8
 
-- Fix remote source configuration refreshes that could get stuck on bundled defaults after a failed startup request.
-- Start the 45-minute refresh window only after a successful validated remote configuration fetch.
-- Retry failed source configuration refreshes instead of suppressing them for 45 minutes.
-- Simplify the read-only config request path and disable client-side HTTP caching for remote source updates.
-- Keep bundled source defaults and the previous known-good remote snapshot as safe fallbacks.
-- Preserve the existing Fapello, Bunkr, WikiFeet, and WikiFeet X behavior outside remote configuration changes.
+- Add visible remote source configuration diagnostics in Settings.
+- Show the active config version, origin, global kill-switch state, and ON/OFF state for Fapello, Bunkr, WikiFeet, and WikiFeet X.
+- Add a manual "Check source config now" action for immediate remote refresh testing.
+- Update the diagnostics immediately after a manual refresh so remote configuration problems can be isolated without clearing app storage.
+- Keep the 3.0.7 resilient refresh behavior and safe bundled/previous-known-good fallbacks.
