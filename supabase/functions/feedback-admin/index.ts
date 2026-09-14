@@ -6,7 +6,7 @@ const allowedStatuses = new Set(["submitted", "reviewing", "planned", "completed
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8" },
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
 }
 
@@ -58,6 +58,12 @@ Deno.serve(async (request) => {
         .select("id,status,developer_reply,updated_at").single();
       if (error) throw error;
       return response({ item: data });
+    }
+
+    if (body.action === "analytics") {
+      const { data, error } = await db.rpc("analytics_dashboard");
+      if (error) throw error;
+      return response({ analytics: data ?? {} });
     }
 
     return response({ error: "Invalid action." }, 400);
