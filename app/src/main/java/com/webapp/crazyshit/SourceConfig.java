@@ -374,11 +374,11 @@ final class SourceConfig {
         if (value.contains("://") || value.contains("\\") || value.contains("..")) {
             throw invalid(key + " must be a relative route template");
         }
-        java.util.regex.Matcher tokens = Pattern.compile("\\{([a-zA-Z][a-zA-Z0-9]*)}").matcher(value);
+        java.util.regex.Matcher tokens = Pattern.compile("\\{([a-zA-Z][a-zA-Z0-9]*)\\}").matcher(value);
         while (tokens.find()) if (!supportedTokens.contains(tokens.group(1))) {
             throw invalid(key + " contained unsupported token " + tokens.group(1));
         }
-        if (value.matches(".*[{}].*") && !value.replaceAll("\\{[a-zA-Z][a-zA-Z0-9]*}", "").matches("[^{}]*")) {
+        if (value.matches(".*[{}].*") && !value.replaceAll("\\{[a-zA-Z][a-zA-Z0-9]*\\}", "").matches("[^{}]*")) {
             throw invalid(key + " contained a malformed token");
         }
         return value.startsWith("/") ? value.substring(1) : value;
