@@ -146,20 +146,19 @@ public final class MainActivity extends AppCompatActivity {
 
         TextView status = text("Loading published configuration…", 15,
                 color(R.color.app_on_surface_variant));
-        status.setPadding(0, dp(12), 0, dp(12));
+        status.setPadding(0, dp(12), 0, dp(6));
         page.addView(status);
+        TextView help = text("Use the switches for quick source control. Tap Edit for common settings, or Advanced JSON for routes, headers and selectors.",
+                13, color(R.color.app_on_surface_variant));
+        help.setPadding(0, 0, 0, dp(10));
+        page.addView(help);
 
-        EditText editor = new EditText(this);
-        editor.setTextColor(color(R.color.app_on_surface));
-        editor.setHintTextColor(color(R.color.app_on_surface_variant));
-        editor.setHint("Published source configuration JSON");
-        editor.setTypeface(Typeface.MONOSPACE);
-        editor.setTextSize(12);
-        editor.setGravity(Gravity.TOP | Gravity.START);
-        editor.setMinLines(18);
-        editor.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE |
-                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        page.addView(editor, new LinearLayout.LayoutParams(
+        SourceConfigEditor editor = new SourceConfigEditor(this);
+        ScrollView editorScroll = new ScrollView(this);
+        editorScroll.setFillViewport(true);
+        editorScroll.addView(editor, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        page.addView(editorScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         LinearLayout actions = new LinearLayout(this);
@@ -176,6 +175,13 @@ public final class MainActivity extends AppCompatActivity {
 
         final long[] currentVersion = {0L};
         final String[] validatedText = {""};
+        editor.setOnChangedListener(() -> {
+            if (!validatedText[0].isEmpty()) {
+                status.setText("Changes made. Validate again before publishing.");
+            }
+            validatedText[0] = "";
+            publish.setEnabled(false);
+        });
         feedback.setOnClickListener(v -> showInbox());
         network.execute(() -> {
             try {
@@ -183,13 +189,13 @@ public final class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     if (item == null) {
                         org.json.JSONObject defaults = bundledDefaults();
-                        editor.setText(prettyJson(defaults));
+                        editor.setConfig(defaults);
                         status.setText("No configuration is published. Bundled defaults are ready to validate.");
                         return;
                     }
                     currentVersion[0] = item.optLong("config_version");
                     org.json.JSONObject config = item.optJSONObject("config");
-                    editor.setText(prettyJson(config));
+                    editor.setConfig(config);
                     status.setText(configStatus(item));
                 });
             } catch (Exception error) {
@@ -203,14 +209,14 @@ public final class MainActivity extends AppCompatActivity {
             status.setText("Validating changes…");
             network.execute(() -> {
                 try {
-                    org.json.JSONObject candidate = new org.json.JSONObject(editor.getText().toString());
+                    org.json.JSONObject candidate = editor.getConfig();
                     candidate.put("configVersion", currentVersion[0] + 1L);
                     candidate.put("updatedAt", isoNow());
                     AdminRepository.validateConfig(SecureTokenStore.read(this), candidate);
-                    String formatted = candidate.toString(2);
-                    validatedText[0] = formatted;
+                    String canonical = candidate.toString();
+                    validatedText[0] = canonical;
                     runOnUiThread(() -> {
-                        editor.setText(formatted);
+                        editor.setConfig(candidate);
                         status.setText("Validated version " + (currentVersion[0] + 1L) + ". Ready to publish.");
                         validate.setEnabled(true);
                         publish.setEnabled(true);
@@ -226,9 +232,15 @@ public final class MainActivity extends AppCompatActivity {
         });
 
         publish.setOnClickListener(v -> {
-            if (!editor.getText().toString().equals(validatedText[0])) {
+            try {
+                if (!editor.getConfig().toString().equals(validatedText[0])) {
+                    publish.setEnabled(false);
+                    status.setText("The configuration changed. Validate it again before publishing.");
+                    return;
+                }
+            } catch (Exception error) {
                 publish.setEnabled(false);
-                status.setText("The configuration changed. Validate it again before publishing.");
+                status.setText("Could not read the edited configuration. Validate it again.");
                 return;
             }
             publish.setEnabled(false);
@@ -239,7 +251,7 @@ public final class MainActivity extends AppCompatActivity {
                             new org.json.JSONObject(validatedText[0]));
                     currentVersion[0] = version;
                     validatedText[0] = "";
-                    runOnUiThread(() -> status.setText("Published version " + version + "."));
+                    runOnUiThread(() -> status.setText("Published version " + version + ". Changes are live."));
                 } catch (Exception error) {
                     runOnUiThread(() -> {
                         status.setText("Publish failed: " + message(error));
