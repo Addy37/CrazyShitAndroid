@@ -11,6 +11,8 @@ import androidx.viewpager2.widget.ViewPager2;
 
 import org.json.JSONObject;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -37,6 +39,7 @@ final class AnalyticsTracker {
     private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
     private static final Map<String, Long> RECENT = new ConcurrentHashMap<>();
     private static final long DUPLICATE_WINDOW_MS = 5_000L;
+    private static final int MAX_ATTEMPTS = 3;
 
     private AnalyticsTracker() {
     }
@@ -162,7 +165,7 @@ final class AnalyticsTracker {
                         .put("day_key", anonymousKey(installation, "day", today, metric, value))
                         .put("week_key", anonymousKey(installation, "week", week, metric, value))
                         .put("month_key", anonymousKey(installation, "month", month, metric, value));
-                post(payload);
+                postWithRetry(payload);
             } catch (Exception ignored) {
                 // Analytics never blocks or changes app behavior.
             }
@@ -170,8 +173,7 @@ final class AnalyticsTracker {
     }
 
     private static boolean isConfigured() {
-        return !BuildConfig.ANALYTICS_ENDPOINT.trim().isEmpty()
-                && !BuildConfig.FEEDBACK_ANON_KEY.trim().isEmpty();
+        return !BuildConfig.ANALYTICS_ENDPOINT.trim().isEmpty();
     }
 
     private static String anonymousKey(
@@ -190,6 +192,27 @@ final class AnalyticsTracker {
         return result.toString();
     }
 
+    private static void postWithRetry(JSONObject payload) throws Exception {
+        Exception last = null;
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                post(payload);
+                return;
+            } catch (Exception error) {
+                last = error;
+                if (attempt < MAX_ATTEMPTS) {
+                    try {
+                        Thread.sleep(500L * attempt);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw interrupted;
+                    }
+                }
+            }
+        }
+        if (last != null) throw last;
+    }
+
     private static void post(JSONObject payload) throws Exception {
         HttpURLConnection connection = null;
         try {
@@ -199,18 +222,22 @@ final class AnalyticsTracker {
             connection.setReadTimeout(10_000);
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("apikey", BuildConfig.FEEDBACK_ANON_KEY);
-            connection.setRequestProperty("Authorization", "Bearer " + BuildConfig.FEEDBACK_ANON_KEY);
             connection.setRequestProperty("Cache-Control", "no-store");
+            connection.setRequestProperty("X-CrazyShit-Analytics", "1");
             byte[] bytes = payload.toString().getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(bytes.length);
             try (OutputStream output = connection.getOutputStream()) {
                 output.write(bytes);
             }
+
             int status = connection.getResponseCode();
             if (status < 200 || status >= 300) {
-                java.io.InputStream error = connection.getErrorStream();
+                InputStream error = connection.getErrorStream();
                 if (error != null) error.close();
+                throw new IOException("Analytics request failed with HTTP " + status);
             }
+            InputStream input = connection.getInputStream();
+            if (input != null) input.close();
         } finally {
             if (connection != null) connection.disconnect();
         }
