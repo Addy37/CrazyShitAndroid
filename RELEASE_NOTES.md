@@ -1,7 +1,7 @@
-# CrazyShit 3.0.8
+# CrazyShit 3.0.9
 
-- Add visible remote source configuration diagnostics in Settings.
-- Show the active config version, origin, global kill-switch state, and ON/OFF state for Fapello, Bunkr, WikiFeet, and WikiFeet X.
-- Add a manual "Check source config now" action for immediate remote refresh testing.
-- Update the diagnostics immediately after a manual refresh so remote configuration problems can be isolated without clearing app storage.
-- Keep the 3.0.7 resilient refresh behavior and safe bundled/previous-known-good fallbacks.
+- Allow remote source configuration to recover even when no local source-config snapshot is active.
+- Make "Check source config now" contact Supabase instead of failing immediately when bundled initialization fails.
+- Allow a validated remote config to become the first active snapshot and persist it as the known-good configuration.
+- Show the real bundled initialization or validation error in Settings instead of only "Source config unavailable."
+- Preserve the 3.0.8 source diagnostics and manual refresh controls.
