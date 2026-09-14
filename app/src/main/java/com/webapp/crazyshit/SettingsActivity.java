@@ -32,6 +32,7 @@ public class SettingsActivity extends Activity {
     private AppUpdater appUpdater;
     private AppBackupController backup;
     private TextView notificationStatusView;
+    private TextView sourceConfigStatusView;
     private boolean notificationReceiverRegistered;
     private final BroadcastReceiver notificationCheckReceiver = new BroadcastReceiver() {
         @Override
@@ -206,6 +207,14 @@ public class SettingsActivity extends Activity {
         addAction(root, "Performance details", "View loading and scrolling timings from this session.", () ->
                 new AlertDialog.Builder(this).setTitle("Performance details").setMessage(AppPerformance.summary())
                         .setPositiveButton("Close", null).show());
+        sourceConfigStatusView = addAction(root,
+                "Source configuration",
+                sourceConfigSummary(),
+                this::showSourceConfigDetails);
+        addAction(root,
+                "Check source config now",
+                "Force an immediate remote source configuration refresh.",
+                this::checkSourceConfigNow);
         addAction(root, "App updates", "Version " + BuildConfig.VERSION_NAME + " · Check for updates.", () -> {
             if (appUpdater != null) appUpdater.check(true);
         });
@@ -328,6 +337,58 @@ public class SettingsActivity extends Activity {
         Toast.makeText(this, "Checking both sites in the background.", Toast.LENGTH_SHORT).show();
     }
 
+    private String sourceConfigSummary() {
+        SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
+        if (config == null) return "Source config unavailable";
+        return RemoteSourceConfigManager.statusSummary(this)
+                + " · Kill switches " + onOff(config.sourceKillSwitchesEnabled)
+                + "\nFapello " + onOff(config.fapello.enabled)
+                + " · Bunkr " + onOff(config.bunkr.enabled)
+                + " · WikiFeet " + onOff(config.wikiFeet.enabled)
+                + " · WikiFeet X " + onOff(config.wikiFeetX.enabled);
+    }
+
+    private String sourceConfigDetails() {
+        SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
+        if (config == null) return "Source configuration is unavailable.";
+        return "Active config: v" + config.configVersion + " · " + RemoteSourceConfigManager.activeOrigin()
+                + "\nKill switches: " + onOff(config.sourceKillSwitchesEnabled)
+                + "\nFallbacks: " + onOff(config.fallbacksEnabled)
+                + "\n\nFapello: " + onOff(config.fapello.enabled)
+                + "\nBunkr: " + onOff(config.bunkr.enabled)
+                + "\nWikiFeet: " + onOff(config.wikiFeet.enabled)
+                + "\nWikiFeet X: " + onOff(config.wikiFeetX.enabled)
+                + "\n\nStatus: " + RemoteSourceConfigManager.statusSummary(this);
+    }
+
+    private String onOff(boolean enabled) {
+        return enabled ? "ON" : "OFF";
+    }
+
+    private void showSourceConfigDetails() {
+        new AlertDialog.Builder(this)
+                .setTitle("Source configuration")
+                .setMessage(sourceConfigDetails())
+                .setPositiveButton("Close", null)
+                .show();
+    }
+
+    private void checkSourceConfigNow() {
+        if (sourceConfigStatusView != null) {
+            sourceConfigStatusView.setText("Refreshing remote source configuration…");
+        }
+        RemoteSourceConfigManager.refreshNow(this, success -> {
+            if (sourceConfigStatusView != null) {
+                sourceConfigStatusView.setText(sourceConfigSummary());
+            }
+            Toast.makeText(
+                    this,
+                    success ? "Source configuration refreshed." : "Source configuration refresh failed.",
+                    Toast.LENGTH_SHORT
+            ).show();
+        });
+    }
+
     private void showChaosPreloadChoices() {
         String[] choices = {
                 "Full",
@@ -398,6 +459,9 @@ public class SettingsActivity extends Activity {
         if (appUpdater != null) appUpdater.onHostResume();
         if (notificationStatusView != null) {
             notificationStatusView.setText(NotificationCoordinator.statusSummary(this));
+        }
+        if (sourceConfigStatusView != null) {
+            sourceConfigStatusView.setText(sourceConfigSummary());
         }
     }
 
