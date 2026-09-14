@@ -108,7 +108,7 @@ final class FeedbackRepository {
                 .put("device", Build.MANUFACTURER + " " + Build.MODEL);
     }
 
-    private static synchronized String installationId(Context context) {
+    static synchronized String installationId(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String current = prefs.getString(INSTALLATION_ID, "");
         if (current != null && !current.isEmpty()) return current;
