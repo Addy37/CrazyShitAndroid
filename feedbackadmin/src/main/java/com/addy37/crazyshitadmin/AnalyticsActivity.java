@@ -230,7 +230,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
     private LinearLayout bottomNav() {
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setPadding(dp(8), dp(8), dp(8), dp(8));
+        nav.setPadding(dp(6), dp(7), dp(6), dp(7));
         nav.setBackgroundColor(color(R.color.app_surface));
         nav.addView(navButton("Dashboard", "dashboard", false), weighted());
         nav.addView(navButton("Analytics", "analytics", true), weighted());
@@ -242,12 +242,16 @@ public final class AnalyticsActivity extends AppCompatActivity {
     private MaterialButton navButton(String title, String destination, boolean active) {
         MaterialButton button = new MaterialButton(this);
         button.setText(title);
-        button.setTextSize(11);
+        button.setTextSize(10);
         button.setAllCaps(false);
-        button.setMinHeight(dp(46));
+        button.setSingleLine(true);
+        button.setMaxLines(1);
+        button.setMinWidth(0);
+        button.setPadding(dp(2), 0, dp(2), 0);
+        button.setMinHeight(dp(44));
         button.setInsetTop(0);
         button.setInsetBottom(0);
-        button.setCornerRadius(dp(14));
+        button.setCornerRadius(dp(13));
         button.setBackgroundTintList(ColorStateList.valueOf(active
                 ? color(R.color.app_primary) : color(R.color.app_surface_variant)));
         button.setTextColor(active ? color(R.color.app_on_primary) : color(R.color.app_on_surface_variant));

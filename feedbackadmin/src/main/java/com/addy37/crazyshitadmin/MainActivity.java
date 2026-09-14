@@ -193,7 +193,7 @@ public final class MainActivity extends AppCompatActivity {
         TextView totalFeedback = metricNumber("–", "Total");
         feedbackBody.addView(metricBlock(newFeedback), weighted());
         feedbackBody.addView(metricBlock(totalFeedback), weighted());
-        content.addView(panel("FEEDBACK", "What users are telling you", feedbackBody));
+        content.addView(panel("FEEDBACK", "New and total user submissions", feedbackBody));
 
         LinearLayout sourceBody = column(0);
         TextView sourceSummary = text("Loading source status…", 15, color(R.color.app_on_surface));
@@ -448,7 +448,7 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER);
-        nav.setPadding(dp(8), dp(8), dp(8), dp(8));
+        nav.setPadding(dp(6), dp(7), dp(6), dp(7));
         nav.setBackgroundColor(color(R.color.app_surface));
 
         nav.addView(navButton("Dashboard", DASHBOARD, selected, v -> showDashboard()), weighted());
@@ -462,12 +462,16 @@ public final class MainActivity extends AppCompatActivity {
         boolean active = destination.equals(selected);
         MaterialButton button = new MaterialButton(this);
         button.setText(title);
-        button.setTextSize(11);
+        button.setTextSize(10);
         button.setAllCaps(false);
-        button.setMinHeight(dp(46));
+        button.setSingleLine(true);
+        button.setMaxLines(1);
+        button.setMinWidth(0);
+        button.setPadding(dp(2), 0, dp(2), 0);
+        button.setMinHeight(dp(44));
         button.setInsetTop(0);
         button.setInsetBottom(0);
-        button.setCornerRadius(dp(14));
+        button.setCornerRadius(dp(13));
         button.setBackgroundTintList(ColorStateList.valueOf(active
                 ? color(R.color.app_primary) : color(R.color.app_surface_variant)));
         button.setTextColor(active ? color(R.color.app_on_primary) : color(R.color.app_on_surface_variant));
