@@ -4,6 +4,10 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
+import android.view.ViewGroup;
+
+import androidx.viewpager2.widget.ViewPager2;
 
 import org.json.JSONObject;
 
@@ -47,7 +51,8 @@ final class AnalyticsTracker {
     static void onActivityCreated(Activity activity, Bundle state) {
         if (activity == null || state != null) return;
         String name = activity.getClass().getSimpleName();
-        if ("SearchActivity".equals(name)) trackSection(activity, "search");
+        if (activity instanceof NativeMainActivity) attachMainPager(activity);
+        else if ("SearchActivity".equals(name)) trackSection(activity, "search");
         else if ("FavoritesActivity".equals(name)) trackSection(activity, "favorites");
         else if ("DownloadedActivity".equals(name)) trackSection(activity, "downloads");
         else if ("SettingsActivity".equals(name)) trackSection(activity, "settings");
@@ -73,6 +78,46 @@ final class AnalyticsTracker {
         trackSection(context, "creator_gallery");
         trackSource(context, "fapzone");
         track(context, "creator", clean);
+    }
+
+    private static void attachMainPager(Activity activity) {
+        View root = activity.getWindow() == null ? null : activity.getWindow().getDecorView();
+        if (root == null) {
+            trackSection(activity, "home");
+            return;
+        }
+        root.post(() -> {
+            ViewPager2 pager = findPrimaryPager(root);
+            if (pager == null) {
+                trackSection(activity, "home");
+                return;
+            }
+            trackPrimaryPage(activity, pager.getCurrentItem());
+            pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+                @Override
+                public void onPageSelected(int position) {
+                    trackPrimaryPage(activity, position);
+                }
+            });
+        });
+    }
+
+    private static ViewPager2 findPrimaryPager(View view) {
+        if (view instanceof ViewPager2) return (ViewPager2) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int index = 0; index < group.getChildCount(); index++) {
+            ViewPager2 found = findPrimaryPager(group.getChildAt(index));
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static void trackPrimaryPage(Context context, int position) {
+        if (position == MainPagerAdapter.PAGE_SERIES) trackSection(context, "collections");
+        else if (position == MainPagerAdapter.PAGE_CHAOS) trackSection(context, "chaos");
+        else if (position == MainPagerAdapter.PAGE_CATEGORIES) trackSection(context, "categories");
+        else trackSection(context, "home");
     }
 
     private static void trackNativeBrowser(Activity activity) {
