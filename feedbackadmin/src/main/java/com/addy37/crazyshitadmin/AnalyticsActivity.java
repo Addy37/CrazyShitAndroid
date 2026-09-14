@@ -38,6 +38,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
 
     private void buildUi() {
         LinearLayout root = vertical(16);
+        root.setBackgroundColor(color(R.color.app_background));
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -116,7 +117,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
         LinearLayout users = new LinearLayout(this);
         users.setOrientation(LinearLayout.HORIZONTAL);
         users.addView(metric("Today", dashboard.dailyUsers), weighted());
-        users.addView(metric("7-day period", dashboard.weeklyUsers), weighted());
+        users.addView(metric("This week", dashboard.weeklyUsers), weighted());
         users.addView(metric("This month", dashboard.monthlyUsers), weighted());
         content.addView(card("ACTIVE USERS", users));
 
@@ -221,7 +222,6 @@ public final class AnalyticsActivity extends AppCompatActivity {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp(paddingDp), dp(paddingDp), dp(paddingDp), dp(paddingDp));
-        layout.setBackgroundColor(color(R.color.app_background));
         return layout;
     }
 
