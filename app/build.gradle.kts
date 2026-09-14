@@ -30,6 +30,11 @@ android {
         )
         buildConfigField(
             "String",
+            "ANALYTICS_ENDPOINT",
+            "\"${System.getenv("ANALYTICS_ENDPOINT") ?: "https://fketutffusxgjxjlckci.supabase.co/functions/v1/analytics-ingest"}\""
+        )
+        buildConfigField(
+            "String",
             "SOURCE_CONFIG_ENDPOINT",
             "\"${System.getenv("SOURCE_CONFIG_ENDPOINT") ?: ""}\""
         )
