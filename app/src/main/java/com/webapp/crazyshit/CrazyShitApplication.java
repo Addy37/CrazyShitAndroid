@@ -17,6 +17,7 @@ public final class CrazyShitApplication extends Application {
         AppPerformance.begin();
         RemoteSourceConfigManager.initialize(this);
         RemoteSourceConfigManager.refreshInBackground(this);
+        AnalyticsTracker.initialize(this);
 
         SharedPreferences appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         boolean needsMigration = appPrefs.getBoolean("minimize_on_back", true)
@@ -47,6 +48,7 @@ public final class CrazyShitApplication extends Application {
             public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
                 PhoneOrientationPolicy.applyBrowsingOrientation(activity);
                 UiFoundationCoordinator.onActivityCreated(activity, savedInstanceState);
+                AnalyticsTracker.onActivityCreated(activity, savedInstanceState);
             }
 
             @Override
