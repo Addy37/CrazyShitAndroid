@@ -2,6 +2,7 @@ package com.addy37.crazyshitadmin;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.text.InputType;
@@ -67,6 +68,14 @@ final class SourceConfigEditor extends LinearLayout {
         removeAllViews();
         JSONObject global = object(config, "global");
         JSONObject sources = object(config, "sources");
+
+        MaterialButton analytics = button("View Analytics");
+        analytics.setOnClickListener(v -> getContext().startActivity(
+                new Intent(getContext(), AnalyticsActivity.class)));
+        LayoutParams analyticsParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        analyticsParams.bottomMargin = dp(8);
+        addView(analytics, analyticsParams);
 
         addView(section("GLOBAL"));
         addView(globalCard(global));
