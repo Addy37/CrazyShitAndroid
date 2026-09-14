@@ -6,9 +6,11 @@ on:
     paths:
       - '.github/workflows/build-feedback-admin.yml'
       - 'feedbackadmin/**'
+      - 'supabase/functions/feedback-admin/**'
       - 'supabase/functions/app-config-admin/**'
       - 'supabase/functions/_shared/**'
       - 'supabase/migrations/*source_config.sql'
+      - 'supabase/migrations/*analytics.sql'
   workflow_dispatch:
   pull_request:
     paths:
@@ -17,6 +19,7 @@ on:
       - 'supabase/functions/app-config-admin/**'
       - 'supabase/functions/_shared/**'
       - 'supabase/migrations/*source_config.sql'
+      - 'supabase/migrations/*analytics.sql'
       - 'settings.gradle.kts'
       - '.github/workflows/build-feedback-admin.yml'
 
@@ -40,10 +43,43 @@ jobs:
         with:
           gradle-version: '8.7'
           cache-provider: basic
+
+      - name: Restore persistent signing key
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          if [ -z "$SIGNING_BUNDLE" ]; then
+            echo "No signing bundle is available. Release will use the fallback debug key."
+            exit 0
+          fi
+          python - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ["SIGNING_BUNDLE"].replace("\r", "").replace("\n", "")
+          data = json.loads(raw)
+          required = ["keystore_base64", "store_password", "key_alias", "key_password"]
+          missing = [key for key in required if not data.get(key)]
+          if missing:
+              raise SystemExit("Signing bundle is missing: " + ", ".join(missing))
+          for key in ("store_password", "key_alias", "key_password"):
+              print(f"::add-mask::{data[key]}")
+          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "crazyshit-admin-release.jks"
+          keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
+          keystore.chmod(0o600)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
+              output.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")
+              output.write(f"ANDROID_KEY_ALIAS={data['key_alias']}\n")
+              output.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
+          PY
+
       - name: Build private admin APK
-        run: gradle --no-daemon :feedbackadmin:assembleDebug
+        run: gradle --no-daemon :feedbackadmin:assembleRelease
+
       - name: Prepare APK
-        run: cp feedbackadmin/build/outputs/apk/debug/feedbackadmin-debug.apk CrazyShit-Admin.apk
+        run: |
+          cp feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk CrazyShit-Admin.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs CrazyShit-Admin.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: CrazyShit-Admin
