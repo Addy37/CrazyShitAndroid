@@ -49,6 +49,43 @@ final class AdminRepository {
         }
     }
 
+    static final class AnalyticsRow {
+        final String value;
+        final long eventCount;
+        final long uniqueUsers;
+        final long usersToday;
+
+        AnalyticsRow(JSONObject row) {
+            value = row.optString("value", "Unknown");
+            eventCount = row.optLong("event_count");
+            uniqueUsers = row.optLong("unique_users");
+            usersToday = row.optLong("users_today");
+        }
+    }
+
+    static final class AnalyticsDashboard {
+        final long dailyUsers;
+        final long weeklyUsers;
+        final long monthlyUsers;
+        final String generatedAt;
+        final List<AnalyticsRow> sections;
+        final List<AnalyticsRow> sources;
+        final List<AnalyticsRow> creators;
+        final List<AnalyticsRow> versions;
+
+        AnalyticsDashboard(JSONObject value) {
+            JSONObject active = value.optJSONObject("active_users");
+            dailyUsers = active == null ? 0L : active.optLong("daily");
+            weeklyUsers = active == null ? 0L : active.optLong("weekly");
+            monthlyUsers = active == null ? 0L : active.optLong("monthly");
+            generatedAt = value.optString("generated_at");
+            sections = analyticsRows(value.optJSONArray("sections"));
+            sources = analyticsRows(value.optJSONArray("sources"));
+            creators = analyticsRows(value.optJSONArray("creators"));
+            versions = analyticsRows(value.optJSONArray("versions"));
+        }
+    }
+
     private AdminRepository() {}
 
     static List<Item> list(String token) throws Exception {
@@ -60,6 +97,13 @@ final class AdminRepository {
             for (int i = 0; i < rows.length(); i++) items.add(new Item(rows.getJSONObject(i)));
         }
         return items;
+    }
+
+    static AnalyticsDashboard analytics(String token) throws Exception {
+        JSONObject result = request(BuildConfig.ADMIN_FEEDBACK_ENDPOINT, token,
+                new JSONObject().put("action", "analytics"));
+        JSONObject analytics = result.optJSONObject("analytics");
+        return new AnalyticsDashboard(analytics == null ? new JSONObject() : analytics);
     }
 
     static void update(String token, String id, String status, String reply) throws Exception {
@@ -104,6 +148,16 @@ final class AdminRepository {
         JSONObject result = request(BuildConfig.ADMIN_SOURCE_CONFIG_ENDPOINT, token,
                 new JSONObject().put("action", "rollback").put("configVersion", version));
         return result.optLong("configVersion");
+    }
+
+    private static List<AnalyticsRow> analyticsRows(JSONArray values) {
+        List<AnalyticsRow> rows = new ArrayList<>();
+        if (values == null) return rows;
+        for (int index = 0; index < values.length(); index++) {
+            JSONObject row = values.optJSONObject(index);
+            if (row != null) rows.add(new AnalyticsRow(row));
+        }
+        return rows;
     }
 
     private static JSONObject request(String endpoint, String token, JSONObject body) throws Exception {
