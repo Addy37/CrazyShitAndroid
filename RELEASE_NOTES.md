@@ -1,7 +1,8 @@
-# CrazyShit 3.0.6
+# CrazyShit 3.0.7
 
-- Add remote source configuration backed by Supabase.
-- Allow supported source domains, routes, headers, selectors, CDN hosts, timeout/retry values, fallbacks, and source availability to be updated without publishing a new APK.
-- Keep bundled source defaults as the safe fallback when remote configuration is unavailable or invalid.
-- Add versioned publishing and rollback support through CrazyShit Admin Source Control.
-- Preserve the Fapello repair and existing Fapzone behavior from 3.0.5.
+- Fix remote source configuration refreshes that could get stuck on bundled defaults after a failed startup request.
+- Start the 45-minute refresh window only after a successful validated remote configuration fetch.
+- Retry failed source configuration refreshes instead of suppressing them for 45 minutes.
+- Simplify the read-only config request path and disable client-side HTTP caching for remote source updates.
+- Keep bundled source defaults and the previous known-good remote snapshot as safe fallbacks.
+- Preserve the existing Fapello, Bunkr, WikiFeet, and WikiFeet X behavior outside remote configuration changes.
