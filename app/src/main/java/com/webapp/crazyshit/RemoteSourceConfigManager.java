@@ -44,6 +44,7 @@ final class RemoteSourceConfigManager {
     private static final AtomicInteger CONSECUTIVE_FAILURES = new AtomicInteger();
     private static volatile Context applicationContext;
     private static volatile String activeOrigin = "bundled";
+    private static volatile String initializationError = "";
 
     interface RefreshCallback {
         void complete(boolean success);
@@ -52,21 +53,26 @@ final class RemoteSourceConfigManager {
     private RemoteSourceConfigManager() {}
 
     static synchronized void initialize(Context context) {
-        if (context == null || applicationContext != null) return;
-        applicationContext = context.getApplicationContext();
+        if (context == null) return;
+        Context app = context.getApplicationContext();
+        if (applicationContext == null) applicationContext = app;
+        if (ACTIVE.get() != null) return;
+
         SourceConfig bundled = null;
         try {
-            bundled = readBundled(applicationContext);
+            bundled = readBundled(app);
             ACTIVE.set(bundled);
             activeOrigin = "bundled";
+            initializationError = "";
             Log.i(TAG, "Bundled defaults active, version=" + bundled.configVersion);
         } catch (Exception error) {
             activeOrigin = "compiled";
+            initializationError = safeReason(error);
             Log.e(TAG, "Bundled source configuration unavailable; using compiled repository defaults: " +
-                    safeReason(error));
+                    initializationError);
         }
 
-        SharedPreferences prefs = prefs(applicationContext);
+        SharedPreferences prefs = prefs(app);
         String cached = prefs.getString(ACTIVE_JSON, "");
         if (cached != null && !cached.trim().isEmpty()) {
             try {
@@ -74,6 +80,7 @@ final class RemoteSourceConfigManager {
                 if (bundled == null || candidate.configVersion >= bundled.configVersion) {
                     ACTIVE.set(candidate);
                     activeOrigin = "cached";
+                    initializationError = "";
                     Log.i(TAG, "Cached configuration active, version=" + candidate.configVersion);
                 } else {
                     Log.w(TAG, "Cached configuration rejected: older than bundled defaults");
@@ -99,7 +106,12 @@ final class RemoteSourceConfigManager {
     static String statusSummary(Context context) {
         initialize(context);
         SourceConfig current = snapshotOrNull();
-        if (current == null) return "Source config unavailable";
+        if (current == null) {
+            String reason = initializationError == null ? "" : initializationError.trim();
+            return reason.isEmpty()
+                    ? "Source config unavailable"
+                    : "Unavailable · " + reason;
+        }
         SharedPreferences prefs = prefs(context.getApplicationContext());
         long success = prefs.getLong(LAST_REFRESH_SUCCESS, 0L);
         StringBuilder summary = new StringBuilder("v")
@@ -115,7 +127,7 @@ final class RemoteSourceConfigManager {
     static void refreshInBackground(Context context) {
         initialize(context);
         Context app = applicationContext;
-        if (app == null || snapshotOrNull() == null) return;
+        if (app == null) return;
         queueRefreshIfDue(app);
         if (PERIODIC_REFRESH_SCHEDULED.compareAndSet(false, true)) {
             REFRESHER.scheduleWithFixedDelay(() -> queueRefreshIfDue(app),
@@ -126,7 +138,7 @@ final class RemoteSourceConfigManager {
     static void refreshNow(Context context, RefreshCallback callback) {
         initialize(context);
         Context app = applicationContext;
-        if (app == null || snapshotOrNull() == null) {
+        if (app == null) {
             deliver(callback, false);
             return;
         }
@@ -194,10 +206,15 @@ final class RemoteSourceConfigManager {
             Log.d(TAG, "Remote refresh skipped: endpoint unavailable");
             return false;
         }
-        SourceConfig before = snapshot();
+        SourceConfig before = snapshotOrNull();
+        long beforeVersion = before == null ? 0L : before.configVersion;
         try {
-            FetchResult result = fetcher.fetch(endpoint, key, before.configVersion);
+            FetchResult result = fetcher.fetch(endpoint, key, beforeVersion);
             if (result.notModified) {
+                if (before == null) {
+                    recordError(context, "Server returned no config while no local snapshot was active");
+                    return false;
+                }
                 Log.d(TAG, "Remote configuration unchanged, version=" + before.configVersion);
                 return true;
             }
@@ -210,19 +227,19 @@ final class RemoteSourceConfigManager {
                 return false;
             }
             Log.i(TAG, "Remote configuration version " + candidate.configVersion + " downloaded");
-            if (candidate.configVersion < before.configVersion) {
+            if (before != null && candidate.configVersion < before.configVersion) {
                 recordError(context, "Remote version older than active version");
                 Log.w(TAG, "Remote configuration rejected: version " + candidate.configVersion +
                         " is older than " + before.configVersion);
                 return false;
             }
-            if (candidate.configVersion == before.configVersion) return true;
+            if (before != null && candidate.configVersion == before.configVersion) return true;
             activateValidated(context, candidate);
             return true;
         } catch (Exception error) {
             recordError(context, safeReason(error));
             Log.w(TAG, "Remote refresh failed; keeping " + activeOrigin +
-                    " version=" + before.configVersion + ": " + safeReason(error));
+                    " version=" + beforeVersion + ": " + safeReason(error));
             return false;
         }
     }
@@ -235,14 +252,15 @@ final class RemoteSourceConfigManager {
     }
 
     private static synchronized void activateValidated(Context context, SourceConfig candidate) {
-        SourceConfig current = snapshot();
-        if (candidate.configVersion <= current.configVersion) return;
-        prefs(context).edit()
-                .putString(PREVIOUS_JSON, current.serialized())
-                .putString(ACTIVE_JSON, candidate.serialized())
-                .commit();
+        SourceConfig current = snapshotOrNull();
+        if (current != null && candidate.configVersion <= current.configVersion) return;
+        SharedPreferences.Editor editor = prefs(context).edit();
+        if (current != null) editor.putString(PREVIOUS_JSON, current.serialized());
+        else editor.remove(PREVIOUS_JSON);
+        editor.putString(ACTIVE_JSON, candidate.serialized()).commit();
         ACTIVE.set(candidate);
         activeOrigin = "remote";
+        initializationError = "";
         Log.i(TAG, "Remote configuration version " + candidate.configVersion + " passed validation and is active");
     }
 
@@ -254,6 +272,7 @@ final class RemoteSourceConfigManager {
             if (bundled != null && candidate.configVersion < bundled.configVersion) return;
             ACTIVE.set(candidate);
             activeOrigin = "rollback";
+            initializationError = "";
             prefs.edit().putString(ACTIVE_JSON, candidate.serialized()).apply();
             Log.i(TAG, "Fell back to previous known-good configuration, version=" + candidate.configVersion);
         } catch (SourceConfig.ValidationException error) {
@@ -265,7 +284,7 @@ final class RemoteSourceConfigManager {
         try (InputStream input = context.getAssets().open("source_config_defaults.json")) {
             return SourceConfig.parseAndValidate(readLimited(input));
         } catch (Exception error) {
-            throw new IllegalStateException("Bundled source configuration is invalid", error);
+            throw new IllegalStateException("Bundled source configuration is invalid: " + safeReason(error), error);
         }
     }
 
@@ -344,6 +363,7 @@ final class RemoteSourceConfigManager {
         applicationContext = null;
         ACTIVE.set(null);
         activeOrigin = "bundled";
+        initializationError = "";
         REFRESH_IN_FLIGHT.set(false);
         CONSECUTIVE_FAILURES.set(0);
     }
