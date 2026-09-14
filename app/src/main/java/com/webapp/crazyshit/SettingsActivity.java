@@ -338,8 +338,9 @@ public class SettingsActivity extends Activity {
     }
 
     private String sourceConfigSummary() {
+        RemoteSourceConfigManager.initialize(this);
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
-        if (config == null) return "Source config unavailable";
+        if (config == null) return RemoteSourceConfigManager.statusSummary(this);
         return RemoteSourceConfigManager.statusSummary(this)
                 + " · Kill switches " + onOff(config.sourceKillSwitchesEnabled)
                 + "\nFapello " + onOff(config.fapello.enabled)
@@ -349,8 +350,12 @@ public class SettingsActivity extends Activity {
     }
 
     private String sourceConfigDetails() {
+        RemoteSourceConfigManager.initialize(this);
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
-        if (config == null) return "Source configuration is unavailable.";
+        if (config == null) {
+            return "No active source configuration.\n\nStatus: "
+                    + RemoteSourceConfigManager.statusSummary(this);
+        }
         return "Active config: v" + config.configVersion + " · " + RemoteSourceConfigManager.activeOrigin()
                 + "\nKill switches: " + onOff(config.sourceKillSwitchesEnabled)
                 + "\nFallbacks: " + onOff(config.fallbacksEnabled)
