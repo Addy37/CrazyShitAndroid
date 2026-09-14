@@ -17,34 +17,13 @@ function parseDictionary(name: string): Record<string, string> {
     const value = JSON.parse(Deno.env.get(name) ?? "{}");
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
     return Object.fromEntries(
-      Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string" && !!entry[1]),
+      Object.entries(value).filter((entry): entry is [string, string] =>
+        typeof entry[1] === "string" && !!entry[1]
+      ),
     );
   } catch {
     return {};
   }
-}
-
-function parseArray(name: string): string[] {
-  try {
-    const value = JSON.parse(Deno.env.get(name) ?? "[]");
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && !!item) : [];
-  } catch {
-    return [];
-  }
-}
-
-function acceptsPublishableKey(request: Request) {
-  const supplied = request.headers.get("apikey") ?? "";
-  if (!supplied) return false;
-
-  const legacy = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  if (legacy && supplied === legacy) return true;
-
-  const currentKeys = Object.values(parseDictionary("SUPABASE_PUBLISHABLE_KEYS"));
-  if (currentKeys.includes(supplied)) return true;
-
-  const customKeys = parseArray("APP_CONFIG_PUBLISHABLE_KEYS");
-  return customKeys.includes(supplied);
 }
 
 function adminKey() {
@@ -55,8 +34,9 @@ function adminKey() {
 }
 
 Deno.serve(async (request) => {
-  if (request.method !== "GET") return response({ error: "Method not allowed." }, 405, { Allow: "GET" });
-  if (!acceptsPublishableKey(request)) return response({ error: "Unauthorized." }, 401);
+  if (request.method !== "GET") {
+    return response({ error: "Method not allowed." }, 405, { Allow: "GET" });
+  }
 
   try {
     const url = Deno.env.get("SUPABASE_URL") ?? "";
@@ -65,7 +45,9 @@ Deno.serve(async (request) => {
 
     const db = createClient(url, serviceKey, { auth: { persistSession: false } });
     const { data, error } = await db.from("source_config_versions")
-      .select("config_version,config").eq("is_active", true).maybeSingle();
+      .select("config_version,config")
+      .eq("is_active", true)
+      .maybeSingle();
     if (error) throw error;
     if (!data) return response({ error: "No configuration has been published." }, 404);
 
