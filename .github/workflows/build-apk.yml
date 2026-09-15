@@ -41,8 +41,14 @@ jobs:
           grep -q 'applicationId = "com.addy37.crazyshitunofficial"' app/build.gradle.kts
           grep -q 'applicationIdSuffix = ".dev"' app/build.gradle.kts
           grep -q 'android:label="ZeroFilter Admin"' feedbackadmin/src/main/AndroidManifest.xml
+          grep -q 'LayoutInflater.from(activity).inflate(R.layout.activity_splash' app/src/main/java/com/webapp/crazyshit/ChaosStartupOverlayController.java
+          grep -q 'android:windowSplashScreenAnimatedIcon">@drawable/ic_zerofilter_mark' app/src/main/res/values-v31/themes.xml
           if grep -q -E 'CrazyShit Admin|Live overview of CrazyShit' feedbackadmin/src/main/java/com/addy37/crazyshitadmin/MainActivity.java; then
             echo "Legacy public admin branding was reintroduced."
+            exit 1
+          fi
+          if grep -q -E 'splash_wordmark_transparent|splash_orange_glow' app/src/main/java/com/webapp/crazyshit/ChaosStartupOverlayController.java; then
+            echo "Legacy startup overlay branding was reintroduced."
             exit 1
           fi
           if grep -q -E '251, 245, 6|FBF506' \

@@ -5,11 +5,10 @@ import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 
 import androidx.media3.common.util.UnstableApi;
 
@@ -45,34 +44,35 @@ final class ChaosStartupOverlayController {
             return;
         }
 
-        FrameLayout overlay = new FrameLayout(activity);
-        overlay.setBackgroundColor(Color.BLACK);
+        View inflated = LayoutInflater.from(activity).inflate(R.layout.activity_splash, content, false);
+        if (!(inflated instanceof FrameLayout)) {
+            ChaosStartupHandoff.finish();
+            return;
+        }
+
+        FrameLayout overlay = (FrameLayout) inflated;
+        overlay.setBackgroundColor(Color.rgb(5, 7, 11));
         overlay.setClickable(true);
         overlay.setFocusable(true);
         overlay.setAlpha(1f);
 
-        View glow = new View(activity);
-        glow.setBackgroundResource(R.drawable.splash_orange_glow);
-        glow.setAlpha(0.52f);
-        FrameLayout.LayoutParams glowParams = new FrameLayout.LayoutParams(
-                dp(activity, 420),
-                dp(activity, 260)
-        );
-        glowParams.gravity = Gravity.CENTER;
-        overlay.addView(glow, glowParams);
-
-        ImageView logo = new ImageView(activity);
-        logo.setImageResource(R.drawable.splash_wordmark_transparent);
-        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        logo.setContentDescription(null);
-        FrameLayout.LayoutParams logoParams = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(activity, 320)
-        );
-        logoParams.gravity = Gravity.CENTER;
-        logoParams.leftMargin = dp(activity, 12);
-        logoParams.rightMargin = dp(activity, 12);
-        overlay.addView(logo, logoParams);
+        View glow = overlay.findViewById(R.id.splashGlow);
+        if (glow != null) {
+            glow.animate().cancel();
+            glow.setAlpha(0.52f);
+            glow.setScaleX(1f);
+            glow.setScaleY(1f);
+        }
+        View wordmark = overlay.findViewById(R.id.splashWordmark);
+        if (wordmark != null) {
+            wordmark.animate().cancel();
+            wordmark.setAlpha(1f);
+            wordmark.setScaleX(1f);
+            wordmark.setScaleY(1f);
+            wordmark.setTranslationX(0f);
+        }
+        View sweep = overlay.findViewById(R.id.splashSweep);
+        if (sweep != null) sweep.setAlpha(0f);
 
         content.addView(overlay, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -118,9 +118,5 @@ final class ChaosStartupOverlayController {
         };
 
         handler.postDelayed(poll[0], 40L);
-    }
-
-    private static int dp(Activity activity, int value) {
-        return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 }
