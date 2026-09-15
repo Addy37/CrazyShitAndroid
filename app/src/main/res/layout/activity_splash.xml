@@ -54,7 +54,7 @@
             android:layout_height="188dp"
             android:contentDescription="@null"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_zerofilter_mark" />
+            android:src="@drawable/ic_zerochill_mark" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -67,7 +67,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif"
-                android:text="Zero"
+                android:text="ZERO"
                 android:textColor="#22D3EE"
                 android:textSize="42sp"
                 android:textStyle="bold" />
@@ -76,7 +76,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-light"
-                android:text="Filter"
+                android:text="CHILL"
                 android:textColor="#F3F4F6"
                 android:textSize="42sp" />
         </LinearLayout>
@@ -86,8 +86,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
             android:fontFamily="sans-serif-medium"
-            android:letterSpacing="0.22"
-            android:text="@string/zerofilter_tagline"
+            android:letterSpacing="0.20"
+            android:text="@string/zerochill_tagline"
             android:textAllCaps="true"
             android:textColor="#B8C4D1"
             android:textSize="10sp" />
