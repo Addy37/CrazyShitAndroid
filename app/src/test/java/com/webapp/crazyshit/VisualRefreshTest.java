@@ -121,7 +121,7 @@ public class VisualRefreshTest {
         assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
         assertEquals(BrowseUi.dp(main, 60), nav.getLayoutParams().height);
         assertEquals(BrowseUi.dp(main, 28), nav.getItemActiveIndicatorHeight());
-        assertEquals(Color.argb(50, 251, 245, 6), nav.getItemActiveIndicatorColor().getDefaultColor());
+        assertEquals(Color.argb(50, 34, 211, 238), nav.getItemActiveIndicatorColor().getDefaultColor());
         assertEquals(UiPalette.PRIMARY, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertEquals(5, nav.getMenu().size());
