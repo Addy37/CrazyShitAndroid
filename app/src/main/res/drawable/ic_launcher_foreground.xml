@@ -5,5 +5,5 @@
         android:top="8dp"
         android:right="8dp"
         android:bottom="8dp"
-        android:drawable="@drawable/ic_zerofilter_mark" />
+        android:drawable="@drawable/ic_zerochill_mark" />
 </layer-list>
