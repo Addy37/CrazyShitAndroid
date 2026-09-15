@@ -6,5 +6,5 @@
         android:top="12dp"
         android:right="12dp"
         android:bottom="12dp"
-        android:drawable="@drawable/ic_zerofilter_mark" />
+        android:drawable="@drawable/ic_zerochill_mark" />
 </layer-list>
