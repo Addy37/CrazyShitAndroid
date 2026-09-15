@@ -93,7 +93,7 @@ jobs:
         if: ${{ steps.capture_art.outputs.captured == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: CrazyShit-browse-art
+          name: ZeroFilter-browse-art
           path: browse-art-bundle.json
           if-no-files-found: error
           retention-days: 14
@@ -124,7 +124,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: CrazyShit-lint
+          name: ZeroFilter-lint
           path: |
             app/build/reports/lint-results-debug.html
             app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
@@ -153,7 +153,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: CrazyShit-tests
+          name: ZeroFilter-tests
           path: |
             app/build/test-results/testDebugUnitTest/
             app/build/test-results/testReleaseUnitTest/
@@ -165,22 +165,22 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: CrazyShit-visual-checks
+          name: ZeroFilter-visual-checks
           path: app/build/reports/visual-tests/*.png
           if-no-files-found: ignore
           retention-days: 14
 
       - name: Rename APK
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk CrazyShit-debug.apk
-          cp app/build/outputs/apk/release/app-release.apk CrazyShit-3.0-phase1-release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ZeroFilter-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk ZeroFilter-release.apk
 
       - name: Upload APK
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: CrazyShit-debug
-          path: CrazyShit-debug.apk
+          name: ZeroFilter-debug
+          path: ZeroFilter-debug.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -188,7 +188,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: CrazyShit-3.0-phase1-release
-          path: CrazyShit-3.0-phase1-release.apk
+          name: ZeroFilter-release
+          path: ZeroFilter-release.apk
           if-no-files-found: error
           retention-days: 14

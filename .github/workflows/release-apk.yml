@@ -56,8 +56,8 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a") as output:
               output.write(f"APP_VERSION_CODE={code}\n")
           PY
-          echo "APK_PRIMARY=CrazyShit.apk" >> "$GITHUB_ENV"
-          echo "RELEASE_TITLE=CrazyShit v${VERSION}" >> "$GITHUB_ENV"
+          echo "APK_PRIMARY=ZeroFilter.apk" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=ZeroFilter v${VERSION}" >> "$GITHUB_ENV"
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -120,9 +120,9 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: CrazyShit-signed
+          name: ZeroFilter-signed
           path: |
-            CrazyShit.apk
+            ZeroFilter.apk
             SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
