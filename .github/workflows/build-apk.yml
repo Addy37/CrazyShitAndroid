@@ -45,7 +45,12 @@ jobs:
             echo "Legacy public admin branding was reintroduced."
             exit 1
           fi
-          if grep -q '251, 245, 6' app/src/main/java/com/webapp/crazyshit/StableBottomNavigationController.java app/src/main/java/com/webapp/crazyshit/UiPolishController.java; then
+          if grep -q -E '251, 245, 6|FBF506' \
+            app/src/main/java/com/webapp/crazyshit/StableBottomNavigationController.java \
+            app/src/main/java/com/webapp/crazyshit/UiPolishController.java \
+            app/src/main/res/color/nav_icon_tint.xml \
+            app/src/main/res/color/nav_text_tint.xml \
+            app/src/main/res/color/nav_ripple.xml; then
             echo "Legacy yellow interaction styling was reintroduced."
             exit 1
           fi
