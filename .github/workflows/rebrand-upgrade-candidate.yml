@@ -45,6 +45,37 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
+      - name: Resolve preview version above latest stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LATEST_TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          LATEST_VERSION="${LATEST_TAG#v}"
+          python3 - "$LATEST_VERSION" <<'PY'
+          import os, re, sys
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
+          if not match:
+              raise SystemExit(f"Latest stable tag is not major.minor.patch: {sys.argv[1]}")
+          major, minor, patch = map(int, match.groups())
+          patch += 1
+          if patch >= 1000:
+              patch = 0
+              minor += 1
+          if minor >= 1000:
+              minor = 0
+              major += 1
+          code = major * 1_000_000 + minor * 1000 + patch
+          if not 0 < code <= 2_100_000_000:
+              raise SystemExit("Preview version code is outside Android limits")
+          name = f"{major}.{minor}.{patch}-zerofilter-preview"
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"APP_VERSION_CODE={code}\n")
+              output.write(f"APP_VERSION_NAME={name}\n")
+              output.write(f"LATEST_STABLE_VERSION={sys.argv[1]}\n")
+          print(f"Upgrade candidate version: {name} ({code})")
+          PY
+
       - name: Restore production signing key
         env:
           SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
@@ -81,7 +112,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroFilter-upgrade-candidate.apk | grep "package: name='com.addy37.crazyshitunofficial'"
           sha256sum ZeroFilter-upgrade-candidate.apk > SHA256SUMS-upgrade-candidate.txt
 
-      - name: Verify signing identity against latest stable
+      - name: Verify upgrade compatibility against latest stable
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -92,12 +123,23 @@ jobs:
           fi
           STABLE_APK="$(find "$RUNNER_TEMP/latest-stable" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
           test -n "$STABLE_APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$STABLE_APK" | grep "package: name='com.addy37.crazyshitunofficial'"
+
+          CANDIDATE_BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroFilter-upgrade-candidate.apk)"
+          STABLE_BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$STABLE_APK")"
+          printf '%s\n' "$CANDIDATE_BADGING" | grep "package: name='com.addy37.crazyshitunofficial'"
+          printf '%s\n' "$STABLE_BADGING" | grep "package: name='com.addy37.crazyshitunofficial'"
+
+          CANDIDATE_CODE="$(printf '%s\n' "$CANDIDATE_BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
+          STABLE_CODE="$(printf '%s\n' "$STABLE_BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
+          test -n "$CANDIDATE_CODE"
+          test -n "$STABLE_CODE"
+          test "$CANDIDATE_CODE" -gt "$STABLE_CODE"
+
           CANDIDATE_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs ZeroFilter-upgrade-candidate.apk | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
           STABLE_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$STABLE_APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
           test -n "$CANDIDATE_CERT"
           test "$CANDIDATE_CERT" = "$STABLE_CERT"
-          echo "Package ID and signing certificate match the latest stable release."
+          echo "Package ID, higher version code, and signing certificate match upgrade requirements from stable $LATEST_STABLE_VERSION."
 
       - name: Upload signed upgrade candidate
         uses: actions/upload-artifact@v4
