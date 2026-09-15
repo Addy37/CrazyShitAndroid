@@ -176,7 +176,7 @@ final class UiPolishController {
 
         float maxRadius = dp(activity, 16);
         if (card.getRadius() > maxRadius) card.setRadius(maxRadius);
-        card.setRippleColor(ColorStateList.valueOf(Color.argb(52, 251, 245, 6)));
+        card.setRippleColor(ColorStateList.valueOf(Color.argb(52, 34, 211, 238)));
 
         if (!card.isClickable()) return;
         card.setOnTouchListener((v, event) -> {
@@ -196,4 +196,3 @@ final class UiPolishController {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 }
-
