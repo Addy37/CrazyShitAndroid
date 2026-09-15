@@ -33,6 +33,23 @@ jobs:
           grep -q 'NAV_CATEGORIES = 3' app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java
           grep -q 'NativeContentItem.KIND_MEDIA.equals(item.kind)' app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java
 
+      - name: Verify ZeroFilter rebrand guardrails
+        run: |
+          set -euo pipefail
+          grep -q '<string name="app_name">ZeroFilter</string>' app/src/main/res/values/strings.xml
+          grep -q 'PRIMARY = Color.rgb(34, 211, 238)' app/src/main/java/com/webapp/crazyshit/UiPalette.java
+          grep -q 'applicationId = "com.addy37.crazyshitunofficial"' app/build.gradle.kts
+          grep -q 'applicationIdSuffix = ".dev"' app/build.gradle.kts
+          grep -q 'android:label="ZeroFilter Admin"' feedbackadmin/src/main/AndroidManifest.xml
+          if grep -q -E 'CrazyShit Admin|Live overview of CrazyShit' feedbackadmin/src/main/java/com/addy37/crazyshitadmin/MainActivity.java; then
+            echo "Legacy public admin branding was reintroduced."
+            exit 1
+          fi
+          if grep -q '251, 245, 6' app/src/main/java/com/webapp/crazyshit/StableBottomNavigationController.java app/src/main/java/com/webapp/crazyshit/UiPolishController.java; then
+            echo "Legacy yellow interaction styling was reintroduced."
+            exit 1
+          fi
+
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
