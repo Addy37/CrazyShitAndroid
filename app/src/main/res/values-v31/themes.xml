@@ -19,7 +19,7 @@
         <item name="colorOnSurfaceVariant">@color/app_on_surface_variant</item>
         <item name="bottomNavigationStyle">@style/Widget.CrazyShit.BottomNavigation</item>
         <item name="android:windowSplashScreenBackground">@color/app_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_zerofilter_mark</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_zerochill_mark</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
         <item name="android:windowSplashScreenAnimationDuration">0</item>
     </style>
