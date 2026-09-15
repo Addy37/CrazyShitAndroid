@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ZeroFilter Z -->
+    <path
+        android:fillColor="#FF22D3EE"
+        android:pathData="M20,27 L59,27 L53,36 L39,36 L29,48 L49,48 L43,57 L20,57 L39,36 L20,36 Z" />
+
+    <!-- ZeroFilter F -->
+    <path
+        android:fillColor="#FF22D3EE"
+        android:pathData="M51,40 L88,40 L82,49 L62,49 L62,55 L80,55 L74,64 L62,64 L62,80 L52,88 L52,57 L44,57 Z" />
+
+    <!-- Signature cut -->
+    <path
+        android:fillColor="#FF05070B"
+        android:pathData="M63,21 L69,21 L46,55 L54,55 L39,78 L46,58 L38,58 Z" />
+
+    <!-- Small cyan lightning edge for readability at launcher size -->
+    <path
+        android:fillColor="#FF67E8F9"
+        android:pathData="M61,26 L64,26 L49,49 L55,49 L43,67 L48,52 L42,52 Z" />
+</vector>

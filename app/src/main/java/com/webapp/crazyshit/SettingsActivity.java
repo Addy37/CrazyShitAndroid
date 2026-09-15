@@ -225,7 +225,7 @@ public class SettingsActivity extends Activity {
         });
 
         TextView footer = new TextView(this);
-        footer.setText("CrazyShit\nCommunity Android client\nNot affiliated with or endorsed by CrazyShit.com");
+        footer.setText("ZeroFilter\nCommunity Android client\nNot affiliated with or endorsed by CrazyShit.com");
         footer.setTextColor(Color.rgb(145, 145, 153));
         footer.setTextSize(12);
         footer.setGravity(Gravity.CENTER);

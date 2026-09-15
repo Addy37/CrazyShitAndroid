@@ -19,7 +19,7 @@
     <style name="Widget.CrazyShit.BottomNavigation.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:width">50dp</item>
         <item name="android:height">28dp</item>
-        <item name="android:color">#32FBF506</item>
+        <item name="android:color">#3222D3EE</item>
     </style>
 
     <style name="TextAppearance.CrazyShit.BottomNav" parent="TextAppearance.Material3.LabelMedium">

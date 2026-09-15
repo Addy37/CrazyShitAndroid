@@ -61,7 +61,7 @@ final class StableBottomNavigationController {
         nav.setElevation(dp(context, oled ? 4 : 6));
         nav.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
         nav.setItemHorizontalTranslationEnabled(false);
-        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 251, 245, 6)));
+        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 34, 211, 238)));
 
         int[][] states = new int[][] {
                 new int[] {android.R.attr.state_checked},
@@ -75,7 +75,7 @@ final class StableBottomNavigationController {
 
         try {
             nav.setItemActiveIndicatorEnabled(true);
-            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(Color.argb(50, 251, 245, 6)));
+            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(Color.argb(50, 34, 211, 238)));
             nav.setItemActiveIndicatorWidth(dp(context, 48));
             nav.setItemActiveIndicatorHeight(dp(context, 28));
             nav.setItemIconSize(dp(context, 23));

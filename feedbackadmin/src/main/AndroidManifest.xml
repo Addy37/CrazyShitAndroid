@@ -7,7 +7,7 @@
         android:name=".AdminApplication"
         android:allowBackup="false"
         android:icon="@drawable/ic_admin"
-        android:label="CrazyShit Admin"
+        android:label="ZeroFilter Admin"
         android:supportsRtl="true"
         android:theme="@style/Theme.CrazyShitAdmin">
         <activity

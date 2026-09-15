@@ -71,7 +71,7 @@ android {
             // Betas remain side-by-side with stable while using the same persistent signing key.
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-            resValue("string", "app_name", "CrazyShit Beta")
+            resValue("string", "app_name", "ZeroFilter Beta")
             signingConfigs.findByName("release")?.let {
                 signingConfig = it
             }

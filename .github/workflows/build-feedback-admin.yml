@@ -38,6 +38,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v6
         with:
@@ -77,12 +79,12 @@ jobs:
 
       - name: Prepare APK
         run: |
-          cp feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk CrazyShit-Admin.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs CrazyShit-Admin.apk
+          cp feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk ZeroFilter-Admin.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroFilter-Admin.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: CrazyShit-Admin
-          path: CrazyShit-Admin.apk
+          name: ZeroFilter-Admin
+          path: ZeroFilter-Admin.apk
           if-no-files-found: error
           retention-days: 14
