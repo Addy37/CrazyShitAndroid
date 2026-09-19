@@ -2,7 +2,7 @@
 
 ## Summary
 
-CrazyShit for Android is a lightweight Android client with an optional native Media3 / ExoPlayer video player. The app does not operate analytics, advertising, telemetry, or required user accounts. Its optional feedback feature uses a project-operated backend as described below.
+ZeroChill for Android is a lightweight Android client with an optional native Media3 / ExoPlayer video player. The app does not use advertising or require user accounts. It uses privacy-light aggregate analytics and an optional feedback feature as described below.
 
 ## Optional feedback
 
@@ -16,6 +16,19 @@ If you choose to send feedback, the app sends the following information to the p
 - A random installation ID
 
 The service hashes the installation ID before storing it. The ID lets you view developer replies under **My feedback** without creating an account. It is not used for advertising or cross-app tracking. Feedback remains on the service until the project owner deletes it. Clearing app data or uninstalling the app can prevent you from viewing earlier submissions.
+
+## Aggregate analytics
+
+The app sends aggregate usage signals when you use the app, including:
+
+- App opens when the app enters the foreground
+- App version
+- Sections and content sources you open
+- Creator gallery labels you open
+
+The app does not send its stable installation ID for analytics. Instead, it creates one-way anonymous keys that rotate by metric, value, and reporting day, week, and month. These keys support aggregate unique-user counts without creating a persistent cross-feature viewing profile.
+
+Analytics are not used for advertising or cross-app tracking. Background content and update checks do not count as app opens.
 
 ## Website data
 
@@ -51,7 +64,7 @@ The wrapper may interact with:
 - Files you explicitly download from the website
 - Links you choose to open in external apps or your browser
 
-Except for information you intentionally submit through the optional feedback feature, the app does not send this data to a separate server operated by this project.
+Except for information you intentionally submit through the optional feedback feature and the aggregate analytics described above, the app does not send this data to a separate server operated by this project.
 
 ## Permissions
 
