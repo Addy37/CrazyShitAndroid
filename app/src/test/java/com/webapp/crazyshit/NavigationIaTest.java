@@ -90,7 +90,8 @@ public class NavigationIaTest {
 
     private static View findByDescription(View view, String description) {
         if (view == null) return null;
-        if (description.contentEquals(view.getContentDescription())) return view;
+        CharSequence contentDescription = view.getContentDescription();
+        if (contentDescription != null && description.contentEquals(contentDescription)) return view;
         if (!(view instanceof android.view.ViewGroup)) return null;
         android.view.ViewGroup group = (android.view.ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
