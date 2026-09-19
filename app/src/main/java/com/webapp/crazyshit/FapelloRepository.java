@@ -517,10 +517,10 @@ final class FapelloRepository {
             String thumbnail = imageFrom(link, endpoint);
             String id = postId(pageUrl);
             String title = clean(link.attr("title"));
-            if (title.isEmpty()) title = id.isEmpty() ? "Fapzone video" : "Fapzone video #" + id;
+            if (title.isEmpty()) title = id.isEmpty() ? "OnlyFap video" : "OnlyFap video #" + id;
             NativeContentItem candidate = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA, title, pageUrl, thumbnail,
-                    "", "", "", "Fapzone");
+                    "", "", "", "OnlyFap");
             NativeContentItem existing = items.get(pageUrl);
             if (existing == null || (existing.imageUrl.isEmpty() && !thumbnail.isEmpty())) {
                 items.put(pageUrl, candidate);

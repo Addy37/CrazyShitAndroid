@@ -121,6 +121,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean active;
     private boolean hostResumed = true;
     private boolean poolLoading;
+    private volatile boolean closed;
     private boolean autoAdvancePending;
     private boolean chaosMuted;
     private boolean sensorFullscreen;
@@ -164,7 +165,7 @@ public final class ChaosFeedView extends FrameLayout {
         empty.setTextSize(15);
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(30), dp(30), dp(30), dp(30));
-        empty.setText("Loading Chaos…");
+        empty.setText("Loading ShitTok…");
         empty.setVisibility(View.GONE);
         addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
@@ -249,6 +250,10 @@ public final class ChaosFeedView extends FrameLayout {
 }
 
     public void close() {
+        closed = true;
+        poolLoading = false;
+        active = false;
+        hostResumed = false;
         orientationListener.disable();
         exitSensorFullscreen();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
@@ -260,7 +265,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void loadMorePool() {
-    if (poolLoading) return;
+    if (closed || poolLoading) return;
     poolLoading = true;
 
     io.execute(() -> {
@@ -282,6 +287,7 @@ public final class ChaosFeedView extends FrameLayout {
         Collections.shuffle(recentFallback, random);
 
         activity.runOnUiThread(() -> {
+            if (closed) return;
             poolLoading = false;
             int before = items.size();
             appendUnique(fresh);
@@ -315,7 +321,7 @@ public final class ChaosFeedView extends FrameLayout {
                 loadMorePool();
             } else if (items.isEmpty()) {
                 initialProgress.setVisibility(View.GONE);
-                empty.setText("Chaos couldn't find a playable pool right now.\nPull away and come back to retry.");
+                empty.setText("ShitTok couldn't find a playable pool right now.\nPull away and come back to retry.");
                 empty.setVisibility(View.VISIBLE);
             } else if (autoAdvancePending && autoAdvanceFrom + 1 >= items.size()) {
                 autoAdvancePending = false;
@@ -390,6 +396,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void resolveAt(int position) {
+        if (closed) return;
         if (position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
         if (streamCache.containsKey(item.url)) {
@@ -417,6 +424,7 @@ public final class ChaosFeedView extends FrameLayout {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
             activity.runOnUiThread(() -> {
+                if (closed) return;
                 resolving.remove(item.url);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     if (shouldRetryResolution(item, position)) {
@@ -449,12 +457,14 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void scheduleResolutionRetry(NativeContentItem item, int position) {
+        if (closed) return;
         ChaosHolder holder = holderAt(position);
         if (holder != null && holder.isBoundTo(item.url, position)) {
             holder.noteResolutionRetry();
             holder.showRetrying();
         }
         pager.postDelayed(() -> {
+            if (closed) return;
             if (position < 0 || position >= items.size()) return;
             if (!item.url.equals(items.get(position).url)) return;
             if ((!active || !hostResumed || position != selectedPosition)
@@ -714,6 +724,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void retryPlayback(ChaosHolder holder, PlaybackException originalError) {
+        if (closed) return;
         if (holder == null || holder.item == null || holder.item.url.isEmpty()) return;
         NativeContentItem retryItem = holder.item;
         String pageUrl = retryItem.url;
@@ -734,6 +745,7 @@ public final class ChaosFeedView extends FrameLayout {
             }
             CrazyShitRepository.StreamInfo resolved = refreshed;
             activity.runOnUiThread(() -> {
+                if (closed) return;
                 resolving.remove(pageUrl);
                 boolean valid = resolved != null
                         && resolved.mediaUrl != null
@@ -820,7 +832,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (!supportsComments(item)) {
             Toast.makeText(
                     activity,
-                    "Comments are not available for this source in Chaos.",
+                    "Comments are not available for this source in ShitTok.",
                     Toast.LENGTH_SHORT
             ).show();
             return;
@@ -1569,7 +1581,7 @@ public final class ChaosFeedView extends FrameLayout {
                             VideoActionSheet.action(
                                     R.drawable.ic_action_replay,
                                     "Replay",
-                                    "Play this Chaos clip from the beginning",
+                                    "Play this ShitTok clip from the beginning",
                                     this::replayCurrentVideo
                             )
                     ),
@@ -1590,7 +1602,7 @@ public final class ChaosFeedView extends FrameLayout {
                             VideoActionSheet.action(
                                     R.drawable.ic_action_comments,
                                     "Comments",
-                                    "Read and reply without leaving Chaos",
+                                    "Read and reply without leaving ShitTok",
                                     () -> openInlineComments(item)
                             ),
                             VideoActionSheet.action(
@@ -1605,7 +1617,7 @@ public final class ChaosFeedView extends FrameLayout {
                             VideoActionSheet.action(
                                     R.drawable.ic_action_hide,
                                     "Not interested",
-                                    "Hide this clip from your Chaos feed",
+                                    "Hide this clip from your ShitTok feed",
                                     () -> hideFromChaos(item)
                             ),
                             VideoActionSheet.action(

@@ -54,7 +54,7 @@ final class FapzoneCreatorSearchRepository {
             } catch (Exception ignored) { }
         }
         for (Future<?> request : requests) if (!request.isDone()) request.cancel(true);
-        if (successes == 0) throw new IOException("Fapzone creator search could not be reached");
+        if (successes == 0) throw new IOException("OnlyFap creator search could not be reached");
 
         ArrayList<NativeContentItem> output = new ArrayList<>();
         for (CreatorGroup group : groups.values()) {

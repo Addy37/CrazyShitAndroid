@@ -134,7 +134,7 @@ final class UiFoundationCoordinator {
             Menu menu = nav.getMenu();
             for (int i = 0; i < menu.size(); i++) {
                 if (menu.getItem(i).getTitle() != null
-                        && "Chaos".contentEquals(menu.getItem(i).getTitle())) {
+                        && "ShitTok".contentEquals(menu.getItem(i).getTitle())) {
                     nav.setSelectedItemId(menu.getItem(i).getItemId());
                     break;
                 }

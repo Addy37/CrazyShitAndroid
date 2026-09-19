@@ -283,7 +283,7 @@ final class BunkrCreatorGalleryRepository {
         if (result.isEmpty() && bunkrCatalogError != null && fapelloCatalogError != null &&
                 wikiFeetCatalogError != null &&
                 state.loadedMediaUrls.isEmpty()) {
-            throw new IOException("Fapzone sources could not be reached", fapelloCatalogError);
+            throw new IOException("OnlyFap sources could not be reached", fapelloCatalogError);
         }
         return new Batch(result, state.finished(), state.lastFapelloFailure);
     }

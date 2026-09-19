@@ -86,7 +86,7 @@ public class VisualRefreshTest {
         nav.setSelectedItemId(3);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         androidx.viewpager2.widget.ViewPager2 viewPager = ReflectionHelpers.getField(main, "primaryPager");
-        assertEquals(MainPagerAdapter.PAGE_CATEGORIES, viewPager.getCurrentItem());
+        assertEquals(MainPagerAdapter.PAGE_LIBRARY, viewPager.getCurrentItem());
         nav.setSelectedItemId(1);
         OledImmersiveUiController.attachMain(main);
         UiPolishController.attach(main);
@@ -125,6 +125,11 @@ public class VisualRefreshTest {
         assertEquals(UiPalette.PRIMARY, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertEquals(5, nav.getMenu().size());
+        assertEquals("Home", nav.getMenu().findItem(1).getTitle());
+        assertEquals("Collections", nav.getMenu().findItem(2).getTitle());
+        assertEquals("ShitTok", nav.getMenu().findItem(4).getTitle());
+        assertEquals("Library", nav.getMenu().findItem(3).getTitle());
+        assertEquals("More", nav.getMenu().findItem(5).getTitle());
         for (int id : new int[] {1, 2, 4, 3, 5}) {
             View tab = nav.findViewById(id);
             assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));

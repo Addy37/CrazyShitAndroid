@@ -25,8 +25,8 @@ internal fun MacrobenchmarkScope.scrollHome() {
 }
 
 internal fun MacrobenchmarkScope.openAndScrollChaos() {
-    device.wait(Until.hasObject(By.text("Chaos")), 8_000)
-    device.findObject(By.text("Chaos"))?.click()
+    device.wait(Until.hasObject(By.text("ShitTok")), 8_000)
+    device.findObject(By.text("ShitTok"))?.click()
     device.waitForIdle()
     device.wait(Until.hasObject(By.desc("Play or pause video")), 12_000)
     repeat(5) {
@@ -61,8 +61,8 @@ private fun MacrobenchmarkScope.swipeUp() {
 internal fun MacrobenchmarkScope.openCreatorProfileAndGallery() {
     device.wait(Until.hasObject(By.text("Collections")), 5_000)
     device.findObject(By.text("Collections"))?.click()
-    device.wait(Until.hasObject(By.desc("Show Fapzone collections")), 5_000)
-    device.findObject(By.desc("Show Fapzone collections"))?.click()
+    device.wait(Until.hasObject(By.desc("Show OnlyFap collections")), 5_000)
+    device.findObject(By.desc("Show OnlyFap collections"))?.click()
     val creator = device.wait(
         Until.findObject(By.descContains("Open pictures and videos")),
         30_000

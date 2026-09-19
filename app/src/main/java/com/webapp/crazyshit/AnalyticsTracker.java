@@ -119,7 +119,7 @@ final class AnalyticsTracker {
     private static void trackPrimaryPage(Context context, int position) {
         if (position == MainPagerAdapter.PAGE_SERIES) trackSection(context, "collections");
         else if (position == MainPagerAdapter.PAGE_CHAOS) trackSection(context, "chaos");
-        else if (position == MainPagerAdapter.PAGE_CATEGORIES) trackSection(context, "categories");
+        else if (position == MainPagerAdapter.PAGE_LIBRARY) trackSection(context, "library");
         else trackSection(context, "home");
     }
 

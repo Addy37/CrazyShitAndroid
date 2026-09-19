@@ -44,16 +44,17 @@ import java.util.concurrent.Executors;
 public class NativeMainActivity extends Activity implements NativeMiniPlayer.Host {
     private static final int NAV_HOME = 1;
     private static final int NAV_SERIES = 2;
-    private static final int NAV_CATEGORIES = 3;
+    @Deprecated private static final int NAV_CATEGORIES = 3;
+    private static final int NAV_LIBRARY = NAV_CATEGORIES;
     private static final int NAV_CHAOS = 4;
     private static final int NAV_MORE = 5;
     private static final int PLAYER_REQUEST = 3001;
-    private static final int FAVORITES_REQUEST = 3002;
+    static final int FAVORITES_REQUEST = 3002;
 
     private enum Screen {
         HOME,
         SERIES,
-        CATEGORIES,
+        LIBRARY,
         CHAOS,
         SEARCH
     }
@@ -270,8 +271,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         Menu menu = bottomNavigation.getMenu();
         menu.add(Menu.NONE, NAV_HOME, 0, "Home").setIcon(R.drawable.ic_nav_home);
         menu.add(Menu.NONE, NAV_SERIES, 1, "Collections").setIcon(R.drawable.ic_nav_series);
-        menu.add(Menu.NONE, NAV_CHAOS, 2, "Chaos").setIcon(R.drawable.ic_nav_chaos);
-        menu.add(Menu.NONE, NAV_CATEGORIES, 3, "Categories").setIcon(R.drawable.ic_nav_categories);
+        menu.add(Menu.NONE, NAV_CHAOS, 2, "ShitTok").setIcon(R.drawable.ic_nav_chaos);
+        menu.add(Menu.NONE, NAV_LIBRARY, 3, "Library").setIcon(R.drawable.ic_nav_categories);
         menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
         bottomNavigation.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
@@ -283,8 +284,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 showSeries();
                 return true;
             }
-            if (id == NAV_CATEGORIES) {
-                showCategoriesPage();
+            if (id == NAV_LIBRARY) {
+                showLibraryPage();
                 return true;
             }
             if (id == NAV_CHAOS) {
@@ -301,7 +302,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         bottomNavigation.post(() -> {
             View chaosItem = bottomNavigation.findViewById(NAV_CHAOS);
             if (chaosItem != null) {
-                chaosItem.setContentDescription("Chaos featured tab");
+                chaosItem.setContentDescription("ShitTok featured tab");
             }
         });
 
@@ -371,8 +372,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         showPrimaryPage(MainPagerAdapter.PAGE_SERIES, true);
     }
 
-    private void showCategoriesPage() {
-        showPrimaryPage(MainPagerAdapter.PAGE_CATEGORIES, true);
+    private void showLibraryPage() {
+        showPrimaryPage(MainPagerAdapter.PAGE_LIBRARY, true);
     }
 
     boolean isBunkrCollectionSearchContext() {
@@ -417,15 +418,15 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             feedBaseUrl = CrazyShitRepository.HOME;
             feedTitle = "Collections";
             selectNavSilently(NAV_SERIES);
-        } else if (position == MainPagerAdapter.PAGE_CATEGORIES) {
-            screen = Screen.CATEGORIES;
+        } else if (position == MainPagerAdapter.PAGE_LIBRARY) {
+            screen = Screen.LIBRARY;
             feedBaseUrl = CrazyShitRepository.HOME;
-            feedTitle = "Categories";
-            selectNavSilently(NAV_CATEGORIES);
+            feedTitle = "Library";
+            selectNavSilently(NAV_LIBRARY);
         } else if (position == MainPagerAdapter.PAGE_CHAOS) {
             screen = Screen.CHAOS;
             feedBaseUrl = CrazyShitRepository.HOME;
-            feedTitle = "Chaos";
+            feedTitle = "ShitTok";
             selectNavSilently(NAV_CHAOS);
         } else {
             screen = Screen.HOME;
@@ -440,9 +441,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             if (position == MainPagerAdapter.PAGE_CHAOS) {
                 headerSubtitle.setText("Random video feed  •  Swipe up/down");
             } else if (position == MainPagerAdapter.PAGE_SERIES) {
-                headerSubtitle.setText("CrazyShit  •  EFukt  •  Fapzone");
-            } else if (position == MainPagerAdapter.PAGE_CATEGORIES) {
-                headerSubtitle.setText("CrazyShit  •  Browse categories");
+                headerSubtitle.setText("CrazyShit  •  EFukt  •  OnlyFap  •  Categories");
+            } else if (position == MainPagerAdapter.PAGE_LIBRARY) {
+                headerSubtitle.setText("Continue Watching  •  History  •  Downloads");
             } else {
                 headerSubtitle.setText("CrazyShit  •  " +
                         viewModeLabel(primaryPagerAdapter.viewMode(position)));

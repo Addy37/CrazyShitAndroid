@@ -186,7 +186,7 @@ final class LandscapeMoreDialog {
                                 "Download and install app updates",
                                 () -> invokeBoolean(activity, "checkForUpdates", true)),
                         new Action(R.drawable.ic_more_help, "Gesture guide",
-                                "Player and Chaos controls",
+                                "Player and ShitTok controls",
                                 () -> GestureGuideDialog.show(activity))
                 )
         );

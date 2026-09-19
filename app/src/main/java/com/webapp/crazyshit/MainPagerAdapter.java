@@ -23,19 +23,22 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Keeps Home, Collections, Chaos and Categories alive for true horizontal paging.
+ * Keeps Home, Collections, ShitTok and Library alive for true horizontal paging.
  * Chaos itself owns a nested vertical ViewPager2 for Shorts/Reels-style playback.
  */
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
     public static final int PAGE_HOME = 0;
     public static final int PAGE_SERIES = 1;
     public static final int PAGE_CHAOS = 2;
-    public static final int PAGE_CATEGORIES = 3;
+    /** Stable slot used by old saved state; it now hosts the public Library. */
+    public static final int PAGE_LIBRARY = 3;
+    @Deprecated public static final int PAGE_CATEGORIES = PAGE_LIBRARY;
     public static final int PAGE_COUNT = 4;
     private static final int PAGE_ARRAY_COUNT = 4;
     private static final int SERIES_SOURCE_CRAZYSHIT = 0;
     private static final int SERIES_SOURCE_EFUKT = 1;
     private static final int SERIES_SOURCE_BUNKR = 2;
+    private static final int SERIES_SOURCE_CATEGORIES = 3;
     private static final String PREF_SERIES_SOURCE = "native_series_source";
     private static final String PREF_FAPZONE_MODE = "native_fapzone_mode";
 
@@ -48,7 +51,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private enum PageKind {
         FEED,
         SERIES,
-        CATEGORIES
+        CATEGORIES,
+        LIBRARY
     }
 
     private final Activity activity;
@@ -73,7 +77,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         pages[PAGE_HOME] = buildFeedPage(PAGE_HOME, "native_view_home", CrazyShitRepository.HOME);
         pages[PAGE_SERIES] = buildBrowsePage(PAGE_SERIES, PageKind.SERIES);
-        pages[PAGE_CATEGORIES] = buildBrowsePage(PAGE_CATEGORIES, PageKind.CATEGORIES);
+        pages[PAGE_LIBRARY] = buildLibraryPage(PAGE_LIBRARY);
 
         chaosView = new ChaosFeedView(activity, new ChaosFeedView.Host() {
             @Override
@@ -87,8 +91,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public String titleFor(int position) {
         if (position == PAGE_SERIES) return "Collections";
-        if (position == PAGE_CATEGORIES) return "Categories";
-        if (position == PAGE_CHAOS) return "Chaos";
+        if (position == PAGE_LIBRARY) return "Library";
+        if (position == PAGE_CHAOS) return "ShitTok";
         return "Home";
     }
 
@@ -101,7 +105,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void setViewMode(int position, int mode) {
-        if (position == PAGE_CHAOS) return;
+        if (position == PAGE_CHAOS || position == PAGE_LIBRARY) return;
         Page page = pageAt(position);
         if (page == null || page.kind != PageKind.FEED) return;
 
@@ -123,6 +127,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             return;
         }
         Page page = pageAt(position);
+        if (page != null && page.kind == PageKind.LIBRARY) return;
         if (page == null) return;
         page.generation++;
         if (page.loadTask != null) page.loadTask.cancel(true);
@@ -137,6 +142,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         chaosView.setActive(position == PAGE_CHAOS);
         if (position == PAGE_CHAOS) return;
         Page page = pageAt(position);
+        if (page != null && page.kind == PageKind.LIBRARY) return;
         if (page != null && page.itemCount() == 0 && !page.loading && !page.endReached) {
             load(page, false);
         }
@@ -247,7 +253,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         LinearLayout sources = new LinearLayout(activity);
         sources.setGravity(Gravity.CENTER_VERTICAL);
         sources.setPadding(dp(12), dp(4), dp(12), dp(4));
-        String[] names = {"All", "CrazyShit", "EFukt", "Fapzone"};
+        String[] names = {"All", "CrazyShit", "EFukt", "OnlyFap"};
         for (int source = 0; source < names.length; source++) {
             final int selected = source;
             TextView chip = BrowseUi.action(activity, names[source], names[source] + " Home feed", v -> {
@@ -347,6 +353,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         ? BunkrRepository.mostFilesAlbumsUrl()
                         : page.seriesSource == SERIES_SOURCE_EFUKT
                         ? EfuktRepository.SERIES
+                        : page.seriesSource == SERIES_SOURCE_CATEGORIES
+                        ? BrowseRepository.CATEGORIES
                         : BrowseRepository.SERIES;
                 android.content.Intent intent = new android.content.Intent(activity, WebFallbackActivity.class);
                 intent.putExtra(WebFallbackActivity.EXTRA_URL, url);
@@ -356,12 +364,82 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         return page;
     }
 
+    private Page buildLibraryPage(int index) {
+        Page page = new Page(index, PageKind.LIBRARY, "", "");
+        page.root = new FrameLayout(activity);
+        page.root.setBackgroundColor(Color.BLACK);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(activity);
+        scroll.setFillViewport(true);
+        LinearLayout content = new LinearLayout(activity);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(20), dp(28), dp(20), dp(28));
+        TextView title = new TextView(activity);
+        title.setText("Library");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(28);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        content.addView(title);
+        TextView subtitle = new TextView(activity);
+        subtitle.setText("Your saved viewing and downloads");
+        subtitle.setTextColor(Color.rgb(165, 165, 177));
+        subtitle.setTextSize(14);
+        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
+        subtitleParams.setMargins(0, dp(4), 0, dp(20));
+        content.addView(subtitle, subtitleParams);
+        addLibraryAction(content, "Favorite creators", "Browse creators you saved", v ->
+                activity.startActivity(new android.content.Intent(activity, CreatorsActivity.class)));
+        addLibraryAction(content, "Continue Watching", "Resume where you left off", v ->
+                openSavedVideos(FavoritesActivity.START_CONTINUE));
+        addLibraryAction(content, "History", "See videos you watched", v ->
+                openSavedVideos(FavoritesActivity.START_HISTORY));
+        addLibraryAction(content, "Watch Later", "Open your saved queue", v ->
+                openSavedVideos(FavoritesActivity.START_WATCH_LATER));
+        addLibraryAction(content, "Downloads", "Watch videos available offline", v ->
+                activity.startActivity(new android.content.Intent(activity, DownloadedActivity.class)));
+        scroll.addView(content, new android.widget.ScrollView.LayoutParams(-1, -2));
+        page.root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        return page;
+    }
+
+    private void openSavedVideos(int startTab) {
+        android.content.Intent intent = new android.content.Intent(activity, FavoritesActivity.class)
+                .putExtra(FavoritesActivity.EXTRA_START_TAB, startTab);
+        activity.startActivityForResult(intent, NativeMainActivity.FAVORITES_REQUEST);
+    }
+
+    private void addLibraryAction(LinearLayout content, String title, String detail, View.OnClickListener listener) {
+        LinearLayout action = new LinearLayout(activity);
+        action.setOrientation(LinearLayout.VERTICAL);
+        action.setGravity(Gravity.CENTER_VERTICAL);
+        action.setPadding(dp(18), dp(14), dp(18), dp(14));
+        action.setBackground(BrowseUi.rounded(activity, Color.rgb(24, 24, 29), 16));
+        action.setClickable(true);
+        action.setFocusable(true);
+        action.setContentDescription(title);
+        action.setOnClickListener(listener);
+        TextView heading = new TextView(activity);
+        heading.setText(title);
+        heading.setTextColor(UiPalette.PRIMARY);
+        heading.setTextSize(17);
+        heading.setTypeface(null, android.graphics.Typeface.BOLD);
+        action.addView(heading);
+        TextView copy = new TextView(activity);
+        copy.setText(detail);
+        copy.setTextColor(Color.rgb(177, 177, 187));
+        copy.setTextSize(13);
+        action.addView(copy);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(76));
+        params.setMargins(0, 0, 0, dp(10));
+        content.addView(action, params);
+    }
+
     private void addSeriesSourceSelector(Page page) {
         page.seriesSource = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
                 .getInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT);
         page.fapzoneMode = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
                 .getInt(PREF_FAPZONE_MODE, FapzoneCreatorRepository.MODE_TOP_50);
-        if (page.seriesSource != SERIES_SOURCE_EFUKT && page.seriesSource != SERIES_SOURCE_BUNKR) {
+        if (page.seriesSource != SERIES_SOURCE_EFUKT && page.seriesSource != SERIES_SOURCE_BUNKR
+                && page.seriesSource != SERIES_SOURCE_CATEGORIES) {
             page.seriesSource = SERIES_SOURCE_CRAZYSHIT;
         }
         if (page.fapzoneMode < FapzoneCreatorRepository.MODE_TOP_50 ||
@@ -377,7 +455,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         page.crazyShitSource = seriesSourceButton("CrazyShit");
         page.efuktSource = seriesSourceButton("EFukt");
-        page.bunkrSource = seriesSourceButton("Fapzone");
+        page.bunkrSource = seriesSourceButton("OnlyFap");
+        page.categoriesSource = seriesSourceButton("Categories");
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(0, dp(40), 1f);
         buttonParams.setMarginEnd(dp(4));
         selector.addView(page.crazyShitSource, buttonParams);
@@ -388,10 +467,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         LinearLayout.LayoutParams thirdParams = new LinearLayout.LayoutParams(0, dp(40), 1f);
         thirdParams.setMarginStart(dp(4));
         selector.addView(page.bunkrSource, thirdParams);
+        LinearLayout.LayoutParams fourthParams = new LinearLayout.LayoutParams(0, dp(40), 1f);
+        fourthParams.setMarginStart(dp(4));
+        selector.addView(page.categoriesSource, fourthParams);
 
         page.crazyShitSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CRAZYSHIT));
         page.efuktSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_EFUKT));
         page.bunkrSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_BUNKR));
+        page.categoriesSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CATEGORIES));
         FrameLayout.LayoutParams selectorParams = new FrameLayout.LayoutParams(-1, dp(56));
         selectorParams.gravity = Gravity.TOP;
         page.root.addView(selector, selectorParams);
@@ -503,7 +586,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         button.setGravity(Gravity.CENTER);
         button.setClickable(true);
         button.setFocusable(true);
-        button.setContentDescription("Show " + label + " Fapzone creators");
+        button.setContentDescription("Show " + label + " OnlyFap creators");
         return button;
     }
 
@@ -561,6 +644,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         styleSeriesSourceButton(page.crazyShitSource, page.seriesSource == SERIES_SOURCE_CRAZYSHIT);
         styleSeriesSourceButton(page.efuktSource, page.seriesSource == SERIES_SOURCE_EFUKT);
         styleSeriesSourceButton(page.bunkrSource, page.seriesSource == SERIES_SOURCE_BUNKR);
+        styleSeriesSourceButton(page.categoriesSource, page.seriesSource == SERIES_SOURCE_CATEGORIES);
         boolean showFapzoneChrome = page.seriesSource == SERIES_SOURCE_BUNKR;
         if (page.fapzoneModes != null) {
             page.fapzoneModes.setVisibility(showFapzoneChrome ? View.VISIBLE : View.GONE);
@@ -780,6 +864,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                             )
                             : page.seriesSource == SERIES_SOURCE_EFUKT
                             ? efuktRepository.fetchSeries(activity)
+                            : page.seriesSource == SERIES_SOURCE_CATEGORIES
+                            ? browseRepository.fetchCategories(activity)
                             : browseRepository.fetchSeries(activity);
                 } else if (page.kind == PageKind.CATEGORIES) {
                     result = browseRepository.fetchCategories(activity);
@@ -817,13 +903,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
                     if (page.itemCount() == 0) {
                         page.empty.setText(page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_BUNKR
-                                ? "Couldn't load this Fapzone list right now.\nPull down to try again."
+                                ? "Couldn't load this OnlyFap list right now.\nPull down to try again."
                                 : page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_EFUKT
                                 ? "Couldn't load EFukt Series here.\nIt may be unavailable in your region.\nTap to open the website."
+                                : page.seriesSource == SERIES_SOURCE_CATEGORIES
+                                ? "Couldn't load Categories right now."
                                 : page.kind == PageKind.SERIES
                                 ? "Couldn't load CrazyShit Series right now."
-                                : page.kind == PageKind.CATEGORIES
-                                ? "Couldn't load Categories right now."
                                 : "No videos returned for this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
@@ -836,13 +922,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     page.refresh.setRefreshing(false);
                     if (page.itemCount() == 0) {
                         page.empty.setText(page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_BUNKR
-                                ? "Couldn't load this Fapzone list right now.\nPull down to try again."
+                                ? "Couldn't load this OnlyFap list right now.\nPull down to try again."
                                 : page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_EFUKT
                                 ? "Couldn't load EFukt Series here.\nIt may be unavailable in your region.\nTap to open the website."
+                                : page.seriesSource == SERIES_SOURCE_CATEGORIES
+                                ? "Couldn't load Categories right now."
                                 : page.kind == PageKind.SERIES
                                 ? "Couldn't load CrazyShit Series right now."
-                                : page.kind == PageKind.CATEGORIES
-                                ? "Couldn't load Categories right now."
                                 : "Couldn't load this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
@@ -871,7 +957,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void requestBrowseArtwork(Page page, int generation) {
         if (page == null || page.browseAdapter == null || !page.browseAdapter.hasMissingArtwork()) return;
 
-        if (page.kind == PageKind.CATEGORIES) {
+        if (page.kind == PageKind.CATEGORIES ||
+                (page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_CATEGORIES)) {
             browseArtworkResolver.request(BrowseRepository.CATEGORIES, "/category/", (source, artwork) -> {
                 if (generation != page.generation) return;
                 page.browseAdapter.applyArtwork(artwork);
@@ -926,6 +1013,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         TextView crazyShitSource;
         TextView efuktSource;
         TextView bunkrSource;
+        TextView categoriesSource;
         View fapzoneModes;
         TextView fapzoneTop;
         TextView fapzoneNew;

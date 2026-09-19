@@ -143,7 +143,7 @@ final class FapzoneCreatorRepository {
             return result;
         }
         if (!stale.isEmpty()) return stale;
-        throw new IOException("No Fapzone creators were available");
+        throw new IOException("No OnlyFap creators were available");
     }
 
     static String titleFor(int mode) {
@@ -155,8 +155,8 @@ final class FapzoneCreatorRepository {
 
     static String hintFor(int mode) {
         if (mode == MODE_NEW) return "Recently added on Fapello • one combined gallery";
-        if (mode == MODE_HOT) return "Hot on Fapello • matched across Fapzone";
-        if (mode == MODE_POPULAR) return "Popular on Fapello • matched across Fapzone";
+        if (mode == MODE_HOT) return "Hot on Fapello • matched across OnlyFap";
+        if (mode == MODE_POPULAR) return "Popular on Fapello • matched across OnlyFap";
         return PopularCreatorRepository.SHELF_HINT;
     }
 
@@ -369,7 +369,7 @@ final class FapzoneCreatorRepository {
         if (mode == MODE_NEW) return FapelloRepository.LIST_NEW;
         if (mode == MODE_HOT) return FapelloRepository.LIST_HOT;
         if (mode == MODE_POPULAR) return FapelloRepository.LIST_POPULAR;
-        throw new IOException("Unknown Fapzone creator mode");
+        throw new IOException("Unknown OnlyFap creator mode");
     }
 
     private String cacheName(int mode) {

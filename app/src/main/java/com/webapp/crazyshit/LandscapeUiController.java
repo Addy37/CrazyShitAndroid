@@ -146,8 +146,8 @@ final class LandscapeUiController {
 
         addRailButton(activity, state, menu, NAV_HOME, "Home", R.drawable.ic_nav_home);
         addRailButton(activity, state, menu, NAV_SERIES, "Collections", R.drawable.ic_nav_series);
-        addRailButton(activity, state, menu, NAV_CHAOS, "Chaos", R.drawable.ic_nav_chaos);
-        addRailButton(activity, state, menu, NAV_CATEGORIES, "Categories", R.drawable.ic_nav_categories);
+        addRailButton(activity, state, menu, NAV_CHAOS, "ShitTok", R.drawable.ic_nav_chaos);
+        addRailButton(activity, state, menu, NAV_CATEGORIES, "Library", R.drawable.ic_nav_categories);
         addRailButton(activity, state, menu, NAV_MORE, "More", R.drawable.ic_nav_more);
 
         if (state.overlayRoot instanceof FrameLayout) {
