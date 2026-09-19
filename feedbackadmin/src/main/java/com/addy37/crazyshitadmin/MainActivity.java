@@ -95,7 +95,7 @@ public final class MainActivity extends AppCompatActivity {
         root.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView eyebrow = label("PRIVATE CONTROL CENTER");
-        TextView title = text("ZeroFilter Admin", 32, Color.WHITE);
+        TextView title = text("ZeroChill Admin", 32, Color.WHITE);
         title.setTypeface(null, Typeface.BOLD);
         TextView detail = text("Connect once to manage analytics, sources, and feedback.",
                 15, color(R.color.app_on_surface_variant));
@@ -156,7 +156,7 @@ public final class MainActivity extends AppCompatActivity {
         TextView eyebrow = label("CONTROL CENTER");
         TextView title = text("Dashboard", 30, Color.WHITE);
         title.setTypeface(null, Typeface.BOLD);
-        TextView subtitle = text("Live overview of ZeroFilter", 14, color(R.color.app_on_surface_variant));
+        TextView subtitle = text("Live overview of ZeroChill", 14, color(R.color.app_on_surface_variant));
         titles.addView(eyebrow);
         titles.addView(title);
         titles.addView(subtitle);

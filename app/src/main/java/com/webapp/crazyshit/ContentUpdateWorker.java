@@ -324,7 +324,7 @@ public final class ContentUpdateWorker extends Worker {
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
             connection.setRequestProperty("Accept", "application/vnd.github+json");
-            connection.setRequestProperty("User-Agent", "CrazyShit-Android");
+            connection.setRequestProperty("User-Agent", "ZeroChill-Android");
             int code = connection.getResponseCode();
             if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
             try (InputStream input = connection.getInputStream();

@@ -142,7 +142,7 @@ final class RatingFeedbackPrompt {
         panel.setPadding(dp(activity, 22), dp(activity, 22), dp(activity, 22), dp(activity, 16));
         panel.setBackground(rounded(Color.rgb(24, 24, 28), 22, activity));
 
-        TextView title = text(activity, "Enjoying ZeroFilter?", 23, Color.WHITE, true);
+        TextView title = text(activity, "Enjoying ZeroChill?", 23, Color.WHITE, true);
         panel.addView(title);
 
         TextView message = text(activity, "Your feedback helps improve the app.", 14,

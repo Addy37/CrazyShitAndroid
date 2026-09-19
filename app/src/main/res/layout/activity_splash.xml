@@ -68,7 +68,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif"
                 android:text="ZERO"
-                android:textColor="#22D3EE"
+                android:textColor="#F3F4F6"
                 android:textSize="42sp"
                 android:textStyle="bold" />
 
@@ -77,7 +77,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-light"
                 android:text="CHILL"
-                android:textColor="#F3F4F6"
+                android:textColor="#22D3EE"
                 android:textSize="42sp" />
         </LinearLayout>
 

@@ -2,7 +2,7 @@ package com.webapp.crazyshit;
 
 import android.graphics.Color;
 
-/** Shared visual palette for the ZeroFilter cyan-on-OLED refresh. */
+/** Shared visual palette for the ZeroChill cyan-on-OLED refresh. */
 final class UiPalette {
     static final int PRIMARY = Color.rgb(34, 211, 238);
     static final int PRIMARY_DIM = Color.rgb(14, 165, 233);

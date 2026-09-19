@@ -1,8 +1,8 @@
-name: ZeroFilter Signed Upgrade Candidate
+name: ZeroChill Signed Upgrade Candidate
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, rebrand/zerochill ]
     paths:
       - 'app/**'
       - '.github/workflows/rebrand-upgrade-candidate.yml'
@@ -68,7 +68,7 @@ jobs:
           code = major * 1_000_000 + minor * 1000 + patch
           if not 0 < code <= 2_100_000_000:
               raise SystemExit("Preview version code is outside Android limits")
-          name = f"{major}.{minor}.{patch}-zerofilter-preview"
+          name = f"{major}.{minor}.{patch}-zerochill-preview"
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"APP_VERSION_CODE={code}\n")
               output.write(f"APP_VERSION_NAME={name}\n")
@@ -92,7 +92,7 @@ jobs:
               sys.exit("Signing bundle is missing: " + ", ".join(missing))
           for key in ("store_password", "key_alias", "key_password"):
               print(f"::add-mask::{data[key]}")
-          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "zerofilter-upgrade-candidate.jks"
+          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "zerochill-upgrade-candidate.jks"
           keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
           keystore.chmod(0o600)
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
@@ -107,10 +107,10 @@ jobs:
 
       - name: Prepare candidate
         run: |
-          cp app/build/outputs/apk/release/app-release.apk ZeroFilter-upgrade-candidate.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroFilter-upgrade-candidate.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroFilter-upgrade-candidate.apk | grep "package: name='com.addy37.crazyshitunofficial'"
-          sha256sum ZeroFilter-upgrade-candidate.apk > SHA256SUMS-upgrade-candidate.txt
+          cp app/build/outputs/apk/release/app-release.apk ZeroChill-upgrade-candidate.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroChill-upgrade-candidate.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroChill-upgrade-candidate.apk | grep "package: name='com.addy37.crazyshitunofficial'"
+          sha256sum ZeroChill-upgrade-candidate.apk > SHA256SUMS-upgrade-candidate.txt
 
       - name: Verify upgrade compatibility against latest stable
         env:
@@ -118,13 +118,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/latest-stable"
-          if ! gh release download --repo "$GITHUB_REPOSITORY" --pattern 'CrazyShit.apk' --dir "$RUNNER_TEMP/latest-stable"; then
-            gh release download --repo "$GITHUB_REPOSITORY" --pattern 'ZeroFilter.apk' --dir "$RUNNER_TEMP/latest-stable"
+          if ! gh release download --repo "$GITHUB_REPOSITORY" --pattern 'ZeroChill.apk' --dir "$RUNNER_TEMP/latest-stable"; then
+            if ! gh release download --repo "$GITHUB_REPOSITORY" --pattern 'ZeroFilter.apk' --dir "$RUNNER_TEMP/latest-stable"; then
+              gh release download --repo "$GITHUB_REPOSITORY" --pattern 'CrazyShit.apk' --dir "$RUNNER_TEMP/latest-stable"
+            fi
           fi
           STABLE_APK="$(find "$RUNNER_TEMP/latest-stable" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
           test -n "$STABLE_APK"
 
-          CANDIDATE_BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroFilter-upgrade-candidate.apk)"
+          CANDIDATE_BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroChill-upgrade-candidate.apk)"
           STABLE_BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$STABLE_APK")"
           printf '%s\n' "$CANDIDATE_BADGING" | grep "package: name='com.addy37.crazyshitunofficial'"
           printf '%s\n' "$STABLE_BADGING" | grep "package: name='com.addy37.crazyshitunofficial'"
@@ -135,7 +137,7 @@ jobs:
           test -n "$STABLE_CODE"
           test "$CANDIDATE_CODE" -gt "$STABLE_CODE"
 
-          CANDIDATE_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs ZeroFilter-upgrade-candidate.apk | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+          CANDIDATE_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs ZeroChill-upgrade-candidate.apk | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
           STABLE_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$STABLE_APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
           test -n "$CANDIDATE_CERT"
           test "$CANDIDATE_CERT" = "$STABLE_CERT"
@@ -144,9 +146,9 @@ jobs:
       - name: Upload signed upgrade candidate
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroFilter-upgrade-candidate
+          name: ZeroChill-upgrade-candidate
           path: |
-            ZeroFilter-upgrade-candidate.apk
+            ZeroChill-upgrade-candidate.apk
             SHA256SUMS-upgrade-candidate.txt
           if-no-files-found: error
           retention-days: 14

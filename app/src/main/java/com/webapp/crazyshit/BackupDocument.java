@@ -43,7 +43,7 @@ final class BackupDocument {
     static void validate(JSONObject document) throws Exception {
         if (!"crazyshit-backup".equals(document.optString("format"))
                 || !(document.opt("version") instanceof Integer) || document.getInt("version") != 1)
-            throw new IOException("This isn't a supported CrazyShit backup.");
+            throw new IOException("This isn't a supported ZeroChill backup.");
         JSONArray creators = document.getJSONArray("creators");
         JSONArray later = document.getJSONArray("watchLater");
         if (creators.length() > MAX_ITEMS || later.length() > MAX_ITEMS)

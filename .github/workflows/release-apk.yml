@@ -1,4 +1,4 @@
-name: Publish Signed APK Release
+name: Publish ZeroChill Signed APK Release
 
 on:
   workflow_dispatch:
@@ -6,7 +6,6 @@ on:
       version:
         description: Release version without the v prefix
         required: true
-        default: '2.0.0'
         type: string
   push:
     branches: [ main ]
@@ -56,8 +55,8 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a") as output:
               output.write(f"APP_VERSION_CODE={code}\n")
           PY
-          echo "APK_PRIMARY=ZeroFilter.apk" >> "$GITHUB_ENV"
-          echo "RELEASE_TITLE=ZeroFilter v${VERSION}" >> "$GITHUB_ENV"
+          echo "APK_PRIMARY=ZeroChill.apk" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=ZeroChill v${VERSION}" >> "$GITHUB_ENV"
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -113,15 +112,19 @@ jobs:
       - name: Prepare and verify release files
         run: |
           cp app/build/outputs/apk/release/app-release.apk "$APK_PRIMARY"
+          cp "$APK_PRIMARY" CrazyShit.apk
+          cp "$APK_PRIMARY" ZeroFilter.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK_PRIMARY"
-          sha256sum "$APK_PRIMARY" > SHA256SUMS.txt
+          sha256sum "$APK_PRIMARY" CrazyShit.apk ZeroFilter.apk > SHA256SUMS.txt
 
       - name: Upload signed APK artifact
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroFilter-signed
+          name: ZeroChill-signed
           path: |
+            ZeroChill.apk
+            CrazyShit.apk
             ZeroFilter.apk
             SHA256SUMS.txt
           if-no-files-found: error
@@ -133,6 +136,8 @@ jobs:
         run: |
           gh release create "v${VERSION}" \
             "$APK_PRIMARY" \
+            CrazyShit.apk \
+            ZeroFilter.apk \
             SHA256SUMS.txt \
             --target "$GITHUB_SHA" \
             --title "$RELEASE_TITLE" \

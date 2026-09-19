@@ -2,7 +2,7 @@
 
 ## Summary
 
-CrazyShit for Android is a lightweight Android client with an optional native Media3 / ExoPlayer video player. The app does not operate analytics, advertising, telemetry, or required user accounts. Its optional feedback feature uses a project-operated backend as described below.
+ZeroChill for Android is a lightweight Android client with an optional native Media3 / ExoPlayer video player. The app does not operate analytics, advertising, telemetry, or required user accounts. Its optional feedback feature uses a project-operated backend as described below.
 
 ## Optional feedback
 

@@ -1,6 +1,6 @@
 # Remote source configuration
 
-CrazyShit keeps source logic in the APK. Supabase can publish validated data values that change
+ZeroChill keeps source logic in the APK. Supabase can publish validated data values that change
 domains, routes, approved headers, selectors, bounded timeout/retry values, CDN hosts, fallbacks,
 and per-source availability.
 
@@ -89,11 +89,11 @@ ADMIN_SOURCE_CONFIG_ENDPOINT=https://fketutffusxgjxjlckci.supabase.co/functions/
 Do not add a secret/service-role Supabase key to GitHub Android-build secrets.
 
 Build and install the private admin APK. Open **Source Control**, validate the bundled version 1
-document, then publish it. Until the first publish, CrazyShit continues using its bundled defaults.
+document, then publish it. Until the first publish, ZeroChill continues using its bundled defaults.
 
 ## Publishing and rollback
 
-1. Open **Source Control** in CrazyShit Admin.
+1. Open **Source Control** in ZeroChill Admin.
 2. Edit supported JSON values.
 3. Tap **Validate**. The app assigns the next version and current UTC time.
 4. Tap **Publish** only after validation succeeds.

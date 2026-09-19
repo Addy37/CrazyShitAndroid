@@ -142,7 +142,7 @@ final class FlashUiController {
             nav.setClipToPadding(false);
             nav.setPadding(dp(activity, 4), 0, dp(activity, 4), 0);
             nav.setItemIconSize(dp(activity, 21));
-            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(32, 251, 245, 6)));
+            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(32, 34, 211, 238)));
 
             if (nav.getParent() instanceof ViewGroup) {
                 ((ViewGroup) nav.getParent()).setClipChildren(false);

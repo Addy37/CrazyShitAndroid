@@ -201,7 +201,7 @@ final class NotificationCoordinator {
         }
 
         PendingIntent open = appPendingIntent(activity, 9301);
-        Notification notification = baseBuilder(activity, CHANNEL_VIDEOS, "ZF")
+        Notification notification = baseBuilder(activity, CHANNEL_VIDEOS, "ZC")
                 .setContentTitle("Notifications are ready")
                 .setContentText("New video and app update alerts will appear here.")
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(
@@ -241,7 +241,7 @@ final class NotificationCoordinator {
             PendingIntent open = appPendingIntent(context, 9302);
             String text = total + (total == 1 ? " new video" : " new videos") +
                     " across CrazyShit and EFukt";
-            Notification summary = baseBuilder(context, CHANNEL_VIDEOS, "ZF")
+            Notification summary = baseBuilder(context, CHANNEL_VIDEOS, "ZC")
                     .setContentTitle("Fresh uploads are ready")
                     .setContentText(text)
                     .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
@@ -276,7 +276,7 @@ final class NotificationCoordinator {
         );
 
         String cleanTitle = title == null || title.trim().isEmpty()
-                ? "ZeroFilter " + version
+                ? "ZeroChill " + version
                 : title.trim();
         String channel = beta ? "beta" : "stable";
         String details = cleanTitle + " is ready on the " + channel + " channel. " +
@@ -285,11 +285,11 @@ final class NotificationCoordinator {
         Notification publicVersion = new NotificationCompat.Builder(context, CHANNEL_UPDATES)
                 .setSmallIcon(R.drawable.ic_notification_crazyshit)
                 .setContentTitle("App update available")
-                .setContentText("Open ZeroFilter to view it.")
+                .setContentText("Open ZeroChill to view it.")
                 .build();
 
         Notification notification = baseBuilder(context, CHANNEL_UPDATES, "UP")
-                .setContentTitle("ZeroFilter " + version + " is ready")
+                .setContentTitle("ZeroChill " + version + " is ready")
                 .setContentText("Tap to review and install the " + channel + " update.")
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(details))
                 .setContentIntent(open)
@@ -344,7 +344,7 @@ final class NotificationCoordinator {
         Notification publicVersion = new NotificationCompat.Builder(context, CHANNEL_VIDEOS)
                 .setSmallIcon(R.drawable.ic_notification_crazyshit)
                 .setContentTitle("New videos available")
-                .setContentText("Open ZeroFilter to view them.")
+                .setContentText("Open ZeroChill to view them.")
                 .build();
 
         return baseBuilder(context, CHANNEL_VIDEOS, alert.efukt ? "EF" : "CS")
@@ -481,7 +481,7 @@ final class NotificationCoordinator {
                 "App updates",
                 NotificationManager.IMPORTANCE_DEFAULT
         );
-        updates.setDescription("Alerts when a new ZeroFilter app build is available");
+        updates.setDescription("Alerts when a new ZeroChill app build is available");
         updates.enableLights(true);
         updates.setLightColor(UiPalette.PRIMARY);
         updates.setShowBadge(true);
