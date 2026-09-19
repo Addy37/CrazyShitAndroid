@@ -300,10 +300,10 @@ final class ImmersiveUiController {
         bg.setStroke(dp(activity, 1), Color.rgb(53, 53, 61));
         nav.setBackground(bg);
         nav.setElevation(dp(activity, 18));
-        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(40, 251, 245, 6)));
+        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(40, 34, 211, 238)));
         try {
             nav.setItemActiveIndicatorEnabled(true);
-            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(Color.argb(72, 251, 245, 6)));
+            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(Color.argb(72, 34, 211, 238)));
         } catch (Throwable ignored) {
         }
 

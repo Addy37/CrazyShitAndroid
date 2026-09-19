@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, rebrand/zerochill ]
   pull_request:
   workflow_dispatch:
 
@@ -33,18 +33,48 @@ jobs:
           grep -q 'NAV_CATEGORIES = 3' app/src/main/java/com/webapp/crazyshit/NativeMainActivity.java
           grep -q 'NativeContentItem.KIND_MEDIA.equals(item.kind)' app/src/main/java/com/webapp/crazyshit/ChaosFeedView.java
 
-      - name: Verify ZeroFilter rebrand guardrails
+      - name: Verify ZeroChill rebrand guardrails
         run: |
           set -euo pipefail
-          grep -q '<string name="app_name">ZeroFilter</string>' app/src/main/res/values/strings.xml
+          grep -q '<string name="app_name">ZeroChill</string>' app/src/main/res/values/strings.xml
+          grep -q '<string name="zerochill_tagline">NO LIMITS. ALL CONTENT.</string>' app/src/main/res/values/zerochill_brand.xml
           grep -q 'PRIMARY = Color.rgb(34, 211, 238)' app/src/main/java/com/webapp/crazyshit/UiPalette.java
           grep -q 'applicationId = "com.addy37.crazyshitunofficial"' app/build.gradle.kts
           grep -q 'applicationIdSuffix = ".dev"' app/build.gradle.kts
-          grep -q 'android:label="ZeroFilter Admin"' feedbackadmin/src/main/AndroidManifest.xml
+          grep -q 'applicationId = "com.addy37.crazyshitadmin"' feedbackadmin/build.gradle.kts
+          grep -q 'android:label="ZeroChill Admin"' feedbackadmin/src/main/AndroidManifest.xml
           grep -q 'LayoutInflater.from(activity).inflate(R.layout.activity_splash' app/src/main/java/com/webapp/crazyshit/ChaosStartupOverlayController.java
-          grep -q 'android:windowSplashScreenAnimatedIcon">@drawable/ic_zerofilter_mark' app/src/main/res/values-v31/themes.xml
-          if grep -q -E 'CrazyShit Admin|Live overview of CrazyShit' feedbackadmin/src/main/java/com/addy37/crazyshitadmin/MainActivity.java; then
+          grep -q 'android:windowSplashScreenAnimatedIcon">@drawable/ic_zerochill_mark' app/src/main/res/values-v31/themes.xml
+          grep -A5 'android:text="ZERO"' app/src/main/res/layout/activity_splash.xml | grep -q 'android:textColor="#F3F4F6"'
+          grep -A5 'android:text="CHILL"' app/src/main/res/layout/activity_splash.xml | grep -q 'android:textColor="#22D3EE"'
+          if grep -q -E 'CrazyShit Admin|ZeroFilter Admin|Live overview of CrazyShit|Live overview of ZeroFilter' feedbackadmin/src/main/java/com/addy37/crazyshitadmin/MainActivity.java; then
             echo "Legacy public admin branding was reintroduced."
+            exit 1
+          fi
+          if grep -E -n 'ZeroFilter' \
+            app/src/main/java/com/webapp/crazyshit/AppUpdater.java \
+            app/src/main/java/com/webapp/crazyshit/ContentUpdateWorker.java \
+            app/src/main/java/com/webapp/crazyshit/MainActivity.java \
+            app/src/main/java/com/webapp/crazyshit/NotificationCoordinator.java \
+            app/src/main/java/com/webapp/crazyshit/RatingFeedbackPrompt.java \
+            app/src/main/java/com/webapp/crazyshit/SettingsActivity.java \
+            app/src/main/java/com/webapp/crazyshit/LandscapeMoreDialog.java \
+            app/src/main/java/com/webapp/crazyshit/UiPalette.java \
+            app/src/main/java/com/webapp/crazyshit/VideoDownloadStore.java \
+            feedbackadmin/src/main/AndroidManifest.xml \
+            feedbackadmin/src/main/java/com/addy37/crazyshitadmin/MainActivity.java \
+            feedbackadmin/src/main/java/com/addy37/crazyshitadmin/AdminApplication.java; then
+            echo "Stale public ZeroFilter branding was reintroduced."
+            exit 1
+          fi
+          if grep -E -n 'baseBuilder\([^,]+, [^,]+, "ZF"\)|CrazyShit for Android|CrazyShit Beta|supported CrazyShit backup|yellow timeline|CrazyShit-Android' \
+            app/src/main/java/com/webapp/crazyshit/NotificationCoordinator.java \
+            app/src/main/java/com/webapp/crazyshit/BackupDocument.java \
+            app/src/main/java/com/webapp/crazyshit/GestureGuideDialog.java \
+            app/src/main/java/com/webapp/crazyshit/ContentUpdateWorker.java \
+            app/src/main/java/com/webapp/crazyshit/MainActivity.java \
+            README.md; then
+            echo "Legacy public app branding was reintroduced."
             exit 1
           fi
           if grep -q -E 'splash_wordmark_transparent|splash_orange_glow' app/src/main/java/com/webapp/crazyshit/ChaosStartupOverlayController.java; then
@@ -54,6 +84,9 @@ jobs:
           if grep -q -E '251, 245, 6|FBF506' \
             app/src/main/java/com/webapp/crazyshit/StableBottomNavigationController.java \
             app/src/main/java/com/webapp/crazyshit/UiPolishController.java \
+            app/src/main/java/com/webapp/crazyshit/LandscapeUiController.java \
+            app/src/main/java/com/webapp/crazyshit/FlashUiController.java \
+            app/src/main/java/com/webapp/crazyshit/ImmersiveUiController.java \
             app/src/main/res/color/nav_icon_tint.xml \
             app/src/main/res/color/nav_text_tint.xml \
             app/src/main/res/color/nav_ripple.xml; then
@@ -121,7 +154,7 @@ jobs:
         if: ${{ steps.capture_art.outputs.captured == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroFilter-browse-art
+          name: ZeroChill-browse-art
           path: browse-art-bundle.json
           if-no-files-found: error
           retention-days: 14
@@ -152,7 +185,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroFilter-lint
+          name: ZeroChill-lint
           path: |
             app/build/reports/lint-results-debug.html
             app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
@@ -181,7 +214,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroFilter-tests
+          name: ZeroChill-tests
           path: |
             app/build/test-results/testDebugUnitTest/
             app/build/test-results/testReleaseUnitTest/
@@ -193,22 +226,22 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroFilter-visual-checks
+          name: ZeroChill-visual-checks
           path: app/build/reports/visual-tests/*.png
           if-no-files-found: ignore
           retention-days: 14
 
       - name: Rename APK
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk ZeroFilter-debug.apk
-          cp app/build/outputs/apk/release/app-release.apk ZeroFilter-release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ZeroChill-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk ZeroChill-release.apk
 
       - name: Upload APK
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroFilter-debug
-          path: ZeroFilter-debug.apk
+          name: ZeroChill-debug
+          path: ZeroChill-debug.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -216,7 +249,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroFilter-release
-          path: ZeroFilter-release.apk
+          name: ZeroChill-release
+          path: ZeroChill-release.apk
           if-no-files-found: error
           retention-days: 14

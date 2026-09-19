@@ -1,23 +1,23 @@
 <p align="center">
-  <img src="app/src/main/res/drawable-nodpi/splash_wordmark_transparent.webp" alt="CrazyShit for Android" width="720">
+  <strong>NO LIMITS. ALL CONTENT.</strong>
 </p>
 
-<h1 align="center">CrazyShit for Android</h1>
+<h1 align="center">ZeroChill for Android</h1>
 
 <p align="center">
-  A fast, native Android client for CrazyShit, EFukt, Bunkr, Fapello, and WikiFeet content.
+  A fast, native Android client for supported CrazyShit, EFukt, Bunkr, Fapello, and WikiFeet content.
 </p>
 
 <p align="center">
-  <a href="https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit.apk"><img src="https://img.shields.io/badge/Download-Latest_APK-FBF506?style=for-the-badge&logo=android&logoColor=0D0D0F&labelColor=0D0D0F" alt="Download latest APK"></a>
-  <a href="https://github.com/Addy37/CrazyShitAndroid/releases"><img src="https://img.shields.io/badge/Release-Latest-F97316?style=for-the-badge&logo=github&logoColor=white&labelColor=0D0D0F" alt="Latest release"></a>
-  <a href="https://github.com/Addy37/CrazyShitAndroid/releases"><img src="https://img.shields.io/github/downloads/Addy37/CrazyShitAndroid/CrazyShit.apk?style=for-the-badge&label=APK%20Downloads&labelColor=0D0D0F&color=F97316&displayAssetName=false" alt="Total APK downloads"></a>
+  <a href="https://github.com/Addy37/CrazyShitAndroid/releases/latest"><img src="https://img.shields.io/badge/Download-Latest_APK-22D3EE?style=for-the-badge&logo=android&logoColor=0D0D0F&labelColor=0D0D0F" alt="Download latest APK"></a>
+  <a href="https://github.com/Addy37/CrazyShitAndroid/releases"><img src="https://img.shields.io/badge/Release-Latest-22D3EE?style=for-the-badge&logo=github&logoColor=white&labelColor=0D0D0F" alt="Latest release"></a>
+  <a href="https://github.com/Addy37/CrazyShitAndroid/releases"><img src="https://img.shields.io/github/downloads/Addy37/CrazyShitAndroid/total?style=for-the-badge&label=APK%20Downloads&labelColor=0D0D0F&color=22D3EE" alt="Total APK downloads"></a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=black" alt="Android 8.0 or newer">
-  <img src="https://img.shields.io/badge/UI-Native_Android-FBF506?style=flat-square&labelColor=0D0D0F" alt="Native Android interface">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-F97316?style=flat-square&labelColor=0D0D0F" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/UI-Native_Android-22D3EE?style=flat-square&labelColor=0D0D0F" alt="Native Android interface">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22D3EE?style=flat-square&labelColor=0D0D0F" alt="MIT License"></a>
 </p>
 
 > [!WARNING]
@@ -28,7 +28,7 @@
 
 ## Android browsing without the browser clutter
 
-CrazyShit combines native feeds, galleries, search, playback, downloads, and personal lists in one OLED-friendly Android interface. A compatibility browser remains available only for account actions and pages that require the original website.
+ZeroChill combines native feeds, galleries, search, playback, downloads, and personal lists in one OLED-friendly Android interface. A compatibility browser remains available only for account actions and pages that require the original website.
 
 | Experience | What you get |
 | --- | --- |
@@ -102,12 +102,12 @@ Backups exclude cookies, account sessions, history, and downloaded media.
 
 Stable APKs are distributed publicly through GitHub Releases. A GitHub account is not required.
 
-1. Download [`CrazyShit.apk`](https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/CrazyShit.apk).
+1. Open the [latest release](https://github.com/Addy37/CrazyShitAndroid/releases/latest) and download `ZeroChill.apk`. Older releases may use `ZeroFilter.apk` or `CrazyShit.apk`.
 2. Open the APK and approve **Install unknown apps** if Android asks.
 
 The app checks the public GitHub release feed for newer stable versions when update alerts are enabled. You can also check manually from the app.
 
-Stable builds keep the application ID `com.addy37.crazyshitunofficial` and the existing signing identity, so a newer stable APK installs over an older stable version without clearing app data. Debug builds use the `.dev` suffix and install separately as **CrazyShit Beta**.
+Stable builds keep the application ID `com.addy37.crazyshitunofficial` and the existing signing identity, so a newer stable APK installs over an older stable version without clearing app data. Debug builds use the `.dev` suffix and install separately as **ZeroChill Beta**.
 
 ## Privacy and access
 

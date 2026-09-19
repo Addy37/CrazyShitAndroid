@@ -1,4 +1,4 @@
-# CrazyShit feedback setup
+# ZeroChill feedback setup
 
 The Android screen is already wired to a Supabase Edge Function. Users do not create accounts.
 Each app installation gets a random ID. The function hashes that ID before storing it.

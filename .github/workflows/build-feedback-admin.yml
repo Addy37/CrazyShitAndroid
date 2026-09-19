@@ -2,7 +2,7 @@ name: Build Private Feedback Admin APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, rebrand/zerochill ]
     paths:
       - '.github/workflows/build-feedback-admin.yml'
       - 'feedbackadmin/**'
@@ -79,12 +79,12 @@ jobs:
 
       - name: Prepare APK
         run: |
-          cp feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk ZeroFilter-Admin.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroFilter-Admin.apk
+          cp feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk ZeroChill-Admin.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroChill-Admin.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ZeroFilter-Admin
-          path: ZeroFilter-Admin.apk
+          name: ZeroChill-Admin
+          path: ZeroChill-Admin.apk
           if-no-files-found: error
           retention-days: 14

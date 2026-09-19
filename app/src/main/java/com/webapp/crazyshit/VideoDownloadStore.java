@@ -204,7 +204,7 @@ final class VideoDownloadStore {
         try {
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(mediaUrl));
             request.setTitle(title);
-            request.setDescription("CrazyShit video");
+            request.setDescription("ZeroChill video");
             request.setMimeType(mime);
             request.setAllowedOverMetered(true);
             request.setAllowedOverRoaming(false);
@@ -607,7 +607,7 @@ final class VideoDownloadStore {
                 .replaceAll("[^A-Za-z0-9._ -]+", "")
                 .replaceAll("\\s+", " ")
                 .trim();
-        if (clean.isEmpty()) clean = "CrazyShit video";
+        if (clean.isEmpty()) clean = "ZeroChill video";
         if (clean.length() > 70) clean = clean.substring(0, 70).trim();
         String extension = "video/webm".equals(mime) ? ".webm"
                 : "video/x-m4v".equals(mime) ? ".m4v" : ".mp4";

@@ -2,7 +2,7 @@
 
 ## Independent project status
 
-CrazyShit for Android is an independent community-made Android client. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
+ZeroChill for Android is an independent community-made Android client. It is not affiliated with, endorsed by, sponsored by, or published by CrazyShit.com.
 
 The optional EFukt Series source is also independent and is not affiliated with, endorsed by, sponsored by, or published by EFukt.com.
 

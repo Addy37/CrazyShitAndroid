@@ -87,7 +87,7 @@ final class GestureGuideDialog {
         addGesture(activity, content, "TAP", "Show or hide controls",
                 "Tap a regular video once to reveal the player controls.");
         addGesture(activity, content, "SEEK", "Move through a video",
-                "Use the back and forward controls or drag the yellow timeline.");
+                "Use the back and forward controls or drag the cyan timeline.");
         addGesture(activity, content, "↓", "Minimize a regular video",
                 "Swipe down from a portrait video to keep it playing above the tabs.");
         addGesture(activity, content, "MINI", "Return to the player",

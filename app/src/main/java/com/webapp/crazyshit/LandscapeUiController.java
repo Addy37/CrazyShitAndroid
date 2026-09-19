@@ -258,7 +258,7 @@ final class LandscapeUiController {
         GradientDrawable background = new GradientDrawable();
         background.setShape(GradientDrawable.RECTANGLE);
         background.setCornerRadius(dp(activity, 18));
-        background.setColor(selected ? Color.argb(72, 251, 245, 6) : Color.TRANSPARENT);
+        background.setColor(selected ? Color.argb(72, 34, 211, 238) : Color.TRANSPARENT);
         return background;
     }
 

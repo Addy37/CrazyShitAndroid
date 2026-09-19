@@ -263,7 +263,7 @@ final class LandscapeMoreDialog {
         TextView title = text(activity, "More", 22, Color.WHITE, true);
         TextView subtitle = text(
                 activity,
-                "ZeroFilter " + BuildConfig.VERSION_NAME,
+                "ZeroChill " + BuildConfig.VERSION_NAME,
                 11,
                 Color.rgb(166, 166, 176),
                 false

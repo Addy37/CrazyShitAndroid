@@ -19,7 +19,7 @@ public final class AdminApplication extends Application {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID, "New feedback", NotificationManager.IMPORTANCE_DEFAULT);
-            channel.setDescription("Alerts when ZeroFilter receives new feedback");
+            channel.setDescription("Alerts when ZeroChill receives new feedback");
             getSystemService(NotificationManager.class).createNotificationChannel(channel);
         }
         scheduleNotifications();
