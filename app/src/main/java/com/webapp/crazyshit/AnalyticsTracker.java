@@ -19,8 +19,9 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Locale;
 import java.util.Map;
@@ -31,13 +32,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Sends aggregate-only usage signals. Stable installation IDs never leave the device for analytics.
- * Unique keys rotate by metric, value and UTC day/week/month so analytics cannot build a persistent
- * cross-feature viewing profile for an installation.
+ * Unique keys rotate by metric, value and reporting day/week/month so analytics cannot build a
+ * persistent cross-feature viewing profile for an installation.
  */
 final class AnalyticsTracker {
     private static final ExecutorService NETWORK = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
+    private static final ZoneId REPORTING_ZONE = ZoneId.of("America/New_York");
     private static final Map<String, Long> RECENT = new ConcurrentHashMap<>();
+    private static int startedActivities;
+    private static boolean changingConfigurations;
     private static final long DUPLICATE_WINDOW_MS = 5_000L;
     private static final int MAX_ATTEMPTS = 3;
 
@@ -45,10 +49,25 @@ final class AnalyticsTracker {
     }
 
     static void initialize(Context context) {
-        if (!isConfigured() || !INITIALIZED.compareAndSet(false, true)) return;
-        Context app = context.getApplicationContext();
-        track(app, "app_open", "all");
-        track(app, "app_version", BuildConfig.VERSION_NAME);
+        if (!isConfigured()) return;
+        INITIALIZED.compareAndSet(false, true);
+    }
+
+    static synchronized void onActivityStarted(Activity activity) {
+        if (activity == null || !INITIALIZED.get()) return;
+        if (startedActivities == 0 && !changingConfigurations) {
+            Context app = activity.getApplicationContext();
+            track(app, "app_open", "all");
+            track(app, "app_version", BuildConfig.VERSION_NAME);
+        }
+        startedActivities++;
+        changingConfigurations = false;
+    }
+
+    static synchronized void onActivityStopped(Activity activity) {
+        if (activity == null || !INITIALIZED.get()) return;
+        if (startedActivities > 0) startedActivities--;
+        changingConfigurations = activity.isChangingConfigurations();
     }
 
     static void onActivityCreated(Activity activity, Bundle state) {
@@ -156,9 +175,9 @@ final class AnalyticsTracker {
         NETWORK.execute(() -> {
             try {
                 String installation = FeedbackRepository.installationId(app);
-                LocalDate today = LocalDate.now(ZoneOffset.UTC);
-                LocalDate week = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-                LocalDate month = today.withDayOfMonth(1);
+                LocalDate today = reportingDate(Instant.now());
+                LocalDate week = reportingWeek(today);
+                LocalDate month = reportingMonth(today);
                 JSONObject payload = new JSONObject()
                         .put("metric", metric)
                         .put("value", value)
@@ -170,6 +189,18 @@ final class AnalyticsTracker {
                 // Analytics never blocks or changes app behavior.
             }
         });
+    }
+
+    static LocalDate reportingDate(Instant instant) {
+        return instant.atZone(REPORTING_ZONE).toLocalDate();
+    }
+
+    static LocalDate reportingWeek(LocalDate date) {
+        return date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+    }
+
+    static LocalDate reportingMonth(LocalDate date) {
+        return date.withDayOfMonth(1);
     }
 
     private static boolean isConfigured() {
