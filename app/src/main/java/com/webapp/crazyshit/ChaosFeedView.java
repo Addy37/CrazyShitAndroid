@@ -121,6 +121,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean active;
     private boolean hostResumed = true;
     private boolean poolLoading;
+    private volatile boolean closed;
     private boolean autoAdvancePending;
     private boolean chaosMuted;
     private boolean sensorFullscreen;
@@ -249,6 +250,10 @@ public final class ChaosFeedView extends FrameLayout {
 }
 
     public void close() {
+        closed = true;
+        poolLoading = false;
+        active = false;
+        hostResumed = false;
         orientationListener.disable();
         exitSensorFullscreen();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
@@ -260,7 +265,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void loadMorePool() {
-    if (poolLoading) return;
+    if (closed || poolLoading) return;
     poolLoading = true;
 
     io.execute(() -> {
@@ -282,6 +287,7 @@ public final class ChaosFeedView extends FrameLayout {
         Collections.shuffle(recentFallback, random);
 
         activity.runOnUiThread(() -> {
+            if (closed) return;
             poolLoading = false;
             int before = items.size();
             appendUnique(fresh);
@@ -390,6 +396,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void resolveAt(int position) {
+        if (closed) return;
         if (position < 0 || position >= items.size()) return;
         NativeContentItem item = items.get(position);
         if (streamCache.containsKey(item.url)) {
@@ -417,6 +424,7 @@ public final class ChaosFeedView extends FrameLayout {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
             activity.runOnUiThread(() -> {
+                if (closed) return;
                 resolving.remove(item.url);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     if (shouldRetryResolution(item, position)) {
@@ -449,12 +457,14 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void scheduleResolutionRetry(NativeContentItem item, int position) {
+        if (closed) return;
         ChaosHolder holder = holderAt(position);
         if (holder != null && holder.isBoundTo(item.url, position)) {
             holder.noteResolutionRetry();
             holder.showRetrying();
         }
         pager.postDelayed(() -> {
+            if (closed) return;
             if (position < 0 || position >= items.size()) return;
             if (!item.url.equals(items.get(position).url)) return;
             if ((!active || !hostResumed || position != selectedPosition)
@@ -714,6 +724,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void retryPlayback(ChaosHolder holder, PlaybackException originalError) {
+        if (closed) return;
         if (holder == null || holder.item == null || holder.item.url.isEmpty()) return;
         NativeContentItem retryItem = holder.item;
         String pageUrl = retryItem.url;
@@ -734,6 +745,7 @@ public final class ChaosFeedView extends FrameLayout {
             }
             CrazyShitRepository.StreamInfo resolved = refreshed;
             activity.runOnUiThread(() -> {
+                if (closed) return;
                 resolving.remove(pageUrl);
                 boolean valid = resolved != null
                         && resolved.mediaUrl != null
