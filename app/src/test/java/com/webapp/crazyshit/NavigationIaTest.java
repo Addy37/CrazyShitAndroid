@@ -32,7 +32,8 @@ public class NavigationIaTest {
         Bundle state = new Bundle();
         state.putInt("primary_page", 3);
         ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
-                .create(state).start().resume();
+                .create(state).start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
         NativeMainActivity activity = controller.get();
         ViewPager2 pager = ReflectionHelpers.getField(activity, "primaryPager");
         BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
@@ -52,11 +53,12 @@ public class NavigationIaTest {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
                 .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        Bundle state = new Bundle();
+        state.putInt("primary_page", MainPagerAdapter.PAGE_LIBRARY);
         ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
-                .setup();
+                .create(state).start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
         NativeMainActivity activity = controller.get();
-        BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
-        nav.setSelectedItemId(3);
         View libraryAction = findByDescription(activity.getWindow().getDecorView(), "History");
         assertNotNull(libraryAction);
         libraryAction.performClick();
@@ -71,11 +73,12 @@ public class NavigationIaTest {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
                 .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        Bundle state = new Bundle();
+        state.putInt("primary_page", MainPagerAdapter.PAGE_SERIES);
         ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
-                .setup();
+                .create(state).start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
         NativeMainActivity activity = controller.get();
-        BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
-        nav.setSelectedItemId(2);
         View categories = findByDescription(activity.getWindow().getDecorView(),
                 "Show Categories collections");
         assertNotNull(categories);
@@ -86,6 +89,7 @@ public class NavigationIaTest {
     }
 
     private static View findByDescription(View view, String description) {
+        if (view == null) return null;
         if (description.contentEquals(view.getContentDescription())) return view;
         if (!(view instanceof android.view.ViewGroup)) return null;
         android.view.ViewGroup group = (android.view.ViewGroup) view;
