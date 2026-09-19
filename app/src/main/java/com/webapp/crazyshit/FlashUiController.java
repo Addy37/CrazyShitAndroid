@@ -234,7 +234,7 @@ final class FlashUiController {
             fab.setElevation(dp(activity, 22));
             fab.setClickable(true);
             fab.setFocusable(true);
-            fab.setContentDescription("Chaos");
+            fab.setContentDescription("ShitTok");
             fab.setOnClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 if (nav != null) nav.setSelectedItemId(NAV_CHAOS);

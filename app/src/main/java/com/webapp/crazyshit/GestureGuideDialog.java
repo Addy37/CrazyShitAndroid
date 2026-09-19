@@ -92,8 +92,8 @@ final class GestureGuideDialog {
                 "Swipe down from a portrait video to keep it playing above the tabs.");
         addGesture(activity, content, "MINI", "Return to the player",
                 "Tap the mini-player to expand the same playback session.");
-        addGesture(activity, content, "2×", "Chaos speed boost",
-                "Press and hold a Chaos video to play at double speed. Swipe up or down for the next clip.");
+        addGesture(activity, content, "2×", "ShitTok speed boost",
+                "Press and hold a ShitTok video to play at double speed. Swipe up or down for the next clip.");
         addGesture(activity, content, "BACK", "Related video history",
                 "Swipe back to preview and return through the related videos you opened.");
 

@@ -179,7 +179,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         back.setOnClickListener(v -> finish());
         top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(52)));
 
-        TextView heading = text(isCreatorGallery() ? "Fapzone" : title, 20, Color.WHITE);
+        TextView heading = text(isCreatorGallery() ? "OnlyFap" : title, 20, Color.WHITE);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         heading.setSingleLine(true);
         heading.setEllipsize(android.text.TextUtils.TruncateAt.END);

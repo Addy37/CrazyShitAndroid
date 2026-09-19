@@ -44,7 +44,7 @@ final class BunkrGallerySessionStore {
         String cursor = "";
 
         Session(String title, String albumUrl, String creatorQuery) {
-            this.title = title == null ? "Fapzone gallery" : title;
+            this.title = title == null ? "OnlyFap gallery" : title;
             this.albumUrl = albumUrl == null ? "" : albumUrl;
             this.creatorQuery = creatorQuery == null ? "" : creatorQuery.trim();
         }

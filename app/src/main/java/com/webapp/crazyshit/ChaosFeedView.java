@@ -164,7 +164,7 @@ public final class ChaosFeedView extends FrameLayout {
         empty.setTextSize(15);
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(30), dp(30), dp(30), dp(30));
-        empty.setText("Loading Chaos…");
+        empty.setText("Loading ShitTok…");
         empty.setVisibility(View.GONE);
         addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
@@ -315,7 +315,7 @@ public final class ChaosFeedView extends FrameLayout {
                 loadMorePool();
             } else if (items.isEmpty()) {
                 initialProgress.setVisibility(View.GONE);
-                empty.setText("Chaos couldn't find a playable pool right now.\nPull away and come back to retry.");
+                empty.setText("ShitTok couldn't find a playable pool right now.\nPull away and come back to retry.");
                 empty.setVisibility(View.VISIBLE);
             } else if (autoAdvancePending && autoAdvanceFrom + 1 >= items.size()) {
                 autoAdvancePending = false;
@@ -820,7 +820,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (!supportsComments(item)) {
             Toast.makeText(
                     activity,
-                    "Comments are not available for this source in Chaos.",
+                    "Comments are not available for this source in ShitTok.",
                     Toast.LENGTH_SHORT
             ).show();
             return;
@@ -1569,7 +1569,7 @@ public final class ChaosFeedView extends FrameLayout {
                             VideoActionSheet.action(
                                     R.drawable.ic_action_replay,
                                     "Replay",
-                                    "Play this Chaos clip from the beginning",
+                                    "Play this ShitTok clip from the beginning",
                                     this::replayCurrentVideo
                             )
                     ),
@@ -1590,7 +1590,7 @@ public final class ChaosFeedView extends FrameLayout {
                             VideoActionSheet.action(
                                     R.drawable.ic_action_comments,
                                     "Comments",
-                                    "Read and reply without leaving Chaos",
+                                    "Read and reply without leaving ShitTok",
                                     () -> openInlineComments(item)
                             ),
                             VideoActionSheet.action(
@@ -1605,7 +1605,7 @@ public final class ChaosFeedView extends FrameLayout {
                             VideoActionSheet.action(
                                     R.drawable.ic_action_hide,
                                     "Not interested",
-                                    "Hide this clip from your Chaos feed",
+                                    "Hide this clip from your ShitTok feed",
                                     () -> hideFromChaos(item)
                             ),
                             VideoActionSheet.action(

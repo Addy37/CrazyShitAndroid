@@ -39,8 +39,8 @@ final class AppShortcuts {
         shortcuts.add(shortcut(
                 context,
                 ID_CHAOS,
-                "Chaos",
-                "Open Chaos",
+                "ShitTok",
+                "Open ShitTok",
                 R.drawable.ic_nav_chaos,
                 ACTION_CHAOS,
                 0

@@ -152,7 +152,7 @@ public class SettingsActivity extends Activity {
                 "remember_video_position",
                 true);
         addAction(root,
-                "Chaos preloading",
+                "ShitTok preloading",
                 ChaosPreloadPolicy.summary(this),
                 this::showChaosPreloadChoices);
 
@@ -401,7 +401,7 @@ public class SettingsActivity extends Activity {
                 "Minimal"
         };
         new AlertDialog.Builder(this)
-                .setTitle("Chaos preloading")
+                .setTitle("ShitTok preloading")
                 .setSingleChoiceItems(choices, ChaosPreloadPolicy.selectedIndex(this), (dialog, which) -> {
                     ChaosPreloadPolicy.setMode(this, ChaosPreloadPolicy.modeForIndex(which));
                     dialog.dismiss();

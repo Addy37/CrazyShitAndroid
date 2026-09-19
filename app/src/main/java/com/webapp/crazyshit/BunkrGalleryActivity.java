@@ -114,7 +114,7 @@ public final class BunkrGalleryActivity extends Activity {
         }
         initialUrl = value(getIntent().getStringExtra(EXTRA_INITIAL_URL));
         initialPosition = Math.max(0, getIntent().getIntExtra(EXTRA_INITIAL_POSITION, 0));
-        if (albumTitle.isEmpty()) albumTitle = "Fapzone gallery";
+        if (albumTitle.isEmpty()) albumTitle = "OnlyFap gallery";
 
         if (state != null) {
             sessionId = state.getString("session", sessionId);

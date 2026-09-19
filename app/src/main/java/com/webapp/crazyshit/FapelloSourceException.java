@@ -38,7 +38,7 @@ final class FapelloSourceException extends IOException {
     String userMessage() {
         switch (reason) {
             case BLOCKED:
-                return "Fapello blocked this request. Other Fapzone sources can still load.";
+                return "Fapello blocked this request. Other OnlyFap sources can still load.";
             case RATE_LIMITED:
                 return "Fapello is rate limiting requests. Try again in a few minutes.";
             case NOT_FOUND:
