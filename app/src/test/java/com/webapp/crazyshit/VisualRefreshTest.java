@@ -138,6 +138,12 @@ public class VisualRefreshTest {
                 nav.getItemActiveIndicatorHeight());
         assertEquals(Color.TRANSPARENT,
                 nav.getItemActiveIndicatorColor().getDefaultColor());
+        assertFalse(nav.getClipChildren());
+        assertFalse(nav.getClipToPadding());
+        assertTrue(nav.getChildAt(0) instanceof android.view.ViewGroup);
+        android.view.ViewGroup navMenu = (android.view.ViewGroup) nav.getChildAt(0);
+        assertFalse(navMenu.getClipChildren());
+        assertFalse(navMenu.getClipToPadding());
         assertEquals(UiPalette.PRIMARY, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertEquals(5, nav.getMenu().size());

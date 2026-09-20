@@ -61,6 +61,14 @@ final class StableBottomNavigationController {
             nav.setItemPaddingTop(dp(context, 7));
             nav.setItemPaddingBottom(dp(context, 1));
             nav.setItemBackgroundResource(R.drawable.zc_nav_item_background);
+            nav.setClipChildren(false);
+            nav.setClipToPadding(false);
+            View menu = nav.getChildAt(0);
+            if (menu instanceof ViewGroup) {
+                ViewGroup menuGroup = (ViewGroup) menu;
+                menuGroup.setClipChildren(false);
+                menuGroup.setClipToPadding(false);
+            }
         } catch (Throwable ignored) {
         }
     }
