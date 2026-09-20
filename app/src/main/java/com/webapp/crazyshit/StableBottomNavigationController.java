@@ -230,7 +230,9 @@ final class StableBottomNavigationController {
             if (raw instanceof ViewGroup.MarginLayoutParams) {
                 ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) raw;
                 int side = dp(10);
-                int top = dp(2);
+                // Preserve the bar's approved screen position while letting the pager fill the
+                // layout slot behind it. The nav remains the final child and draws above content.
+                int top = -(wantedHeight + dp(6));
                 int bottom = dp(6);
                 if (margins.leftMargin != side || margins.topMargin != top ||
                         margins.rightMargin != side || margins.bottomMargin != bottom) {
