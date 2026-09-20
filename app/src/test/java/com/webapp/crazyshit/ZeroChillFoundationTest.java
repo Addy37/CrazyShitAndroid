@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.Application;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
 import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -35,6 +36,8 @@ public class ZeroChillFoundationTest {
         Drawable navigation = ZeroChillUi.navigationGlass(activity);
         Drawable panel = ZeroChillUi.panelGlass(activity);
         assertNotNull(navigation);
+        assertTrue(navigation instanceof LayerDrawable);
+        assertTrue(((LayerDrawable) navigation).getNumberOfLayers() >= 4);
         assertNotNull(panel);
         activity.finish();
     }
