@@ -20,6 +20,7 @@ import org.robolectric.util.ReflectionHelpers;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
 @RunWith(RobolectricTestRunner.class)
@@ -46,8 +47,25 @@ public class NavigationIaTest {
         assertEquals("OnlyFap", nav.getMenu().findItem(3).getTitle());
         assertEquals("More", nav.getMenu().findItem(5).getTitle());
         assertNull(findMenuItem(nav, "Library"));
-        assertNotNull(findByDescription(activity.getWindow().getDecorView(),
-                "Show Top 50 OnlyFap creators"));
+        View modeButton = findByDescription(activity.getWindow().getDecorView(),
+                "Show Top 50 OnlyFap creators");
+        View badge = findByDescription(activity.getWindow().getDecorView(), "Creator list mode");
+        assertNotNull(modeButton);
+        assertNotNull(badge);
+        View modeRow = (View) modeButton.getParent();
+        View caption = (View) badge.getParent();
+        android.widget.FrameLayout.LayoutParams modeParams =
+                (android.widget.FrameLayout.LayoutParams) modeRow.getLayoutParams();
+        android.widget.FrameLayout.LayoutParams captionParams =
+                (android.widget.FrameLayout.LayoutParams) caption.getLayoutParams();
+        Object[] pages = ReflectionHelpers.getField(adapter, "pages");
+        Object onlyFap = pages[MainPagerAdapter.PAGE_ONLYFAP];
+        androidx.swiperefreshlayout.widget.SwipeRefreshLayout refresh =
+                ReflectionHelpers.getField(onlyFap, "refresh");
+        android.widget.FrameLayout.LayoutParams refreshParams =
+                (android.widget.FrameLayout.LayoutParams) refresh.getLayoutParams();
+        assertTrue(captionParams.topMargin >= modeParams.topMargin + modeParams.height);
+        assertTrue(refreshParams.topMargin >= captionParams.topMargin + captionParams.height);
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("OnlyFap", title.getText().toString());
         controller.pause().stop().destroy();
