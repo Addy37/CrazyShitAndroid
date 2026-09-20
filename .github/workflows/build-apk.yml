@@ -38,7 +38,7 @@ jobs:
           set -euo pipefail
           grep -q '<string name="app_name">ZeroChill</string>' app/src/main/res/values/strings.xml
           grep -q '<string name="zerochill_tagline">NO LIMITS. ALL CONTENT.</string>' app/src/main/res/values/zerochill_brand.xml
-          grep -q 'PRIMARY = Color.rgb(34, 211, 238)' app/src/main/java/com/webapp/crazyshit/UiPalette.java
+          grep -q 'PRIMARY = Color.rgb(8, 146, 208)' app/src/main/java/com/webapp/crazyshit/UiPalette.java
           grep -q 'applicationId = "com.addy37.crazyshitunofficial"' app/build.gradle.kts
           grep -q 'applicationIdSuffix = ".dev"' app/build.gradle.kts
           grep -q 'applicationId = "com.addy37.crazyshitadmin"' feedbackadmin/build.gradle.kts
@@ -46,7 +46,7 @@ jobs:
           grep -q 'LayoutInflater.from(activity).inflate(R.layout.activity_splash' app/src/main/java/com/webapp/crazyshit/ChaosStartupOverlayController.java
           grep -q 'android:windowSplashScreenAnimatedIcon">@drawable/ic_zerochill_mark' app/src/main/res/values-v31/themes.xml
           grep -A5 'android:text="ZERO"' app/src/main/res/layout/activity_splash.xml | grep -q 'android:textColor="#F3F4F6"'
-          grep -A5 'android:text="CHILL"' app/src/main/res/layout/activity_splash.xml | grep -q 'android:textColor="#22D3EE"'
+          grep -A5 'android:text="CHILL"' app/src/main/res/layout/activity_splash.xml | grep -q 'android:textColor="@color/zc_cyan"'
           if grep -q -E 'CrazyShit Admin|ZeroFilter Admin|Live overview of CrazyShit|Live overview of ZeroFilter' feedbackadmin/src/main/java/com/addy37/crazyshitadmin/MainActivity.java; then
             echo "Legacy public admin branding was reintroduced."
             exit 1
