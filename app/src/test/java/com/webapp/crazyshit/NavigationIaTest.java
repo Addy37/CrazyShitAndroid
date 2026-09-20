@@ -75,6 +75,22 @@ public class NavigationIaTest {
         ActivityController<LibraryHubActivity> controller =
                 Robolectric.buildActivity(LibraryHubActivity.class).setup();
         LibraryHubActivity activity = controller.get();
+        android.widget.FrameLayout content = activity.findViewById(android.R.id.content);
+        android.view.ViewGroup root = (android.view.ViewGroup) content.getChildAt(0);
+        View shell = root.getChildAt(0);
+        androidx.core.view.WindowInsetsCompat safeInsets =
+                new androidx.core.view.WindowInsetsCompat.Builder()
+                        .setInsets(
+                                androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                                        | androidx.core.view.WindowInsetsCompat.Type.displayCutout(),
+                                androidx.core.graphics.Insets.of(3, 24, 5, 12)
+                        )
+                        .build();
+        androidx.core.view.ViewCompat.dispatchApplyWindowInsets(shell, safeInsets);
+        assertEquals(3, shell.getPaddingLeft());
+        assertEquals(24, shell.getPaddingTop());
+        assertEquals(5, shell.getPaddingRight());
+        assertEquals(12, shell.getPaddingBottom());
         View libraryAction = findByDescription(activity.getWindow().getDecorView(), "History");
         assertNotNull(libraryAction);
         libraryAction.performClick();
