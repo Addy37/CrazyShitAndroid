@@ -13,7 +13,6 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
-import org.robolectric.shadows.ShadowValueAnimator;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -70,15 +69,13 @@ public class ZeroChillFoundationTest {
     @Test public void reducedMotionSkipsSelectionAnimationAndAppliesFinalState() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         View view = new View(activity);
-        ShadowValueAnimator.setDurationScale(0f);
-        try {
-            assertFalse(ZeroChillMotion.animationsEnabled(activity));
-            ZeroChillMotion.animateSelection(view, true);
-            assertEquals(1f, view.getScaleX(), 0.001f);
-            assertEquals(1f, view.getScaleY(), 0.001f);
-        } finally {
-            ShadowValueAnimator.setDurationScale(1f);
-            activity.finish();
-        }
+        activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE).edit()
+                .putBoolean("immersive_motion_enabled", false)
+                .apply();
+        assertFalse(ZeroChillMotion.animationsEnabled(activity));
+        ZeroChillMotion.animateSelection(view, true);
+        assertEquals(1f, view.getScaleX(), 0.001f);
+        assertEquals(1f, view.getScaleY(), 0.001f);
+        activity.finish();
     }
 }
