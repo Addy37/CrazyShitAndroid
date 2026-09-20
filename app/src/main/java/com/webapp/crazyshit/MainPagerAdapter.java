@@ -567,8 +567,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void switchFapzoneMode(Page page, int mode) {
-        if (page == null || page.kind != PageKind.SERIES ||
-                page.seriesSource != SERIES_SOURCE_BUNKR || page.fapzoneMode == mode) return;
+        if (page == null || page.kind != PageKind.ONLYFAP || page.fapzoneMode == mode) return;
         page.fapzoneMode = mode;
         activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
                 .edit()
@@ -589,34 +588,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void updateSeriesSourceButtons(Page page) {
         styleSeriesSourceButton(page.crazyShitSource, page.seriesSource == SERIES_SOURCE_CRAZYSHIT);
         styleSeriesSourceButton(page.efuktSource, page.seriesSource == SERIES_SOURCE_EFUKT);
-        styleSeriesSourceButton(page.bunkrSource, page.seriesSource == SERIES_SOURCE_BUNKR);
         styleSeriesSourceButton(page.categoriesSource, page.seriesSource == SERIES_SOURCE_CATEGORIES);
-        boolean showFapzoneChrome = page.seriesSource == SERIES_SOURCE_BUNKR;
-        if (page.fapzoneModes != null) {
-            page.fapzoneModes.setVisibility(showFapzoneChrome ? View.VISIBLE : View.GONE);
-        }
-        if (page.seriesCaption != null) {
-            page.seriesCaption.setVisibility(showFapzoneChrome ? View.VISIBLE : View.GONE);
-        }
-        updateFapzoneModeButtons(page);
-        updateFapzoneCaption(page);
         if (page.refresh != null) {
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-            params.topMargin = dp(showFapzoneChrome ? 172 : 56);
+            params.topMargin = dp(56);
             page.refresh.setLayoutParams(params);
         }
         if (page.recycler != null) {
-            page.recycler.setPadding(
-                    showFapzoneChrome ? dp(4) : 0,
-                    showFapzoneChrome ? dp(3) : dp(5),
-                    showFapzoneChrome ? dp(4) : 0,
-                    showFapzoneChrome ? dp(26) : dp(18)
-            );
+            page.recycler.setPadding(0, dp(5), 0, dp(18));
         }
         if (page.browseAdapter != null) {
-            page.browseAdapter.setWideCreatorCards(showFapzoneChrome);
+            page.browseAdapter.setWideCreatorCards(false);
         }
-        applyBrowseLayout(page, showFapzoneChrome);
+        applyBrowseLayout(page, false);
     }
 
     private void updateFapzoneModeButtons(Page page) {
@@ -780,14 +764,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.loadTask = io.submit(() -> {
             try {
                 List<NativeContentItem> result;
-                if (page.kind == PageKind.SERIES) {
-                    result = page.seriesSource == SERIES_SOURCE_BUNKR
-                            ? fapzoneCreatorRepository.fetch(
-                                    activity,
-                                    page.fapzoneMode,
-                                    items -> showPopularCreatorProgress(page, generation, items)
-                            )
-                            : page.seriesSource == SERIES_SOURCE_EFUKT
+                if (page.kind == PageKind.ONLYFAP) {
+                    result = fapzoneCreatorRepository.fetch(
+                            activity,
+                            page.fapzoneMode,
+                            items -> showPopularCreatorProgress(page, generation, items)
+                    );
+                } else if (page.kind == PageKind.SERIES) {
+                    result = page.seriesSource == SERIES_SOURCE_EFUKT
                             ? efuktRepository.fetchSeries(activity)
                             : page.seriesSource == SERIES_SOURCE_CATEGORIES
                             ? browseRepository.fetchCategories(activity)
@@ -827,7 +811,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     }
 
                     if (page.itemCount() == 0) {
-                        page.empty.setText(page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_BUNKR
+                        page.empty.setText(page.kind == PageKind.ONLYFAP
                                 ? "Couldn't load this OnlyFap list right now.\nPull down to try again."
                                 : page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_EFUKT
                                 ? "Couldn't load EFukt Series here.\nIt may be unavailable in your region.\nTap to open the website."
@@ -846,7 +830,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     page.progress.setVisibility(View.GONE);
                     page.refresh.setRefreshing(false);
                     if (page.itemCount() == 0) {
-                        page.empty.setText(page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_BUNKR
+                        page.empty.setText(page.kind == PageKind.ONLYFAP
                                 ? "Couldn't load this OnlyFap list right now.\nPull down to try again."
                                 : page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_EFUKT
                                 ? "Couldn't load EFukt Series here.\nIt may be unavailable in your region.\nTap to open the website."
@@ -870,7 +854,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (items == null || items.isEmpty()) return;
         activity.runOnUiThread(() -> {
             if (generation != page.generation ||
-                    page.seriesSource != SERIES_SOURCE_BUNKR ||
+                    page.kind != PageKind.ONLYFAP ||
                     page.browseAdapter == null) return;
             page.progress.setVisibility(View.GONE);
             page.refresh.setRefreshing(false);
