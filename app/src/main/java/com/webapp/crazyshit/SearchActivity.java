@@ -105,8 +105,7 @@ public final class SearchActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         bunkrOnly = SCOPE_BUNKR.equals(getIntent().getStringExtra(EXTRA_SCOPE));
-        getWindow().setStatusBarColor(Color.BLACK);
-        getWindow().setNavigationBarColor(Color.BLACK);
+        ZeroChillUi.applySystemBars(this);
         buildUi();
 
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -147,11 +146,11 @@ public final class SearchActivity extends Activity {
 
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(ZeroChillUi.background(this));
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.BLACK);
+        shell.setBackgroundColor(ZeroChillUi.background(this));
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(shell, (view, insets) -> {
             androidx.core.graphics.Insets safe = insets.getInsets(
                     androidx.core.view.WindowInsetsCompat.Type.systemBars()
@@ -179,7 +178,7 @@ public final class SearchActivity extends Activity {
 
         recycler = new RecyclerView(this);
         recycler.setLayoutManager(new LinearLayoutManager(this));
-        recycler.setBackgroundColor(Color.BLACK);
+        recycler.setBackgroundColor(ZeroChillUi.background(this));
         recycler.setClipToPadding(false);
         recycler.setPadding(0, dp(4), 0, dp(22));
         recycler.setItemAnimator(null);
@@ -188,10 +187,7 @@ public final class SearchActivity extends Activity {
         content.addView(recycler, new FrameLayout.LayoutParams(-1, -1));
 
         status = new TextView(this);
-        status.setTextColor(Color.rgb(180, 180, 190));
-        status.setTextSize(15f);
-        status.setGravity(Gravity.CENTER);
-        status.setPadding(dp(26), dp(26), dp(26), dp(26));
+        ZeroChillUi.styleEmpty(status);
         status.setText(bunkrOnly
                 ? "Search OnlyFap\nBunkr, Fapello, WikiFeet and WikiFeet X open in one gallery"
                 : "Search CrazyShit, EFukt, OnlyFap, Collections, Categories and your Library");
@@ -199,6 +195,7 @@ public final class SearchActivity extends Activity {
 
         progress = new ProgressBar(this);
         progress.setIndeterminate(true);
+        ZeroChillUi.styleProgress(progress);
         progress.setVisibility(View.GONE);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
         progressParams.gravity = Gravity.CENTER;
@@ -219,7 +216,7 @@ public final class SearchActivity extends Activity {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(7), 0, dp(14), 0);
-        bar.setBackgroundColor(Color.BLACK);
+        ZeroChillUi.styleTopBar(bar);
 
         TextView back = new TextView(this);
         back.setText("‹");
@@ -236,14 +233,13 @@ public final class SearchActivity extends Activity {
 
         TextView title = new TextView(this);
         title.setText(bunkrOnly ? "Search OnlyFap" : "Search");
-        title.setTextColor(Color.WHITE);
+        ZeroChillUi.styleTitle(title);
         title.setTextSize(20f);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
         labels.addView(title);
 
         TextView subtitle = new TextView(this);
         subtitle.setText(bunkrOnly ? "One combined media gallery" : "Everything in one place");
-        subtitle.setTextColor(Color.rgb(165, 165, 176));
+        ZeroChillUi.styleSecondary(subtitle);
         subtitle.setTextSize(12f);
         subtitle.setVisibility(View.GONE);
         labels.addView(subtitle);
@@ -262,15 +258,15 @@ public final class SearchActivity extends Activity {
 
         input = new EditText(this);
         input.setHint("Search creators or videos");
-        input.setHintTextColor(Color.rgb(145, 145, 155));
-        input.setTextColor(Color.WHITE);
+        input.setHintTextColor(ZeroChillUi.color(this, R.color.zc_text_muted));
+        input.setTextColor(ZeroChillUi.color(this, R.color.zc_text_primary));
         input.setTextSize(16f);
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         input.setContentDescription("Search creators, albums and videos");
         input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackground(rounded(Color.rgb(30, 30, 35), dp(14)));
+        input.setBackgroundResource(R.drawable.zc_search_field);
         input.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 runSearch();
@@ -329,11 +325,7 @@ public final class SearchActivity extends Activity {
     private void refreshFilterStyles() {
         for (TextView chip : filterViews) {
             boolean selected = chip.getTag() == filter;
-            chip.setTextColor(selected ? UiPalette.ON_PRIMARY : Color.rgb(188, 188, 198));
-            chip.setBackground(rounded(
-                    selected ? UiPalette.PRIMARY : Color.rgb(31, 31, 36),
-                    dp(18)
-            ));
+            ZeroChillUi.styleChip(chip, selected);
         }
     }
 

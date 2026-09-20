@@ -41,7 +41,6 @@ final class LandscapeUiController {
     private static final int NAV_CHAOS = 4;
     private static final int NAV_MORE = 5;
 
-    private static final int RAIL_WIDTH_DP = 68;
     private static final int LANDSCAPE_TOP_BAR_DP = 50;
     private static final int PORTRAIT_TOP_BAR_DP = 56;
 
@@ -126,8 +125,13 @@ final class LandscapeUiController {
         LinearLayout rail = new LinearLayout(activity);
         rail.setOrientation(LinearLayout.VERTICAL);
         rail.setGravity(Gravity.CENTER_HORIZONTAL);
-        rail.setBackgroundColor(Color.rgb(17, 17, 20));
-        rail.setElevation(dp(activity, 12));
+        rail.setBackground(ZeroChillUi.rounded(
+                activity,
+                ZeroChillUi.color(activity, R.color.zc_surface_glass),
+                ZeroChillUi.color(activity, R.color.zc_edge),
+                R.dimen.zc_radius_small
+        ));
+        rail.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_navigation));
         rail.setVisibility(View.GONE);
         rail.setContentDescription("Landscape navigation");
 
@@ -152,17 +156,20 @@ final class LandscapeUiController {
 
         if (state.overlayRoot instanceof FrameLayout) {
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                    dp(activity, RAIL_WIDTH_DP),
+                    ZeroChillUi.dimension(activity, R.dimen.zc_rail_width),
                     -1
             );
             params.gravity = Gravity.START;
             state.overlayRoot.addView(rail, params);
         } else {
-            state.overlayRoot.addView(rail, new ViewGroup.LayoutParams(dp(activity, RAIL_WIDTH_DP), -1));
+            state.overlayRoot.addView(rail, new ViewGroup.LayoutParams(
+                    ZeroChillUi.dimension(activity, R.dimen.zc_rail_width),
+                    -1
+            ));
         }
 
         state.rail = rail;
-        state.railWidth = dp(activity, RAIL_WIDTH_DP);
+        state.railWidth = ZeroChillUi.dimension(activity, R.dimen.zc_rail_width);
         activity.getWindow().getDecorView().requestApplyInsets();
     }
 
@@ -229,7 +236,9 @@ final class LandscapeUiController {
         } else if (landscape) {
             setVisibility(state.bottomNavigation, View.GONE);
             setVisibility(state.rail, View.VISIBLE);
-            setShellStartMargin(state, state.railWidth > 0 ? state.railWidth : dp(activity, RAIL_WIDTH_DP));
+            setShellStartMargin(state, state.railWidth > 0
+                    ? state.railWidth
+                    : ZeroChillUi.dimension(activity, R.dimen.zc_rail_width));
         } else {
             setVisibility(state.rail, View.GONE);
             setVisibility(state.bottomNavigation, View.VISIBLE);
@@ -240,8 +249,8 @@ final class LandscapeUiController {
     }
 
     private static void updateRailSelection(NativeMainActivity activity, State state, int selected) {
-        int active = UiPalette.PRIMARY;
-        int inactive = Color.rgb(165, 165, 176);
+        int active = ZeroChillUi.color(activity, R.color.zc_cyan);
+        int inactive = ZeroChillUi.color(activity, R.color.zc_text_muted);
         for (Map.Entry<Integer, TextView> entry : state.railButtons.entrySet()) {
             boolean checked = entry.getKey() == selected;
             TextView button = entry.getValue();
@@ -251,6 +260,7 @@ final class LandscapeUiController {
             Drawable top = drawables.length > 1 ? drawables[1] : null;
             if (top != null) top.setTint(color);
             button.setBackground(railPill(activity, checked));
+            ZeroChillMotion.animateSelection(button, checked);
         }
     }
 
@@ -258,7 +268,15 @@ final class LandscapeUiController {
         GradientDrawable background = new GradientDrawable();
         background.setShape(GradientDrawable.RECTANGLE);
         background.setCornerRadius(dp(activity, 18));
-        background.setColor(selected ? Color.argb(72, 34, 211, 238) : Color.TRANSPARENT);
+        background.setColor(selected
+                ? ZeroChillUi.color(activity, R.color.zc_cyan_container)
+                : Color.TRANSPARENT);
+        if (selected) {
+            background.setStroke(
+                    ZeroChillUi.dimension(activity, R.dimen.zc_stroke),
+                    ZeroChillUi.color(activity, R.color.zc_edge)
+            );
+        }
         return background;
     }
 
@@ -270,6 +288,7 @@ final class LandscapeUiController {
     ) {
         View topBar = state.topBar;
         if (topBar == null) return;
+        ZeroChillUi.styleTopBar(topBar);
 
         setVisibility(topBar, chaosFullscreen ? View.GONE : View.VISIBLE);
         ViewGroup.LayoutParams raw = topBar.getLayoutParams();
@@ -459,7 +478,7 @@ final class LandscapeUiController {
 
             if (state.rail != null) {
                 state.rail.setPadding(left, top, 0, bottom);
-                int width = dp(activity, RAIL_WIDTH_DP) + left;
+                int width = ZeroChillUi.dimension(activity, R.dimen.zc_rail_width) + left;
                 state.railWidth = width;
                 ViewGroup.LayoutParams railRaw = state.rail.getLayoutParams();
                 if (railRaw != null && railRaw.width != width) {

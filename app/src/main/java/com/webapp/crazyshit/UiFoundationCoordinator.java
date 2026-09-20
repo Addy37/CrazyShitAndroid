@@ -178,8 +178,8 @@ final class UiFoundationCoordinator {
         FlashUiController.detach(main);
         WatchStatePolish.attach(main);
         PredictiveBackPolish.attach(main);
-        OledImmersiveUiController.attachMain(main);
-        FeedMotionController.attach(main);
+        // NativeMainActivity owns its ZeroChill shell and motion. The legacy controllers remain
+        // attached to browser activities, where their feed-specific behavior is still required.
 
         boolean landscape = main.getResources().getConfiguration().orientation ==
                 Configuration.ORIENTATION_LANDSCAPE;

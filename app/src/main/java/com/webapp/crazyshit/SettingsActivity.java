@@ -163,13 +163,13 @@ public class SettingsActivity extends Activity {
                 "oled_black_enabled",
                 true);
         addSwitch(root,
-                "Ambient feed glow",
-                "Add a very faint artwork glow without tinting the whole screen.",
+                "Cyan edge glow",
+                "Show a faint cyan highlight on glass surfaces without tinting the screen.",
                 "ambient_feed_glow",
                 true);
         addSwitch(root,
                 "Motion effects",
-                "Use light focus and thumbnail movement while scrolling.",
+                "Use light press, selection and page transition effects.",
                 "immersive_motion_enabled",
                 true);
 
