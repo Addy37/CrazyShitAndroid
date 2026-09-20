@@ -198,38 +198,13 @@ final class StableBottomNavigationController {
             View topBar = shell.getChildAt(0);
             TextView title = field(activity, "headerTitle", TextView.class);
             TextView subtitle = field(activity, "headerSubtitle", TextView.class);
-            int position = pager == null ? MainPagerAdapter.PAGE_HOME : pager.getCurrentItem();
 
-            ImageView appIcon = childImage(topBar, 0);
-            View profile = topBar instanceof ViewGroup && ((ViewGroup) topBar).getChildCount() > 3
-                    ? ((ViewGroup) topBar).getChildAt(3) : null;
-
-            if (position == MainPagerAdapter.PAGE_HOME) {
-                ZeroChillUi.styleTopBar(topBar);
-                if (title != null) {
-                    title.setText("Home");
-                    title.setTextColor(ZeroChillUi.color(activity, R.color.zc_text_primary));
-                    title.setTextSize(18f);
-                }
-                if (subtitle != null) {
-                    subtitle.setVisibility(View.VISIBLE);
-                    ZeroChillUi.styleSecondary(subtitle);
-                    subtitle.setTextSize(11f);
-                    subtitle.setText(R.string.zerochill_tagline);
-                }
-                if (appIcon != null) appIcon.setVisibility(View.VISIBLE);
-                if (profile != null) profile.setVisibility(View.GONE);
-                return;
-            }
-
-            ZeroChillUi.styleTopBar(topBar);
+            topBar.setBackgroundColor(ZeroChillUi.background(activity));
+            topBar.setElevation(0f);
             if (title != null) {
-                title.setTextColor(ZeroChillUi.color(activity, R.color.zc_text_primary));
-                title.setTextSize(23f);
+                title.setTextSize(22f);
             }
             if (subtitle != null) subtitle.setVisibility(View.GONE);
-            if (appIcon != null) appIcon.setVisibility(View.GONE);
-            if (profile != null) profile.setVisibility(View.VISIBLE);
         }
 
         private void applyGeometry() {
