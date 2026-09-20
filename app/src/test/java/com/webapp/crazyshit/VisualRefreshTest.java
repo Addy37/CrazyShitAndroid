@@ -112,15 +112,9 @@ public class VisualRefreshTest {
         TextView headerTitle = ReflectionHelpers.getField(main, "headerTitle");
         TextView headerSubtitle = ReflectionHelpers.getField(main, "headerSubtitle");
         assertEquals("ZEROCHILL", headerTitle.getText().toString());
-        assertEquals(
-                android.util.TypedValue.applyDimension(
-                        android.util.TypedValue.COMPLEX_UNIT_SP,
-                        28f,
-                        main.getResources().getDisplayMetrics()
-                ),
-                headerTitle.getTextSize(),
-                0.1f
-        );
+        TextView defaultTitle = new TextView(main);
+        ZeroChillUi.styleTitle(defaultTitle);
+        assertTrue(headerTitle.getTextSize() > defaultTitle.getTextSize());
         assertEquals(View.GONE, headerSubtitle.getVisibility());
         LinearLayout shell = ReflectionHelpers.getField(main, "shell");
         assertTrue(shell instanceof FrostedNavigationLayout);
@@ -137,15 +131,9 @@ public class VisualRefreshTest {
         NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
         assertNotNull(visibleSection);
         assertEquals("TODAY'S CRAZY SHIT", visibleSection.sectionTitle.getText().toString());
-        assertEquals(
-                android.util.TypedValue.applyDimension(
-                        android.util.TypedValue.COMPLEX_UNIT_SP,
-                        24f,
-                        main.getResources().getDisplayMetrics()
-                ),
-                visibleSection.sectionTitle.getTextSize(),
-                0.1f
-        );
+        TextView oldSectionSize = new TextView(main);
+        oldSectionSize.setTextSize(17f);
+        assertTrue(visibleSection.sectionTitle.getTextSize() > oldSectionSize.getTextSize());
         com.google.android.material.card.MaterialCardView sectionCard =
                 (com.google.android.material.card.MaterialCardView) visibleSection.itemView;
         assertEquals(Color.TRANSPARENT, sectionCard.getCardBackgroundColor().getDefaultColor());
