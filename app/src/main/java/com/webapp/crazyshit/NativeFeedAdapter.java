@@ -877,7 +877,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private String buildInfo(NativeContentItem item) {
         ArrayList<String> parts = new ArrayList<>();
         if (viewMode == VIEW_CARDS) parts.add(EfuktRepository.isEfuktUrl(item.url) ? "EFukt"
-                : FapelloRepository.isFapelloUrl(item.url) ? "OnlyFap" : "CrazyShit");
+                : FapelloRepository.isFapelloUrl(item.url) ? "OnlyFap" : "Series");
         if (!item.isMeme() && item.views != null && !item.views.isEmpty()) {
             String views = viewMode == VIEW_CARDS ? item.views : compactCount(item.views);
             parts.add(views + " views");

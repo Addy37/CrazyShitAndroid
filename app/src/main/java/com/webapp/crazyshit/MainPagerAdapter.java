@@ -254,7 +254,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         LinearLayout sources = new LinearLayout(activity);
         sources.setGravity(Gravity.CENTER_VERTICAL);
         sources.setPadding(dp(12), dp(6), dp(12), dp(6));
-        String[] names = {"All", "CrazyShit", "EFukt", "OnlyFap"};
+        String[] names = {"All", "Series", "EFukt", "OnlyFap"};
         for (int source = 0; source < names.length; source++) {
             final int selected = source;
             TextView chip = BrowseUi.action(activity, names[source], names[source] + " Home feed", v -> {

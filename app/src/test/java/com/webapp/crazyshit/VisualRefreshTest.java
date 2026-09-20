@@ -80,6 +80,7 @@ public class VisualRefreshTest {
         View chipRow = (View) homeChips.get(0).getParent();
         View sourceBar = (View) chipRow.getParent();
         assertEquals(View.VISIBLE, sourceBar.getVisibility());
+        assertEquals("Series", homeChips.get(1).getText().toString());
         homeChips.get(1).performClick();
         deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
         while ((boolean) ReflectionHelpers.getField(home, "loading") && System.nanoTime() < deadline) {
@@ -122,6 +123,7 @@ public class VisualRefreshTest {
         NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
         assertNotNull(visibleSection);
         assertEquals(main.getString(R.string.zerochill_tagline), visibleSection.sectionTitle.getText().toString());
+        assertTrue(visibleCard.info.getText().toString().startsWith("Series"));
         visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
         visibleCard.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) visibleCard.itemView;
