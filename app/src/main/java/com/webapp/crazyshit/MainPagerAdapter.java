@@ -161,7 +161,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void onConfigurationChanged() {
         chaosView.onConfigurationChanged();
-        applyChaosViewportInset();
     }
 
     public boolean exitChaosFullscreenForBack() {
@@ -214,11 +213,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             ((ViewGroup) pageView.getParent()).removeView(pageView);
         }
         holder.container.removeAllViews();
-        FrameLayout.LayoutParams pageParams = new FrameLayout.LayoutParams(-1, -1);
-        if (position == PAGE_CHAOS) {
-            pageParams.bottomMargin = chaosBottomInset();
-        }
-        holder.container.addView(pageView, pageParams);
+        holder.container.addView(pageView, new FrameLayout.LayoutParams(-1, -1));
     }
 
     private Page buildFeedPage(int index, String prefKey, String baseUrl) {
@@ -894,26 +889,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 });
             });
         }
-    }
-
-    private void applyChaosViewportInset() {
-        ViewGroup.LayoutParams raw = chaosView.getLayoutParams();
-        if (!(raw instanceof FrameLayout.LayoutParams)) return;
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
-        int wanted = chaosBottomInset();
-        if (params.bottomMargin == wanted) return;
-        params.bottomMargin = wanted;
-        chaosView.setLayoutParams(params);
-    }
-
-    private int chaosBottomInset() {
-        if (activity.getResources().getConfiguration().orientation ==
-                Configuration.ORIENTATION_LANDSCAPE) {
-            return 0;
-        }
-        // The floating navbar now consumes zero pager space. Give only ShitTok the same
-        // portrait viewport it had before: 64dp nav + the former 2dp top and 6dp bottom gaps.
-        return ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height) + dp(8);
     }
 
     private Page pageAt(int position) {

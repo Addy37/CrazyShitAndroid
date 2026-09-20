@@ -71,7 +71,8 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
-    @Test public void shitTokKeepsLegacyPortraitViewportWithoutChangingOtherTabs() {
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Test public void shitTokKeepsLegacyPortraitViewportWhilePagerCanSwipeBehindNav() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
                 .putBoolean("access_notice_2_8_3_accepted", true).apply();
@@ -87,9 +88,17 @@ public class NavigationIaTest {
         assertTrue(chaosView.getLayoutParams() instanceof android.widget.FrameLayout.LayoutParams);
         android.widget.FrameLayout.LayoutParams chaosParams =
                 (android.widget.FrameLayout.LayoutParams) chaosView.getLayoutParams();
+        assertEquals(0, chaosParams.bottomMargin);
+
+        androidx.recyclerview.widget.RecyclerView.Adapter chaosAdapter =
+                ReflectionHelpers.getField(chaosView, "adapter");
+        androidx.recyclerview.widget.RecyclerView parent =
+                new androidx.recyclerview.widget.RecyclerView(activity);
+        androidx.recyclerview.widget.RecyclerView.ViewHolder holder =
+                chaosAdapter.onCreateViewHolder(parent, 0);
         int expectedInset = activity.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height)
                 + Math.round(8 * activity.getResources().getDisplayMetrics().density);
-        assertEquals(expectedInset, chaosParams.bottomMargin);
+        assertEquals(expectedInset, holder.itemView.getPaddingBottom());
 
         Object[] pages = ReflectionHelpers.getField(adapter, "pages");
         View homeRoot = ReflectionHelpers.getField(pages[MainPagerAdapter.PAGE_HOME], "root");

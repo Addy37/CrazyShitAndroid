@@ -555,6 +555,16 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
+    private int portraitViewportBottomInset() {
+        if (activity.getResources().getConfiguration().orientation ==
+                Configuration.ORIENTATION_LANDSCAPE) {
+            return 0;
+        }
+        // Keep the old resting viewport while leaving the vertical pager full-height so
+        // incoming/outgoing pages can pass visibly behind the floating glass navbar.
+        return ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height) + dp(8);
+    }
+
     private ChaosHolder holderAt(int position) {
         RecyclerView rv = pagerRecycler();
         if (rv == null) return null;
@@ -1030,6 +1040,7 @@ public final class ChaosFeedView extends FrameLayout {
             root = (FrameLayout) itemView;
             root.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
             root.setBackgroundColor(Color.BLACK);
+            applyViewportInset();
 
             mediaLayer = new FrameLayout(activity);
             mediaLayer.setBackgroundColor(Color.BLACK);
@@ -1346,11 +1357,12 @@ public final class ChaosFeedView extends FrameLayout {
             int[] rootLocation = new int[2];
             root.getLocationOnScreen(rootLocation);
             float available = Math.max(0f, sheetTopOnScreen - rootLocation[1]);
+            float viewportHeight = mediaLayer.getHeight();
             float renderedVideoHeight = Math.min(
-                    root.getHeight(),
+                    viewportHeight,
                     mediaLayer.getWidth() / videoAspectRatio
             );
-            float currentTop = (root.getHeight() - renderedVideoHeight) / 2f;
+            float currentTop = (viewportHeight - renderedVideoHeight) / 2f;
             float targetTop = Math.max(dp(8), (available - renderedVideoHeight) / 2f);
             mediaLayer.setTranslationY(Math.min(0f, targetTop - currentTop));
         }
@@ -1702,12 +1714,22 @@ public final class ChaosFeedView extends FrameLayout {
             showControls(false);
         }
 
+        private void applyViewportInset() {
+            int bottom = portraitViewportBottomInset();
+            if (root.getPaddingLeft() == 0 && root.getPaddingTop() == 0 &&
+                    root.getPaddingRight() == 0 && root.getPaddingBottom() == bottom) {
+                return;
+            }
+            root.setPadding(0, 0, 0, bottom);
+        }
+
         private boolean portrait() {
             return activity.getResources().getConfiguration().orientation
                     != Configuration.ORIENTATION_LANDSCAPE;
         }
 
         void syncOrientationChrome() {
+            applyViewportInset();
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(hideSeekBarRunnable);
             lower.animate().cancel();
