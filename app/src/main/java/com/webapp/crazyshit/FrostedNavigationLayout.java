@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Path;
 import android.graphics.RecordingCanvas;
 import android.graphics.RectF;
 import android.graphics.RenderEffect;
@@ -75,6 +76,8 @@ final class FrostedNavigationLayout extends LinearLayout {
     private static final class Api31RenderState {
         private final RenderNode contentNode = new RenderNode("ZeroChill content");
         private final RenderNode blurNode = new RenderNode("ZeroChill navigation blur");
+        private final Path clipPath = new Path();
+        private final RectF clipBounds = new RectF();
         private RenderEffect blurEffect;
         private int blurRadius;
 
@@ -124,14 +127,20 @@ final class FrostedNavigationLayout extends LinearLayout {
                 float cornerRadius = layout.getResources().getDimension(
                         R.dimen.zc_radius_pill);
                 int checkpoint = canvas.save();
-                canvas.clipRoundRect(new RectF(
+                clipBounds.set(
                         navigation.getLeft(),
                         navigation.getTop(),
                         navigation.getRight(),
-                        navigation.getBottom()),
-                        cornerRadius,
-                        cornerRadius
+                        navigation.getBottom()
                 );
+                clipPath.rewind();
+                clipPath.addRoundRect(
+                        clipBounds,
+                        cornerRadius,
+                        cornerRadius,
+                        Path.Direction.CW
+                );
+                canvas.clipPath(clipPath);
                 canvas.drawRenderNode(blurNode);
                 canvas.restoreToCount(checkpoint);
             }
