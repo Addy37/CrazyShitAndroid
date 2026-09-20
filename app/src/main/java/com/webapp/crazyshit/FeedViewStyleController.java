@@ -257,9 +257,7 @@ final class FeedViewStyleController {
         TextView subtitle = fieldValue(activity, "headerSubtitle", TextView.class);
         if (title != null && !"Home".contentEquals(title.getText())) return;
         if (subtitle == null) return;
-        int mode = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
-        subtitle.setText("CrazyShit  •  " + label(mode));
+        subtitle.setText(R.string.zerochill_tagline);
     }
 
     static String label(int mode) {
@@ -331,4 +329,3 @@ final class FeedViewStyleController {
         return null;
     }
 }
-

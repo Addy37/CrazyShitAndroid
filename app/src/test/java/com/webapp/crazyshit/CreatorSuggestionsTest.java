@@ -48,6 +48,10 @@ public class CreatorSuggestionsTest {
                     try { released = oldReply.await(3, TimeUnit.SECONDS); }
                     catch (InterruptedException ignored) { }
                 }
+                // Simulate a host that completed despite Future.cancel(true). The controller only
+                // caches replies from work that is no longer interrupted, so clear the test
+                // thread's cancellation flag before returning the deliberately stale result.
+                Thread.interrupted();
                 oldFinished.countDown();
                 return Collections.singletonList(CreatorCatalog.fromModel(
                         new FapelloRepository.Model("Anna", "https://fapello.com/anna/", "")));

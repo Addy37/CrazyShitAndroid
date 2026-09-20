@@ -14,6 +14,8 @@ import android.widget.TextView;
 
 import androidx.core.content.ContextCompat;
 
+import com.google.android.material.card.MaterialCardView;
+
 /** Lightweight, resource-backed styling shared by the ZeroChill application shell. */
 final class ZeroChillUi {
     private ZeroChillUi() {
@@ -126,6 +128,7 @@ final class ZeroChillUi {
         chip.setBackground(rounded(context, fill, stroke, R.dimen.zc_radius_pill));
         chip.setSelected(selected);
         ZeroChillMotion.installPressFeedback(chip);
+        ZeroChillMotion.animateSelection(chip, selected);
     }
 
     static void styleCard(View card) {
@@ -133,5 +136,16 @@ final class ZeroChillUi {
         card.setBackground(glass(card.getContext()));
         card.setElevation(dimension(card.getContext(), R.dimen.zc_elevation_low));
         ZeroChillMotion.installPressFeedback(card);
+    }
+
+    static void styleMaterialCard(MaterialCardView card, int radiusResource) {
+        if (card == null) return;
+        Context context = card.getContext();
+        card.setCardBackgroundColor(color(context, R.color.zc_surface_glass));
+        card.setRadius(dimension(context, radiusResource));
+        card.setCardElevation(dimension(context, R.dimen.zc_elevation_low));
+        card.setStrokeWidth(dimension(context, R.dimen.zc_stroke));
+        card.setStrokeColor(color(context, R.color.zc_edge));
+        card.setRippleColor(ColorStateList.valueOf(color(context, R.color.zc_cyan_container)));
     }
 }

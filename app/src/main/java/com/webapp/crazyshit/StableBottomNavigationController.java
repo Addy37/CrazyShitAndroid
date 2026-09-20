@@ -1,45 +1,30 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.navigation.NavigationBarView;
 
 import java.lang.reflect.Field;
-import java.util.List;
 import java.util.WeakHashMap;
 
-/**
- * Final owner for portrait bottom navigation and the restored v2.10 Home presentation.
- *
- * Home keeps the current repositories and navigation behavior, but returns to the compact
- * CrazyShit-only list, classic header and smaller outlined bottom pill used in v2.10.0.
- */
+/** Final owner for portrait bottom navigation and page-specific ZeroChill chrome. */
 final class StableBottomNavigationController {
     private static final int NAV_HOME = 1;
     private static final int NAV_SERIES = 2;
     private static final int NAV_CATEGORIES = 3;
     private static final int NAV_CHAOS = 4;
     private static final int NAV_MORE = 5;
-    private static final int HOME_SOURCE_CRAZYSHIT = 1;
-    private static final String PREF_HOME_SOURCE = "home_source";
-    private static final String PREF_HOME_VIEW = "native_view_home";
-    private static final String PREF_LEGACY_HOME_MIGRATED = "legacy_home_v2_10_restored";
-
     private static final WeakHashMap<NativeMainActivity, State> STATES = new WeakHashMap<>();
 
     private StableBottomNavigationController() {
@@ -62,20 +47,20 @@ final class StableBottomNavigationController {
                 new int[] {}
         };
         int active = ZeroChillUi.color(context, R.color.zc_cyan);
-        int inactive = ZeroChillUi.color(context, R.color.zc_text_muted);
+        int inactive = ZeroChillUi.color(context, R.color.zc_text_secondary);
         ColorStateList colors = new ColorStateList(states, new int[] {active, inactive});
         nav.setItemIconTintList(colors);
         nav.setItemTextColor(colors);
 
         try {
             nav.setItemActiveIndicatorEnabled(true);
-            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(
-                    ZeroChillUi.color(context, R.color.zc_cyan_container)));
+            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(Color.TRANSPARENT));
             nav.setItemActiveIndicatorWidth(ZeroChillUi.dimension(context, R.dimen.zc_nav_indicator_width));
             nav.setItemActiveIndicatorHeight(ZeroChillUi.dimension(context, R.dimen.zc_nav_indicator_height));
             nav.setItemIconSize(ZeroChillUi.dimension(context, R.dimen.zc_nav_icon));
-            nav.setItemPaddingTop(dp(context, 4));
-            nav.setItemPaddingBottom(dp(context, 4));
+            nav.setItemPaddingTop(dp(context, 3));
+            nav.setItemPaddingBottom(dp(context, 5));
+            nav.setItemBackgroundResource(R.drawable.zc_nav_item_background);
         } catch (Throwable ignored) {
         }
     }
@@ -113,8 +98,6 @@ final class StableBottomNavigationController {
         MainPagerAdapter pagerAdapter;
         ViewPager2.OnPageChangeCallback pageCallback;
         View.OnLayoutChangeListener layoutListener;
-        RecyclerView homeRecycler;
-        RecyclerView.OnChildAttachStateChangeListener homeChildListener;
 
         State(NativeMainActivity activity) {
             this.activity = activity;
@@ -163,16 +146,8 @@ final class StableBottomNavigationController {
                 } catch (Exception ignored) {
                 }
             }
-            if (homeRecycler != null && homeChildListener != null) {
-                try {
-                    homeRecycler.removeOnChildAttachStateChangeListener(homeChildListener);
-                } catch (Exception ignored) {
-                }
-            }
             layoutListener = null;
             pageCallback = null;
-            homeChildListener = null;
-            homeRecycler = null;
         }
 
         void scheduleFinalPasses() {
@@ -195,8 +170,6 @@ final class StableBottomNavigationController {
             }
 
             ensureAttached();
-            configureLegacyHome();
-            bindHomeRecycler();
 
             boolean landscape = activity.getResources().getConfiguration().orientation ==
                     Configuration.ORIENTATION_LANDSCAPE;
@@ -210,7 +183,6 @@ final class StableBottomNavigationController {
             applyGeometry();
             resetLegacyItemTransforms();
             stylePageChrome();
-            styleLegacyHomeRows();
         }
 
         private void ensureAttached() {
@@ -219,122 +191,6 @@ final class StableBottomNavigationController {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height)
             ));
-        }
-
-        private void configureLegacyHome() {
-            if (pagerAdapter == null) return;
-            Object home = homePage();
-            if (home == null) return;
-
-            SharedPreferences prefs = activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE);
-            boolean migrated = prefs.getBoolean(PREF_LEGACY_HOME_MIGRATED, false);
-            int currentSource = intField(home, "homeSource", HOME_SOURCE_CRAZYSHIT);
-            boolean sourceChanged = currentSource != HOME_SOURCE_CRAZYSHIT;
-
-            SharedPreferences.Editor editor = prefs.edit()
-                    .putInt(PREF_HOME_SOURCE, HOME_SOURCE_CRAZYSHIT);
-            if (!migrated) {
-                pagerAdapter.setViewMode(MainPagerAdapter.PAGE_HOME, NativeFeedAdapter.VIEW_LIST);
-                editor.putInt(PREF_HOME_VIEW, NativeFeedAdapter.VIEW_LIST)
-                        .putBoolean(PREF_LEGACY_HOME_MIGRATED, true);
-            }
-            editor.apply();
-
-            if (sourceChanged) {
-                setIntField(home, "homeSource", HOME_SOURCE_CRAZYSHIT);
-                pagerAdapter.refresh(MainPagerAdapter.PAGE_HOME);
-            }
-            hideHomeSourceSelector(home);
-        }
-
-        private void hideHomeSourceSelector(Object home) {
-            Object chips = rawField(home, "homeChips");
-            if (chips instanceof List && !((List<?>) chips).isEmpty()) {
-                Object first = ((List<?>) chips).get(0);
-                if (first instanceof View) {
-                    View chip = (View) first;
-                    if (chip.getParent() instanceof View) {
-                        View row = (View) chip.getParent();
-                        if (row.getParent() instanceof View) {
-                            ((View) row.getParent()).setVisibility(View.GONE);
-                        }
-                    }
-                }
-            }
-
-            View refresh = field(home, "refresh", View.class);
-            if (refresh != null && refresh.getLayoutParams() instanceof FrameLayout.LayoutParams) {
-                FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) refresh.getLayoutParams();
-                if (params.topMargin != 0) {
-                    params.topMargin = 0;
-                    refresh.setLayoutParams(params);
-                }
-            }
-            View empty = field(home, "empty", View.class);
-            if (empty != null && empty.getLayoutParams() instanceof FrameLayout.LayoutParams) {
-                FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) empty.getLayoutParams();
-                if (params.topMargin != 0) {
-                    params.topMargin = 0;
-                    empty.setLayoutParams(params);
-                }
-            }
-        }
-
-        private void bindHomeRecycler() {
-            Object home = homePage();
-            RecyclerView next = field(home, "recycler", RecyclerView.class);
-            if (next == homeRecycler && homeChildListener != null) return;
-
-            if (homeRecycler != null && homeChildListener != null) {
-                try {
-                    homeRecycler.removeOnChildAttachStateChangeListener(homeChildListener);
-                } catch (Exception ignored) {
-                }
-            }
-            homeRecycler = next;
-            if (homeRecycler == null) return;
-
-            homeChildListener = new RecyclerView.OnChildAttachStateChangeListener() {
-                @Override
-                public void onChildViewAttachedToWindow(View view) {
-                    styleLegacyHomeChild(view);
-                }
-
-                @Override
-                public void onChildViewDetachedFromWindow(View view) {
-                }
-            };
-            homeRecycler.addOnChildAttachStateChangeListener(homeChildListener);
-            styleLegacyHomeRows();
-        }
-
-        private void styleLegacyHomeRows() {
-            if (homeRecycler == null || pagerAdapter == null ||
-                    pagerAdapter.viewMode(MainPagerAdapter.PAGE_HOME) != NativeFeedAdapter.VIEW_LIST) return;
-            for (int i = 0; i < homeRecycler.getChildCount(); i++) {
-                styleLegacyHomeChild(homeRecycler.getChildAt(i));
-            }
-        }
-
-        private void styleLegacyHomeChild(View child) {
-            if (child == null || pagerAdapter == null ||
-                    pagerAdapter.viewMode(MainPagerAdapter.PAGE_HOME) != NativeFeedAdapter.VIEW_LIST) return;
-            MaterialCardView card = child instanceof MaterialCardView
-                    ? (MaterialCardView) child : findCard(child);
-            if (card == null) return;
-
-            if (hasImage(card)) {
-                card.setCardBackgroundColor(Color.rgb(25, 25, 28));
-                card.setRadius(dp(15));
-                card.setCardElevation(dp(1));
-                card.setStrokeColor(Color.rgb(50, 50, 57));
-                card.setStrokeWidth(dp(1));
-            } else {
-                card.setCardBackgroundColor(Color.rgb(13, 13, 15));
-                card.setRadius(0f);
-                card.setCardElevation(0f);
-                card.setStrokeWidth(0);
-            }
         }
 
         private void stylePageChrome() {
@@ -376,14 +232,6 @@ final class StableBottomNavigationController {
             if (profile != null) profile.setVisibility(View.VISIBLE);
         }
 
-        private Object homePage() {
-            if (pagerAdapter == null) return null;
-            Object raw = rawField(pagerAdapter, "pages");
-            if (!(raw instanceof Object[])) return null;
-            Object[] pages = (Object[]) raw;
-            return pages.length > MainPagerAdapter.PAGE_HOME ? pages[MainPagerAdapter.PAGE_HOME] : null;
-        }
-
         private void applyGeometry() {
             if (nav == null || nav.getLayoutParams() == null) return;
             if (activity.getResources().getConfiguration().orientation ==
@@ -420,7 +268,7 @@ final class StableBottomNavigationController {
                 item.setScaleX(1f);
                 item.setScaleY(1f);
                 item.setTranslationX(0f);
-                item.setTranslationY(0f);
+                item.setTranslationY(-dp(1));
                 item.setAlpha(1f);
             }
         }
@@ -428,27 +276,6 @@ final class StableBottomNavigationController {
         private int dp(int value) {
             return StableBottomNavigationController.dp(activity, value);
         }
-    }
-
-    private static MaterialCardView findCard(View view) {
-        if (view instanceof MaterialCardView) return (MaterialCardView) view;
-        if (!(view instanceof ViewGroup)) return null;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            MaterialCardView found = findCard(group.getChildAt(i));
-            if (found != null) return found;
-        }
-        return null;
-    }
-
-    private static boolean hasImage(View view) {
-        if (view instanceof ImageView) return true;
-        if (!(view instanceof ViewGroup)) return false;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            if (hasImage(group.getChildAt(i))) return true;
-        }
-        return false;
     }
 
     private static ImageView childImage(View view, int index) {
@@ -461,21 +288,6 @@ final class StableBottomNavigationController {
 
     private static int dp(Context context, int value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
-    }
-
-    private static int intField(Object target, String name, int fallback) {
-        Object value = rawField(target, name);
-        return value instanceof Integer ? (Integer) value : fallback;
-    }
-
-    private static void setIntField(Object target, String name, int value) {
-        Field field = findField(target == null ? null : target.getClass(), name);
-        if (field == null) return;
-        try {
-            field.setAccessible(true);
-            field.setInt(target, value);
-        } catch (Exception ignored) {
-        }
     }
 
     private static Object rawField(Object target, String name) {

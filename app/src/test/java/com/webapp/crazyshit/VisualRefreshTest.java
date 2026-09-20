@@ -42,7 +42,7 @@ public class VisualRefreshTest {
         try (FileOutputStream out = new FileOutputStream(new File(dir, name + ".png"))) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); }
         bitmap.recycle();
     }
-    @Test public void fullHomeKeepsRefreshStyleAcrossLateControllersAndTabChanges() throws Exception {
+    @Test public void fullHomeKeepsZeroChillGlassAcrossLateControllersAndTabChanges() throws Exception {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         android.content.SharedPreferences prefs = context.getSharedPreferences("app_prefs", 0);
         prefs.edit().putBoolean("access_notice_2_8_3_accepted", true)
@@ -74,13 +74,12 @@ public class VisualRefreshTest {
         NativeFeedAdapter feed = ReflectionHelpers.getField(home, "feedAdapter");
         assertEquals(2, feed.getItemCount());
         assertTrue(feed.isSectionAt(0));
-        assertEquals(NativeFeedAdapter.VIEW_LIST, pager.viewMode(MainPagerAdapter.PAGE_HOME));
-        assertEquals(1, prefs.getInt("home_source", -1));
-        assertTrue(prefs.getBoolean("legacy_home_v2_10_restored", false));
+        assertEquals(NativeFeedAdapter.VIEW_CARDS, pager.viewMode(MainPagerAdapter.PAGE_HOME));
+        assertEquals(0, prefs.getInt("home_source", -1));
         java.util.List<TextView> homeChips = ReflectionHelpers.getField(home, "homeChips");
         View chipRow = (View) homeChips.get(0).getParent();
         View sourceBar = (View) chipRow.getParent();
-        assertEquals(View.GONE, sourceBar.getVisibility());
+        assertEquals(View.VISIBLE, sourceBar.getVisibility());
 
         com.google.android.material.bottomnavigation.BottomNavigationView nav = ReflectionHelpers.getField(main, "bottomNavigation");
         nav.setSelectedItemId(3);
@@ -111,18 +110,22 @@ public class VisualRefreshTest {
         assertNull(homeList.getItemAnimator());
         NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(1);
         assertNotNull(visibleCard);
+        NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
+        assertNotNull(visibleSection);
+        assertEquals(main.getString(R.string.zerochill_tagline), visibleSection.sectionTitle.getText().toString());
         visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
         visibleCard.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) visibleCard.itemView;
         assertEquals(BrowseUi.dp(main, 1), card.getStrokeWidth());
-        assertEquals(Color.rgb(25, 25, 28), card.getCardBackgroundColor().getDefaultColor());
+        assertEquals(main.getColor(R.color.zc_surface_glass), card.getCardBackgroundColor().getDefaultColor());
+        assertEquals(main.getColor(R.color.zc_edge), card.getStrokeColor());
         capture(root, "home-lifecycle", 360, 800);
         assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
         assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
                 nav.getLayoutParams().height);
         assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_nav_indicator_height),
                 nav.getItemActiveIndicatorHeight());
-        assertEquals(main.getColor(R.color.zc_cyan_container),
+        assertEquals(Color.TRANSPARENT,
                 nav.getItemActiveIndicatorColor().getDefaultColor());
         assertEquals(UiPalette.PRIMARY, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
         assertTrue(nav.isItemActiveIndicatorEnabled());
@@ -136,12 +139,33 @@ public class VisualRefreshTest {
             View tab = nav.findViewById(id);
             assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
             assertTrue(tab.getHeight() >= BrowseUi.dp(main, 48));
+            assertEquals(-BrowseUi.dp(main, 1), Math.round(tab.getTranslationY()));
         }
         prefs.edit().putInt("native_view_home", NativeFeedAdapter.VIEW_GRID).apply();
         FeedViewStyleController.prepareVisualRefresh(main);
         assertEquals(NativeFeedAdapter.VIEW_GRID, prefs.getInt("native_view_home", -1));
         UiFoundationCoordinator.onActivityDestroyed(main);
         screen.pause().stop().destroy();
+    }
+
+    @Test public void collectionsCardsUseGlassWithoutLiveBlur() {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        NativeCategoryAdapter adapter = new NativeCategoryAdapter(host.get(), item -> { });
+        adapter.setWideCreatorCards(true);
+        adapter.replace(Collections.singletonList(creator()));
+        RecyclerView parent = new RecyclerView(host.get());
+        int viewType = adapter.getItemViewType(0);
+        NativeCategoryAdapter.Holder holder = adapter.onCreateViewHolder(parent, viewType);
+        adapter.onBindViewHolder(holder, 0);
+
+        assertEquals(host.get().getColor(R.color.zc_surface_glass),
+                holder.card.getCardBackgroundColor().getDefaultColor());
+        assertEquals(host.get().getColor(R.color.zc_cyan), holder.card.getStrokeColor());
+        assertNull(holder.backdrop.getRenderEffect());
+        assertEquals(Boolean.TRUE, holder.card.getTag(R.id.zerochill_motion_installed));
+
+        adapter.close();
+        host.pause().stop().destroy();
     }
 
     @Test public void creatorHeaderFavoriteAndCardMenuWorkAtPhoneWidth() throws Exception {

@@ -249,10 +249,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 .getInt("home_source", 0)));
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(activity);
         scroll.setHorizontalScrollBarEnabled(false);
-        scroll.setBackgroundColor(ZeroChillUi.background(activity));
+        scroll.setBackground(ZeroChillUi.panelGlass(activity));
+        scroll.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
         LinearLayout sources = new LinearLayout(activity);
         sources.setGravity(Gravity.CENTER_VERTICAL);
-        sources.setPadding(dp(12), dp(4), dp(12), dp(4));
+        sources.setPadding(dp(12), dp(6), dp(12), dp(6));
         String[] names = {"All", "CrazyShit", "EFukt", "OnlyFap"};
         for (int source = 0; source < names.length; source++) {
             final int selected = source;
@@ -276,11 +277,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         }
         scroll.addView(sources);
         FrameLayout.LayoutParams feedParams = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-        feedParams.topMargin = dp(56);
+        feedParams.topMargin = dp(60);
         page.refresh.setLayoutParams(feedParams);
-        page.root.addView(scroll, new FrameLayout.LayoutParams(-1, dp(56)));
+        FrameLayout.LayoutParams sourceParams = new FrameLayout.LayoutParams(-1, dp(56));
+        sourceParams.setMargins(dp(8), dp(2), dp(8), dp(2));
+        page.root.addView(scroll, sourceParams);
         FrameLayout.LayoutParams emptyParams = (FrameLayout.LayoutParams) page.empty.getLayoutParams();
-        emptyParams.topMargin = dp(56);
+        emptyParams.topMargin = dp(60);
         page.empty.setLayoutParams(emptyParams);
         page.empty.setOnClickListener(v -> refresh(page.index));
         page.empty.setContentDescription("Retry Home feed");
@@ -450,9 +453,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         selector.setOrientation(LinearLayout.HORIZONTAL);
         selector.setGravity(Gravity.CENTER);
         selector.setPadding(dp(12), dp(8), dp(12), dp(8));
-        selector.setBackgroundColor(ZeroChillUi.background(activity));
+        selector.setBackground(ZeroChillUi.panelGlass(activity));
+        selector.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
 
-        page.crazyShitSource = seriesSourceButton("CrazyShit");
+        page.crazyShitSource = seriesSourceButton("Series");
         page.efuktSource = seriesSourceButton("EFukt");
         page.bunkrSource = seriesSourceButton("OnlyFap");
         page.categoriesSource = seriesSourceButton("Categories");
@@ -476,13 +480,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.categoriesSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CATEGORIES));
         FrameLayout.LayoutParams selectorParams = new FrameLayout.LayoutParams(-1, dp(56));
         selectorParams.gravity = Gravity.TOP;
+        selectorParams.setMargins(dp(8), 0, dp(8), 0);
         page.root.addView(selector, selectorParams);
 
         LinearLayout fapzoneModes = new LinearLayout(activity);
         fapzoneModes.setOrientation(LinearLayout.HORIZONTAL);
         fapzoneModes.setGravity(Gravity.CENTER);
         fapzoneModes.setPadding(dp(12), dp(6), dp(12), dp(6));
-        fapzoneModes.setBackgroundColor(ZeroChillUi.background(activity));
+        fapzoneModes.setBackground(ZeroChillUi.panelGlass(activity));
         page.fapzoneTop = fapzoneModeButton("Top 50");
         page.fapzoneNew = fapzoneModeButton("New");
         page.fapzoneHot = fapzoneModeButton("Hot");
@@ -525,7 +530,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         caption.setOrientation(LinearLayout.HORIZONTAL);
         caption.setGravity(Gravity.CENTER_VERTICAL);
         caption.setPadding(dp(17), dp(7), dp(17), dp(9));
-        caption.setBackgroundColor(ZeroChillUi.background(activity));
+        caption.setBackground(ZeroChillUi.panelGlass(activity));
 
         LinearLayout captionCopy = new LinearLayout(activity);
         captionCopy.setOrientation(LinearLayout.VERTICAL);
@@ -887,7 +892,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                 : page.seriesSource == SERIES_SOURCE_CATEGORIES
                                 ? "Couldn't load Categories right now."
                                 : page.kind == PageKind.SERIES
-                                ? "Couldn't load CrazyShit Series right now."
+                                ? "Couldn't load Series right now."
                                 : "No videos returned for this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
@@ -906,7 +911,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                 : page.seriesSource == SERIES_SOURCE_CATEGORIES
                                 ? "Couldn't load Categories right now."
                                 : page.kind == PageKind.SERIES
-                                ? "Couldn't load CrazyShit Series right now."
+                                ? "Couldn't load Series right now."
                                 : "Couldn't load this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }

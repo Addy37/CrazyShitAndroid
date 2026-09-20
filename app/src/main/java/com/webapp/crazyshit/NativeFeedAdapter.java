@@ -59,7 +59,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long MIN_FEED_PROGRESS_MS = 5_000L;
     private static final int SECTION_ACCENT = UiPalette.PRIMARY;
-    private static final int APP_BG = Color.BLACK;
 
     public interface Listener {
         void onOpen(NativeContentItem item);
@@ -276,10 +275,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private Holder createSectionHolder(ViewGroup parent) {
         MaterialCardView card = new MaterialCardView(parent.getContext());
         card.setTag(STYLE_TAG);
-        card.setCardBackgroundColor(APP_BG);
-        card.setCardElevation(0f);
-        card.setRadius(0f);
-        card.setStrokeWidth(0);
+        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
         card.setClickable(false);
         card.setLongClickable(false);
 
@@ -294,7 +290,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setSingleLine(true);
         header.setEllipsize(TextUtils.TruncateAt.END);
-        header.setPadding(dp(card, 4), 0, dp(card, 4), 0);
+        header.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_primary));
+        header.setPadding(dp(card, 14), 0, dp(card, 14), 0);
         card.addView(header, new MaterialCardView.LayoutParams(-1, -1));
         return new Holder(card, header);
     }
@@ -391,11 +388,9 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     ) {
         MaterialCardView card = new MaterialCardView(parent.getContext());
         card.setTag(STYLE_TAG);
-        card.setCardBackgroundColor(Color.BLACK);
+        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
         card.setRadius(dp(parent, radius));
-        card.setCardElevation(0f);
-        card.setStrokeColor(Color.rgb(50, 50, 57));
-        card.setStrokeWidth(0);
+        ZeroChillMotion.installPressFeedback(card);
         RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
                 -1,
                 fixedHeightDp > 0 ? dp(parent, fixedHeightDp) : -2
@@ -416,13 +411,19 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 widthDp < 0 ? -1 : dp(parent, widthDp),
                 dp(parent, heightDp)
         );
-        mediaFrame.setBackground(BrowseUi.rounded(parent.getContext(), BrowseUi.SURFACE, 16));
+        mediaFrame.setBackground(ZeroChillUi.rounded(
+                parent.getContext(),
+                ZeroChillUi.color(parent.getContext(), R.color.zc_surface_glass_strong),
+                Color.TRANSPARENT,
+                R.dimen.zc_radius_medium
+        ));
+        mediaFrame.setForeground(parent.getContext().getDrawable(R.drawable.zc_media_edge));
         mediaFrame.setClipToOutline(true);
         host.addView(mediaFrame, mediaParams);
 
         ImageView image = new ImageView(parent.getContext());
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        image.setBackgroundColor(Color.rgb(11, 11, 13));
+        image.setBackgroundColor(ZeroChillUi.color(parent.getContext(), R.color.zc_surface_glass_strong));
         mediaFrame.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
         TextView play = new TextView(parent.getContext());
@@ -431,7 +432,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         boolean dense = viewMode == VIEW_GRID || viewMode == VIEW_POSTERS;
         play.setTextSize(dense ? 19 : 23);
         play.setGravity(Gravity.CENTER);
-        play.setBackground(rounded(Color.argb(190, 0, 0, 0), dp(parent, 8)));
+        play.setBackground(ZeroChillUi.rounded(
+                parent.getContext(),
+                Color.argb(210, 8, 13, 17),
+                ZeroChillUi.color(parent.getContext(), R.color.zc_edge),
+                R.dimen.zc_radius_small
+        ));
         int size = dense ? 40 : 46;
         FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(dp(parent, size), dp(parent, size));
         playParams.gravity = Gravity.BOTTOM | Gravity.START;
@@ -457,7 +463,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         overlayComments.setTypeface(null, android.graphics.Typeface.BOLD);
         overlayComments.setGravity(Gravity.CENTER);
         overlayComments.setPadding(dp(parent, 8), dp(parent, 5), dp(parent, 8), dp(parent, 5));
-        overlayComments.setBackground(rounded(Color.argb(210, 20, 20, 24), dp(parent, 12)));
+        overlayComments.setBackground(ZeroChillUi.rounded(
+                parent.getContext(),
+                ZeroChillUi.color(parent.getContext(), R.color.zc_surface_glass_strong),
+                ZeroChillUi.color(parent.getContext(), R.color.zc_edge),
+                R.dimen.zc_radius_pill
+        ));
         overlayComments.setVisibility(View.GONE);
         overlayComments.setElevation(dp(parent, 6));
         FrameLayout.LayoutParams commentsParams = new FrameLayout.LayoutParams(-2, -2);
@@ -468,7 +479,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         mediaFrame.addView(overlayComments, commentsParams);
 
         FrameLayout progressTrack = new FrameLayout(parent.getContext());
-        progressTrack.setBackgroundColor(Color.argb(185, 17, 17, 20));
+        progressTrack.setBackgroundColor(Color.argb(210, 6, 10, 13));
         progressTrack.setVisibility(View.GONE);
         progressTrack.setElevation(dp(parent, 7));
         FrameLayout.LayoutParams trackParams = new FrameLayout.LayoutParams(-1, dp(parent, 3));
@@ -514,7 +525,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         host.addView(copy, copyParams);
 
         TextView title = new TextView(parent.getContext());
-        title.setTextColor(Color.WHITE);
+        title.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_primary));
         title.setTextSize(titleSize);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
@@ -525,7 +536,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         TextView menu = BrowseUi.action(parent.getContext(), "⋮", "Video options", v -> { });
         menu.setTag("video_options");
         menu.setTextSize(24);
-        menu.setTextColor(Color.WHITE);
+        menu.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_secondary));
         menu.setBackgroundColor(Color.TRANSPARENT);
         titleRow.addView(menu, new LinearLayout.LayoutParams(dp(parent, 48), dp(parent, 48)));
         copy.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
@@ -542,7 +553,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         copy.addView(metaRow, new LinearLayout.LayoutParams(-1, -2));
 
         TextView info = new TextView(parent.getContext());
-        info.setTextColor(Color.rgb(170, 170, 180));
+        info.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_secondary));
         info.setTextSize(infoSize);
         info.setMaxLines(1);
         info.setEllipsize(TextUtils.TruncateAt.END);
@@ -556,7 +567,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         metaRow.addView(comments, new LinearLayout.LayoutParams(-2, -2));
 
         TextView description = new TextView(parent.getContext());
-        description.setTextColor(Color.rgb(198, 198, 206));
+        description.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_secondary));
         description.setTextSize(Math.max(10f, infoSize + 0.5f));
         description.setMaxLines(2);
         description.setEllipsize(TextUtils.TruncateAt.END);
@@ -649,7 +660,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private SpannableString styledSectionTitle(String rawTitle) {
-        String title = rawTitle == null ? "" : rawTitle.trim().toUpperCase(Locale.US);
+        String title = publicSectionTitle(rawTitle).toUpperCase(Locale.US);
         SpannableString text = new SpannableString(title);
         int split = title.indexOf(' ');
         int accentEnd = split > 0 ? split : title.length();
@@ -672,12 +683,21 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return text;
     }
 
+    private String publicSectionTitle(String rawTitle) {
+        String title = rawTitle == null ? "" : rawTitle.trim();
+        String normalized = title.replace('’', '\'').toUpperCase(Locale.US);
+        if ("TODAY'S CRAZY SHIT".equals(normalized)) {
+            return context.getString(R.string.zerochill_tagline);
+        }
+        return title;
+    }
+
     private void bindPlaybackState(Holder holder, NativeContentItem item) {
         holder.image.setAlpha(1f);
         holder.watchBadge.setVisibility(View.GONE);
         holder.progressTrack.setVisibility(View.GONE);
         holder.progressFill.setScaleX(0f);
-        holder.card.setStrokeColor(Color.rgb(50, 50, 57));
+        holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_edge));
         if (item == null || item.isMeme()) return;
 
         PlaybackHistoryStore.Item history = playbackByUrl.get(item.url);
@@ -686,16 +706,27 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         if (history.complete) {
             holder.image.setAlpha(0.74f);
             holder.watchBadge.setText("✓ Watched");
-            holder.watchBadge.setBackground(rounded(Color.argb(220, 23, 23, 27), dp(holder.watchBadge, 12)));
+            holder.watchBadge.setBackground(ZeroChillUi.rounded(
+                    holder.card.getContext(),
+                    ZeroChillUi.color(holder.card.getContext(), R.color.zc_surface_glass_strong),
+                    ZeroChillUi.color(holder.card.getContext(), R.color.zc_divider),
+                    R.dimen.zc_radius_pill
+            ));
             holder.watchBadge.setVisibility(View.VISIBLE);
-            holder.card.setStrokeColor(Color.rgb(72, 70, 20));
+            holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_divider));
             return;
         }
 
         if (history.positionMs < MIN_FEED_PROGRESS_MS) return;
         holder.watchBadge.setText("Continue  " + formatTime(history.positionMs));
-        holder.watchBadge.setBackground(rounded(Color.argb(230, 72, 70, 5), dp(holder.watchBadge, 12)));
+        holder.watchBadge.setBackground(ZeroChillUi.rounded(
+                holder.card.getContext(),
+                ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_container),
+                ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim),
+                R.dimen.zc_radius_pill
+        ));
         holder.watchBadge.setVisibility(View.VISIBLE);
+        holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim));
 
         if (history.durationMs > 0L) {
             float fraction = Math.max(0f, Math.min(1f, history.positionMs / (float) history.durationMs));
@@ -730,7 +761,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
         if (imageUrl == null || imageUrl.isEmpty()) {
             Glide.with(holder.image).clear(holder.image);
-            holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
+            holder.image.setImageDrawable(new ColorDrawable(
+                    ZeroChillUi.color(holder.image.getContext(), R.color.zc_surface_glass_strong)));
             return;
         }
 
@@ -739,8 +771,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
-                .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
-                .error(new ColorDrawable(Color.rgb(20, 20, 23)));
+                .placeholder(new ColorDrawable(ZeroChillUi.color(
+                        holder.image.getContext(), R.color.zc_surface_glass_strong)))
+                .error(new ColorDrawable(ZeroChillUi.color(
+                        holder.image.getContext(), R.color.zc_surface_glass_strong)));
         if (item.isMeme()) request.fitCenter(); else request.centerCrop();
         final String attemptedUrl = imageUrl;
         request.listener(new RequestListener<Drawable>() {

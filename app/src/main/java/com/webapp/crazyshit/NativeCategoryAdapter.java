@@ -2,15 +2,11 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
-import android.graphics.RenderEffect;
-import android.graphics.Shader;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -166,14 +162,12 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         boolean creatorCard = isCreatorViewType(viewType);
         MaterialCardView card = new MaterialCardView(parent.getContext());
-        card.setCardBackgroundColor(Color.rgb(22, 22, 25));
+        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
         card.setRadius(dp(parent, creatorCard ? 9 : 16));
-        card.setStrokeWidth(dp(parent, 1));
-        card.setStrokeColor(Color.rgb(52, 52, 59));
-        card.setCardElevation(dp(parent, creatorCard ? 0 : 1));
+        card.setCardElevation(dp(parent, creatorCard ? 1 : 2));
         card.setClickable(true);
         card.setFocusable(true);
-        card.setRippleColor(ColorStateList.valueOf(Color.argb(52, 245, 232, 0)));
+        ZeroChillMotion.installPressFeedback(card);
 
         RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
                 -1,
@@ -202,15 +196,8 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         backdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
         backdrop.setScaleX(1.12f);
         backdrop.setScaleY(1.12f);
-        backdrop.setAlpha(0.86f);
+        backdrop.setAlpha(0.62f);
         backdrop.setVisibility(creatorCard ? View.VISIBLE : View.GONE);
-        if (creatorCard && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            backdrop.setRenderEffect(RenderEffect.createBlurEffect(
-                    24f,
-                    24f,
-                    Shader.TileMode.MIRROR
-            ));
-        }
         frame.addView(backdrop, new FrameLayout.LayoutParams(-1, -1));
 
         View backdropTint = new View(parent.getContext());
@@ -237,7 +224,10 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
             );
             shade.setBackground(gradient);
         } else {
-            shade.setBackgroundColor(Color.argb(170, 0, 0, 0));
+            shade.setBackground(new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{Color.argb(20, 0, 0, 0), Color.argb(232, 5, 9, 12)}
+            ));
         }
         FrameLayout.LayoutParams shadeParams = new FrameLayout.LayoutParams(
                 -1,
@@ -270,8 +260,11 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         favoriteStar.setVisibility(View.GONE);
         GradientDrawable favoriteBackground = new GradientDrawable();
         favoriteBackground.setShape(GradientDrawable.OVAL);
-        favoriteBackground.setColor(Color.argb(210, 12, 12, 15));
-        favoriteBackground.setStroke(dp(parent, 1), Color.argb(190, 245, 232, 0));
+        favoriteBackground.setColor(ZeroChillUi.color(parent.getContext(), R.color.zc_surface_glass_strong));
+        favoriteBackground.setStroke(
+                dp(parent, 1),
+                ZeroChillUi.color(parent.getContext(), R.color.zc_cyan_dim)
+        );
         favoriteStar.setBackground(favoriteBackground);
         FrameLayout.LayoutParams favoriteParams = new FrameLayout.LayoutParams(
                 dp(parent, 36),
@@ -426,12 +419,12 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     private void styleCreatorCard(Holder holder, int rank) {
         if (rank == 1) {
             holder.card.setStrokeWidth(dp(holder.card, 2));
-            holder.card.setStrokeColor(Color.argb(210, 245, 232, 0));
+            holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan));
         } else {
             holder.card.setStrokeWidth(dp(holder.card, 1));
             holder.card.setStrokeColor(rank <= 3
-                    ? Color.rgb(103, 103, 113)
-                    : Color.rgb(50, 50, 57));
+                    ? ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim)
+                    : ZeroChillUi.color(holder.card.getContext(), R.color.zc_edge));
         }
 
         GradientDrawable rankBackground = new GradientDrawable();
@@ -440,8 +433,12 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
             rankBackground.setColor(UiPalette.PRIMARY);
             holder.rank.setTextColor(Color.BLACK);
         } else {
-            rankBackground.setColor(Color.argb(185, 10, 10, 13));
-            rankBackground.setStroke(dp(holder.card, 1), Color.argb(170, 245, 232, 0));
+            rankBackground.setColor(ZeroChillUi.color(
+                    holder.card.getContext(), R.color.zc_surface_glass_strong));
+            rankBackground.setStroke(
+                    dp(holder.card, 1),
+                    ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim)
+            );
             holder.rank.setTextColor(UiPalette.PRIMARY);
         }
         holder.rank.setBackground(rankBackground);
@@ -516,7 +513,6 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .fitCenter()
                 .override(foregroundSize[0], foregroundSize[1])
-                .transition(DrawableTransitionOptions.with(CREATOR_CROSS_FADE))
                 .placeholder(foregroundPlaceholder == null
                         ? new ColorDrawable(Color.TRANSPARENT)
                         : foregroundPlaceholder)
@@ -552,20 +548,29 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                         return false;
                     }
                 });
+        if (ZeroChillMotion.animationsEnabled(holder.image.getContext())) {
+            foreground = foreground.transition(DrawableTransitionOptions.with(CREATOR_CROSS_FADE));
+        } else {
+            foreground = foreground.dontAnimate();
+        }
         foreground = foreground.error(new ColorDrawable(Color.TRANSPARENT));
         foreground.into(holder.image);
 
-        Glide.with(holder.backdrop)
+        RequestBuilder<Drawable> backdrop = Glide.with(holder.backdrop)
                 .load(remoteImage(foregroundUrl, foregroundReferer))
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .centerCrop()
                 .override(220, 220)
-                .transition(DrawableTransitionOptions.with(CREATOR_CROSS_FADE))
                 .placeholder(backdropPlaceholder == null
                         ? new ColorDrawable(Color.TRANSPARENT)
                         : backdropPlaceholder)
-                .error(new ColorDrawable(Color.TRANSPARENT))
-                .into(holder.backdrop);
+                .error(new ColorDrawable(Color.TRANSPARENT));
+        if (ZeroChillMotion.animationsEnabled(holder.backdrop.getContext())) {
+            backdrop = backdrop.transition(DrawableTransitionOptions.with(CREATOR_CROSS_FADE));
+        } else {
+            backdrop = backdrop.dontAnimate();
+        }
+        backdrop.into(holder.backdrop);
     }
 
     private void resizeForDescription(Holder holder, boolean hasDescription) {
@@ -989,11 +994,11 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
     private static Drawable creatorPlaceholder(String title) {
         int[][] palettes = {
-                {Color.rgb(42, 29, 57), Color.rgb(17, 17, 20)},
-                {Color.rgb(19, 47, 55), Color.rgb(17, 17, 20)},
-                {Color.rgb(54, 31, 40), Color.rgb(17, 17, 20)},
-                {Color.rgb(25, 40, 61), Color.rgb(17, 17, 20)},
-                {Color.rgb(51, 43, 23), Color.rgb(17, 17, 20)}
+                {Color.rgb(8, 42, 52), Color.rgb(8, 12, 16)},
+                {Color.rgb(12, 49, 61), Color.rgb(8, 12, 16)},
+                {Color.rgb(15, 35, 52), Color.rgb(8, 12, 16)},
+                {Color.rgb(18, 47, 58), Color.rgb(8, 12, 16)},
+                {Color.rgb(22, 39, 50), Color.rgb(8, 12, 16)}
         };
         int[] colors = palettes[Math.floorMod(title == null ? 0 : title.hashCode(), palettes.length)];
         return new GradientDrawable(GradientDrawable.Orientation.TL_BR, colors);
@@ -1001,7 +1006,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
     private static String initials(String title) {
         String clean = title == null ? "" : title.trim();
-        if (clean.isEmpty()) return "CS";
+        if (clean.isEmpty()) return "ZC";
         String[] words = clean.split("\\s+");
         StringBuilder result = new StringBuilder();
         for (String word : words) {
@@ -1009,7 +1014,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
             result.append(Character.toUpperCase(word.charAt(0)));
             if (result.length() == 2) break;
         }
-        return result.length() == 0 ? "CS" : result.toString();
+        return result.length() == 0 ? "ZC" : result.toString();
     }
 
     private static String clean(String value) {

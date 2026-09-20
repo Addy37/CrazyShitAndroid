@@ -8,6 +8,8 @@ import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import com.google.android.material.card.MaterialCardView;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -51,6 +53,12 @@ public class ZeroChillFoundationTest {
         ZeroChillUi.styleProgress(progress);
         assertEquals(activity.getColor(R.color.zc_cyan),
                 progress.getIndeterminateTintList().getDefaultColor());
+
+        MaterialCardView card = new MaterialCardView(activity);
+        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
+        assertEquals(activity.getColor(R.color.zc_surface_glass),
+                card.getCardBackgroundColor().getDefaultColor());
+        assertEquals(activity.getColor(R.color.zc_edge), card.getStrokeColor());
         activity.finish();
     }
 

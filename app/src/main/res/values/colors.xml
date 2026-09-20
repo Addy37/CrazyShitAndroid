@@ -20,6 +20,7 @@
     <color name="zc_cyan">#22D3EE</color>
     <color name="zc_cyan_dim">#9922D3EE</color>
     <color name="zc_cyan_container">#3322D3EE</color>
+    <color name="zc_nav_selection">#D912171D</color>
     <color name="zc_edge">#3D8DEBFA</color>
     <color name="zc_divider">#2E9AA5B1</color>
     <color name="zc_text_primary">#FFF7FA</color>
