@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.Application;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.view.View;
 import android.widget.ProgressBar;
@@ -38,6 +39,13 @@ public class ZeroChillFoundationTest {
         assertNotNull(navigation);
         assertTrue(navigation instanceof LayerDrawable);
         assertTrue(((LayerDrawable) navigation).getNumberOfLayers() >= 4);
+        Drawable outerNavigationGlass = ((LayerDrawable) navigation).getDrawable(0);
+        assertTrue(outerNavigationGlass instanceof GradientDrawable);
+        int[] navigationColors = ((GradientDrawable) outerNavigationGlass).getColors();
+        assertNotNull(navigationColors);
+        for (int navigationColor : navigationColors) {
+            assertTrue(Color.alpha(navigationColor) <= 0x78);
+        }
         assertNotNull(panel);
         activity.finish();
     }
