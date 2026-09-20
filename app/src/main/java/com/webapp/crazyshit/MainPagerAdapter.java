@@ -382,6 +382,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         LinearLayout selector = new LinearLayout(activity);
         selector.setOrientation(LinearLayout.HORIZONTAL);
+        selector.setClipChildren(false);
+        selector.setClipToPadding(false);
         selector.setGravity(Gravity.CENTER);
         selector.setPadding(dp(12), dp(8), dp(12), dp(8));
         selector.setBackground(ZeroChillUi.panelGlass(activity));

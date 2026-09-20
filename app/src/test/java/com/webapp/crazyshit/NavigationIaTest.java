@@ -18,6 +18,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.util.ReflectionHelpers;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -175,8 +176,12 @@ public class NavigationIaTest {
                 .getInt("native_series_source", -1));
         assertNull(findByDescription(activity.getWindow().getDecorView(),
                 "Show OnlyFap collections"));
-        assertNotNull(findByDescription(activity.getWindow().getDecorView(),
-                "Show CrazyShit collections"));
+        View crazyShit = findByDescription(activity.getWindow().getDecorView(),
+                "Show CrazyShit collections");
+        assertNotNull(crazyShit);
+        android.view.ViewGroup selector = (android.view.ViewGroup) crazyShit.getParent();
+        assertFalse(selector.getClipChildren());
+        assertFalse(selector.getClipToPadding());
         assertNull(findByDescription(activity.getWindow().getDecorView(), "My profile"));
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("Collections", title.getText().toString());
