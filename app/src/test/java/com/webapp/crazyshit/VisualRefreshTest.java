@@ -48,7 +48,7 @@ public class VisualRefreshTest {
         prefs.edit().putBoolean("access_notice_2_8_3_accepted", true)
                 .putBoolean("visual_refresh_2_11_1", true)
                 .putBoolean("legacy_home_v2_10_restored", false)
-                .putInt("home_source", 0)
+                .putInt("home_source", 3)
                 .putInt("native_view_home", NativeFeedAdapter.VIEW_CARDS).apply();
         android.os.Bundle state = new android.os.Bundle(); state.putInt("primary_page", 0);
         ActivityController<NativeMainActivity> screen = Robolectric.buildActivity(NativeMainActivity.class)
@@ -72,15 +72,17 @@ public class VisualRefreshTest {
         }
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         NativeFeedAdapter feed = ReflectionHelpers.getField(home, "feedAdapter");
-        assertEquals(1, feed.getItemCount());
-        assertFalse(feed.isSectionAt(0));
+        assertEquals(2, feed.getItemCount());
+        assertTrue(feed.isSectionAt(0));
         assertEquals(NativeFeedAdapter.VIEW_CARDS, pager.viewMode(MainPagerAdapter.PAGE_HOME));
-        assertEquals(0, prefs.getInt("home_source", -1));
+        assertEquals(2, prefs.getInt("home_source", -1));
         java.util.List<TextView> homeChips = ReflectionHelpers.getField(home, "homeChips");
+        assertEquals(2, homeChips.size());
         View chipRow = (View) homeChips.get(0).getParent();
         View sourceBar = (View) chipRow.getParent();
         assertEquals(View.VISIBLE, sourceBar.getVisibility());
-        assertEquals("Series", homeChips.get(1).getText().toString());
+        assertEquals("CrazyShit", homeChips.get(0).getText().toString());
+        assertEquals("EFukt", homeChips.get(1).getText().toString());
         homeChips.get(1).performClick();
         deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
         while ((boolean) ReflectionHelpers.getField(home, "loading") && System.nanoTime() < deadline) {
@@ -105,16 +107,14 @@ public class VisualRefreshTest {
 
         TextView headerTitle = ReflectionHelpers.getField(main, "headerTitle");
         TextView headerSubtitle = ReflectionHelpers.getField(main, "headerSubtitle");
-        assertEquals("Home", headerTitle.getText().toString());
-        assertEquals(main.getColor(R.color.zc_text_primary), headerTitle.getCurrentTextColor());
-        assertEquals(View.VISIBLE, headerSubtitle.getVisibility());
-        assertEquals(main.getString(R.string.zerochill_tagline), headerSubtitle.getText().toString());
+        assertEquals("ZEROCHILL", headerTitle.getText().toString());
+        assertEquals(View.GONE, headerSubtitle.getVisibility());
         LinearLayout shell = ReflectionHelpers.getField(main, "shell");
         View topBar = shell.getChildAt(0);
         assertTrue(topBar instanceof LinearLayout);
-        ImageView appIcon = (ImageView) ((LinearLayout) topBar).getChildAt(0);
-        assertEquals(View.VISIBLE, appIcon.getVisibility());
-        assertEquals(View.GONE, ((LinearLayout) topBar).getChildAt(3).getVisibility());
+        assertEquals(2, ((LinearLayout) topBar).getChildCount());
+        View search = ((LinearLayout) topBar).getChildAt(1);
+        assertEquals("Search", String.valueOf(search.getContentDescription()));
 
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
         assertNull(homeList.getItemAnimator());
@@ -122,8 +122,8 @@ public class VisualRefreshTest {
         assertNotNull(visibleCard);
         NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
         assertNotNull(visibleSection);
-        assertEquals(main.getString(R.string.zerochill_tagline), visibleSection.sectionTitle.getText().toString());
-        assertTrue(visibleCard.info.getText().toString().startsWith("Series"));
+        assertEquals("TODAY'S CRAZY SHIT", visibleSection.sectionTitle.getText().toString());
+        assertTrue(visibleCard.info.getText().toString().startsWith("CrazyShit"));
         visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
         visibleCard.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) visibleCard.itemView;
