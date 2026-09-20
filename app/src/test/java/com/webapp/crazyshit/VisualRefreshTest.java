@@ -128,6 +128,11 @@ public class VisualRefreshTest {
         NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
         assertNotNull(visibleSection);
         assertEquals("TODAY'S CRAZY SHIT", visibleSection.sectionTitle.getText().toString());
+        com.google.android.material.card.MaterialCardView sectionCard =
+                (com.google.android.material.card.MaterialCardView) visibleSection.itemView;
+        assertEquals(Color.TRANSPARENT, sectionCard.getCardBackgroundColor().getDefaultColor());
+        assertEquals(0, sectionCard.getStrokeWidth());
+        assertEquals(0f, sectionCard.getCardElevation(), 0f);
         assertTrue(visibleCard.info.getText().toString().startsWith("CrazyShit"));
         visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
         visibleCard.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);

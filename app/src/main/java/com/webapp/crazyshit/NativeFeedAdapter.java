@@ -275,7 +275,11 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private Holder createSectionHolder(ViewGroup parent) {
         MaterialCardView card = new MaterialCardView(parent.getContext());
         card.setTag(STYLE_TAG);
-        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
+        card.setCardBackgroundColor(Color.TRANSPARENT);
+        card.setStrokeWidth(0);
+        card.setCardElevation(0f);
+        card.setRadius(0f);
+        card.setUseCompatPadding(false);
         card.setClickable(false);
         card.setLongClickable(false);
 
