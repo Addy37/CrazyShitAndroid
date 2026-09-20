@@ -289,7 +289,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         card.setLayoutParams(params);
 
         TextView header = new TextView(parent.getContext());
-        header.setTextSize(landscape ? 16f : 17f);
+        header.setTextSize(landscape ? 20f : 24f);
         header.setTypeface(null, android.graphics.Typeface.BOLD);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setSingleLine(true);

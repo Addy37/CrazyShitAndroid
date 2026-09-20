@@ -343,6 +343,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
         headerTitle = new TextView(this);
         ZeroChillUi.styleTitle(headerTitle);
+        headerTitle.setTextSize(28f);
         headerTitle.setSingleLine(true);
         labels.addView(headerTitle);
 
