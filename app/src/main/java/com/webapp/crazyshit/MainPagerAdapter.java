@@ -247,9 +247,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         }
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(activity);
         scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setClipChildren(false);
+        scroll.setClipToPadding(false);
         scroll.setBackground(ZeroChillUi.panelGlass(activity));
         scroll.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
         LinearLayout sources = new LinearLayout(activity);
+        sources.setClipChildren(false);
+        sources.setClipToPadding(false);
         sources.setGravity(Gravity.CENTER_VERTICAL);
         sources.setPadding(dp(12), dp(6), dp(12), dp(6));
         String[] names = {"CrazyShit", "EFukt"};

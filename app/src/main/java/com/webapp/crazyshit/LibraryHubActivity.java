@@ -12,6 +12,9 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+
 public final class LibraryHubActivity extends Activity {
     private static final int SAVED_VIDEOS_REQUEST = 4101;
 
@@ -28,6 +31,13 @@ public final class LibraryHubActivity extends Activity {
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
+        ViewCompat.setOnApplyWindowInsetsListener(shell, (view, insets) -> {
+            androidx.core.graphics.Insets safe = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+            );
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+            return insets;
+        });
         root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout header = new LinearLayout(this);
