@@ -58,8 +58,8 @@ final class StableBottomNavigationController {
             nav.setItemActiveIndicatorWidth(ZeroChillUi.dimension(context, R.dimen.zc_nav_indicator_width));
             nav.setItemActiveIndicatorHeight(ZeroChillUi.dimension(context, R.dimen.zc_nav_indicator_height));
             nav.setItemIconSize(ZeroChillUi.dimension(context, R.dimen.zc_nav_icon));
-            nav.setItemPaddingTop(dp(context, 3));
-            nav.setItemPaddingBottom(dp(context, 5));
+            nav.setItemPaddingTop(dp(context, 5));
+            nav.setItemPaddingBottom(dp(context, 3));
             nav.setItemBackgroundResource(R.drawable.zc_nav_item_background);
         } catch (Throwable ignored) {
         }
@@ -243,7 +243,7 @@ final class StableBottomNavigationController {
                 item.setScaleX(1f);
                 item.setScaleY(1f);
                 item.setTranslationX(0f);
-                item.setTranslationY(-dp(1));
+                item.setTranslationY(dp(2));
                 item.setAlpha(1f);
             }
         }
