@@ -23,16 +23,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Keeps Home, Collections, ShitTok and Library alive for true horizontal paging.
+ * Keeps Home, Collections, ShitTok and OnlyFap alive for true horizontal paging.
  * Chaos itself owns a nested vertical ViewPager2 for Shorts/Reels-style playback.
  */
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
     public static final int PAGE_HOME = 0;
     public static final int PAGE_SERIES = 1;
     public static final int PAGE_CHAOS = 2;
-    /** Stable slot used by old saved state; it now hosts the public Library. */
-    public static final int PAGE_LIBRARY = 3;
-    @Deprecated public static final int PAGE_CATEGORIES = PAGE_LIBRARY;
+    /** Stable slot 3 is preserved for upgrades; it now hosts the public OnlyFap tab. */
+    public static final int PAGE_ONLYFAP = 3;
+    @Deprecated public static final int PAGE_LIBRARY = PAGE_ONLYFAP;
+    @Deprecated public static final int PAGE_CATEGORIES = PAGE_ONLYFAP;
     public static final int PAGE_COUNT = 4;
     private static final int PAGE_ARRAY_COUNT = 4;
     private static final int SERIES_SOURCE_CRAZYSHIT = 0;
@@ -52,7 +53,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         FEED,
         SERIES,
         CATEGORIES,
-        LIBRARY
+        ONLYFAP
     }
 
     private final Activity activity;
@@ -77,7 +78,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         pages[PAGE_HOME] = buildFeedPage(PAGE_HOME, "native_view_home", CrazyShitRepository.HOME);
         pages[PAGE_SERIES] = buildBrowsePage(PAGE_SERIES, PageKind.SERIES);
-        pages[PAGE_LIBRARY] = buildLibraryPage(PAGE_LIBRARY);
+        pages[PAGE_ONLYFAP] = buildBrowsePage(PAGE_ONLYFAP, PageKind.ONLYFAP);
 
         chaosView = new ChaosFeedView(activity, new ChaosFeedView.Host() {
             @Override
@@ -91,7 +92,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public String titleFor(int position) {
         if (position == PAGE_SERIES) return "Collections";
-        if (position == PAGE_LIBRARY) return "Library";
+        if (position == PAGE_ONLYFAP) return "OnlyFap";
         if (position == PAGE_CHAOS) return "ShitTok";
         return "Home";
     }
@@ -105,7 +106,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void setViewMode(int position, int mode) {
-        if (position == PAGE_CHAOS || position == PAGE_LIBRARY) return;
+        if (position == PAGE_CHAOS) return;
         Page page = pageAt(position);
         if (page == null || page.kind != PageKind.FEED) return;
 
@@ -127,7 +128,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             return;
         }
         Page page = pageAt(position);
-        if (page != null && page.kind == PageKind.LIBRARY) return;
         if (page == null) return;
         page.generation++;
         if (page.loadTask != null) page.loadTask.cancel(true);
@@ -155,9 +155,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void onHostResume() {
         chaosView.onHostResume();
-        Page collections = pageAt(PAGE_SERIES);
-        if (collections != null && collections.seriesSource == SERIES_SOURCE_BUNKR
-                && collections.browseAdapter != null) collections.browseAdapter.notifyDataSetChanged();
+        Page onlyFap = pageAt(PAGE_ONLYFAP);
+        if (onlyFap != null && onlyFap.browseAdapter != null) onlyFap.browseAdapter.notifyDataSetChanged();
         Page home = pageAt(PAGE_HOME);
         if (home != null && home.feedAdapter != null) home.feedAdapter.refreshPlaybackState();
     }
