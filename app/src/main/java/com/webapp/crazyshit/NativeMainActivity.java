@@ -288,7 +288,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         menu.add(Menu.NONE, NAV_HOME, 0, "Home").setIcon(R.drawable.ic_nav_home);
         menu.add(Menu.NONE, NAV_SERIES, 1, "Collections").setIcon(R.drawable.ic_nav_series);
         menu.add(Menu.NONE, NAV_CHAOS, 2, "ShitTok").setIcon(R.drawable.ic_nav_chaos);
-        menu.add(Menu.NONE, NAV_ONLYFAP, 3, "OnlyFap").setIcon(R.drawable.ic_source_bunkr);
+        menu.add(Menu.NONE, NAV_ONLYFAP, 3, "OnlyFap").setIcon(R.drawable.ic_nav_onlyfap);
         menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
         bottomNavigation.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
