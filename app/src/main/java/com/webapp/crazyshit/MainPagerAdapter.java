@@ -23,7 +23,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Keeps Home, Collections, ShitTok and OnlyFap alive for true horizontal paging.
+ * Keeps Home, Shows, ShitTok and OnlyFap alive for true horizontal paging.
  * Chaos itself owns a nested vertical ViewPager2 for Shorts/Reels-style playback.
  */
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
@@ -91,7 +91,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public String titleFor(int position) {
-        if (position == PAGE_SERIES) return "Collections";
+        if (position == PAGE_SERIES) return "Shows";
         if (position == PAGE_ONLYFAP) return "OnlyFap";
         if (position == PAGE_CHAOS) return "ShitTok";
         return "Home";

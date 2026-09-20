@@ -43,7 +43,7 @@ public class NavigationIaTest {
         assertEquals(4, adapter.getItemCount());
         assertEquals(MainPagerAdapter.PAGE_ONLYFAP, pager.getCurrentItem());
         assertEquals("Home", nav.getMenu().findItem(1).getTitle());
-        assertEquals("Collections", nav.getMenu().findItem(2).getTitle());
+        assertEquals("Shows", nav.getMenu().findItem(2).getTitle());
         assertEquals("ShitTok", nav.getMenu().findItem(4).getTitle());
         assertEquals("OnlyFap", nav.getMenu().findItem(3).getTitle());
         assertEquals("More", nav.getMenu().findItem(5).getTitle());
@@ -184,7 +184,7 @@ public class NavigationIaTest {
         assertFalse(selector.getClipToPadding());
         assertNull(findByDescription(activity.getWindow().getDecorView(), "My profile"));
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
-        assertEquals("Collections", title.getText().toString());
+        assertEquals("Shows", title.getText().toString());
         controller.pause().stop().destroy();
     }
 
