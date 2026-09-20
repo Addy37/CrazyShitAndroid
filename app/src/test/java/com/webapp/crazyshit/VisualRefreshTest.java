@@ -114,7 +114,7 @@ public class VisualRefreshTest {
         assertTrue(topBar instanceof LinearLayout);
         assertEquals(2, ((LinearLayout) topBar).getChildCount());
         View search = ((LinearLayout) topBar).getChildAt(1);
-        assertEquals("Search", String.valueOf(search.getContentDescription()));
+        assertEquals("Global Search", String.valueOf(search.getContentDescription()));
 
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
         assertNull(homeList.getItemAnimator());
