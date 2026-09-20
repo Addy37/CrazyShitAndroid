@@ -994,11 +994,11 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
 
     private static Drawable creatorPlaceholder(String title) {
         int[][] palettes = {
-                {Color.rgb(8, 42, 52), Color.rgb(8, 12, 16)},
-                {Color.rgb(12, 49, 61), Color.rgb(8, 12, 16)},
-                {Color.rgb(15, 35, 52), Color.rgb(8, 12, 16)},
-                {Color.rgb(18, 47, 58), Color.rgb(8, 12, 16)},
-                {Color.rgb(22, 39, 50), Color.rgb(8, 12, 16)}
+                {Color.rgb(5, 30, 48), Color.rgb(8, 12, 16)},
+                {Color.rgb(6, 36, 58), Color.rgb(8, 12, 16)},
+                {Color.rgb(7, 29, 51), Color.rgb(8, 12, 16)},
+                {Color.rgb(7, 34, 54), Color.rgb(8, 12, 16)},
+                {Color.rgb(8, 28, 47), Color.rgb(8, 12, 16)}
         };
         int[] colors = palettes[Math.floorMod(title == null ? 0 : title.hashCode(), palettes.length)];
         return new GradientDrawable(GradientDrawable.Orientation.TL_BR, colors);

@@ -29,6 +29,8 @@ public class ZeroChillFoundationTest {
     @Test public void tokensKeepOledBackgroundAndReadableGlassColors() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         assertEquals(Color.BLACK, ZeroChillUi.color(activity, R.color.zc_background));
+        assertEquals(Color.rgb(8, 146, 208), ZeroChillUi.color(activity, R.color.zc_cyan));
+        assertEquals(ZeroChillUi.color(activity, R.color.zc_cyan), UiPalette.PRIMARY);
         assertTrue(Color.alpha(ZeroChillUi.color(activity, R.color.zc_surface_glass)) < 255);
         assertTrue(Color.alpha(ZeroChillUi.color(activity, R.color.zc_surface_glass)) > 180);
         assertEquals(48, Math.round(activity.getResources()

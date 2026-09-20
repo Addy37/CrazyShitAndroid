@@ -145,7 +145,7 @@ final class UiPolishController {
 
         float maxRadius = dp(activity, 16);
         if (card.getRadius() > maxRadius) card.setRadius(maxRadius);
-        card.setRippleColor(ColorStateList.valueOf(Color.argb(52, 34, 211, 238)));
+        card.setRippleColor(ColorStateList.valueOf(Color.argb(52, 8, 146, 208)));
 
         if (!card.isClickable()) return;
         ZeroChillMotion.installPressFeedback(card);
