@@ -9,6 +9,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.Menu;
@@ -330,18 +333,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(10), 0, dp(4), 0);
-        ZeroChillUi.styleTopBar(bar);
-
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(R.mipmap.ic_launcher);
-        icon.setVisibility(View.GONE);
-        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        bar.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        bar.setPadding(dp(18), 0, dp(12), 0);
+        bar.setBackgroundColor(ZeroChillUi.background(this));
+        bar.setElevation(0f);
 
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.setPadding(dp(9), 0, dp(8), 0);
+        labels.setPadding(0, 0, dp(8), 0);
 
         headerTitle = new TextView(this);
         ZeroChillUi.styleTitle(headerTitle);
@@ -374,14 +372,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             openContextualSearch();
         });
         bar.addView(search, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        ImageView profile = new ImageView(this);
-        profile.setImageResource(R.drawable.ic_more_account);
-        profile.setColorFilter(Color.WHITE);
-        profile.setPadding(dp(12), dp(12), dp(12), dp(12));
-        profile.setContentDescription("My profile");
-        profile.setFocusable(true);
-        profile.setOnClickListener(v -> startActivity(new Intent(this, ProfileActivity.class)));
-        bar.addView(profile, new LinearLayout.LayoutParams(dp(48), dp(48)));
         return bar;
     }
 
@@ -457,20 +447,34 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         }
 
         if (primaryPagerAdapter != null) primaryPagerAdapter.setPrimaryActive(position);
-        if (headerTitle != null) headerTitle.setText(feedTitle);
-        if (headerSubtitle != null && primaryPagerAdapter != null) {
-            if (position == MainPagerAdapter.PAGE_CHAOS) {
-                headerSubtitle.setText("Swipe up or down");
-            } else if (position == MainPagerAdapter.PAGE_SERIES) {
-                headerSubtitle.setText("Series  •  EFukt  •  OnlyFap  •  Categories");
-            } else if (position == MainPagerAdapter.PAGE_LIBRARY) {
-                headerSubtitle.setText("Continue Watching  •  History  •  Downloads");
+        if (headerTitle != null) {
+            if (position == MainPagerAdapter.PAGE_HOME) {
+                setZeroChillWordmark();
             } else {
-                headerSubtitle.setText(R.string.zerochill_tagline);
+                headerTitle.setText(feedTitle);
+                headerTitle.setTextColor(ZeroChillUi.color(this, R.color.zc_text_primary));
             }
         }
+        if (headerSubtitle != null) headerSubtitle.setVisibility(View.GONE);
         applyChaosFullscreenChrome();
         if (position == MainPagerAdapter.PAGE_HOME) scheduleRatingPromptCheck();
+    }
+
+    private void setZeroChillWordmark() {
+        SpannableString wordmark = new SpannableString("ZEROCHILL");
+        wordmark.setSpan(
+                new ForegroundColorSpan(ZeroChillUi.color(this, R.color.zc_text_primary)),
+                0,
+                4,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        wordmark.setSpan(
+                new ForegroundColorSpan(ZeroChillUi.color(this, R.color.zc_cyan)),
+                4,
+                wordmark.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        headerTitle.setText(wordmark);
     }
 
     private void scheduleRatingPromptCheck() {
