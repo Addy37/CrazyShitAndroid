@@ -72,14 +72,23 @@ public class VisualRefreshTest {
         }
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         NativeFeedAdapter feed = ReflectionHelpers.getField(home, "feedAdapter");
-        assertEquals(2, feed.getItemCount());
-        assertTrue(feed.isSectionAt(0));
+        assertEquals(1, feed.getItemCount());
+        assertFalse(feed.isSectionAt(0));
         assertEquals(NativeFeedAdapter.VIEW_CARDS, pager.viewMode(MainPagerAdapter.PAGE_HOME));
         assertEquals(0, prefs.getInt("home_source", -1));
         java.util.List<TextView> homeChips = ReflectionHelpers.getField(home, "homeChips");
         View chipRow = (View) homeChips.get(0).getParent();
         View sourceBar = (View) chipRow.getParent();
         assertEquals(View.VISIBLE, sourceBar.getVisibility());
+        homeChips.get(1).performClick();
+        deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while ((boolean) ReflectionHelpers.getField(home, "loading") && System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(10);
+        }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
+        assertEquals(2, feed.getItemCount());
+        assertTrue(feed.isSectionAt(0));
+        assertEquals(1, prefs.getInt("home_source", -1));
 
         com.google.android.material.bottomnavigation.BottomNavigationView nav = ReflectionHelpers.getField(main, "bottomNavigation");
         nav.setSelectedItemId(3);
