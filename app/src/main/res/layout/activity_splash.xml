@@ -77,7 +77,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-light"
                 android:text="CHILL"
-                android:textColor="#22D3EE"
+                android:textColor="@color/zc_cyan"
                 android:textSize="42sp" />
         </LinearLayout>
 

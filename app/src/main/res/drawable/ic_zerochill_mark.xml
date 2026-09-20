@@ -7,7 +7,7 @@
 
     <!-- ZeroChill Z -->
     <path
-        android:fillColor="#FF22D3EE"
+        android:fillColor="#FF0892D0"
         android:pathData="M18,27 L58,27 L52,36 L38,36 L27,49 L48,49 L42,58 L18,58 L38,36 L18,36 Z" />
 
     <!-- ZeroChill C -->
@@ -17,6 +17,6 @@
 
     <!-- Cold signature slash -->
     <path
-        android:fillColor="#FF67E8F9"
+        android:fillColor="#FF5BBBE2"
         android:pathData="M58,20 L64,20 L48,45 L55,45 L39,70 L45,50 L38,50 Z" />
 </vector>

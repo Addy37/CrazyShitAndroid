@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Smoked glass body and restrained cyan edge light. -->
+    <!-- Smoked glass body and restrained electric-blue edge light. -->
     <item>
         <shape android:shape="rectangle">
             <gradient
@@ -8,7 +8,7 @@
                 android:startColor="#701B222A"
                 android:centerColor="#5211171E"
                 android:endColor="#78070A0E" />
-            <stroke android:width="1dp" android:color="#4D5EDCF3" />
+            <stroke android:width="1dp" android:color="#4D5BBBE2" />
             <corners android:radius="@dimen/zc_radius_pill" />
         </shape>
     </item>
@@ -18,15 +18,15 @@
         <shape android:shape="rectangle">
             <gradient
                 android:angle="270"
-                android:startColor="#2219D9F2"
-                android:centerColor="#128DEBFA"
+                android:startColor="#220892D0"
+                android:centerColor="#125BBBE2"
                 android:endColor="#26000000" />
             <stroke android:width="1dp" android:color="#1AFFFFFF" />
             <corners android:radius="28dp" />
         </shape>
     </item>
 
-    <!-- Broad upper reflection, visible without turning the bar cyan. -->
+    <!-- Broad upper reflection, visible without turning the bar blue. -->
     <item
         android:left="12dp"
         android:top="2dp"
@@ -36,8 +36,8 @@
         <shape android:shape="rectangle">
             <gradient
                 android:angle="270"
-                android:startColor="#38EAFBFF"
-                android:centerColor="#1522D3EE"
+                android:startColor="#38B7E0F2"
+                android:centerColor="#150892D0"
                 android:endColor="#00FFFFFF" />
             <corners android:radius="@dimen/zc_radius_pill" />
         </shape>
@@ -54,8 +54,8 @@
             <gradient
                 android:angle="0"
                 android:startColor="#00FFFFFF"
-                android:centerColor="#B8EAFBFF"
-                android:endColor="#2422D3EE" />
+                android:centerColor="#B8D7F1FB"
+                android:endColor="#240892D0" />
             <corners android:radius="1dp" />
         </shape>
     </item>
