@@ -290,9 +290,9 @@ final class LandscapeMoreDialog {
         addQuickTile(activity, dialog, row, new Action(
                 R.drawable.ic_more_library,
                 "Library",
-                "Continue, History and Watch Later",
+                "Saved viewing, creators and downloads",
                 () -> activity.startActivityForResult(
-                        new Intent(activity, FavoritesActivity.class),
+                        new Intent(activity, LibraryHubActivity.class),
                         FAVORITES_REQUEST
                 )
         ), 0);
