@@ -142,15 +142,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         chaosView.setActive(position == PAGE_CHAOS);
         if (position == PAGE_CHAOS) return;
         Page page = pageAt(position);
-        if (page != null && page.kind == PageKind.LIBRARY) return;
         if (page != null && page.itemCount() == 0 && !page.loading && !page.endReached) {
             load(page, false);
         }
-    }
-
-    public boolean isBunkrCollectionsSelected() {
-        Page page = pageAt(PAGE_SERIES);
-        return page != null && page.seriesSource == SERIES_SOURCE_BUNKR;
     }
 
     public void onHostResume() {
@@ -353,13 +347,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (kind == PageKind.SERIES) {
             addSeriesSourceSelector(page);
             page.empty.setOnClickListener(v -> {
-                if (page.seriesSource == SERIES_SOURCE_BUNKR) {
-                    refresh(PAGE_SERIES);
-                    return;
-                }
-                String url = page.seriesSource == SERIES_SOURCE_BUNKR
-                        ? BunkrRepository.mostFilesAlbumsUrl()
-                        : page.seriesSource == SERIES_SOURCE_EFUKT
+                String url = page.seriesSource == SERIES_SOURCE_EFUKT
                         ? EfuktRepository.SERIES
                         : page.seriesSource == SERIES_SOURCE_CATEGORIES
                         ? BrowseRepository.CATEGORIES
@@ -368,76 +356,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 intent.putExtra(WebFallbackActivity.EXTRA_URL, url);
                 activity.startActivity(intent);
             });
+        } else if (kind == PageKind.ONLYFAP) {
+            addOnlyFapControls(page);
+            page.empty.setOnClickListener(v -> refresh(PAGE_ONLYFAP));
         }
         return page;
-    }
-
-    private Page buildLibraryPage(int index) {
-        Page page = new Page(index, PageKind.LIBRARY, "", "");
-        page.root = new FrameLayout(activity);
-        page.root.setBackgroundColor(ZeroChillUi.background(activity));
-        android.widget.ScrollView scroll = new android.widget.ScrollView(activity);
-        scroll.setFillViewport(true);
-        LinearLayout content = new LinearLayout(activity);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(24), dp(20), dp(28));
-        TextView title = new TextView(activity);
-        title.setText("Library");
-        ZeroChillUi.styleTitle(title);
-        title.setTextSize(28);
-        content.addView(title);
-        TextView subtitle = new TextView(activity);
-        subtitle.setText("Your saved viewing and downloads");
-        ZeroChillUi.styleSecondary(subtitle);
-        subtitle.setTextSize(14);
-        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
-        subtitleParams.setMargins(0, dp(4), 0, dp(20));
-        content.addView(subtitle, subtitleParams);
-        addLibraryAction(content, "Favorite creators", "Browse creators you saved", v ->
-                activity.startActivity(new android.content.Intent(activity, CreatorsActivity.class)));
-        addLibraryAction(content, "Continue Watching", "Resume where you left off", v ->
-                openSavedVideos(FavoritesActivity.START_CONTINUE));
-        addLibraryAction(content, "History", "See videos you watched", v ->
-                openSavedVideos(FavoritesActivity.START_HISTORY));
-        addLibraryAction(content, "Watch Later", "Open your saved queue", v ->
-                openSavedVideos(FavoritesActivity.START_WATCH_LATER));
-        addLibraryAction(content, "Downloads", "Watch videos available offline", v ->
-                activity.startActivity(new android.content.Intent(activity, DownloadedActivity.class)));
-        scroll.addView(content, new android.widget.ScrollView.LayoutParams(-1, -2));
-        page.root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
-        return page;
-    }
-
-    private void openSavedVideos(int startTab) {
-        android.content.Intent intent = new android.content.Intent(activity, FavoritesActivity.class)
-                .putExtra(FavoritesActivity.EXTRA_START_TAB, startTab);
-        activity.startActivityForResult(intent, NativeMainActivity.FAVORITES_REQUEST);
-    }
-
-    private void addLibraryAction(LinearLayout content, String title, String detail, View.OnClickListener listener) {
-        LinearLayout action = new LinearLayout(activity);
-        action.setOrientation(LinearLayout.VERTICAL);
-        action.setGravity(Gravity.CENTER_VERTICAL);
-        action.setPadding(dp(18), dp(14), dp(18), dp(14));
-        ZeroChillUi.styleCard(action);
-        action.setClickable(true);
-        action.setFocusable(true);
-        action.setContentDescription(title);
-        action.setOnClickListener(listener);
-        TextView heading = new TextView(activity);
-        heading.setText(title);
-        heading.setTextColor(ZeroChillUi.color(activity, R.color.zc_text_primary));
-        heading.setTextSize(17);
-        heading.setTypeface(null, android.graphics.Typeface.BOLD);
-        action.addView(heading);
-        TextView copy = new TextView(activity);
-        copy.setText(detail);
-        ZeroChillUi.styleSecondary(copy);
-        copy.setTextSize(13);
-        action.addView(copy);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(76));
-        params.setMargins(0, 0, 0, dp(10));
-        content.addView(action, params);
     }
 
     private void addSeriesSourceSelector(Page page) {
