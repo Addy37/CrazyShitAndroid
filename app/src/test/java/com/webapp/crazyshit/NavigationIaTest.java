@@ -71,6 +71,36 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @Test public void shitTokKeepsLegacyPortraitViewportWithoutChangingOtherTabs() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        Bundle state = new Bundle();
+        state.putInt("primary_page", MainPagerAdapter.PAGE_CHAOS);
+        ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
+                .create(state).start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        NativeMainActivity activity = controller.get();
+        MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
+        ChaosFeedView chaosView = ReflectionHelpers.getField(adapter, "chaosView");
+
+        assertTrue(chaosView.getLayoutParams() instanceof android.widget.FrameLayout.LayoutParams);
+        android.widget.FrameLayout.LayoutParams chaosParams =
+                (android.widget.FrameLayout.LayoutParams) chaosView.getLayoutParams();
+        int expectedInset = activity.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height)
+                + Math.round(8 * activity.getResources().getDisplayMetrics().density);
+        assertEquals(expectedInset, chaosParams.bottomMargin);
+
+        Object[] pages = ReflectionHelpers.getField(adapter, "pages");
+        View homeRoot = ReflectionHelpers.getField(pages[MainPagerAdapter.PAGE_HOME], "root");
+        assertTrue(homeRoot.getLayoutParams() instanceof android.widget.FrameLayout.LayoutParams);
+        android.widget.FrameLayout.LayoutParams homeParams =
+                (android.widget.FrameLayout.LayoutParams) homeRoot.getLayoutParams();
+        assertEquals(0, homeParams.bottomMargin);
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void libraryHubActionsOpenExistingActivities() {
         ActivityController<LibraryHubActivity> controller =
                 Robolectric.buildActivity(LibraryHubActivity.class).setup();
