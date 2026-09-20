@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.RecordingCanvas;
+import android.graphics.RectF;
 import android.graphics.RenderEffect;
 import android.graphics.RenderNode;
 import android.graphics.Shader;
@@ -123,11 +124,11 @@ final class FrostedNavigationLayout extends LinearLayout {
                 float cornerRadius = layout.getResources().getDimension(
                         R.dimen.zc_radius_pill);
                 int checkpoint = canvas.save();
-                canvas.clipRoundRect(
+                canvas.clipRoundRect(new RectF(
                         navigation.getLeft(),
                         navigation.getTop(),
                         navigation.getRight(),
-                        navigation.getBottom(),
+                        navigation.getBottom()),
                         cornerRadius,
                         cornerRadius
                 );
