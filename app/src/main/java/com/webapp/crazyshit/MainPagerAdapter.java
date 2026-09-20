@@ -245,8 +245,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             }
         });
         page.recycler.setAdapter(page.feedAdapter);
-        page.homeSource = Math.max(0, Math.min(3, activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getInt("home_source", 0)));
+        android.content.SharedPreferences homePrefs =
+                activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
+        int savedHomeSource = homePrefs.getInt("home_source", 1);
+        page.homeSource = savedHomeSource == 2 ? 2 : 1;
+        if (savedHomeSource != page.homeSource) {
+            homePrefs.edit().putInt("home_source", page.homeSource).apply();
+        }
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(activity);
         scroll.setHorizontalScrollBarEnabled(false);
         scroll.setBackground(ZeroChillUi.panelGlass(activity));
@@ -254,16 +259,17 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         LinearLayout sources = new LinearLayout(activity);
         sources.setGravity(Gravity.CENTER_VERTICAL);
         sources.setPadding(dp(12), dp(6), dp(12), dp(6));
-        String[] names = {"All", "Series", "EFukt", "OnlyFap"};
-        for (int source = 0; source < names.length; source++) {
-            final int selected = source;
-            TextView chip = BrowseUi.action(activity, names[source], names[source] + " Home feed", v -> {
+        String[] names = {"CrazyShit", "EFukt"};
+        int[] sourceIds = {1, 2};
+        for (int index = 0; index < names.length; index++) {
+            final int selected = sourceIds[index];
+            TextView chip = BrowseUi.action(activity, names[index], names[index] + " Home feed", v -> {
                 if (page.homeSource == selected) {
                     if (!page.loading && page.itemCount() == 0) refresh(page.index);
                     return;
                 }
                 page.homeSource = selected;
-                activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE).edit().putInt("home_source", selected).apply();
+                homePrefs.edit().putInt("home_source", selected).apply();
                 styleHomeSources(page);
                 page.feedAdapter.replace(java.util.Collections.emptyList());
                 page.recycler.scrollToPosition(0);
@@ -436,13 +442,26 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void addSeriesSourceSelector(Page page) {
-        page.seriesSource = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT);
-        page.fapzoneMode = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+        android.content.SharedPreferences collectionPrefs =
+                activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
+        boolean onlyFapDefaultApplied =
+                collectionPrefs.getBoolean("zerochill_collections_default_onlyfap_v1", false);
+        page.seriesSource = onlyFapDefaultApplied
+                ? collectionPrefs.getInt(PREF_SERIES_SOURCE, SERIES_SOURCE_BUNKR)
+                : SERIES_SOURCE_BUNKR;
+        if (!onlyFapDefaultApplied) {
+            collectionPrefs.edit()
+                    .putInt(PREF_SERIES_SOURCE, SERIES_SOURCE_BUNKR)
+                    .putBoolean("zerochill_collections_default_onlyfap_v1", true)
+                    .apply();
+        }
+        page.fapzoneMode = collectionPrefs
                 .getInt(PREF_FAPZONE_MODE, FapzoneCreatorRepository.MODE_TOP_50);
-        if (page.seriesSource != SERIES_SOURCE_EFUKT && page.seriesSource != SERIES_SOURCE_BUNKR
-                && page.seriesSource != SERIES_SOURCE_CATEGORIES) {
-            page.seriesSource = SERIES_SOURCE_CRAZYSHIT;
+        if (page.seriesSource != SERIES_SOURCE_CRAZYSHIT &&
+                page.seriesSource != SERIES_SOURCE_EFUKT &&
+                page.seriesSource != SERIES_SOURCE_BUNKR &&
+                page.seriesSource != SERIES_SOURCE_CATEGORIES) {
+            page.seriesSource = SERIES_SOURCE_BUNKR;
         }
         if (page.fapzoneMode < FapzoneCreatorRepository.MODE_TOP_50 ||
                 page.fapzoneMode > FapzoneCreatorRepository.MODE_POPULAR) {
@@ -456,7 +475,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         selector.setBackground(ZeroChillUi.panelGlass(activity));
         selector.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
 
-        page.crazyShitSource = seriesSourceButton("Series");
+        page.crazyShitSource = seriesSourceButton("CrazyShit");
         page.efuktSource = seriesSourceButton("EFukt");
         page.bunkrSource = seriesSourceButton("OnlyFap");
         page.categoriesSource = seriesSourceButton("Categories");
@@ -820,7 +839,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void styleHomeSources(Page page) {
         for (int i = 0; i < page.homeChips.size(); i++) {
             TextView chip = page.homeChips.get(i);
-            boolean selected = i == page.homeSource;
+            boolean selected = (i + 1) == page.homeSource;
             ZeroChillUi.styleChip(chip, selected);
         }
     }
