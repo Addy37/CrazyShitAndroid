@@ -509,13 +509,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         FrameLayout.LayoutParams captionParams = new FrameLayout.LayoutParams(-1, dp(64));
         captionParams.gravity = Gravity.TOP;
-        captionParams.topMargin = dp(52);
-        captionParams.setMargins(dp(8), 0, dp(8), 0);
+        captionParams.setMargins(dp(8), dp(56), dp(8), 0);
         page.root.addView(caption, captionParams);
 
         FrameLayout.LayoutParams refreshParams =
                 (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-        refreshParams.topMargin = dp(116);
+        refreshParams.topMargin = dp(124);
         page.refresh.setLayoutParams(refreshParams);
         page.recycler.setPadding(dp(4), dp(3), dp(4), dp(26));
         page.browseAdapter.setWideCreatorCards(true);
