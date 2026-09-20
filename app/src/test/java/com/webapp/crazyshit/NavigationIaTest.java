@@ -88,6 +88,29 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @Test public void collectionsDefaultsToOnlyFapAndHidesBrokenProfileShortcut() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true)
+                .remove("native_series_source")
+                .remove("zerochill_collections_default_onlyfap_v1")
+                .apply();
+        Bundle state = new Bundle();
+        state.putInt("primary_page", MainPagerAdapter.PAGE_SERIES);
+        ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
+                .create(state).start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        NativeMainActivity activity = controller.get();
+        assertEquals(2, context.getSharedPreferences("app_prefs", 0)
+                .getInt("native_series_source", -1));
+        assertNotNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show OnlyFap collections"));
+        assertNull(findByDescription(activity.getWindow().getDecorView(), "My profile"));
+        android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
+        assertEquals("Collections", title.getText().toString());
+        controller.pause().stop().destroy();
+    }
+
     private static View findByDescription(View view, String description) {
         if (view == null) return null;
         CharSequence contentDescription = view.getContentDescription();
