@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_checked="true">
-        <inset android:insetLeft="4dp" android:insetTop="4dp" android:insetRight="4dp" android:insetBottom="4dp">
+        <inset android:insetLeft="4dp" android:insetTop="4dp" android:insetRight="4dp" android:insetBottom="0dp">
             <shape android:shape="rectangle">
                 <solid android:color="@color/zc_nav_selection" />
                 <stroke android:width="@dimen/zc_stroke" android:color="@color/zc_cyan_dim" />
@@ -10,7 +10,7 @@
         </inset>
     </item>
     <item android:state_selected="true">
-        <inset android:insetLeft="4dp" android:insetTop="4dp" android:insetRight="4dp" android:insetBottom="4dp">
+        <inset android:insetLeft="4dp" android:insetTop="4dp" android:insetRight="4dp" android:insetBottom="0dp">
             <shape android:shape="rectangle">
                 <solid android:color="@color/zc_nav_selection" />
                 <stroke android:width="@dimen/zc_stroke" android:color="@color/zc_cyan_dim" />
