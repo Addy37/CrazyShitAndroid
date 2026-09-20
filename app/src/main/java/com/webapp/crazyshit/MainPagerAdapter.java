@@ -261,9 +261,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         sources.setPadding(dp(12), dp(6), dp(12), dp(6));
         String[] names = {"CrazyShit", "EFukt"};
         int[] sourceIds = {1, 2};
-        for (int index = 0; index < names.length; index++) {
-            final int selected = sourceIds[index];
-            TextView chip = BrowseUi.action(activity, names[index], names[index] + " Home feed", v -> {
+        for (int chipIndex = 0; chipIndex < names.length; chipIndex++) {
+            final int selected = sourceIds[chipIndex];
+            TextView chip = BrowseUi.action(activity, names[chipIndex], names[chipIndex] + " Home feed", v -> {
                 if (page.homeSource == selected) {
                     if (!page.loading && page.itemCount() == 0) refresh(page.index);
                     return;
