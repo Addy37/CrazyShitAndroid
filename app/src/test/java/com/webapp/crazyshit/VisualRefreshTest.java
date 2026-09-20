@@ -149,7 +149,7 @@ public class VisualRefreshTest {
         for (int id : new int[] {1, 2, 4, 3, 5}) {
             View tab = nav.findViewById(id);
             assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
-            assertTrue(tab.getHeight() >= BrowseUi.dp(main, 48));
+            assertEquals(nav.getHeight(), tab.getHeight());
             assertEquals(0, Math.round(tab.getTranslationY()));
         }
         prefs.edit().putInt("native_view_home", NativeFeedAdapter.VIEW_GRID).apply();

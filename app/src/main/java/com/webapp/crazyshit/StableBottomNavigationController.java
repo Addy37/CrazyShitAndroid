@@ -244,6 +244,11 @@ final class StableBottomNavigationController {
                 item.setScaleY(1f);
                 item.setTranslationX(0f);
                 item.setTranslationY(0f);
+                ViewGroup.LayoutParams itemParams = item.getLayoutParams();
+                if (itemParams != null && itemParams.height != ViewGroup.LayoutParams.MATCH_PARENT) {
+                    itemParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                    item.setLayoutParams(itemParams);
+                }
                 item.setAlpha(1f);
             }
         }
