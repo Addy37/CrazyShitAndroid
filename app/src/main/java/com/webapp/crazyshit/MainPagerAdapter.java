@@ -201,7 +201,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         FrameLayout container = new FrameLayout(parent.getContext());
-        container.setBackgroundColor(Color.BLACK);
+        container.setBackgroundColor(ZeroChillUi.background(activity));
         container.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
         return new Holder(container);
     }
@@ -249,7 +249,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 .getInt("home_source", 0)));
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(activity);
         scroll.setHorizontalScrollBarEnabled(false);
-        scroll.setBackgroundColor(Color.BLACK);
+        scroll.setBackgroundColor(ZeroChillUi.background(activity));
         LinearLayout sources = new LinearLayout(activity);
         sources.setGravity(Gravity.CENTER_VERTICAL);
         sources.setPadding(dp(12), dp(4), dp(12), dp(4));
@@ -367,21 +367,20 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private Page buildLibraryPage(int index) {
         Page page = new Page(index, PageKind.LIBRARY, "", "");
         page.root = new FrameLayout(activity);
-        page.root.setBackgroundColor(Color.BLACK);
+        page.root.setBackgroundColor(ZeroChillUi.background(activity));
         android.widget.ScrollView scroll = new android.widget.ScrollView(activity);
         scroll.setFillViewport(true);
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(28), dp(20), dp(28));
+        content.setPadding(dp(20), dp(24), dp(20), dp(28));
         TextView title = new TextView(activity);
         title.setText("Library");
-        title.setTextColor(Color.WHITE);
+        ZeroChillUi.styleTitle(title);
         title.setTextSize(28);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
         content.addView(title);
         TextView subtitle = new TextView(activity);
         subtitle.setText("Your saved viewing and downloads");
-        subtitle.setTextColor(Color.rgb(165, 165, 177));
+        ZeroChillUi.styleSecondary(subtitle);
         subtitle.setTextSize(14);
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
         subtitleParams.setMargins(0, dp(4), 0, dp(20));
@@ -412,20 +411,20 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         action.setOrientation(LinearLayout.VERTICAL);
         action.setGravity(Gravity.CENTER_VERTICAL);
         action.setPadding(dp(18), dp(14), dp(18), dp(14));
-        action.setBackground(BrowseUi.rounded(activity, Color.rgb(24, 24, 29), 16));
+        ZeroChillUi.styleCard(action);
         action.setClickable(true);
         action.setFocusable(true);
         action.setContentDescription(title);
         action.setOnClickListener(listener);
         TextView heading = new TextView(activity);
         heading.setText(title);
-        heading.setTextColor(UiPalette.PRIMARY);
+        heading.setTextColor(ZeroChillUi.color(activity, R.color.zc_text_primary));
         heading.setTextSize(17);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         action.addView(heading);
         TextView copy = new TextView(activity);
         copy.setText(detail);
-        copy.setTextColor(Color.rgb(177, 177, 187));
+        ZeroChillUi.styleSecondary(copy);
         copy.setTextSize(13);
         action.addView(copy);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(76));
@@ -451,7 +450,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         selector.setOrientation(LinearLayout.HORIZONTAL);
         selector.setGravity(Gravity.CENTER);
         selector.setPadding(dp(12), dp(8), dp(12), dp(8));
-        selector.setBackgroundColor(Color.BLACK);
+        selector.setBackgroundColor(ZeroChillUi.background(activity));
 
         page.crazyShitSource = seriesSourceButton("CrazyShit");
         page.efuktSource = seriesSourceButton("EFukt");
@@ -483,7 +482,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         fapzoneModes.setOrientation(LinearLayout.HORIZONTAL);
         fapzoneModes.setGravity(Gravity.CENTER);
         fapzoneModes.setPadding(dp(12), dp(6), dp(12), dp(6));
-        fapzoneModes.setBackgroundColor(Color.BLACK);
+        fapzoneModes.setBackgroundColor(ZeroChillUi.background(activity));
         page.fapzoneTop = fapzoneModeButton("Top 50");
         page.fapzoneNew = fapzoneModeButton("New");
         page.fapzoneHot = fapzoneModeButton("Hot");
@@ -526,7 +525,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         caption.setOrientation(LinearLayout.HORIZONTAL);
         caption.setGravity(Gravity.CENTER_VERTICAL);
         caption.setPadding(dp(17), dp(7), dp(17), dp(9));
-        caption.setBackgroundColor(Color.BLACK);
+        caption.setBackgroundColor(ZeroChillUi.background(activity));
 
         LinearLayout captionCopy = new LinearLayout(activity);
         captionCopy.setOrientation(LinearLayout.VERTICAL);
@@ -543,7 +542,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         TextView captionHint = new TextView(activity);
         captionHint.setText(FapzoneCreatorRepository.hintFor(page.fapzoneMode));
-        captionHint.setTextColor(Color.rgb(164, 164, 174));
+        ZeroChillUi.styleSecondary(captionHint);
         captionHint.setTextSize(11.5f);
         captionHint.setMaxLines(1);
         captionHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -739,41 +738,24 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void styleSeriesSourceButton(TextView button, boolean selected) {
-        if (button == null) return;
-        GradientDrawable background = new GradientDrawable();
-        background.setCornerRadius(dp(20));
-        background.setColor(selected ? UiPalette.PRIMARY : Color.rgb(27, 27, 31));
-        background.setStroke(dp(1), selected ? UiPalette.PRIMARY : Color.rgb(57, 57, 64));
-        button.setBackground(background);
-        button.setTextColor(selected ? Color.BLACK : Color.rgb(220, 220, 226));
-        button.setSelected(selected);
+        ZeroChillUi.styleChip(button, selected);
     }
 
     private void styleFapzoneModeButton(TextView button, boolean selected) {
-        if (button == null) return;
-        GradientDrawable background = new GradientDrawable();
-        background.setCornerRadius(dp(11));
-        background.setColor(selected ? Color.rgb(46, 46, 18) : Color.rgb(24, 24, 28));
-        background.setStroke(
-                dp(1),
-                selected ? UiPalette.PRIMARY : Color.rgb(52, 52, 59)
-        );
-        button.setBackground(background);
-        button.setTextColor(selected ? UiPalette.PRIMARY : Color.rgb(188, 188, 198));
-        button.setSelected(selected);
+        ZeroChillUi.styleChip(button, selected);
     }
 
     private Page createPageShell(int index, PageKind kind, String prefKey, String baseUrl) {
         Page page = new Page(index, kind, prefKey, baseUrl);
         page.root = new FrameLayout(activity);
-        page.root.setBackgroundColor(Color.BLACK);
+        page.root.setBackgroundColor(ZeroChillUi.background(activity));
 
         page.refresh = new SwipeRefreshLayout(activity);
         page.refresh.setColorSchemeColors(UiPalette.PRIMARY);
         page.root.addView(page.refresh, new FrameLayout.LayoutParams(-1, -1));
 
         page.recycler = new RecyclerView(activity);
-        page.recycler.setBackgroundColor(Color.BLACK);
+        page.recycler.setBackgroundColor(ZeroChillUi.background(activity));
         page.recycler.setClipToPadding(false);
         page.recycler.setPadding(0, dp(5), 0, dp(18));
         page.recycler.setItemAnimator(null);
@@ -781,15 +763,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         page.progress = new ProgressBar(activity);
         page.progress.setIndeterminate(true);
+        ZeroChillUi.styleProgress(page.progress);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
         progressParams.gravity = Gravity.CENTER;
         page.root.addView(page.progress, progressParams);
 
         page.empty = new TextView(activity);
-        page.empty.setTextColor(Color.rgb(190, 190, 198));
-        page.empty.setTextSize(15);
-        page.empty.setGravity(Gravity.CENTER);
-        page.empty.setPadding(dp(28), dp(28), dp(28), dp(28));
+        ZeroChillUi.styleEmpty(page.empty);
         page.empty.setVisibility(View.GONE);
         page.root.addView(page.empty, new FrameLayout.LayoutParams(-1, -1));
 
@@ -836,9 +816,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         for (int i = 0; i < page.homeChips.size(); i++) {
             TextView chip = page.homeChips.get(i);
             boolean selected = i == page.homeSource;
-            chip.setSelected(selected);
-            chip.setTextColor(selected ? UiPalette.ON_PRIMARY : BrowseUi.MUTED);
-            chip.setBackground(BrowseUi.rounded(activity, selected ? UiPalette.PRIMARY : BrowseUi.SURFACE, 12));
+            ZeroChillUi.styleChip(chip, selected);
         }
     }
 

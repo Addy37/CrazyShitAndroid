@@ -88,7 +88,6 @@ public class VisualRefreshTest {
         androidx.viewpager2.widget.ViewPager2 viewPager = ReflectionHelpers.getField(main, "primaryPager");
         assertEquals(MainPagerAdapter.PAGE_LIBRARY, viewPager.getCurrentItem());
         nav.setSelectedItemId(1);
-        OledImmersiveUiController.attachMain(main);
         UiPolishController.attach(main);
         ResponsiveFitmentController.applySoon(main);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
@@ -98,10 +97,9 @@ public class VisualRefreshTest {
         TextView headerTitle = ReflectionHelpers.getField(main, "headerTitle");
         TextView headerSubtitle = ReflectionHelpers.getField(main, "headerSubtitle");
         assertEquals("Home", headerTitle.getText().toString());
-        assertEquals(Color.WHITE, headerTitle.getCurrentTextColor());
+        assertEquals(main.getColor(R.color.zc_text_primary), headerTitle.getCurrentTextColor());
         assertEquals(View.VISIBLE, headerSubtitle.getVisibility());
-        assertTrue(headerSubtitle.getText().toString().contains("CrazyShit"));
-        assertTrue(headerSubtitle.getText().toString().contains("List"));
+        assertEquals(main.getString(R.string.zerochill_tagline), headerSubtitle.getText().toString());
         LinearLayout shell = ReflectionHelpers.getField(main, "shell");
         View topBar = shell.getChildAt(0);
         assertTrue(topBar instanceof LinearLayout);
@@ -110,6 +108,7 @@ public class VisualRefreshTest {
         assertEquals(View.GONE, ((LinearLayout) topBar).getChildAt(3).getVisibility());
 
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
+        assertNull(homeList.getItemAnimator());
         NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(1);
         assertNotNull(visibleCard);
         visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
@@ -119,9 +118,12 @@ public class VisualRefreshTest {
         assertEquals(Color.rgb(25, 25, 28), card.getCardBackgroundColor().getDefaultColor());
         capture(root, "home-lifecycle", 360, 800);
         assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
-        assertEquals(BrowseUi.dp(main, 60), nav.getLayoutParams().height);
-        assertEquals(BrowseUi.dp(main, 28), nav.getItemActiveIndicatorHeight());
-        assertEquals(Color.argb(50, 34, 211, 238), nav.getItemActiveIndicatorColor().getDefaultColor());
+        assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
+                nav.getLayoutParams().height);
+        assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_nav_indicator_height),
+                nav.getItemActiveIndicatorHeight());
+        assertEquals(main.getColor(R.color.zc_cyan_container),
+                nav.getItemActiveIndicatorColor().getDefaultColor());
         assertEquals(UiPalette.PRIMARY, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertEquals(5, nav.getMenu().size());

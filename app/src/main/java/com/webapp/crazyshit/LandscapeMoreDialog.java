@@ -6,11 +6,11 @@ import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -222,20 +222,18 @@ final class LandscapeMoreDialog {
             if (bottomSheet != null) bottomSheet.setBackgroundColor(Color.TRANSPARENT);
         }
 
-        panel.setAlpha(0f);
-        if (sidePanel) panel.setTranslationX(dp(activity, 36));
-        else panel.setTranslationY(dp(activity, 24));
-        panel.animate()
-                .alpha(1f)
-                .translationX(0f)
-                .translationY(0f)
-                .setDuration(200L)
-                .start();
+        // BottomSheetDialog already owns portrait motion. Add one lightweight entrance only to
+        // the custom landscape panel so animations never stack on phones.
+        if (sidePanel) ZeroChillMotion.enterFromEnd(panel, dp(activity, 36));
     }
 
     private static void addDragHandle(NativeMainActivity activity, LinearLayout panel) {
         View handle = new View(activity);
-        handle.setBackground(roundedBackground(activity, Color.rgb(91, 91, 101), 2));
+        handle.setBackground(roundedBackground(
+                activity,
+                ZeroChillUi.color(activity, R.color.zc_text_muted),
+                2
+        ));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 4));
         params.gravity = Gravity.CENTER_HORIZONTAL;
         params.setMargins(0, 0, 0, dp(activity, 8));
@@ -265,7 +263,7 @@ final class LandscapeMoreDialog {
                 activity,
                 "ZeroChill " + BuildConfig.VERSION_NAME,
                 11,
-                Color.rgb(166, 166, 176),
+                ZeroChillUi.color(activity, R.color.zc_text_secondary),
                 false
         );
         labels.addView(title);
@@ -273,7 +271,7 @@ final class LandscapeMoreDialog {
         header.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
         ImageView close = iconView(activity, R.drawable.ic_more_close, 40, 10);
-        close.setBackground(circleBackground(Color.rgb(34, 34, 39)));
+        close.setBackground(circleBackground(ZeroChillUi.color(activity, R.color.zc_cyan_container)));
         close.setContentDescription("Close More");
         close.setOnClickListener(v -> dialog.dismiss());
         header.addView(close, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 40)));
@@ -327,7 +325,7 @@ final class LandscapeMoreDialog {
         tile.setOrientation(LinearLayout.VERTICAL);
         tile.setGravity(Gravity.CENTER);
         tile.setPadding(dp(activity, 6), dp(activity, 8), dp(activity, 6), dp(activity, 7));
-        tile.setBackground(roundedBackground(activity, Color.rgb(27, 27, 31), 16));
+        tile.setBackground(ZeroChillUi.glass(activity));
         tile.setClickable(true);
         tile.setFocusable(true);
         tile.setContentDescription(action.title + ". " + action.subtitle);
@@ -358,7 +356,13 @@ final class LandscapeMoreDialog {
             String label,
             List<Action> actions
     ) {
-        TextView section = text(activity, label, 10, Color.rgb(145, 145, 155), true);
+        TextView section = text(
+                activity,
+                label,
+                10,
+                ZeroChillUi.color(activity, R.color.zc_text_muted),
+                true
+        );
         section.setLetterSpacing(0.08f);
         section.setPadding(dp(activity, 6), dp(activity, 9), dp(activity, 6), dp(activity, 5));
         parent.addView(section, new LinearLayout.LayoutParams(-1, -2));
@@ -372,7 +376,7 @@ final class LandscapeMoreDialog {
             addActionRow(activity, dialog, group, actions.get(i));
             if (i < actions.size() - 1) {
                 View divider = new View(activity);
-                divider.setBackgroundColor(Color.rgb(43, 43, 49));
+                divider.setBackgroundColor(ZeroChillUi.color(activity, R.color.zc_divider));
                 LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(activity, 1));
                 dividerParams.setMargins(dp(activity, 56), 0, dp(activity, 8), 0);
                 group.addView(divider, dividerParams);
@@ -409,7 +413,13 @@ final class LandscapeMoreDialog {
         TextView title = text(activity, action.title, 15, Color.WHITE, true);
         title.setMaxLines(1);
         labels.addView(title, new LinearLayout.LayoutParams(-1, -2));
-        TextView subtitle = text(activity, action.subtitle, 11, Color.rgb(166, 166, 176), false);
+        TextView subtitle = text(
+                activity,
+                action.subtitle,
+                11,
+                ZeroChillUi.color(activity, R.color.zc_text_secondary),
+                false
+        );
         subtitle.setMaxLines(1);
         subtitle.setPadding(0, dp(activity, 1), 0, 0);
         labels.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
@@ -431,12 +441,7 @@ final class LandscapeMoreDialog {
     }
 
     private static void installPressFeedback(View view) {
-        view.setOnTouchListener((v, event) -> {
-            int touch = event.getActionMasked();
-            if (touch == MotionEvent.ACTION_DOWN) v.setAlpha(0.78f);
-            else if (touch == MotionEvent.ACTION_UP || touch == MotionEvent.ACTION_CANCEL) v.setAlpha(1f);
-            return false;
-        });
+        ZeroChillMotion.installPressFeedback(view);
     }
 
     private static ImageView iconView(
@@ -486,15 +491,20 @@ final class LandscapeMoreDialog {
         return view;
     }
 
-    private static GradientDrawable panelBackground(NativeMainActivity activity) {
-        GradientDrawable background = roundedBackground(activity, Color.rgb(15, 15, 18), 26);
-        background.setStroke(dp(activity, 1), Color.rgb(47, 47, 54));
-        return background;
+    private static Drawable panelBackground(NativeMainActivity activity) {
+        return ZeroChillUi.panelGlass(activity);
     }
 
     private static GradientDrawable groupBackground(NativeMainActivity activity) {
-        GradientDrawable background = roundedBackground(activity, Color.rgb(24, 24, 28), 16);
-        background.setStroke(dp(activity, 1), Color.rgb(43, 43, 50));
+        GradientDrawable background = roundedBackground(
+                activity,
+                ZeroChillUi.color(activity, R.color.zc_surface_glass),
+                16
+        );
+        background.setStroke(
+                ZeroChillUi.dimension(activity, R.dimen.zc_stroke),
+                ZeroChillUi.color(activity, R.color.zc_divider)
+        );
         return background;
     }
 

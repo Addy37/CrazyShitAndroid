@@ -97,8 +97,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         if (state != null) restoredPrimaryPage = state.getInt("primary_page", -1);
-        getWindow().setStatusBarColor(Color.BLACK);
-        getWindow().setNavigationBarColor(Color.BLACK);
+        ZeroChillUi.applySystemBars(this);
         FeedViewStyleController.prepareVisualRefresh(this);
         buildUi();
         appUpdater = new AppUpdater(this);
@@ -133,11 +132,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void buildUi() {
         overlayRoot = new FrameLayout(this);
-        overlayRoot.setBackgroundColor(Color.BLACK);
+        overlayRoot.setBackgroundColor(ZeroChillUi.background(this));
 
         shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.BLACK);
+        shell.setBackgroundColor(ZeroChillUi.background(this));
         shell.setOnApplyWindowInsetsListener((view, insets) -> {
             int left;
             int top;
@@ -162,7 +161,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
         overlayRoot.addView(shell, new FrameLayout.LayoutParams(-1, -1));
 
-        shell.addView(buildTopBar(), new LinearLayout.LayoutParams(-1, dp(56)));
+        shell.addView(buildTopBar(), new LinearLayout.LayoutParams(
+                -1,
+                ZeroChillUi.dimension(this, R.dimen.zc_top_bar_height)
+        ));
 
         FrameLayout content = new FrameLayout(this);
         legacyContent = content;
@@ -192,6 +194,19 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         primaryPager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
         primaryPager.setOffscreenPageLimit(MainPagerAdapter.PAGE_COUNT - 1);
         primaryPager.setAdapter(primaryPagerAdapter);
+        primaryPager.setPageTransformer((page, position) -> {
+            if (ZeroChillMotion.animationsEnabled(page.getContext())) {
+                float distance = Math.min(1f, Math.abs(position));
+                page.setAlpha(1f - (distance * 0.10f));
+                float scale = 1f - (distance * 0.012f);
+                page.setScaleX(scale);
+                page.setScaleY(scale);
+            } else {
+                page.setAlpha(1f);
+                page.setScaleX(1f);
+                page.setScaleY(1f);
+            }
+        });
         primaryPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
@@ -206,7 +221,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         content.addView(swipeRefresh, new FrameLayout.LayoutParams(-1, -1));
 
         recycler = new RecyclerView(this);
-        recycler.setBackgroundColor(Color.BLACK);
+        recycler.setBackgroundColor(ZeroChillUi.background(this));
         recycler.setClipToPadding(false);
         recycler.setPadding(0, dp(5), 0, dp(18));
         recycler.setItemAnimator(null);
@@ -214,16 +229,14 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
         progress = new ProgressBar(this);
         progress.setIndeterminate(true);
+        ZeroChillUi.styleProgress(progress);
         progress.setVisibility(View.GONE);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
         progressParams.gravity = Gravity.CENTER;
         content.addView(progress, progressParams);
 
         emptyView = new TextView(this);
-        emptyView.setTextColor(Color.rgb(190, 190, 198));
-        emptyView.setTextSize(15);
-        emptyView.setGravity(Gravity.CENTER);
-        emptyView.setPadding(dp(28), dp(28), dp(28), dp(28));
+        ZeroChillUi.styleEmpty(emptyView);
         emptyView.setVisibility(View.GONE);
         emptyView.setOnClickListener(v -> openFallback(feedBaseUrl));
         content.addView(emptyView, new FrameLayout.LayoutParams(-1, -1));
@@ -265,8 +278,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
 
         bottomNavigation = new BottomNavigationView(this);
-        bottomNavigation.setBackgroundColor(Color.rgb(21, 21, 24));
-        bottomNavigation.setElevation(dp(12));
+        bottomNavigation.setBackground(ZeroChillUi.navigationGlass(this));
+        bottomNavigation.setElevation(ZeroChillUi.dimension(this, R.dimen.zc_elevation_navigation));
         bottomNavigation.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
         Menu menu = bottomNavigation.getMenu();
         menu.add(Menu.NONE, NAV_HOME, 0, "Home").setIcon(R.drawable.ic_nav_home);
@@ -298,7 +311,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
             return false;
         });
-        shell.addView(bottomNavigation, new LinearLayout.LayoutParams(-1, dp(76)));
+        shell.addView(bottomNavigation, new LinearLayout.LayoutParams(
+                -1,
+                ZeroChillUi.dimension(this, R.dimen.zc_bottom_nav_height)
+        ));
         bottomNavigation.post(() -> {
             View chaosItem = bottomNavigation.findViewById(NAV_CHAOS);
             if (chaosItem != null) {
@@ -315,7 +331,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(10), 0, dp(4), 0);
-        bar.setBackgroundColor(Color.BLACK);
+        ZeroChillUi.styleTopBar(bar);
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(R.mipmap.ic_launcher);
@@ -328,15 +344,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         labels.setPadding(dp(9), 0, dp(8), 0);
 
         headerTitle = new TextView(this);
-        headerTitle.setTextColor(UiPalette.PRIMARY);
-        headerTitle.setTextSize(23);
-        headerTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillUi.styleTitle(headerTitle);
         headerTitle.setSingleLine(true);
         labels.addView(headerTitle);
 
         headerSubtitle = new TextView(this);
-        headerSubtitle.setText("CrazyShit");
-        headerSubtitle.setTextColor(Color.rgb(168, 168, 178));
+        headerSubtitle.setText(R.string.zerochill_tagline);
+        ZeroChillUi.styleSecondary(headerSubtitle);
         headerSubtitle.setTextSize(11);
         labels.addView(headerSubtitle);
         headerSubtitle.setVisibility(View.GONE);
@@ -346,6 +360,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         search.setImageResource(R.drawable.ic_nav_search);
         search.setPadding(dp(12), dp(12), dp(12), dp(12));
         search.setContentDescription("Search");
+        search.setColorFilter(ZeroChillUi.color(this, R.color.zc_cyan));
+        search.setBackground(ZeroChillUi.rounded(
+                this,
+                ZeroChillUi.color(this, R.color.zc_cyan_container),
+                Color.TRANSPARENT,
+                R.dimen.zc_radius_pill
+        ));
         search.setClickable(true);
         search.setFocusable(true);
         search.setOnClickListener(v -> {
@@ -394,7 +415,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void showPrimaryPage(int position, boolean smooth) {
         if (primaryPager == null) return;
         showPagerChrome(position);
-        primaryPager.setCurrentItem(position, smooth);
+        primaryPager.setCurrentItem(position, smooth && ZeroChillMotion.animationsEnabled(this));
     }
 
     private void showPagerChrome(int position) {
@@ -436,17 +457,16 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         }
 
         if (primaryPagerAdapter != null) primaryPagerAdapter.setPrimaryActive(position);
-        if (headerTitle != null) headerTitle.setText(position == MainPagerAdapter.PAGE_HOME ? "CrazyShit" : feedTitle);
+        if (headerTitle != null) headerTitle.setText(feedTitle);
         if (headerSubtitle != null && primaryPagerAdapter != null) {
             if (position == MainPagerAdapter.PAGE_CHAOS) {
-                headerSubtitle.setText("Random video feed  •  Swipe up/down");
+                headerSubtitle.setText("Swipe up or down");
             } else if (position == MainPagerAdapter.PAGE_SERIES) {
-                headerSubtitle.setText("CrazyShit  •  EFukt  •  OnlyFap  •  Categories");
+                headerSubtitle.setText("Series  •  EFukt  •  OnlyFap  •  Categories");
             } else if (position == MainPagerAdapter.PAGE_LIBRARY) {
                 headerSubtitle.setText("Continue Watching  •  History  •  Downloads");
             } else {
-                headerSubtitle.setText("CrazyShit  •  " +
-                        viewModeLabel(primaryPagerAdapter.viewMode(position)));
+                headerSubtitle.setText(R.string.zerochill_tagline);
             }
         }
         applyChaosFullscreenChrome();
@@ -543,7 +563,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         endReached = false;
         loading = false;
         headerTitle.setText(feedTitle);
-        headerSubtitle.setText("CrazyShit  •  " + viewModeLabel(currentViewMode()));
+        headerSubtitle.setText("Search results  •  " + viewModeLabel(currentViewMode()));
         applyFeedLayout();
         recycler.setAdapter(feedAdapter);
         feedAdapter.replace(new ArrayList<>());
@@ -748,7 +768,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 feedAdapter.setViewMode(checked);
                 applyFeedLayout();
             }
-            headerSubtitle.setText("CrazyShit  •  " + viewModeLabel(checked));
+            headerSubtitle.setText("Home  •  " + viewModeLabel(checked));
             dialog.dismiss();
         }));
         dialog.show();
@@ -770,7 +790,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_action_share,
                 "Share",
-                "Send the CrazyShit page",
+                "Send the source page",
                 () -> shareItem(item)
         ));
         actions.add(VideoActionSheet.action(
@@ -825,7 +845,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void showSearchDialog() {
         EditText input = new EditText(this);
-        input.setHint("Search CrazyShit");
+        input.setHint("Search ZeroChill");
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT);
         int pad = dp(18);

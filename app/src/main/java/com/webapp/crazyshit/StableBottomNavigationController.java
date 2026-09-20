@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -46,39 +45,35 @@ final class StableBottomNavigationController {
     private StableBottomNavigationController() {
     }
 
-    /** v2.10.0 portrait navigation styling. */
+    /** Shared ZeroChill floating-glass portrait navigation styling. */
     static void styleBar(BottomNavigationView nav) {
         if (nav == null) return;
         Context context = nav.getContext();
-        boolean oled = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                .getBoolean("oled_black_enabled", true);
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(oled ? Color.BLACK : Color.rgb(20, 20, 24));
-        bg.setStroke(dp(context, 1), oled ? Color.rgb(31, 31, 35) : Color.rgb(48, 48, 55));
-        bg.setCornerRadius(dp(context, 30));
-        nav.setBackground(bg);
-        nav.setElevation(dp(context, oled ? 4 : 6));
+        nav.setBackground(ZeroChillUi.navigationGlass(context));
+        nav.setBackgroundTintList(null);
+        nav.setElevation(ZeroChillUi.dimension(context, R.dimen.zc_elevation_navigation));
         nav.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
         nav.setItemHorizontalTranslationEnabled(false);
-        nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(28, 34, 211, 238)));
+        nav.setItemRippleColor(ColorStateList.valueOf(
+                ZeroChillUi.color(context, R.color.zc_cyan_container)));
 
         int[][] states = new int[][] {
                 new int[] {android.R.attr.state_checked},
                 new int[] {}
         };
-        int active = UiPalette.PRIMARY;
-        int inactive = Color.rgb(168, 168, 178);
+        int active = ZeroChillUi.color(context, R.color.zc_cyan);
+        int inactive = ZeroChillUi.color(context, R.color.zc_text_muted);
         ColorStateList colors = new ColorStateList(states, new int[] {active, inactive});
         nav.setItemIconTintList(colors);
         nav.setItemTextColor(colors);
 
         try {
             nav.setItemActiveIndicatorEnabled(true);
-            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(Color.argb(50, 34, 211, 238)));
-            nav.setItemActiveIndicatorWidth(dp(context, 48));
-            nav.setItemActiveIndicatorHeight(dp(context, 28));
-            nav.setItemIconSize(dp(context, 23));
+            nav.setItemActiveIndicatorColor(ColorStateList.valueOf(
+                    ZeroChillUi.color(context, R.color.zc_cyan_container)));
+            nav.setItemActiveIndicatorWidth(ZeroChillUi.dimension(context, R.dimen.zc_nav_indicator_width));
+            nav.setItemActiveIndicatorHeight(ZeroChillUi.dimension(context, R.dimen.zc_nav_indicator_height));
+            nav.setItemIconSize(ZeroChillUi.dimension(context, R.dimen.zc_nav_icon));
             nav.setItemPaddingTop(dp(context, 4));
             nav.setItemPaddingBottom(dp(context, 4));
         } catch (Throwable ignored) {
@@ -222,7 +217,7 @@ final class StableBottomNavigationController {
             if (nav == null || shell == null || nav.getParent() != null) return;
             shell.addView(nav, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    dp(60)
+                    ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height)
             ));
         }
 
@@ -354,30 +349,26 @@ final class StableBottomNavigationController {
                     ? ((ViewGroup) topBar).getChildAt(3) : null;
 
             if (position == MainPagerAdapter.PAGE_HOME) {
-                topBar.setBackgroundColor(Color.rgb(17, 17, 20));
-                topBar.setElevation(0f);
+                ZeroChillUi.styleTopBar(topBar);
                 if (title != null) {
                     title.setText("Home");
-                    title.setTextColor(Color.WHITE);
+                    title.setTextColor(ZeroChillUi.color(activity, R.color.zc_text_primary));
                     title.setTextSize(18f);
                 }
                 if (subtitle != null) {
                     subtitle.setVisibility(View.VISIBLE);
-                    subtitle.setTextColor(Color.rgb(168, 168, 178));
+                    ZeroChillUi.styleSecondary(subtitle);
                     subtitle.setTextSize(11f);
-                    String mode = pagerAdapter == null
-                            ? "List"
-                            : FeedViewStyleController.label(pagerAdapter.viewMode(MainPagerAdapter.PAGE_HOME));
-                    subtitle.setText("CrazyShit  •  " + mode);
+                    subtitle.setText(R.string.zerochill_tagline);
                 }
                 if (appIcon != null) appIcon.setVisibility(View.VISIBLE);
                 if (profile != null) profile.setVisibility(View.GONE);
                 return;
             }
 
-            topBar.setBackgroundColor(Color.BLACK);
+            ZeroChillUi.styleTopBar(topBar);
             if (title != null) {
-                title.setTextColor(UiPalette.PRIMARY);
+                title.setTextColor(ZeroChillUi.color(activity, R.color.zc_text_primary));
                 title.setTextSize(23f);
             }
             if (subtitle != null) subtitle.setVisibility(View.GONE);
@@ -400,7 +391,7 @@ final class StableBottomNavigationController {
 
             ViewGroup.LayoutParams raw = nav.getLayoutParams();
             boolean changed = false;
-            int wantedHeight = dp(60);
+            int wantedHeight = ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height);
             if (raw.height != wantedHeight) {
                 raw.height = wantedHeight;
                 changed = true;
