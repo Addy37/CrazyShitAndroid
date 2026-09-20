@@ -16,6 +16,7 @@
     <dimen name="zc_nav_icon">24dp</dimen>
     <dimen name="zc_nav_indicator_width">50dp</dimen>
     <dimen name="zc_nav_indicator_height">30dp</dimen>
+    <dimen name="zc_navigation_blur_radius">20dp</dimen>
     <dimen name="zc_rail_width">68dp</dimen>
     <dimen name="zc_elevation_low">2dp</dimen>
     <dimen name="zc_elevation_navigation">8dp</dimen>

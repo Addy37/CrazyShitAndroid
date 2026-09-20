@@ -137,7 +137,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         overlayRoot = new FrameLayout(this);
         overlayRoot.setBackgroundColor(ZeroChillUi.background(this));
 
-        shell = new LinearLayout(this);
+        shell = new FrostedNavigationLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(ZeroChillUi.background(this));
         shell.setOnApplyWindowInsetsListener((view, insets) -> {

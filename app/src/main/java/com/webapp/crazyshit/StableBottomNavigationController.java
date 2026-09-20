@@ -37,6 +37,9 @@ final class StableBottomNavigationController {
         nav.setBackground(ZeroChillUi.navigationGlass(context));
         nav.setBackgroundTintList(null);
         nav.setElevation(ZeroChillUi.dimension(context, R.dimen.zc_elevation_navigation));
+        if (nav.getParent() instanceof FrostedNavigationLayout) {
+            ((FrostedNavigationLayout) nav.getParent()).setFrostedNavigationView(nav);
+        }
         nav.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
         nav.setItemHorizontalTranslationEnabled(false);
         nav.setItemRippleColor(ColorStateList.valueOf(

@@ -114,6 +114,7 @@ public class VisualRefreshTest {
         assertEquals("ZEROCHILL", headerTitle.getText().toString());
         assertEquals(View.GONE, headerSubtitle.getVisibility());
         LinearLayout shell = ReflectionHelpers.getField(main, "shell");
+        assertTrue(shell instanceof FrostedNavigationLayout);
         View topBar = shell.getChildAt(0);
         assertTrue(topBar instanceof LinearLayout);
         assertEquals(2, ((LinearLayout) topBar).getChildCount());
@@ -138,6 +139,9 @@ public class VisualRefreshTest {
         assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
         assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
                 nav.getLayoutParams().height);
+        assertSame(nav, ((FrostedNavigationLayout) shell).frostedNavigationViewForTest());
+        assertEquals(BrowseUi.dp(main, 20),
+                main.getResources().getDimensionPixelSize(R.dimen.zc_navigation_blur_radius));
         assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_nav_indicator_height),
                 nav.getItemActiveIndicatorHeight());
         assertEquals(Color.TRANSPARENT,
