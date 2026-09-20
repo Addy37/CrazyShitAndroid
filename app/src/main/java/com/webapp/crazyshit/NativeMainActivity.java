@@ -48,7 +48,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private static final int NAV_HOME = 1;
     private static final int NAV_SERIES = 2;
     @Deprecated private static final int NAV_CATEGORIES = 3;
-    private static final int NAV_LIBRARY = NAV_CATEGORIES;
+    private static final int NAV_ONLYFAP = NAV_CATEGORIES;
     private static final int NAV_CHAOS = 4;
     private static final int NAV_MORE = 5;
     private static final int PLAYER_REQUEST = 3001;
@@ -57,7 +57,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private enum Screen {
         HOME,
         SERIES,
-        LIBRARY,
+        ONLYFAP,
         CHAOS,
         SEARCH
     }
@@ -288,7 +288,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         menu.add(Menu.NONE, NAV_HOME, 0, "Home").setIcon(R.drawable.ic_nav_home);
         menu.add(Menu.NONE, NAV_SERIES, 1, "Collections").setIcon(R.drawable.ic_nav_series);
         menu.add(Menu.NONE, NAV_CHAOS, 2, "ShitTok").setIcon(R.drawable.ic_nav_chaos);
-        menu.add(Menu.NONE, NAV_LIBRARY, 3, "Library").setIcon(R.drawable.ic_nav_categories);
+        menu.add(Menu.NONE, NAV_ONLYFAP, 3, "OnlyFap").setIcon(R.drawable.ic_source_bunkr);
         menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
         bottomNavigation.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
@@ -300,8 +300,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 showSeries();
                 return true;
             }
-            if (id == NAV_LIBRARY) {
-                showLibraryPage();
+            if (id == NAV_ONLYFAP) {
+                showOnlyFapPage();
                 return true;
             }
             if (id == NAV_CHAOS) {
@@ -383,20 +383,18 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         showPrimaryPage(MainPagerAdapter.PAGE_SERIES, true);
     }
 
-    private void showLibraryPage() {
-        showPrimaryPage(MainPagerAdapter.PAGE_LIBRARY, true);
+    private void showOnlyFapPage() {
+        showPrimaryPage(MainPagerAdapter.PAGE_ONLYFAP, true);
     }
 
-    boolean isBunkrCollectionSearchContext() {
+    boolean isOnlyFapSearchContext() {
         return primaryPager != null &&
                 primaryPager.getVisibility() == View.VISIBLE &&
-                primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_SERIES &&
-                primaryPagerAdapter != null &&
-                primaryPagerAdapter.isBunkrCollectionsSelected();
+                primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_ONLYFAP;
     }
 
     void openContextualSearch() {
-        Intent intent = isBunkrCollectionSearchContext()
+        Intent intent = isOnlyFapSearchContext()
                 ? SearchActivity.createBunkrSearch(this)
                 : new Intent(this, SearchActivity.class);
         startActivity(intent);
@@ -429,11 +427,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             feedBaseUrl = CrazyShitRepository.HOME;
             feedTitle = "Collections";
             selectNavSilently(NAV_SERIES);
-        } else if (position == MainPagerAdapter.PAGE_LIBRARY) {
-            screen = Screen.LIBRARY;
+        } else if (position == MainPagerAdapter.PAGE_ONLYFAP) {
+            screen = Screen.ONLYFAP;
             feedBaseUrl = CrazyShitRepository.HOME;
-            feedTitle = "Library";
-            selectNavSilently(NAV_LIBRARY);
+            feedTitle = "OnlyFap";
+            selectNavSilently(NAV_ONLYFAP);
         } else if (position == MainPagerAdapter.PAGE_CHAOS) {
             screen = Screen.CHAOS;
             feedBaseUrl = CrazyShitRepository.HOME;
