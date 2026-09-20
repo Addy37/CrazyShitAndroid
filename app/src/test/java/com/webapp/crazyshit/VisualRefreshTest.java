@@ -150,7 +150,7 @@ public class VisualRefreshTest {
             View tab = nav.findViewById(id);
             assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
             assertTrue(tab.getHeight() >= BrowseUi.dp(main, 48));
-            assertEquals(BrowseUi.dp(main, 2), Math.round(tab.getTranslationY()));
+            assertEquals(0, Math.round(tab.getTranslationY()));
         }
         prefs.edit().putInt("native_view_home", NativeFeedAdapter.VIEW_GRID).apply();
         FeedViewStyleController.prepareVisualRefresh(main);
