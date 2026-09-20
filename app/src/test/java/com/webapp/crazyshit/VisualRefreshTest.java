@@ -161,7 +161,7 @@ public class VisualRefreshTest {
         assertEquals(host.get().getColor(R.color.zc_surface_glass),
                 holder.card.getCardBackgroundColor().getDefaultColor());
         assertEquals(host.get().getColor(R.color.zc_cyan), holder.card.getStrokeColor());
-        assertNull(holder.backdrop.getRenderEffect());
+        assertEquals(0.62f, holder.backdrop.getAlpha(), 0.001f);
         assertEquals(Boolean.TRUE, holder.card.getTag(R.id.zerochill_motion_installed));
 
         adapter.close();
