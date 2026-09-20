@@ -81,10 +81,10 @@ public class VisualRefreshTest {
         View chipRow = (View) homeChips.get(0).getParent();
         View sourceBar = (View) chipRow.getParent();
         assertEquals(View.VISIBLE, sourceBar.getVisibility());
-        assertFalse(((ViewGroup) sourceBar).getClipChildren());
-        assertFalse(((ViewGroup) sourceBar).getClipToPadding());
-        assertFalse(((ViewGroup) chipRow).getClipChildren());
-        assertFalse(((ViewGroup) chipRow).getClipToPadding());
+        assertFalse(((android.view.ViewGroup) sourceBar).getClipChildren());
+        assertFalse(((android.view.ViewGroup) sourceBar).getClipToPadding());
+        assertFalse(((android.view.ViewGroup) chipRow).getClipChildren());
+        assertFalse(((android.view.ViewGroup) chipRow).getClipToPadding());
         assertEquals("CrazyShit", homeChips.get(0).getText().toString());
         assertEquals("EFukt", homeChips.get(1).getText().toString());
         homeChips.get(1).performClick();
