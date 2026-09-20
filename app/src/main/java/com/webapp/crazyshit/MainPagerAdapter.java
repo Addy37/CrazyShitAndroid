@@ -911,7 +911,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                 : page.seriesSource == SERIES_SOURCE_CATEGORIES
                                 ? "Couldn't load Categories right now."
                                 : page.kind == PageKind.SERIES
-                                ? "Couldn't load Series right now."
+                                ? "Couldn't load CrazyShit right now."
                                 : "No videos returned for this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
@@ -930,7 +930,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                 : page.seriesSource == SERIES_SOURCE_CATEGORIES
                                 ? "Couldn't load Categories right now."
                                 : page.kind == PageKind.SERIES
-                                ? "Couldn't load Series right now."
+                                ? "Couldn't load CrazyShit right now."
                                 : "Couldn't load this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
