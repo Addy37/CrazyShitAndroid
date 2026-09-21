@@ -11,7 +11,7 @@ const WIKI_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "pictureHo
   "ajaxTimeoutMs", "retryCount", "searchRoute", "searchSelector"]);
 const WEB_VIDEO_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "userAgent",
   "requestHeaders", "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"]);
-const ONLYHAVEN_FIELDS = new Set([...WEB_VIDEO_FIELDS, "mediaBaseUrl"]);
+const ONLYHAVEN_FIELDS = new Set([...WEB_VIDEO_FIELDS, "mediaBaseUrl", "imageBaseUrl"]);
 const WEB_VIDEO_ROUTES = new Set(["feedFirst", "feedPage"]);
 const WEB_VIDEO_SELECTORS = new Set(["cardLinks", "playableVideo"]);
 const WEB_VIDEO_PATTERNS = new Set(["pageUrl", "scriptMediaUrl"]);
