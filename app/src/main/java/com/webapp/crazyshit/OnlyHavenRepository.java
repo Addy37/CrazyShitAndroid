@@ -213,8 +213,7 @@ final class OnlyHavenRepository {
                 if (!matchesCreatorQuery(query, name, id)) continue;
 
                 String url = config.baseUrl + "creators/" + urlToken(service) + "/" + urlToken(id);
-                String image = firstJsonText(row, "avatarUrl", "avatar_url", "imageUrl", "image_url");
-                if (!image.startsWith("https://")) image = "";
+                String image = creatorImageUrl(config, row, service, id);
                 int postCount = firstJsonInt(
                         row,
                         "postCount",
@@ -395,6 +394,47 @@ final class OnlyHavenRepository {
             if (!value.isEmpty() && !"null".equalsIgnoreCase(value)) return value;
         }
         return "";
+    }
+
+    private String creatorImageUrl(
+            SourceConfig.OnlyHaven config,
+            JSONObject row,
+            String service,
+            String id
+    ) {
+        String direct = firstJsonText(row, "avatarUrl", "avatar_url", "imageUrl", "image_url");
+        if (direct.startsWith("https://")) return direct;
+
+        String thumbHash = firstJsonText(
+                row,
+                "avatarThumbhash",
+                "avatar_thumbhash",
+                "avatar",
+                "avatar_hash"
+        );
+        if (thumbHash.startsWith("https://")) return thumbHash;
+        String cleanHash = clean(thumbHash)
+                .replaceFirst("^/+", "")
+                .replaceFirst("^data/", "")
+                .replaceFirst("^media/", "")
+                .replaceFirst("^thumbnail/", "");
+        int slash = cleanHash.indexOf('/');
+        if (slash >= 0) cleanHash = cleanHash.substring(0, slash);
+        if (!cleanHash.isEmpty()) {
+            return imageBase(config) + "thumbnail/" + cleanHash + "/preview.webp";
+        }
+
+        if (!clean(service).isEmpty() && !clean(id).isEmpty()) {
+            return imageBase(config) + "creator/" + urlToken(service) + "/" +
+                    urlToken(id) + "/avatar.webp";
+        }
+        return "";
+    }
+
+    private String imageBase(SourceConfig.OnlyHaven config) {
+        String base = clean(config.imageBaseUrl);
+        if (base.isEmpty()) base = "https://img.cum.st/";
+        return base.endsWith("/") ? base : base + "/";
     }
 
     private int firstJsonInt(JSONObject object, String... keys) {
