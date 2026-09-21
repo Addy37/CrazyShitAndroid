@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "configVersion": 4,
-  "updatedAt": "2026-09-21T12:20:00Z",
+  "configVersion": 5,
+  "updatedAt": "2026-09-21T13:25:00Z",
   "global": {
     "sourceKillSwitchesEnabled": true,
     "fallbacksEnabled": true
@@ -253,7 +253,8 @@
         "creatorUrl": "(?i)^https?://(?:www\\.)?cum\\.st/creators/([a-z0-9_-]+)/([a-z0-9_-]+)(?:[/?#].*)?$",
         "scriptMediaUrl": "(?i)https?://[^\\s\\\"'<>]+?\\.(?:jpg|jpeg|png|webp|gif|mp4|webm|m4v|m3u8)(?:\\?[^\\s\\\"'<>]*)?"
       },
-      "mediaBaseUrl": "https://e1.cum.st/media/"
+      "mediaBaseUrl": "https://e1.cum.st/media/",
+      "imageBaseUrl": "https://img.cum.st/"
     }
   }
 }
