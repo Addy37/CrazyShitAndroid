@@ -174,7 +174,7 @@ final class FeedViewStyleController {
 
     private static void applySavedMainLayout(NativeMainActivity activity) {
         int mode = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
+                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_LIST));
         applyMainMode(activity, mode);
     }
 
