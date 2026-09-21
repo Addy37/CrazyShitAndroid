@@ -232,6 +232,53 @@ public class VisualRefreshTest {
         assertNotNull(menu); menu.performClick(); assertEquals(1, menus.get());
         adapter.close(); host.pause().stop().destroy();
     }
+    @Test public void homeListUsesWiderMediaReadableTitlesAndCompactMetadata() {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        NativeFeedAdapter.Listener listener = new NativeFeedAdapter.Listener() {
+            public void onOpen(NativeContentItem item) { }
+            public void onLongPress(NativeContentItem item, View anchor) { }
+            public void onComments(NativeContentItem item) { }
+        };
+        NativeContentItem video = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "5 REASONS TO SAY \"WHAT IN THE FUC...\"",
+                "https://crazyshit.com/video/example",
+                "",
+                "41100",
+                "12000",
+                "",
+                ""
+        );
+        RecyclerView parent = new RecyclerView(host.get());
+
+        NativeFeedAdapter homeAdapter = new NativeFeedAdapter(host.get(), listener, true);
+        homeAdapter.setViewMode(NativeFeedAdapter.VIEW_LIST);
+        homeAdapter.replace(Collections.singletonList(video));
+        NativeFeedAdapter.Holder homeHolder = homeAdapter.onCreateViewHolder(parent, NativeFeedAdapter.VIEW_LIST);
+        homeAdapter.onBindViewHolder(homeHolder, 0);
+        ViewGroup homeRow = (ViewGroup) ((ViewGroup) homeHolder.itemView).getChildAt(0);
+        View homeMedia = homeRow.getChildAt(0);
+        assertEquals(BrowseUi.dp(host.get(), 209), homeMedia.getLayoutParams().width);
+        assertEquals("5 Reasons to Say \"What in the Fuc...\"", homeHolder.title.getText().toString());
+        assertEquals(2, homeHolder.title.getMaxLines());
+        assertEquals("41.1K views", homeHolder.info.getText().toString());
+        assertEquals("💬 12K", homeHolder.comments.getText().toString());
+
+        NativeFeedAdapter regularAdapter = new NativeFeedAdapter(host.get(), listener);
+        regularAdapter.setViewMode(NativeFeedAdapter.VIEW_LIST);
+        regularAdapter.replace(Collections.singletonList(video));
+        NativeFeedAdapter.Holder regularHolder = regularAdapter.onCreateViewHolder(parent, NativeFeedAdapter.VIEW_LIST);
+        regularAdapter.onBindViewHolder(regularHolder, 0);
+        ViewGroup regularRow = (ViewGroup) ((ViewGroup) regularHolder.itemView).getChildAt(0);
+        View regularMedia = regularRow.getChildAt(0);
+        assertEquals(BrowseUi.dp(host.get(), 166), regularMedia.getLayoutParams().width);
+        assertEquals(video.title, regularHolder.title.getText().toString());
+
+        homeAdapter.close();
+        regularAdapter.close();
+        host.pause().stop().destroy();
+    }
+
     @Test public void creatorGalleryRendersTheSavedGridWithoutFetching() throws Exception {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         String id = BunkrGallerySessionStore.createCreator("Alex Rivera", creator().url, "Alex Rivera");
