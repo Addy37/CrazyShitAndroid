@@ -507,6 +507,10 @@ public final class BunkrGalleryActivity extends Activity {
             startPlayer(position, item, cached, item.url);
             return;
         }
+        if (isOnlyHavenDirectVideo(item)) {
+            startPlayer(position, item, item.url, value(item.uploader));
+            return;
+        }
 
         adapter.setLoading(position, true);
         int requestGeneration = generation;
@@ -850,6 +854,15 @@ public final class BunkrGalleryActivity extends Activity {
         view.setClickable(true);
         view.setFocusable(true);
         return view;
+    }
+
+    private boolean isOnlyHavenDirectVideo(NativeContentItem item) {
+        if (item == null || !item.isVideo()) return false;
+        boolean onlyHaven = OnlyHavenRepository.isOnlyHavenUrl(item.uploader) ||
+                value(item.description).toLowerCase(java.util.Locale.US).contains("onlyhaven");
+        if (!onlyHaven) return false;
+        String lower = value(item.url).toLowerCase(java.util.Locale.US);
+        return lower.matches(".*\\.(?:mp4|m3u8|mpd|webm|m4v)(?:\\?.*)?$");
     }
 
     private String value(String value) {
