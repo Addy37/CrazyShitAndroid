@@ -43,6 +43,17 @@ android {
             "SOURCE_CONFIG_PUBLISHABLE_KEY",
             "\"${System.getenv("SUPABASE_PUBLISHABLE_KEY") ?: ""}\""
         )
+        // Public installed-app metadata only. Reddit still requires API approval for the client.
+        buildConfigField(
+            "String",
+            "REDDIT_CLIENT_ID",
+            "\"${System.getenv("REDDIT_CLIENT_ID") ?: ""}\""
+        )
+        buildConfigField(
+            "String",
+            "REDDIT_API_USERNAME",
+            "\"${System.getenv("REDDIT_API_USERNAME") ?: ""}\""
+        )
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
