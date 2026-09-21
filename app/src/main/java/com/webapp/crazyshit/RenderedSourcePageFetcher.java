@@ -151,7 +151,16 @@ final class RenderedSourcePageFetcher {
         try {
             WebView webView = new WebView(activity);
             activeWebView.set(webView);
-            webView.setVisibility(android.view.View.INVISIBLE);
+            if (requireMedia) {
+                // Keep a real viewport so lazy/JS video players initialize, but make it effectively invisible.
+                webView.setVisibility(android.view.View.VISIBLE);
+                webView.setAlpha(0.01f);
+                webView.setClickable(false);
+                webView.setFocusable(false);
+                webView.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            } else {
+                webView.setVisibility(android.view.View.INVISIBLE);
+            }
             WebSettings settings = webView.getSettings();
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
@@ -210,7 +219,12 @@ final class RenderedSourcePageFetcher {
                 }
             });
 
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(1, 1);
+            FrameLayout.LayoutParams params = requireMedia
+                    ? new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    : new FrameLayout.LayoutParams(1, 1);
             params.gravity = Gravity.BOTTOM | Gravity.END;
             activity.addContentView(webView, params);
 
@@ -252,11 +266,19 @@ final class RenderedSourcePageFetcher {
                 + "const selectors='a[href],img,video,source,iframe[src],meta[property],meta[name],"
                 + "h1,h2,h3,h4,h5,h6,script';"
                 + "const nodes=Array.from(document.querySelectorAll(selectors)).slice(0,3000).map(node);"
+                + "const playerMedia=[];"
+                + "const add=u=>{if(/^https?:/i.test(String(u||''))&&!playerMedia.includes(u))playerMedia.push(u);};"
+                + "for(const v of document.querySelectorAll('video')){add(v.currentSrc);add(v.src);"
+                + "for(const s of v.querySelectorAll('source[src]'))add(s.src);"
+                + "try{v.preload='metadata';v.load();}catch(e){}}"
+                + "try{if(typeof window.jwplayer==='function'){const p=window.jwplayer('thisPlayer');"
+                + "const item=p&&p.getPlaylistItem?p.getPlaylistItem():null;"
+                + "if(item){add(item.file);for(const s of (item.sources||[]))add(s&&s.file);}}}catch(e){}"
                 + "const resources=(performance&&performance.getEntriesByType"
                 + "?performance.getEntriesByType('resource').map(e=>e.name).filter(u=>"
-                + "/^https?:/i.test(u)&&/\\.(m3u8|mpd|mp4|webm|m4v)(?:[?#]|$)/i.test(u)).slice(-40):[]);"
+                + "/^https?:/i.test(u)&&/\\.(m3u8|mpd|mp4|webm|m4v)(?:[?#]|$)/i.test(u)).slice(-60):[]);"
                 + "return JSON.stringify({url:location.href,title:document.title||'',"
-                + "text:(document.body?document.body.innerText:'').slice(0,16000),nodes,resources});})()";
+                + "text:(document.body?document.body.innerText:'').slice(0,16000),nodes,resources,playerMedia});})()";
 
         webView.evaluateJavascript(script, encoded -> {
             try {
@@ -268,6 +290,7 @@ final class RenderedSourcePageFetcher {
                 String body = payload.optString("text");
                 JSONArray nodes = payload.optJSONArray("nodes");
                 JSONArray resources = payload.optJSONArray("resources");
+                JSONArray playerMedia = payload.optJSONArray("playerMedia");
                 StringBuilder html = new StringBuilder("<html><head><title>")
                         .append(Entities.escape(title)).append("</title></head><body>")
                         .append("<div id=\"rendered-source-text\">")
@@ -275,11 +298,21 @@ final class RenderedSourcePageFetcher {
                 if (nodes != null) {
                     for (int index = 0; index < nodes.length(); index++) html.append(nodes.optString(index));
                 }
+                if (playerMedia != null) {
+                    for (int index = 0; index < playerMedia.length(); index++) {
+                        String media = playerMedia.optString(index);
+                        if (isDirectMediaUrl(media)) {
+                            html.append("<source data-player-media=\"1\" src=\"")
+                                    .append(Entities.escape(media)).append("\">");
+                        }
+                    }
+                }
                 if (resources != null) {
                     for (int index = 0; index < resources.length(); index++) {
                         String resource = resources.optString(index);
                         if (isDirectMediaUrl(resource)) {
-                            html.append("<source src=\"").append(Entities.escape(resource)).append("\">");
+                            html.append("<source data-resource-media=\"1\" src=\"")
+                                    .append(Entities.escape(resource)).append("\">");
                         }
                     }
                 }
@@ -292,7 +325,7 @@ final class RenderedSourcePageFetcher {
                 document.setBaseUri(finalUrl);
 
                 boolean pageReady = requireMedia
-                        ? readyMedia(document, capturedMedia.get())
+                        ? readyMedia(document, capturedMedia.get(), attempt)
                         : ready(document, readyHrefFragment);
                 if (pageReady || attempt >= MAX_EXTRACTION_ATTEMPTS) {
                     result.set(document);
@@ -319,11 +352,10 @@ final class RenderedSourcePageFetcher {
         });
     }
 
-    private static boolean readyMedia(Document document, String capturedMedia) {
-        if (isDirectMediaUrl(capturedMedia)) return true;
+    private static boolean readyMedia(Document document, String capturedMedia, int attempt) {
         if (document == null) return false;
         for (org.jsoup.nodes.Element media : document.select(
-                "video[src],video[data-current-src],video source[src],source[src],"
+                "source[data-player-media][src],video[data-current-src],video[src],video source[src],"
                         + "meta[property=og:video][content],meta[property=og:video:url][content],"
                         + "meta[property=og:video:secure_url][content],meta[name=twitter:player:stream][content]"
         )) {
@@ -334,6 +366,15 @@ final class RenderedSourcePageFetcher {
                 value = media.hasAttr("src") ? media.attr("src") : media.attr("content");
             }
             if (isDirectMediaUrl(value)) return true;
+        }
+        // Give JS players a short window to initialize before accepting a generic intercepted
+        // media request, which can otherwise be a pre-roll/ad asset.
+        if (attempt >= 3 && isDirectMediaUrl(capturedMedia)) return true;
+        if (attempt >= 3) {
+            for (org.jsoup.nodes.Element resource :
+                    document.select("source[data-resource-media][src]")) {
+                if (isDirectMediaUrl(resource.absUrl("src"))) return true;
+            }
         }
         return false;
     }
