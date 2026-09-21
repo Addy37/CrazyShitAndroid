@@ -261,7 +261,7 @@ public class VisualRefreshTest {
         View homeMedia = homeRow.getChildAt(0);
         assertEquals(BrowseUi.dp(host.get(), 209), homeMedia.getLayoutParams().width);
         assertEquals("5 Reasons to Say \"What in the Fuc...\"", homeHolder.title.getText().toString());
-        assertEquals(3, homeHolder.title.getMaxLines());
+        assertEquals(4, homeHolder.title.getMaxLines());
         assertEquals("41.1K views", homeHolder.info.getText().toString());
         assertEquals("💬 12K", homeHolder.comments.getText().toString());
 
