@@ -39,6 +39,7 @@ final class ChaosSourceMixer {
     private final EfuktRepository efukt = new EfuktRepository();
     private final BunkrRepository bunkr = new BunkrRepository();
     private final FapelloRepository fapello = new FapelloRepository();
+    private final RedditSourceRepository reddit = new RedditSourceRepository();
     private final ArrayList<NativeContentItem> efuktSeries = new ArrayList<>();
     private final ArrayDeque<NativeContentItem> efuktSeriesDeck = new ArrayDeque<>();
     private final ArrayList<NativeContentItem> bunkrAlbums = new ArrayList<>();
@@ -102,7 +103,11 @@ final class ChaosSourceMixer {
         Collections.shuffle(fapelloItems, random);
         List<NativeContentItem> fapzoneItems = weaveEfukt(bunkrItems, fapelloItems);
         List<NativeContentItem> mixedExternal = weaveEfukt(regularAndEfukt, fapzoneItems);
-        return weaveShitShow(mixedExternal, shitShowItems);
+        ArrayList<NativeContentItem> redditItems =
+                new ArrayList<>(reddit.fetchShitTokBatch(context));
+        Collections.shuffle(redditItems, random);
+        List<NativeContentItem> withReddit = weaveEfukt(mixedExternal, redditItems);
+        return weaveShitShow(withReddit, shitShowItems);
     }
 
     void resetDeck() {
@@ -110,6 +115,7 @@ final class ChaosSourceMixer {
         usedSourcePages.clear();
         starterPending = true;
         shitShow.resetDeck();
+        reddit.resetShitTok();
         efuktSeriesDeck.clear();
         if (efuktSeries.isEmpty()) efuktCatalogAttempted = false;
         bunkrAlbumDeck.clear();
