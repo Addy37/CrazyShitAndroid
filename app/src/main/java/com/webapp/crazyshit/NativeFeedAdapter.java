@@ -962,14 +962,16 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private String buildInfo(NativeContentItem item) {
         ArrayList<String> parts = new ArrayList<>();
+        boolean reddit = RedditSourceRepository.isRedditUrl(item.url);
         if (viewMode == VIEW_CARDS) parts.add(EfuktRepository.isEfuktUrl(item.url) ? "EFukt"
-                : FapelloRepository.isFapelloUrl(item.url) ? "OnlyFap" : "CrazyShit");
+                : FapelloRepository.isFapelloUrl(item.url) ? "OnlyFap"
+                : reddit ? RedditSourceRepository.SOURCE_NAME : "CrazyShit");
         if (!item.isMeme() && item.views != null && !item.views.isEmpty()) {
             String views = viewMode == VIEW_CARDS ? item.views : compactCount(item.views);
             parts.add(views + " views");
         }
         if (item.uploader != null && !item.uploader.isEmpty() &&
-                (viewMode == VIEW_CARDS || "EFukt".equalsIgnoreCase(item.uploader))) {
+                (viewMode == VIEW_CARDS || reddit || "EFukt".equalsIgnoreCase(item.uploader))) {
             parts.add(item.uploader);
         }
         if (item.isMeme() && parts.isEmpty()) parts.add("Image");
