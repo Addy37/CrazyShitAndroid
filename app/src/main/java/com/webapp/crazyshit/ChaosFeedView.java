@@ -445,7 +445,7 @@ public final class ChaosFeedView extends FrameLayout {
     private CrazyShitRepository.StreamInfo resolvePlayable(NativeContentItem item)
             throws Exception {
         if (item == null || item.url == null || item.url.isEmpty()) return null;
-        return PlayableSourceRouter.resolve(activity, item.url);
+        return PlayableSourceRouter.resolve(activity, item);
     }
 
     private boolean shouldRetryResolution(NativeContentItem item, int position) {
