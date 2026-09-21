@@ -67,7 +67,14 @@ public class NavigationIaTest {
         android.widget.FrameLayout.LayoutParams refreshParams =
                 (android.widget.FrameLayout.LayoutParams) refresh.getLayoutParams();
         assertTrue(captionParams.topMargin >= modeParams.topMargin + modeParams.height);
-        assertTrue(refreshParams.topMargin >= captionParams.topMargin + captionParams.height);
+        assertEquals(0, refreshParams.topMargin);
+        assertTrue(modeRow.getParent() instanceof FrostedOverlayLayout);
+        FrostedOverlayLayout root = (FrostedOverlayLayout) modeRow.getParent();
+        assertSame(modeRow, root.frostedOverlayForTest());
+        androidx.recyclerview.widget.RecyclerView recycler =
+                ReflectionHelpers.getField(onlyFap, "recycler");
+        assertEquals(BrowseUi.dp(activity, 127), recycler.getPaddingTop());
+        assertFalse(recycler.getClipToPadding());
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("OnlyFap", title.getText().toString());
         controller.pause().stop().destroy();

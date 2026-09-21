@@ -429,7 +429,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         modes.setOrientation(LinearLayout.HORIZONTAL);
         modes.setGravity(Gravity.CENTER);
         modes.setPadding(dp(12), dp(6), dp(12), dp(6));
-        modes.setBackground(ZeroChillUi.panelGlass(activity));
+        modes.setBackground(ZeroChillUi.navigationGlass(activity));
 
         page.fapzoneTop = fapzoneModeButton("Top 50");
         page.fapzoneNew = fapzoneModeButton("New");
@@ -462,6 +462,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         modeParams.gravity = Gravity.TOP;
         modeParams.setMargins(dp(8), 0, dp(8), 0);
         page.root.addView(modes, modeParams);
+        ((FrostedOverlayLayout) page.root).setFrostedOverlay(modes);
 
         LinearLayout caption = new LinearLayout(activity);
         caption.setOrientation(LinearLayout.HORIZONTAL);
@@ -520,9 +521,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         FrameLayout.LayoutParams refreshParams =
                 (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-        refreshParams.topMargin = dp(124);
+        refreshParams.topMargin = 0;
         page.refresh.setLayoutParams(refreshParams);
-        page.recycler.setPadding(dp(4), dp(3), dp(4), dp(26));
+        page.recycler.setPadding(dp(4), dp(127), dp(4), dp(26));
         page.browseAdapter.setWideCreatorCards(true);
         applyBrowseLayout(page, true);
         updateFapzoneModeButtons(page);
@@ -678,12 +679,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void styleFapzoneModeButton(TextView button, boolean selected) {
-        ZeroChillUi.styleChip(button, selected);
+        ZeroChillUi.styleSourceRailChip(button, selected);
     }
 
     private Page createPageShell(int index, PageKind kind, String prefKey, String baseUrl) {
         Page page = new Page(index, kind, prefKey, baseUrl);
-        page.root = kind == PageKind.FEED || kind == PageKind.SERIES
+        page.root = kind == PageKind.FEED || kind == PageKind.SERIES ||
+                kind == PageKind.ONLYFAP
                 ? new FrostedOverlayLayout(activity)
                 : new FrameLayout(activity);
         page.root.setBackgroundColor(ZeroChillUi.background(activity));
