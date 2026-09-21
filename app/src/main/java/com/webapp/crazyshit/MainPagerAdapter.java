@@ -241,7 +241,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         android.content.SharedPreferences homePrefs =
                 activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
         int savedHomeSource = homePrefs.getInt("home_source", 1);
-        page.homeSource = savedHomeSource >= 1 && savedHomeSource <= 3 ? savedHomeSource : 1;
+        page.homeSource = savedHomeSource >= 1 && savedHomeSource <= 4 ? savedHomeSource : 1;
         if (savedHomeSource != page.homeSource) {
             homePrefs.edit().putInt("home_source", page.homeSource).apply();
         }
@@ -256,8 +256,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         sources.setClipToPadding(false);
         sources.setGravity(Gravity.CENTER_VERTICAL);
         sources.setPadding(dp(12), dp(6), dp(12), dp(6));
-        String[] names = {"CrazyShit", "EFukt", "Kaotic"};
-        int[] sourceIds = {1, 2, 3};
+        String[] names = {"CrazyShit", "EFukt", "Kaotic", RedditSourceRepository.SOURCE_NAME};
+        int[] sourceIds = {1, 2, 3, 4};
         for (int chipIndex = 0; chipIndex < names.length; chipIndex++) {
             final int selected = sourceIds[chipIndex];
             TextView chip = BrowseUi.action(activity, names[chipIndex], names[chipIndex] + " Home feed", v -> {
@@ -291,7 +291,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.empty.setContentDescription("Retry Home feed");
         styleHomeSources(page);
         page.viewMode = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getInt(prefKey, NativeFeedAdapter.VIEW_CARDS);
+                .getInt(prefKey, NativeFeedAdapter.VIEW_LIST);
         if (page.viewMode < NativeFeedAdapter.VIEW_CARDS || page.viewMode > NativeFeedAdapter.VIEW_POSTERS) {
             page.viewMode = NativeFeedAdapter.VIEW_LIST;
         }
@@ -828,6 +828,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                 ? "Couldn't load Categories right now."
                                 : page.kind == PageKind.SERIES
                                 ? "Couldn't load CrazyShit right now."
+                                : page.kind == PageKind.FEED && page.homeSource == 4 &&
+                                        !RedditSourceRepository.isConfigured()
+                                ? RedditSourceRepository.configurationMessage()
                                 : "No videos returned for this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
@@ -847,6 +850,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                 ? "Couldn't load Categories right now."
                                 : page.kind == PageKind.SERIES
                                 ? "Couldn't load CrazyShit right now."
+                                : page.kind == PageKind.FEED && page.homeSource == 4 &&
+                                        !RedditSourceRepository.isConfigured()
+                                ? RedditSourceRepository.configurationMessage()
                                 : "Couldn't load this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
