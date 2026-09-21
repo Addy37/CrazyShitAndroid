@@ -664,7 +664,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, stream.pageUrl);
         intent.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, stream.requestReferer);
         intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, EfuktRepository.isEfuktUrl(stream.pageUrl)
-                ? "efukt" : FapelloRepository.isFapelloUrl(stream.pageUrl) ? "bunkr" : "crazyshit");
+                ? "efukt"
+                : FapelloRepository.isFapelloUrl(stream.pageUrl) ? "bunkr"
+                : RedditSourceRepository.isRedditUrl(stream.pageUrl) ? "reddit"
+                : WebVideoSourceRepository.isKaoticUrl(stream.pageUrl) ? "kaotic"
+                : "crazyshit");
         intent.putExtra(PlayerActivity.EXTRA_TITLE,
                 item != null && item.title != null && !item.title.trim().isEmpty()
                         ? item.title : stream.title);
@@ -700,6 +704,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void openComments(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
+        if (RedditSourceRepository.isRedditUrl(item.url)) {
+            openFallback(item.url);
+            return;
+        }
         new InlineCommentsDialog(
                 this,
                 item.url,
