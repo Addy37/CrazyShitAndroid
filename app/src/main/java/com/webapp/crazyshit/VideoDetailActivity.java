@@ -650,6 +650,8 @@ public class VideoDetailActivity extends Activity {
                     }
                 } catch (Exception ignored) {
                 }
+            } else if (isReddit()) {
+                // Keep Reddit details native without substituting unrelated CrazyShit recommendations.
             } else if (isKaotic()) {
                 try {
                     List<NativeContentItem> kaotic = webVideoSourceRepository.fetchFeed(
@@ -1214,7 +1216,7 @@ public class VideoDetailActivity extends Activity {
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_action_share,
                 "Share",
-                "Send the CrazyShit page",
+                "Send the source page",
                 this::sharePage
         ));
         actions.add(VideoActionSheet.action(
@@ -1315,8 +1317,12 @@ public class VideoDetailActivity extends Activity {
         return "kaotic".equals(source) || WebVideoSourceRepository.isKaoticUrl(pageUrl);
     }
 
+    private boolean isReddit() {
+        return "reddit".equals(source) || RedditSourceRepository.isRedditUrl(pageUrl);
+    }
+
     private boolean supportsComments() {
-        return !isEfukt() && !isBunkr();
+        return !isEfukt() && !isBunkr() && !isReddit();
     }
 
     private void minimizeFromMenu() {
