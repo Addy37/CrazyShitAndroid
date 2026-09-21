@@ -9,6 +9,21 @@ final class PlayableSourceRouter {
     private PlayableSourceRouter() {
     }
 
+    static CrazyShitRepository.StreamInfo resolve(Context context, NativeContentItem item)
+            throws IOException {
+        if (item == null) return null;
+        String pageUrl = item.url == null ? "" : item.url;
+        if (WebVideoSourceRepository.isTheYncUrl(pageUrl)) {
+            return new WebVideoSourceRepository().resolvePlayable(
+                    context,
+                    WebVideoSourceRepository.Source.THEYNC,
+                    pageUrl,
+                    item.imageUrl
+            );
+        }
+        return resolve(context, pageUrl);
+    }
+
     static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl) throws IOException {
         if (WikiFeetRepository.isWikiFeetUrl(pageUrl)) {
             return new WikiFeetRepository().resolvePlayable(pageUrl);
