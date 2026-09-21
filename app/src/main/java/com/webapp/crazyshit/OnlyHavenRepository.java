@@ -3,6 +3,9 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.webkit.CookieManager;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.json.JSONTokener;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -61,6 +64,26 @@ final class OnlyHavenRepository {
                 lastError = error;
             }
         }
+
+        if (creators.isEmpty()) {
+            for (String route : routes) {
+                try {
+                    Document rendered = RenderedSourcePageFetcher.fetch(
+                            context,
+                            config.baseUrl + route,
+                            config.userAgent,
+                            config.requestHeaders,
+                            config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride,
+                            "/creators/"
+                    );
+                    parseCreators(rendered, config, creators, Math.max(1, limit));
+                    if (!creators.isEmpty()) break;
+                } catch (IOException error) {
+                    lastError = error;
+                }
+            }
+        }
+
         if (creators.isEmpty() && lastError != null) throw lastError;
         return new ArrayList<>(creators.values());
     }
@@ -76,12 +99,210 @@ final class OnlyHavenRepository {
         }
         SourceConfig.OnlyHaven config = config();
         if (!config.enabled) throw new IOException("OnlyHaven is temporarily unavailable");
+
+        int safePage = Math.max(1, page);
+        int safeLimit = Math.max(1, limit);
+        int offset = (safePage - 1) * safeLimit;
+        String apiRoute = config.creatorPostsApiRoute
+                .replace("{service}", urlToken(creator.service))
+                .replace("{id}", urlToken(creator.id))
+                .replace("{offset}", String.valueOf(offset))
+                .replace("{limit}", String.valueOf(safeLimit));
+
+        IOException apiFailure = null;
+        try {
+            String body = fetchConfiguredText(context, config, config.baseUrl + apiRoute);
+            List<NativeContentItem> apiItems =
+                    parseCreatorMediaJson(body, config, creator, safeLimit);
+            if (!apiItems.isEmpty()) return apiItems;
+        } catch (IOException error) {
+            apiFailure = error;
+        }
+
         String route = config.creatorPageRoute
                 .replace("{service}", urlToken(creator.service))
                 .replace("{id}", urlToken(creator.id))
-                .replace("{page}", String.valueOf(Math.max(1, page)));
-        Document document = fetchConfigured(context, config, config.baseUrl + route);
-        return parseMedia(document, config, creator, Math.max(1, limit));
+                .replace("{page}", String.valueOf(safePage));
+        try {
+            Document document = fetchConfigured(context, config, config.baseUrl + route);
+            List<NativeContentItem> htmlItems =
+                    parseMedia(document, config, creator, safeLimit);
+            if (!htmlItems.isEmpty() || apiFailure == null) return htmlItems;
+        } catch (IOException htmlFailure) {
+            if (apiFailure == null) throw htmlFailure;
+        }
+
+        throw apiFailure == null
+                ? new IOException("OnlyHaven returned no creator media")
+                : apiFailure;
+    }
+
+    List<NativeContentItem> parseCreatorMediaJson(
+            String body,
+            SourceConfig.OnlyHaven config,
+            Creator creator,
+            int limit
+    ) throws IOException {
+        try {
+            Object root = new JSONTokener(body == null ? "" : body).nextValue();
+            JSONArray posts = null;
+            if (root instanceof JSONArray) {
+                posts = (JSONArray) root;
+            } else if (root instanceof JSONObject) {
+                JSONObject object = (JSONObject) root;
+                for (String key : new String[]{"posts", "items", "results", "data"}) {
+                    posts = object.optJSONArray(key);
+                    if (posts != null) break;
+                }
+            }
+            if (posts == null) return new ArrayList<>();
+
+            LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
+            for (int index = 0; index < posts.length() && items.size() < limit; index++) {
+                JSONObject post = posts.optJSONObject(index);
+                if (post == null) continue;
+                String title = firstJsonText(post, "title", "caption", "name");
+                if (title.isEmpty()) title = creator.name.isEmpty() ? "OnlyHaven media" : creator.name;
+
+                ArrayList<JSONObject> files = new ArrayList<>();
+                addJsonObject(files, post.optJSONObject("file"));
+                addJsonArray(files, post.optJSONArray("attachments"));
+                addJsonArray(files, post.optJSONArray("files"));
+                addJsonArray(files, post.optJSONArray("media"));
+
+                String preview = "";
+                for (JSONObject file : files) {
+                    String candidate = mediaUrl(config, file);
+                    if (isDirectImage(candidate)) {
+                        preview = candidate;
+                        break;
+                    }
+                }
+
+                for (JSONObject file : files) {
+                    if (items.size() >= limit) break;
+                    String candidate = mediaUrl(config, file);
+                    boolean video = isDirectVideo(candidate);
+                    boolean image = isDirectImage(candidate);
+                    if (!video && !image) continue;
+                    NativeContentItem item = new NativeContentItem(
+                            video ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE,
+                            title,
+                            candidate,
+                            image ? candidate : preview,
+                            "",
+                            creator.url,
+                            "",
+                            creator.service + " · OnlyHaven"
+                    );
+                    items.putIfAbsent(candidate, item);
+                }
+            }
+            return new ArrayList<>(items.values());
+        } catch (Exception error) {
+            throw new IOException("OnlyHaven posts API returned unreadable JSON", error);
+        }
+    }
+
+    private void addJsonObject(List<JSONObject> output, JSONObject value) {
+        if (value != null) output.add(value);
+    }
+
+    private void addJsonArray(List<JSONObject> output, JSONArray values) {
+        if (values == null) return;
+        for (int index = 0; index < values.length(); index++) {
+            JSONObject value = values.optJSONObject(index);
+            if (value != null) output.add(value);
+        }
+    }
+
+    private String firstJsonText(JSONObject object, String... keys) {
+        for (String key : keys) {
+            Object raw = object.opt(key);
+            if (!(raw instanceof String)) continue;
+            String value = clean((String) raw);
+            if (!value.isEmpty() && !"null".equalsIgnoreCase(value)) return value;
+        }
+        return "";
+    }
+
+    private String mediaUrl(SourceConfig.OnlyHaven config, JSONObject file) {
+        if (file == null) return "";
+
+        String direct = firstJsonText(file, "url", "src");
+        if (direct.startsWith("https://")) return cleanUrl(direct);
+
+        String storageKey = firstJsonText(file, "storageKey", "storage_key", "sha256");
+        String path = firstJsonText(file, "path");
+        if (storageKey.isEmpty() && path.matches("(?i)^[0-9a-f]{16,}$")) storageKey = path;
+
+        if (!storageKey.isEmpty()) {
+            String variant = preferredVariant(file.optJSONArray("variants"));
+            if (variant.isEmpty()) {
+                String name = firstJsonText(file, "name", "originalFilename", "filename");
+                String extension = extension(name);
+                if (extension.isEmpty()) extension = extensionForMime(firstJsonText(file, "mimeType", "mime_type"));
+                if (extension.isEmpty()) extension = "jpg";
+                variant = "original." + extension;
+            }
+            return config.mediaBaseUrl + stripSlashes(storageKey) + "/" + stripSlashes(variant);
+        }
+
+        if (path.startsWith("https://")) return cleanUrl(path);
+        if (!path.isEmpty()) {
+            String normalized = path.startsWith("/") ? path : "/" + path;
+            if (normalized.startsWith("/data/")) normalized = normalized.substring(5);
+            return config.baseUrl + "data" + normalized;
+        }
+        return "";
+    }
+
+    private String preferredVariant(JSONArray variants) {
+        if (variants == null || variants.length() == 0) return "";
+        String first = "";
+        for (int index = 0; index < variants.length(); index++) {
+            Object raw = variants.opt(index);
+            String name = "";
+            if (raw instanceof JSONObject) {
+                name = firstJsonText((JSONObject) raw, "name", "path", "filename");
+            } else if (raw instanceof String) {
+                name = clean((String) raw);
+            }
+            if (name.isEmpty()) continue;
+            if (first.isEmpty()) first = name;
+            if (name.toLowerCase(Locale.US).contains("original")) return name;
+        }
+        return first;
+    }
+
+    private String extension(String value) {
+        String clean = value == null ? "" : value.trim();
+        int query = clean.indexOf('?');
+        if (query >= 0) clean = clean.substring(0, query);
+        int dot = clean.lastIndexOf('.');
+        if (dot < 0 || dot + 1 >= clean.length()) return "";
+        String extension = clean.substring(dot + 1).toLowerCase(Locale.US);
+        return extension.matches("[a-z0-9]{2,5}") ? extension : "";
+    }
+
+    private String extensionForMime(String mime) {
+        String value = mime == null ? "" : mime.toLowerCase(Locale.US);
+        if (value.contains("jpeg")) return "jpg";
+        if (value.contains("png")) return "png";
+        if (value.contains("gif")) return "gif";
+        if (value.contains("webp")) return "webp";
+        if (value.contains("avif")) return "avif";
+        if (value.contains("mp4")) return "mp4";
+        if (value.contains("webm")) return "webm";
+        if (value.contains("quicktime")) return "mov";
+        return "";
+    }
+
+    private String stripSlashes(String value) {
+        String result = value == null ? "" : value.trim();
+        while (result.startsWith("/")) result = result.substring(1);
+        while (result.endsWith("/")) result = result.substring(0, result.length() - 1);
+        return result;
     }
 
     CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl)
@@ -223,6 +444,41 @@ final class OnlyHavenRepository {
             }
         }
         return "";
+    }
+
+    private String fetchConfiguredText(
+            Context context,
+            SourceConfig.OnlyHaven config,
+            String requested
+    ) throws IOException {
+        IOException failure = null;
+        for (String candidate : candidates(config, requested)) {
+            for (int attempt = 0; attempt <= config.retryCount; attempt++) {
+                try {
+                    Connection connection = Jsoup.connect(candidate)
+                            .userAgent(config.userAgent)
+                            .referrer(config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride)
+                            .timeout(config.requestTimeoutMs)
+                            .maxBodySize(16 * 1024 * 1024)
+                            .followRedirects(true)
+                            .ignoreContentType(true)
+                            .ignoreHttpErrors(false);
+                    for (Map.Entry<String, String> header : config.requestHeaders.entrySet()) {
+                        connection.header(header.getKey(), header.getValue());
+                    }
+                    connection.header("Accept", "application/json,text/plain,*/*;q=0.8");
+                    try {
+                        String cookies = CookieManager.getInstance().getCookie(candidate);
+                        if (cookies != null && !cookies.trim().isEmpty()) connection.header("Cookie", cookies);
+                    } catch (Exception ignored) {
+                    }
+                    return connection.execute().body();
+                } catch (IOException error) {
+                    failure = error;
+                }
+            }
+        }
+        throw failure == null ? new IOException("OnlyHaven API request failed") : failure;
     }
 
     private Document fetchConfigured(
