@@ -245,6 +245,15 @@ final class WebVideoSourceRepository {
             Source source,
             String pageUrl
     ) throws IOException {
+        return resolvePlayable(context, source, pageUrl, "");
+    }
+
+    CrazyShitRepository.StreamInfo resolvePlayable(
+            Context context,
+            Source source,
+            String pageUrl,
+            String thumbnailUrl
+    ) throws IOException {
         if (isDirectMedia(pageUrl)) {
             return new CrazyShitRepository.StreamInfo(pageUrl, pageUrl, source.label);
         }
@@ -281,6 +290,9 @@ final class WebVideoSourceRepository {
             } catch (IOException ignored) {
             }
         }
+        if (media.isEmpty() && source == Source.THEYNC) {
+            media = theYncVideoFromThumbnail(thumbnailUrl);
+        }
         if (media.isEmpty()) {
             int checked = 0;
             for (Element frame : page.select("iframe[src]")) {
@@ -304,9 +316,13 @@ final class WebVideoSourceRepository {
         if (document == null) return "";
 
         for (Element video : document.select(
-                ".stage-video > .inner-stage video[src], #thisPlayer video[src], #thisPlayer source[src]"
+                "source[data-player-media][src],"
+                        + ".stage-video > .inner-stage video[data-current-src],"
+                        + ".stage-video > .inner-stage video[src],"
+                        + "#thisPlayer video[data-current-src],#thisPlayer video[src],#thisPlayer source[src]"
         )) {
-            String candidate = absolute(video, "src", document.location());
+            String attr = video.hasAttr("data-current-src") ? "data-current-src" : "src";
+            String candidate = absolute(video, attr, document.location());
             if (isDirectMedia(candidate) && isTheYncVideoMedia(candidate)) return candidate;
         }
 
@@ -329,6 +345,19 @@ final class WebVideoSourceRepository {
         }
 
         return "";
+    }
+
+    String theYncVideoFromThumbnail(String thumbnailUrl) {
+        String clean = cleanUrl(thumbnailUrl);
+        if (clean.isEmpty()) return "";
+        Pattern thumbnail = Pattern.compile(
+                "(?i)^https?://(?:media\\.theync\\.(?:com|org|net)|"
+                        + "(?:www\\.)?theync\\.(?:com|org|net)/media)/thumbs/"
+                        + "(.+?)\\.(?:flv|mpg|wmv|avi|3gp|qt|mp4|mov|m4v|f4v)"
+        );
+        Matcher matcher = thumbnail.matcher(clean);
+        if (!matcher.find()) return "";
+        return "https://media.theync.com/videos/" + matcher.group(1) + ".mp4";
     }
 
     private String theYncMediaFromScript(String body) {
