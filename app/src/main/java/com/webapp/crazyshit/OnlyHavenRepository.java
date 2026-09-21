@@ -48,12 +48,26 @@ final class OnlyHavenRepository {
         if (value.length() < 2) return new ArrayList<>();
         String encoded = URLEncoder.encode(value, "UTF-8").replace("+", "%20");
 
+        IOException apiError = null;
+        try {
+            String apiRoute = config.creatorSearchApiRoute
+                    .replace("{query}", encoded)
+                    .replace("{limit}", String.valueOf(Math.max(1, Math.min(50, limit))))
+                    .replace("{offset}", "0");
+            String body = fetchConfiguredText(context, config, config.baseUrl + apiRoute);
+            List<Creator> apiCreators =
+                    parseCreatorSearchJson(body, config, value, Math.max(1, limit));
+            if (!apiCreators.isEmpty()) return apiCreators;
+        } catch (IOException error) {
+            apiError = error;
+        }
+
         ArrayList<String> routes = new ArrayList<>();
         routes.add(config.creatorSearchRoute.replace("{query}", encoded));
         routes.add("creators?q=" + encoded);
         routes.add("creators?query=" + encoded);
 
-        IOException lastError = null;
+        IOException lastError = apiError;
         LinkedHashMap<String, Creator> creators = new LinkedHashMap<>();
         for (String route : routes) {
             try {
@@ -86,6 +100,61 @@ final class OnlyHavenRepository {
 
         if (creators.isEmpty() && lastError != null) throw lastError;
         return new ArrayList<>(creators.values());
+    }
+
+    List<Creator> parseCreatorSearchJson(
+            String body,
+            SourceConfig.OnlyHaven config,
+            String query,
+            int limit
+    ) throws IOException {
+        try {
+            Object root = new JSONTokener(body == null ? "" : body).nextValue();
+            JSONArray creators = null;
+            if (root instanceof JSONArray) {
+                creators = (JSONArray) root;
+            } else if (root instanceof JSONObject) {
+                JSONObject object = (JSONObject) root;
+                for (String key : new String[]{"creators", "items", "results", "data"}) {
+                    creators = object.optJSONArray(key);
+                    if (creators != null) break;
+                }
+            }
+            if (creators == null) return new ArrayList<>();
+
+            LinkedHashMap<String, Creator> result = new LinkedHashMap<>();
+            for (int index = 0; index < creators.length() && result.size() < limit; index++) {
+                JSONObject row = creators.optJSONObject(index);
+                if (row == null) continue;
+                String service = firstJsonText(row, "service");
+                String id = firstJsonText(row, "id", "creatorId", "creator_id", "user");
+                String name = firstJsonText(row, "displayName", "display_name", "name", "username");
+                if (service.isEmpty() || id.isEmpty()) continue;
+                if (name.isEmpty()) name = id;
+                if (!matchesCreatorQuery(query, name, id)) continue;
+
+                String url = config.baseUrl + "creators/" + urlToken(service) + "/" + urlToken(id);
+                String image = firstJsonText(row, "avatarUrl", "avatar_url", "imageUrl", "image_url");
+                if (!image.startsWith("https://")) image = "";
+                String key = service.toLowerCase(Locale.US) + ":" + id.toLowerCase(Locale.US);
+                result.putIfAbsent(key, new Creator(service, id, name, url, image));
+            }
+            return new ArrayList<>(result.values());
+        } catch (Exception error) {
+            throw new IOException("OnlyHaven creator search API returned unreadable JSON", error);
+        }
+    }
+
+    private boolean matchesCreatorQuery(String query, String name, String id) {
+        String wanted = compactName(query);
+        if (wanted.isEmpty()) return true;
+        String named = compactName(name);
+        String identifier = compactName(id);
+        return named.contains(wanted) || wanted.contains(named) || identifier.equals(wanted);
+    }
+
+    private String compactName(String value) {
+        return clean(value).toLowerCase(Locale.US).replaceAll("[^a-z0-9]", "");
     }
 
     List<NativeContentItem> fetchCreatorMedia(
@@ -219,8 +288,8 @@ final class OnlyHavenRepository {
     private String firstJsonText(JSONObject object, String... keys) {
         for (String key : keys) {
             Object raw = object.opt(key);
-            if (!(raw instanceof String)) continue;
-            String value = clean((String) raw);
+            if (!(raw instanceof String) && !(raw instanceof Number)) continue;
+            String value = clean(String.valueOf(raw));
             if (!value.isEmpty() && !"null".equalsIgnoreCase(value)) return value;
         }
         return "";
