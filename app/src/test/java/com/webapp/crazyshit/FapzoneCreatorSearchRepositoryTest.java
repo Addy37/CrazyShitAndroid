@@ -9,6 +9,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -32,7 +33,12 @@ public final class FapzoneCreatorSearchRepositoryTest {
                 (ignoredContext, query, limit) ->
                         Collections.singletonList(creator("Fast Creator", "Fapello")),
                 (ignoredContext, query, limit) -> {
-                    assertTrue(firstPublished.await(2, TimeUnit.SECONDS));
+                    try {
+                        assertTrue(firstPublished.await(2, TimeUnit.SECONDS));
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException(interrupted);
+                    }
                     return Collections.singletonList(creator("Slow Creator", "OnlyHaven"));
                 }
         );
