@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "configVersion": 3,
-  "updatedAt": "2026-09-21T11:15:00Z",
+  "configVersion": 4,
+  "updatedAt": "2026-09-21T12:20:00Z",
   "global": {
     "sourceKillSwitchesEnabled": true,
     "fallbacksEnabled": true
@@ -239,6 +239,7 @@
       "retryCount": 1,
       "routes": {
         "creatorSearch": "creators?search={query}",
+        "creatorSearchApi": "api/v1/creators?q={query}&n={limit}&o={offset}",
         "creatorPage": "creators/{service}/{id}?page={page}",
         "creatorPostsApi": "api/v1/{service}/user/{id}/posts?o={offset}&n={limit}"
       },
