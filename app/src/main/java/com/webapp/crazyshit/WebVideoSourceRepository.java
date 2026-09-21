@@ -40,6 +40,9 @@ final class WebVideoSourceRepository {
                     + "(?:january|february|march|april|may|june|july|august|september|october|november|december)\\s+"
                     + "\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?$"
     );
+    private static final Pattern THEYNC_VIDEO_ID = Pattern.compile(
+            "(?i)^https?://(?:www\\.)?theync\\.com/video/(\\d+)(?:/[^?#]*)?"
+    );
 
     List<NativeContentItem> fetchFeed(Context context, Source source, int page) throws IOException {
         SourceConfig.WebVideo config = config(source);
@@ -116,6 +119,7 @@ final class WebVideoSourceRepository {
             if (!node.is(config.cardLinksSelector)) continue;
             String pageUrl = absolute(node, "href", document.location());
             if (pageUrl.isEmpty() || !config.pageUrlPattern.matcher(pageUrl).find()) continue;
+            if (source == Source.THEYNC) pageUrl = canonicalTheYncPageUrl(pageUrl);
 
             Element scope = cardScope(node);
             String title = title(node, scope, pageUrl);
@@ -132,9 +136,13 @@ final class WebVideoSourceRepository {
                     ""
             );
 
-            Integer oldPosition = positions.get(pageUrl);
+            String feedKey = feedKey(source, pageUrl);
+            Integer oldPosition = positions.get(feedKey);
             if (oldPosition != null) {
-                result.set(oldPosition, result.get(oldPosition).merge(candidate));
+                NativeContentItem old = result.get(oldPosition);
+                result.set(oldPosition, source == Source.THEYNC
+                        ? mergeTheYnc(old, candidate)
+                        : old.merge(candidate));
                 continue;
             }
 
@@ -152,12 +160,64 @@ final class WebVideoSourceRepository {
                 pendingHeader = "";
             }
 
-            positions.put(pageUrl, result.size());
+            positions.put(feedKey, result.size());
             result.add(candidate);
             mediaCount++;
             if (mediaCount >= 60) break;
         }
         return result;
+    }
+
+    private String feedKey(Source source, String pageUrl) {
+        if (source != Source.THEYNC) return pageUrl;
+        Matcher matcher = THEYNC_VIDEO_ID.matcher(pageUrl);
+        return matcher.find() ? "theync:" + matcher.group(1) : pageUrl;
+    }
+
+    private String canonicalTheYncPageUrl(String pageUrl) {
+        try {
+            URI uri = new URI(pageUrl);
+            Matcher matcher = THEYNC_VIDEO_ID.matcher(pageUrl);
+            if (!matcher.find()) return pageUrl;
+            String path = uri.getPath();
+            return new URI(uri.getScheme(), uri.getAuthority(), path, null, null).toASCIIString();
+        } catch (Exception ignored) {
+            int query = pageUrl.indexOf('?');
+            int fragment = pageUrl.indexOf('#');
+            int end = pageUrl.length();
+            if (query >= 0) end = Math.min(end, query);
+            if (fragment >= 0) end = Math.min(end, fragment);
+            return pageUrl.substring(0, end);
+        }
+    }
+
+    private NativeContentItem mergeTheYnc(NativeContentItem old, NativeContentItem candidate) {
+        if (old == null) return candidate;
+        if (candidate == null) return old;
+        String title = betterTheYncTitle(old.title, candidate.title);
+        return new NativeContentItem(
+                old.kind,
+                title,
+                old.url.isEmpty() ? candidate.url : old.url,
+                old.imageUrl.isEmpty() ? candidate.imageUrl : old.imageUrl,
+                old.views.isEmpty() ? candidate.views : old.views,
+                old.uploader.isEmpty() ? candidate.uploader : old.uploader,
+                old.comments.isEmpty() ? candidate.comments : old.comments,
+                old.description.isEmpty() ? candidate.description : old.description,
+                old.searchQuery.isEmpty() ? candidate.searchQuery : old.searchQuery
+        );
+    }
+
+    private String betterTheYncTitle(String first, String second) {
+        String left = clean(first);
+        String right = clean(second);
+        boolean leftNumeric = left.matches("[0-9,.]+");
+        boolean rightNumeric = right.matches("[0-9,.]+");
+        if (leftNumeric && !rightNumeric) return right;
+        if (rightNumeric && !leftNumeric) return left;
+        if (left.isEmpty()) return right;
+        if (right.isEmpty()) return left;
+        return left.length() >= right.length() ? left : right;
     }
 
     private String kaoticSection(Element element) {
@@ -193,26 +253,24 @@ final class WebVideoSourceRepository {
             page = fetchConfigured(context, config, pageUrl);
         } catch (IOException error) {
             if (source != Source.THEYNC) throw error;
-            page = RenderedSourcePageFetcher.fetch(
+            page = RenderedSourcePageFetcher.fetchMedia(
                     context,
                     pageUrl,
                     config.userAgent,
                     config.requestHeaders,
-                    config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride,
-                    "/video/"
+                    config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride
             );
         }
         String title = clean(page.title());
         String media = playableFromDocument(page, config);
         if (media.isEmpty() && source == Source.THEYNC) {
             try {
-                Document rendered = RenderedSourcePageFetcher.fetch(
+                Document rendered = RenderedSourcePageFetcher.fetchMedia(
                         context,
                         pageUrl,
                         config.userAgent,
                         config.requestHeaders,
-                        config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride,
-                        "/video/"
+                        config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride
                 );
                 media = playableFromDocument(rendered, config);
                 if (title.isEmpty()) title = clean(rendered.title());
