@@ -135,7 +135,7 @@ public final class RemoteSourceConfigManagerTest {
 
     @Test public void newerFetchedConfigActivatesAndFailedRefreshKeepsIt() throws Exception {
         JSONObject newer = defaults();
-        newer.put("configVersion", 4);
+        newer.put("configVersion", 3);
         newer.put("updatedAt", "2026-09-21T12:00:00Z");
         RemoteSourceConfigManager.refreshForTests(context,
                 (endpoint, key, currentVersion) ->
@@ -151,7 +151,7 @@ public final class RemoteSourceConfigManagerTest {
 
     @Test public void olderVersionCannotReplaceNewerKnownGood() throws Exception {
         JSONObject newer = defaults();
-        newer.put("configVersion", 3);
+        newer.put("configVersion", 4);
         newer.put("updatedAt", "2026-09-13T13:00:00Z");
         RemoteSourceConfigManager.applyRemoteForTests(context, newer.toString());
         JSONObject older = defaults();
