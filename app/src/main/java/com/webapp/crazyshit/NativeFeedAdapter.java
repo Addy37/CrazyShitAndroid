@@ -548,7 +548,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         title.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_primary));
         title.setTextSize(titleSize);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setMaxLines(2);
+        title.setMaxLines(homePresentation && viewMode == VIEW_LIST ? 3 : 2);
         title.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout titleRow = new LinearLayout(parent.getContext());
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
