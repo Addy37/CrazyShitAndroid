@@ -13,6 +13,9 @@ final class PlayableSourceRouter {
             throws IOException {
         if (item == null) return null;
         String pageUrl = item.url == null ? "" : item.url;
+        if (RedditSourceRepository.isRedditItem(item)) {
+            return new RedditSourceRepository().resolvePlayable(context, item);
+        }
         if (WebVideoSourceRepository.isTheYncUrl(pageUrl)) {
             return new WebVideoSourceRepository().resolvePlayable(
                     context,
@@ -25,6 +28,9 @@ final class PlayableSourceRouter {
     }
 
     static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl) throws IOException {
+        if (RedditSourceRepository.isRedditUrl(pageUrl)) {
+            return new RedditSourceRepository().resolvePlayable(context, pageUrl);
+        }
         if (WikiFeetRepository.isWikiFeetUrl(pageUrl)) {
             return new WikiFeetRepository().resolvePlayable(pageUrl);
         }
