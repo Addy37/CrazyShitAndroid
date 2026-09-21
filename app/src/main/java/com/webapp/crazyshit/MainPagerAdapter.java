@@ -241,7 +241,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         android.content.SharedPreferences homePrefs =
                 activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
         int savedHomeSource = homePrefs.getInt("home_source", 1);
-        page.homeSource = savedHomeSource >= 1 && savedHomeSource <= 5 ? savedHomeSource : 1;
+        page.homeSource = savedHomeSource >= 1 && savedHomeSource <= 3 ? savedHomeSource : 1;
         if (savedHomeSource != page.homeSource) {
             homePrefs.edit().putInt("home_source", page.homeSource).apply();
         }
@@ -256,8 +256,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         sources.setClipToPadding(false);
         sources.setGravity(Gravity.CENTER_VERTICAL);
         sources.setPadding(dp(12), dp(6), dp(12), dp(6));
-        String[] names = {"CrazyShit", "EFukt", "Kaotic", "TheYNC", "ItemFix"};
-        int[] sourceIds = {1, 2, 3, 4, 5};
+        String[] names = {"CrazyShit", "EFukt", "Kaotic"};
+        int[] sourceIds = {1, 2, 3};
         for (int chipIndex = 0; chipIndex < names.length; chipIndex++) {
             final int selected = sourceIds[chipIndex];
             TextView chip = BrowseUi.action(activity, names[chipIndex], names[chipIndex] + " Home feed", v -> {
