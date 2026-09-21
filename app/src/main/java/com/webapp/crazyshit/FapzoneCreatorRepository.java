@@ -440,7 +440,7 @@ final class FapzoneCreatorRepository {
     }
 
     private String cacheName(int mode) {
-        if (mode == MODE_TOP_50) return "onlyfap_trending_v1";
+        if (mode == MODE_TOP_50) return "onlyfap_trending_v2";
         // v3 discards cards cached before static Fapello routes were excluded from listings.
         return "fapzone_creator_feed_v3_" + mode;
     }
