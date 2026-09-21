@@ -239,7 +239,8 @@
       "retryCount": 1,
       "routes": {
         "creatorSearch": "creators?search={query}",
-        "creatorPage": "creators/{service}/{id}?page={page}"
+        "creatorPage": "creators/{service}/{id}?page={page}",
+        "creatorPostsApi": "api/v1/{service}/user/{id}/posts?o={offset}&n={limit}"
       },
       "selectors": {
         "creatorLinks": "a[href*=/creators/]",
@@ -250,7 +251,8 @@
       "patterns": {
         "creatorUrl": "(?i)^https?://(?:www\\.)?cum\\.st/creators/([a-z0-9_-]+)/([a-z0-9_-]+)(?:[/?#].*)?$",
         "scriptMediaUrl": "(?i)https?://[^\\s\\\"'<>]+?\\.(?:jpg|jpeg|png|webp|gif|mp4|webm|m4v|m3u8)(?:\\?[^\\s\\\"'<>]*)?"
-      }
+      },
+      "mediaBaseUrl": "https://e1.cum.st/media/"
     }
   }
 }
