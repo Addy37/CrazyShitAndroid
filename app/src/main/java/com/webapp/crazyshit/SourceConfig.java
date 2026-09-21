@@ -276,7 +276,7 @@ final class SourceConfig {
                 "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"
         ), "sources.onlyhaven");
         JSONObject routes = requiredObject(value, "routes");
-        rejectUnknown(routes, set("creatorSearch", "creatorPage", "creatorPostsApi"),
+        rejectUnknown(routes, set("creatorSearch", "creatorSearchApi", "creatorPage", "creatorPostsApi"),
                 "sources.onlyhaven.routes");
         JSONObject selectors = requiredObject(value, "selectors");
         rejectUnknown(selectors, set(
@@ -296,6 +296,7 @@ final class SourceConfig {
                 timeout(value, "requestTimeoutMs"),
                 retryCount(value),
                 route(routes, "creatorSearch", set("query")),
+                route(routes, "creatorSearchApi", set("query", "limit", "offset")),
                 route(routes, "creatorPage", set("service", "id", "page")),
                 route(routes, "creatorPostsApi", set("service", "id", "offset", "limit")),
                 selector(selectors, "creatorLinks"),
@@ -629,7 +630,7 @@ final class SourceConfig {
     static final class OnlyHaven {
         final boolean enabled;
         final String baseUrl, mediaBaseUrl, userAgent, refererOverride, creatorSearchRoute,
-                creatorPageRoute, creatorPostsApiRoute;
+                creatorSearchApiRoute, creatorPageRoute, creatorPostsApiRoute;
         final List<String> fallbackDomains;
         final Map<String, String> requestHeaders;
         final int requestTimeoutMs, retryCount;
@@ -639,7 +640,7 @@ final class SourceConfig {
         OnlyHaven(boolean enabled, String baseUrl, List<String> fallbackDomains, String mediaBaseUrl,
                   String userAgent, Map<String, String> requestHeaders, String refererOverride,
                   int requestTimeoutMs, int retryCount, String creatorSearchRoute,
-                  String creatorPageRoute, String creatorPostsApiRoute,
+                  String creatorSearchApiRoute, String creatorPageRoute, String creatorPostsApiRoute,
                   String creatorLinksSelector, String mediaLinksSelector,
                   String playableVideoSelector, String playableImageSelector,
                   Pattern creatorUrlPattern, Pattern scriptMediaUrlPattern) {
@@ -647,6 +648,7 @@ final class SourceConfig {
             this.mediaBaseUrl = mediaBaseUrl; this.userAgent = userAgent; this.requestHeaders = requestHeaders;
             this.refererOverride = refererOverride; this.requestTimeoutMs = requestTimeoutMs;
             this.retryCount = retryCount; this.creatorSearchRoute = creatorSearchRoute;
+            this.creatorSearchApiRoute = creatorSearchApiRoute;
             this.creatorPageRoute = creatorPageRoute; this.creatorPostsApiRoute = creatorPostsApiRoute;
             this.creatorLinksSelector = creatorLinksSelector;
             this.mediaLinksSelector = mediaLinksSelector; this.playableVideoSelector = playableVideoSelector;
