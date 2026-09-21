@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "configVersion": 2,
-  "updatedAt": "2026-09-21T10:00:00Z",
+  "configVersion": 3,
+  "updatedAt": "2026-09-21T11:15:00Z",
   "global": {
     "sourceKillSwitchesEnabled": true,
     "fallbacksEnabled": true
@@ -213,8 +213,8 @@
       "requestTimeoutMs": 18000,
       "retryCount": 1,
       "routes": {
-        "feedFirst": "",
-        "feedPage": "list?page={page}"
+        "feedFirst": "list?order_by=newest_added",
+        "feedPage": "list?order_by=newest_added&page={page}"
       },
       "selectors": {
         "cardLinks": "a[href*='/v?t='],a[href*=\"/v?t=\"]",
