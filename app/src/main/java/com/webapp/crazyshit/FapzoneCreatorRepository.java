@@ -161,47 +161,78 @@ final class FapzoneCreatorRepository {
             listener.onProgress(new ArrayList<>(stale));
         }
 
-        IOException failure = null;
+        List<OnlyHavenRepository.Creator> creators;
         try {
-            List<OnlyHavenRepository.Creator> creators =
-                    onlyHaven.fetchTrendingCreators(context, TRENDING_ITEMS);
-            ArrayList<NativeContentItem> result = new ArrayList<>();
-            for (OnlyHavenRepository.Creator creator : creators) {
-                if (creator == null || !OnlyHavenRepository.isOnlyHavenUrl(creator.url)) continue;
-                StringBuilder description = new StringBuilder("OnlyHaven");
-                String service = serviceLabel(creator.service);
-                if (!service.isEmpty()) description.append(" · ").append(service);
-                if (creator.postCount >= 0) {
-                    description.append(" · ")
-                            .append(String.format(Locale.US, "%,d", creator.postCount))
-                            .append(creator.postCount == 1 ? " post" : " posts");
-                }
-                result.add(new NativeContentItem(
-                        NativeContentItem.KIND_CREATOR,
-                        creator.name,
-                        creator.url,
-                        creator.imageUrl,
-                        String.valueOf(result.size() + 1),
-                        creator.url,
-                        "",
-                        description.toString(),
-                        creator.name
-                ));
-                if (result.size() >= TRENDING_ITEMS) break;
-            }
-            if (!result.isEmpty()) {
-                writeCache(appContext, MODE_TOP_50, result);
-                if (listener != null) listener.onProgress(new ArrayList<>(result));
-                return result;
-            }
+            creators = onlyHaven.fetchTrendingCreators(context, TRENDING_ITEMS);
         } catch (IOException error) {
-            failure = error;
+            if (!stale.isEmpty()) return stale;
+            throw error;
+        }
+        if (creators == null || creators.isEmpty()) {
+            if (!stale.isEmpty()) return stale;
+            throw new IOException("No OnlyHaven trending creators were available");
         }
 
+        ExecutorService workers = Executors.newFixedThreadPool(10);
+        ExecutorCompletionService<ResolvedCreator> completed =
+                new ExecutorCompletionService<>(workers);
+        int submitted = 0;
+        for (int index = 0; index < creators.size() && index < TRENDING_ITEMS; index++) {
+            OnlyHavenRepository.Creator creator = creators.get(index);
+            if (creator == null || !OnlyHavenRepository.isOnlyHavenUrl(creator.url)) continue;
+            int rank = index;
+            completed.submit(() -> resolveTrending(context, rank, creator));
+            submitted++;
+        }
+
+        ArrayList<ResolvedCreator> resolved = new ArrayList<>();
+        int lastPublished = stale.size();
+        long deadline = SystemClock.elapsedRealtime() + FETCH_BUDGET_MS;
+        try {
+            for (int i = 0; i < submitted; i++) {
+                long remaining = deadline - SystemClock.elapsedRealtime();
+                if (remaining <= 0L) break;
+                Future<ResolvedCreator> future = completed.poll(remaining, TimeUnit.MILLISECONDS);
+                if (future == null) break;
+                try {
+                    ResolvedCreator creator = future.get();
+                    if (creator == null) continue;
+                    resolved.add(creator);
+                    if (listener != null) {
+                        ArrayList<NativeContentItem> progress =
+                                buildItems(resolved, TRENDING_ITEMS);
+                        int milestone = Math.min(
+                                TRENDING_ITEMS,
+                                ((lastPublished / PROGRESS_STEP) + 1) * PROGRESS_STEP
+                        );
+                        if (progress.size() >= milestone) {
+                            lastPublished = progress.size();
+                            listener.onProgress(progress);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } finally {
+            workers.shutdownNow();
+        }
+
+        ArrayList<NativeContentItem> result = mergeWarm(
+                buildItems(resolved, TRENDING_ITEMS),
+                stale,
+                TRENDING_ITEMS
+        );
+        if (listener != null && !result.isEmpty()) {
+            listener.onProgress(new ArrayList<>(result));
+        }
+        if (!result.isEmpty()) {
+            writeCache(appContext, MODE_TOP_50, result);
+            return result;
+        }
         if (!stale.isEmpty()) return stale;
-        throw failure == null
-                ? new IOException("No OnlyHaven trending creators were available")
-                : failure;
+        throw new IOException("No OnlyHaven trending creators were available");
     }
 
     static String titleFor(int mode) {
@@ -223,6 +254,98 @@ final class FapzoneCreatorRepository {
         if (mode == MODE_HOT) return "HOT";
         if (mode == MODE_POPULAR) return "POP";
         return "LIVE";
+    }
+
+    private ResolvedCreator resolveTrending(
+            Context context,
+            int rank,
+            OnlyHavenRepository.Creator creator
+    ) {
+        FapelloRepository.Model model = null;
+        try {
+            model = chooseFapelloModel(
+                    creator.name,
+                    fapello.searchConfirmedModels(context, creator.name, 6)
+            );
+        } catch (Exception ignored) {
+        }
+
+        NativeContentItem album = null;
+        try {
+            album = chooseAlbum(creator.name, bunkr.searchAlbums(context, creator.name, 1));
+        } catch (Exception ignored) {
+        }
+
+        String fapelloPreview = model == null ? "" : clean(model.imageUrl);
+        if (model != null && fapelloPreview.isEmpty()) {
+            try {
+                fapelloPreview = chooseFapelloPreview(fapello.fetchModelMedia(context, model, 1));
+            } catch (Exception ignored) {
+            }
+        }
+
+        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
+        String imageUrl = chooseThumbnail(fapelloPreview, bunkrPreview);
+        String cardUrl;
+        String imageReferer;
+        if (!fapelloPreview.isEmpty() && imageUrl.equals(fapelloPreview) && model != null) {
+            cardUrl = model.url;
+            imageReferer = model.url;
+        } else if (album != null) {
+            cardUrl = album.url;
+            imageReferer = album.url;
+        } else if (model != null) {
+            cardUrl = model.url;
+            imageReferer = model.url;
+        } else {
+            cardUrl = creator.url;
+            imageReferer = creator.url;
+        }
+
+        // OnlyHaven decides the live rank. Artwork is resolved the same way as the
+        // New, Hot and Popular tabs so creator cards use the proven Fapello/Bunkr path.
+        NativeContentItem item = new NativeContentItem(
+                NativeContentItem.KIND_CREATOR,
+                creator.name,
+                cardUrl,
+                imageUrl,
+                String.valueOf(rank + 1),
+                imageReferer,
+                "",
+                trendingDescription(creator),
+                creator.name
+        );
+        return new ResolvedCreator(rank, item);
+    }
+
+    private FapelloRepository.Model chooseFapelloModel(
+            String creatorName,
+            List<FapelloRepository.Model> models
+    ) {
+        if (models == null || models.isEmpty()) return null;
+        FapelloRepository.Model best = null;
+        int bestRank = Integer.MAX_VALUE;
+        for (FapelloRepository.Model model : models) {
+            if (model == null || !FapelloRepository.isModelUrl(model.url)) continue;
+            int match = CreatorNameMatcher.rank(model.name, creatorName);
+            if (match < bestRank) {
+                best = model;
+                bestRank = match;
+            }
+        }
+        return bestRank == Integer.MAX_VALUE ? null : best;
+    }
+
+    private String trendingDescription(OnlyHavenRepository.Creator creator) {
+        StringBuilder description = new StringBuilder("OnlyHaven");
+        String service = serviceLabel(creator.service);
+        if (!service.isEmpty()) description.append(" · ").append(service);
+        if (creator.postCount >= 0) {
+            description.append(" · ")
+                    .append(String.format(Locale.US, "%,d", creator.postCount))
+                    .append(creator.postCount == 1 ? " post" : " posts");
+        }
+        return description.toString();
     }
 
     private ResolvedCreator resolve(
@@ -330,6 +453,13 @@ final class FapzoneCreatorRepository {
     }
 
     private ArrayList<NativeContentItem> buildItems(List<ResolvedCreator> creators) {
+        return buildItems(creators, LIVE_ITEMS);
+    }
+
+    private ArrayList<NativeContentItem> buildItems(
+            List<ResolvedCreator> creators,
+            int limit
+    ) {
         creators.sort(Comparator.comparingInt(value -> value.rank));
         ArrayList<NativeContentItem> result = new ArrayList<>();
         Set<String> names = new HashSet<>();
@@ -337,7 +467,7 @@ final class FapzoneCreatorRepository {
             if (creator == null || creator.item == null ||
                     !names.add(compact(creator.item.title))) continue;
             result.add(creator.item);
-            if (result.size() >= LIVE_ITEMS) break;
+            if (result.size() >= limit) break;
         }
         return result;
     }
@@ -345,6 +475,14 @@ final class FapzoneCreatorRepository {
     private ArrayList<NativeContentItem> mergeWarm(
             List<NativeContentItem> resolved,
             List<NativeContentItem> warm
+    ) {
+        return mergeWarm(resolved, warm, LIVE_ITEMS);
+    }
+
+    private ArrayList<NativeContentItem> mergeWarm(
+            List<NativeContentItem> resolved,
+            List<NativeContentItem> warm,
+            int limit
     ) {
         LinkedHashMap<String, NativeContentItem> merged = new LinkedHashMap<>();
         if (resolved != null) {
@@ -359,8 +497,8 @@ final class FapzoneCreatorRepository {
         }
         ArrayList<NativeContentItem> result = new ArrayList<>(merged.values());
         result.sort(Comparator.comparingInt(item -> parseRank(item.views)));
-        if (result.size() > LIVE_ITEMS) {
-            return new ArrayList<>(result.subList(0, LIVE_ITEMS));
+        if (result.size() > limit) {
+            return new ArrayList<>(result.subList(0, limit));
         }
         return result;
     }
@@ -440,7 +578,7 @@ final class FapzoneCreatorRepository {
     }
 
     private String cacheName(int mode) {
-        if (mode == MODE_TOP_50) return "onlyfap_trending_v2";
+        if (mode == MODE_TOP_50) return "onlyfap_trending_v3";
         // v3 discards cards cached before static Fapello routes were excluded from listings.
         return "fapzone_creator_feed_v3_" + mode;
     }
