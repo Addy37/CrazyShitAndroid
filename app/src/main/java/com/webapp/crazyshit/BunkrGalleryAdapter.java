@@ -63,25 +63,34 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     void replace(List<NativeContentItem> incoming) {
+        replace(incoming, true);
+    }
+
+    void replace(List<NativeContentItem> incoming, boolean preloadAhead) {
         items.clear();
         addUnique(incoming);
         notifyDataSetChanged();
-        preloadRange(0, Math.min(items.size(), 18));
+        if (preloadAhead) preloadRange(0, Math.min(items.size(), 12));
     }
 
     void append(List<NativeContentItem> incoming) {
+        append(incoming, true);
+    }
+
+    void append(List<NativeContentItem> incoming, boolean preloadAhead) {
         int start = items.size();
         addUnique(incoming);
         int added = items.size() - start;
         if (added > 0) {
             notifyItemRangeInserted(start, added);
-            preloadRange(start, Math.min(items.size(), start + 18));
+            if (preloadAhead) preloadRange(start, Math.min(items.size(), start + 12));
         }
     }
 
     void preloadVisible(int first, int last) {
         int from = Math.max(0, first);
-        int to = Math.min(items.size(), Math.max(from, last + 12));
+        int lookAhead = adaptiveAspectRatios ? 6 : 12;
+        int to = Math.min(items.size(), Math.max(from, last + lookAhead));
         preloadRange(from, to);
     }
 
@@ -219,6 +228,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             if (adaptiveAspectRatios) {
                 request = request
                         .dontTransform()
+                        .override(720, 720)
                         .listener(new RequestListener<Drawable>() {
                             @Override
                             public boolean onLoadFailed(
@@ -244,6 +254,16 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         });
             } else {
                 request = request.centerCrop().override(360, 360);
+            }
+            if (isOnlyHavenImagePreview(item)) {
+                RequestBuilder<Drawable> fallback = Glide.with(holder.image)
+                        .load(withHeaders(item.url, imageReferer(item)))
+                        .diskCacheStrategy(DiskCacheStrategy.ALL)
+                        .dontAnimate();
+                fallback = adaptiveAspectRatios
+                        ? fallback.dontTransform().override(720, 720)
+                        : fallback.centerCrop().override(360, 360);
+                request = request.error(fallback);
             }
             request.into(holder.image);
         }
@@ -289,7 +309,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                     .diskCacheStrategy(DiskCacheStrategy.ALL);
             if (adaptiveAspectRatios) request = request.dontTransform();
             else request = request.centerCrop();
-            request.preload(360, 360);
+            request.preload(adaptiveAspectRatios ? 720 : 360, adaptiveAspectRatios ? 720 : 360);
         }
     }
 
@@ -324,6 +344,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         } catch (Exception ignored) {
         }
         return new GlideUrl(imageUrl, headers.build());
+    }
+
+    private boolean isOnlyHavenImagePreview(NativeContentItem item) {
+        return item != null && item.isImage() &&
+                OnlyHavenRepository.isOnlyHavenUrl(item.uploader) &&
+                item.imageUrl != null && !item.imageUrl.isEmpty() &&
+                item.url != null && !item.url.equals(item.imageUrl);
     }
 
     private String imageReferer(NativeContentItem item) {
