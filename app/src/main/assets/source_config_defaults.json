@@ -164,7 +164,7 @@
       "retryCount": 1,
       "routes": {
         "feedFirst": "",
-        "feedPage": "{page}"
+        "feedPage": "?page={page}"
       },
       "selectors": {
         "cardLinks": "a[href*=/video/]",
