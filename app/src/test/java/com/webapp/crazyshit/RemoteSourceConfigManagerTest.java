@@ -46,7 +46,7 @@ public final class RemoteSourceConfigManagerTest {
         RemoteSourceConfigManager.initialize(context);
         long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
         SourceConfig config = RemoteSourceConfigManager.snapshot();
-        assertEquals(3L, config.configVersion);
+        assertEquals(4L, config.configVersion);
         assertEquals(FapelloRepository.BASE, config.fapello.baseUrl);
         assertEquals(BunkrRepository.INDEX, config.bunkr.indexUrl);
         assertEquals("bundled", RemoteSourceConfigManager.activeOrigin());
@@ -69,7 +69,7 @@ public final class RemoteSourceConfigManagerTest {
 
     @Test public void validNewerConfigChangesFapelloRoutesWithoutRebuild() throws Exception {
         JSONObject config = defaults();
-        config.put("configVersion", 4);
+        config.put("configVersion", 5);
         config.put("updatedAt", "2026-09-21T12:00:00Z");
         JSONObject fapello = config.getJSONObject("sources").getJSONObject("fapello");
         fapello.put("baseUrl", "https://mirror.example/");
@@ -114,13 +114,13 @@ public final class RemoteSourceConfigManagerTest {
         context.getSharedPreferences("remote_source_config", Context.MODE_PRIVATE).edit()
                 .putString("active_json", "{broken").commit();
         RemoteSourceConfigManager.initialize(context);
-        assertEquals(3L, RemoteSourceConfigManager.snapshot().configVersion);
+        assertEquals(4L, RemoteSourceConfigManager.snapshot().configVersion);
         assertEquals("bundled", RemoteSourceConfigManager.activeOrigin());
     }
 
     @Test public void corruptedActiveCacheUsesPreviousKnownGood() throws Exception {
         JSONObject previous = defaults();
-        previous.put("configVersion", 3);
+        previous.put("configVersion", 4);
         previous.put("updatedAt", "2026-09-13T11:00:00Z");
         previous.getJSONObject("sources").getJSONObject("fapello")
                 .put("baseUrl", "https://previous.example/");
@@ -128,42 +128,42 @@ public final class RemoteSourceConfigManagerTest {
                 .putString("active_json", "{broken")
                 .putString("previous_json", previous.toString()).commit();
         RemoteSourceConfigManager.initialize(context);
-        assertEquals(3L, RemoteSourceConfigManager.snapshot().configVersion);
+        assertEquals(4L, RemoteSourceConfigManager.snapshot().configVersion);
         assertEquals("https://previous.example/", RemoteSourceConfigManager.snapshot().fapello.baseUrl);
         assertEquals("rollback", RemoteSourceConfigManager.activeOrigin());
     }
 
     @Test public void newerFetchedConfigActivatesAndFailedRefreshKeepsIt() throws Exception {
         JSONObject newer = defaults();
-        newer.put("configVersion", 4);
+        newer.put("configVersion", 5);
         newer.put("updatedAt", "2026-09-21T12:00:00Z");
         RemoteSourceConfigManager.refreshForTests(context,
                 (endpoint, key, currentVersion) ->
                         new RemoteSourceConfigManager.FetchResult(false, newer.toString()));
-        assertEquals(4L, RemoteSourceConfigManager.snapshot().configVersion);
+        assertEquals(5L, RemoteSourceConfigManager.snapshot().configVersion);
         assertEquals("remote", RemoteSourceConfigManager.activeOrigin());
 
         RemoteSourceConfigManager.refreshForTests(context,
                 (endpoint, key, currentVersion) -> { throw new IOException("offline"); });
-        assertEquals(4L, RemoteSourceConfigManager.snapshot().configVersion);
+        assertEquals(5L, RemoteSourceConfigManager.snapshot().configVersion);
         assertEquals("remote", RemoteSourceConfigManager.activeOrigin());
     }
 
     @Test public void olderVersionCannotReplaceNewerKnownGood() throws Exception {
         JSONObject newer = defaults();
-        newer.put("configVersion", 5);
+        newer.put("configVersion", 6);
         newer.put("updatedAt", "2026-09-13T13:00:00Z");
         RemoteSourceConfigManager.applyRemoteForTests(context, newer.toString());
         JSONObject older = defaults();
-        older.put("configVersion", 4);
+        older.put("configVersion", 5);
         older.put("updatedAt", "2026-09-13T12:00:00Z");
         RemoteSourceConfigManager.applyRemoteForTests(context, older.toString());
-        assertEquals(5L, RemoteSourceConfigManager.snapshot().configVersion);
+        assertEquals(6L, RemoteSourceConfigManager.snapshot().configVersion);
     }
 
     @Test public void disabledSourceFailsWithoutChangingOtherSources() throws Exception {
         JSONObject config = defaults();
-        config.put("configVersion", 4);
+        config.put("configVersion", 5);
         config.put("updatedAt", "2026-09-13T12:00:00Z");
         config.getJSONObject("sources").getJSONObject("fapello").put("enabled", false);
         RemoteSourceConfigManager.applyRemoteForTests(context, config.toString());
@@ -178,7 +178,7 @@ public final class RemoteSourceConfigManagerTest {
 
     @Test public void bunkrFallbackAndWikiFeetHostsCanChangeRemotely() throws Exception {
         JSONObject config = defaults();
-        config.put("configVersion", 4);
+        config.put("configVersion", 5);
         config.put("updatedAt", "2026-09-13T12:00:00Z");
         JSONObject sources = config.getJSONObject("sources");
         sources.getJSONObject("bunkr").put("fallbackOrigins",
@@ -198,18 +198,21 @@ public final class RemoteSourceConfigManagerTest {
 
     @Test public void newSourcesCanChangeRemotely() throws Exception {
         JSONObject config = defaults();
-        config.put("configVersion", 4);
+        config.put("configVersion", 5);
         config.put("updatedAt", "2026-09-21T12:00:00Z");
         JSONObject sources = config.getJSONObject("sources");
         sources.getJSONObject("kaotic").put("baseUrl", "https://kaotic-mirror.example/");
         sources.getJSONObject("onlyhaven").getJSONObject("routes")
-                .put("creatorSearch", "people?query={query}");
+                .put("creatorSearch", "people?query={query}")
+                .put("creatorSearchApi", "api/v2/creators?q={query}&n={limit}&o={offset}");
         RemoteSourceConfigManager.applyRemoteForTests(context, config.toString());
 
         assertEquals("https://kaotic-mirror.example/",
                 RemoteSourceConfigManager.snapshot().kaotic.baseUrl);
         assertEquals("people?query={query}",
                 RemoteSourceConfigManager.snapshot().onlyHaven.creatorSearchRoute);
+        assertEquals("api/v2/creators?q={query}&n={limit}&o={offset}",
+                RemoteSourceConfigManager.snapshot().onlyHaven.creatorSearchApiRoute);
         assertTrue(RemoteSourceConfigManager.snapshot().theYnc.enabled);
         assertTrue(RemoteSourceConfigManager.snapshot().itemFix.enabled);
     }
