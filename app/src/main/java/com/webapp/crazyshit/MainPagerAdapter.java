@@ -236,7 +236,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 if (item == null || item.isSection()) return;
                 host.onOpenComments(item);
             }
-        });
+        }, true);
         page.recycler.setAdapter(page.feedAdapter);
         android.content.SharedPreferences homePrefs =
                 activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
