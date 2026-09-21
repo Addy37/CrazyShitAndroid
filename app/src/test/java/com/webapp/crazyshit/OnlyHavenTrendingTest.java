@@ -35,7 +35,7 @@ public class OnlyHavenTrendingTest {
         );
 
         String json = "{\"creators\":["
-                + "{\"service\":\"onlyfans\",\"id\":\"first\",\"name\":\"First\",\"postCount\":42,\"dmCount\":3},"
+                + "{\"service\":\"onlyfans\",\"id\":\"first\",\"name\":\"First\",\"avatarThumbhash\":\"abc123hash\",\"postCount\":42,\"dmCount\":3},"
                 + "{\"service\":\"fansly\",\"id\":\"second\",\"name\":\"Second\",\"post_count\":7,\"dm_count\":0}"
                 + "]}";
 
@@ -46,6 +46,10 @@ public class OnlyHavenTrendingTest {
         assertEquals("First", creators.get(0).name);
         assertEquals(42, creators.get(0).postCount);
         assertEquals(3, creators.get(0).dmCount);
+        assertEquals(
+                "https://img.cum.st/thumbnail/abc123hash/preview.webp",
+                creators.get(0).imageUrl
+        );
         assertEquals("Second", creators.get(1).name);
         assertEquals(7, creators.get(1).postCount);
     }
