@@ -272,7 +272,7 @@ final class SourceConfig {
     private static OnlyHaven parseOnlyHaven(JSONObject value)
             throws ValidationException, JSONException {
         rejectUnknown(value, set(
-                "enabled", "baseUrl", "fallbackDomains", "mediaBaseUrl", "userAgent", "requestHeaders",
+                "enabled", "baseUrl", "fallbackDomains", "mediaBaseUrl", "imageBaseUrl", "userAgent", "requestHeaders",
                 "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"
         ), "sources.onlyhaven");
         JSONObject routes = requiredObject(value, "routes");
@@ -290,6 +290,7 @@ final class SourceConfig {
                 httpsBase(value, "baseUrl"),
                 httpsList(value, "fallbackDomains"),
                 httpsBase(value, "mediaBaseUrl"),
+                httpsBase(value, "imageBaseUrl"),
                 userAgent(value),
                 headers(value, "requestHeaders"),
                 optionalHttpsUrl(value, "refererOverride"),
@@ -629,7 +630,7 @@ final class SourceConfig {
 
     static final class OnlyHaven {
         final boolean enabled;
-        final String baseUrl, mediaBaseUrl, userAgent, refererOverride, creatorSearchRoute,
+        final String baseUrl, mediaBaseUrl, imageBaseUrl, userAgent, refererOverride, creatorSearchRoute,
                 creatorSearchApiRoute, creatorPageRoute, creatorPostsApiRoute;
         final List<String> fallbackDomains;
         final Map<String, String> requestHeaders;
@@ -638,14 +639,15 @@ final class SourceConfig {
         final Pattern creatorUrlPattern, scriptMediaUrlPattern;
 
         OnlyHaven(boolean enabled, String baseUrl, List<String> fallbackDomains, String mediaBaseUrl,
-                  String userAgent, Map<String, String> requestHeaders, String refererOverride,
+                  String imageBaseUrl, String userAgent, Map<String, String> requestHeaders, String refererOverride,
                   int requestTimeoutMs, int retryCount, String creatorSearchRoute,
                   String creatorSearchApiRoute, String creatorPageRoute, String creatorPostsApiRoute,
                   String creatorLinksSelector, String mediaLinksSelector,
                   String playableVideoSelector, String playableImageSelector,
                   Pattern creatorUrlPattern, Pattern scriptMediaUrlPattern) {
             this.enabled = enabled; this.baseUrl = baseUrl; this.fallbackDomains = fallbackDomains;
-            this.mediaBaseUrl = mediaBaseUrl; this.userAgent = userAgent; this.requestHeaders = requestHeaders;
+            this.mediaBaseUrl = mediaBaseUrl; this.imageBaseUrl = imageBaseUrl;
+            this.userAgent = userAgent; this.requestHeaders = requestHeaders;
             this.refererOverride = refererOverride; this.requestTimeoutMs = requestTimeoutMs;
             this.retryCount = retryCount; this.creatorSearchRoute = creatorSearchRoute;
             this.creatorSearchApiRoute = creatorSearchApiRoute;
