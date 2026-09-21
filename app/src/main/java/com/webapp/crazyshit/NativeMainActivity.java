@@ -642,7 +642,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = PlayableSourceRouter.resolve(this, item.url);
+                stream = PlayableSourceRouter.resolve(this, item);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
