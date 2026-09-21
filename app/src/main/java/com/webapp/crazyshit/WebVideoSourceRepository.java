@@ -195,10 +195,12 @@ final class WebVideoSourceRepository {
         if (old == null) return candidate;
         if (candidate == null) return old;
         String title = betterTheYncTitle(old.title, candidate.title);
+        boolean candidateHasBetterTitle = title.equals(clean(candidate.title)) &&
+                !title.equals(clean(old.title));
         return new NativeContentItem(
                 old.kind,
                 title,
-                old.url.isEmpty() ? candidate.url : old.url,
+                candidateHasBetterTitle || old.url.isEmpty() ? candidate.url : old.url,
                 old.imageUrl.isEmpty() ? candidate.imageUrl : old.imageUrl,
                 old.views.isEmpty() ? candidate.views : old.views,
                 old.uploader.isEmpty() ? candidate.uploader : old.uploader,
