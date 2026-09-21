@@ -63,4 +63,24 @@ public class OnlyHavenTrendingTest {
                 FapzoneCreatorRepository.MODE_TOP_50
         ));
     }
+    @Test
+    public void trendingArtworkFallsBackToGalleryPreview() {
+        java.util.ArrayList<NativeContentItem> media = new java.util.ArrayList<>();
+        media.add(new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "Clip",
+                "https://e1.cum.st/media/video.mp4",
+                "https://img.cum.st/thumbnail/abc/preview.webp",
+                "",
+                "https://cum.st/creators/onlyfans/example",
+                "",
+                "onlyfans · OnlyHaven"
+        ));
+
+        assertEquals(
+                "https://img.cum.st/thumbnail/abc/preview.webp",
+                FapzoneCreatorRepository.chooseGalleryPreview(media)
+        );
+    }
+
 }
