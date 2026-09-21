@@ -302,8 +302,25 @@ final class FapzoneCreatorRepository {
             imageReferer = creator.url;
         }
 
-        // OnlyHaven decides the live rank. Artwork is resolved the same way as the
-        // New, Hot and Popular tabs so creator cards use the proven Fapello/Bunkr path.
+        // Some OnlyHaven display names do not map cleanly to Fapello/Bunkr names.
+        // If the normal creator-card path has no artwork, use the exact creator media
+        // feed that already powers the unified gallery and cache that preview on the card.
+        if (imageUrl.isEmpty()) {
+            try {
+                List<NativeContentItem> galleryMedia =
+                        onlyHaven.fetchCreatorMedia(context, creator, 1, 8);
+                String galleryPreview = chooseGalleryPreview(galleryMedia);
+                if (!galleryPreview.isEmpty()) {
+                    imageUrl = galleryPreview;
+                    cardUrl = creator.url;
+                    imageReferer = creator.url;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // OnlyHaven decides the live rank. Artwork first uses the same Fapello/Bunkr
+        // resolver as New, Hot and Popular, then falls back to the gallery's own media.
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_CREATOR,
                 creator.name,
@@ -417,6 +434,20 @@ final class FapzoneCreatorRepository {
         }
         for (NativeContentItem item : media) {
             if (item != null && !clean(item.imageUrl).isEmpty()) return clean(item.imageUrl);
+        }
+        return "";
+    }
+
+    static String chooseGalleryPreview(List<NativeContentItem> media) {
+        if (media == null) return "";
+        for (NativeContentItem item : media) {
+            if (item == null) continue;
+            String preview = clean(item.imageUrl);
+            if (!preview.isEmpty()) return preview;
+            if (item.isImage()) {
+                String direct = clean(item.url);
+                if (!direct.isEmpty()) return direct;
+            }
         }
         return "";
     }
@@ -578,7 +609,7 @@ final class FapzoneCreatorRepository {
     }
 
     private String cacheName(int mode) {
-        if (mode == MODE_TOP_50) return "onlyfap_trending_v3";
+        if (mode == MODE_TOP_50) return "onlyfap_trending_v4";
         // v3 discards cards cached before static Fapello routes were excluded from listings.
         return "fapzone_creator_feed_v3_" + mode;
     }
