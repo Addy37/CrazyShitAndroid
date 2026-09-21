@@ -261,7 +261,7 @@ public class VisualRefreshTest {
         View homeMedia = homeRow.getChildAt(0);
         assertEquals(BrowseUi.dp(host.get(), 209), homeMedia.getLayoutParams().width);
         assertEquals("5 Reasons to Say \"What in the Fuc...\"", homeHolder.title.getText().toString());
-        assertEquals(2, homeHolder.title.getMaxLines());
+        assertEquals(3, homeHolder.title.getMaxLines());
         assertEquals("41.1K views", homeHolder.info.getText().toString());
         assertEquals("💬 12K", homeHolder.comments.getText().toString());
 
@@ -274,6 +274,7 @@ public class VisualRefreshTest {
         View regularMedia = regularRow.getChildAt(0);
         assertEquals(BrowseUi.dp(host.get(), 166), regularMedia.getLayoutParams().width);
         assertEquals(video.title, regularHolder.title.getText().toString());
+        assertEquals(2, regularHolder.title.getMaxLines());
 
         homeAdapter.close();
         regularAdapter.close();
