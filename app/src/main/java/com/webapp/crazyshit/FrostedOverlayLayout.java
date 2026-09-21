@@ -4,10 +4,10 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.util.AttributeSet;
 import android.view.View;
-import android.widget.LinearLayout;
+import android.widget.FrameLayout;
 
-/** Draws a hardware-backed backdrop blur beneath the portrait navigation on Android 12+. */
-final class FrostedNavigationLayout extends LinearLayout {
+/** FrameLayout that draws one pinned child over a blurred copy of its scrolling content. */
+final class FrostedOverlayLayout extends FrameLayout {
     private final FrostedBackdropRenderer backdropRenderer = new FrostedBackdropRenderer();
     private final FrostedBackdropRenderer.Drawer backdropDrawer =
             new FrostedBackdropRenderer.Drawer() {
@@ -21,42 +21,41 @@ final class FrostedNavigationLayout extends LinearLayout {
                     drawChild(canvas, overlay, drawingTime);
                 }
             };
-    private View navigationView;
+    private View frostedOverlay;
 
-    FrostedNavigationLayout(Context context) {
+    FrostedOverlayLayout(Context context) {
         super(context);
     }
 
-    FrostedNavigationLayout(Context context, AttributeSet attrs) {
+    FrostedOverlayLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
 
-    void setFrostedNavigationView(View navigationView) {
-        if (this.navigationView == navigationView) return;
-        this.navigationView = navigationView;
+    void setFrostedOverlay(View frostedOverlay) {
+        if (this.frostedOverlay == frostedOverlay) return;
+        this.frostedOverlay = frostedOverlay;
         invalidate();
     }
 
-    View frostedNavigationViewForTest() {
-        return navigationView;
+    View frostedOverlayForTest() {
+        return frostedOverlay;
     }
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (backdropRenderer.draw(
-                this, canvas, navigationView, getDrawingTime(), backdropDrawer)) {
+                this, canvas, frostedOverlay, getDrawingTime(), backdropDrawer)) {
             return;
         }
         super.dispatchDraw(canvas);
     }
 
-    private void drawContentChildren(Canvas canvas, View navigation, long drawingTime) {
+    private void drawContentChildren(Canvas canvas, View overlay, long drawingTime) {
         for (int index = 0; index < getChildCount(); index++) {
             View child = getChildAt(index);
-            if (child != navigation && child.getVisibility() != View.GONE) {
+            if (child != overlay && child.getVisibility() != View.GONE) {
                 drawChild(canvas, child, drawingTime);
             }
         }
     }
-
 }

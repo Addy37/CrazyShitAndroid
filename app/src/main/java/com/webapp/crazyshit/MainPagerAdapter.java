@@ -249,7 +249,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         scroll.setHorizontalScrollBarEnabled(false);
         scroll.setClipChildren(false);
         scroll.setClipToPadding(false);
-        scroll.setBackground(ZeroChillUi.panelGlass(activity));
+        scroll.setBackground(ZeroChillUi.navigationGlass(activity));
         scroll.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
         LinearLayout sources = new LinearLayout(activity);
         sources.setClipChildren(false);
@@ -279,12 +279,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.homeChips.add(chip);
         }
         scroll.addView(sources);
-        FrameLayout.LayoutParams feedParams = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-        feedParams.topMargin = dp(60);
-        page.refresh.setLayoutParams(feedParams);
+        page.recycler.setPadding(0, dp(65), 0, dp(18));
         FrameLayout.LayoutParams sourceParams = new FrameLayout.LayoutParams(-1, dp(56));
         sourceParams.setMargins(dp(8), dp(2), dp(8), dp(2));
         page.root.addView(scroll, sourceParams);
+        ((FrostedOverlayLayout) page.root).setFrostedOverlay(scroll);
         FrameLayout.LayoutParams emptyParams = (FrameLayout.LayoutParams) page.empty.getLayoutParams();
         emptyParams.topMargin = dp(60);
         page.empty.setLayoutParams(emptyParams);
@@ -386,7 +385,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         selector.setClipToPadding(false);
         selector.setGravity(Gravity.CENTER);
         selector.setPadding(dp(12), dp(8), dp(12), dp(8));
-        selector.setBackground(ZeroChillUi.panelGlass(activity));
+        selector.setBackground(ZeroChillUi.navigationGlass(activity));
         selector.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
 
         page.crazyShitSource = seriesSourceButton("CrazyShit");
@@ -412,6 +411,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         selectorParams.gravity = Gravity.TOP;
         selectorParams.setMargins(dp(8), 0, dp(8), 0);
         page.root.addView(selector, selectorParams);
+        ((FrostedOverlayLayout) page.root).setFrostedOverlay(selector);
         updateSeriesSourceButtons(page);
     }
 
@@ -596,11 +596,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         styleSeriesSourceButton(page.categoriesSource, page.seriesSource == SERIES_SOURCE_CATEGORIES);
         if (page.refresh != null) {
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-            params.topMargin = dp(56);
+            params.topMargin = 0;
             page.refresh.setLayoutParams(params);
         }
         if (page.recycler != null) {
-            page.recycler.setPadding(0, dp(5), 0, dp(18));
+            page.recycler.setPadding(0, dp(61), 0, dp(18));
         }
         if (page.browseAdapter != null) {
             page.browseAdapter.setWideCreatorCards(false);
@@ -674,7 +674,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void styleSeriesSourceButton(TextView button, boolean selected) {
-        ZeroChillUi.styleChip(button, selected);
+        ZeroChillUi.styleSourceRailChip(button, selected);
     }
 
     private void styleFapzoneModeButton(TextView button, boolean selected) {
@@ -683,7 +683,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private Page createPageShell(int index, PageKind kind, String prefKey, String baseUrl) {
         Page page = new Page(index, kind, prefKey, baseUrl);
-        page.root = new FrameLayout(activity);
+        page.root = kind == PageKind.FEED || kind == PageKind.SERIES
+                ? new FrostedOverlayLayout(activity)
+                : new FrameLayout(activity);
         page.root.setBackgroundColor(ZeroChillUi.background(activity));
 
         page.refresh = new SwipeRefreshLayout(activity);
@@ -752,7 +754,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         for (int i = 0; i < page.homeChips.size(); i++) {
             TextView chip = page.homeChips.get(i);
             boolean selected = (i + 1) == page.homeSource;
-            ZeroChillUi.styleChip(chip, selected);
+            ZeroChillUi.styleSourceRailChip(chip, selected);
         }
     }
 

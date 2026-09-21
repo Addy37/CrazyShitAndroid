@@ -131,6 +131,23 @@ final class ZeroChillUi {
         ZeroChillMotion.animateSelection(chip, selected);
     }
 
+    static void styleSourceRailChip(TextView chip, boolean selected) {
+        if (chip == null) return;
+        Context context = chip.getContext();
+        chip.setTextColor(color(context, selected ? R.color.zc_cyan : R.color.zc_text_secondary));
+        chip.setBackground(selected
+                ? ContextCompat.getDrawable(context, R.drawable.zc_nav_selected_glass)
+                : rounded(
+                        context,
+                        Color.argb(48, 17, 23, 30),
+                        color(context, R.color.zc_divider),
+                        R.dimen.zc_radius_pill
+                ));
+        chip.setSelected(selected);
+        ZeroChillMotion.installPressFeedback(chip);
+        ZeroChillMotion.animateSelection(chip, selected);
+    }
+
     static void styleCard(View card) {
         if (card == null) return;
         card.setBackground(glass(card.getContext()));

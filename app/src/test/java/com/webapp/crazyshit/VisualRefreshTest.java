@@ -86,6 +86,15 @@ public class VisualRefreshTest {
         assertFalse(((android.view.ViewGroup) sourceBar).getClipToPadding());
         assertFalse(((android.view.ViewGroup) chipRow).getClipChildren());
         assertFalse(((android.view.ViewGroup) chipRow).getClipToPadding());
+        View homeRoot = (View) sourceBar.getParent();
+        assertTrue(homeRoot instanceof FrostedOverlayLayout);
+        assertSame(sourceBar, ((FrostedOverlayLayout) homeRoot).frostedOverlayForTest());
+        androidx.swiperefreshlayout.widget.SwipeRefreshLayout homeRefresh =
+                ReflectionHelpers.getField(home, "refresh");
+        assertEquals(0, ((FrameLayout.LayoutParams) homeRefresh.getLayoutParams()).topMargin);
+        RecyclerView homeRecycler = ReflectionHelpers.getField(home, "recycler");
+        assertEquals(BrowseUi.dp(main, 65), homeRecycler.getPaddingTop());
+        assertFalse(homeRecycler.getClipToPadding());
         assertEquals("CrazyShit", homeChips.get(0).getText().toString());
         assertEquals("EFukt", homeChips.get(1).getText().toString());
         homeChips.get(1).performClick();

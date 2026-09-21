@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -182,6 +183,20 @@ public class NavigationIaTest {
         android.view.ViewGroup selector = (android.view.ViewGroup) crazyShit.getParent();
         assertFalse(selector.getClipChildren());
         assertFalse(selector.getClipToPadding());
+        assertTrue(selector.getParent() instanceof FrostedOverlayLayout);
+        FrostedOverlayLayout root = (FrostedOverlayLayout) selector.getParent();
+        assertSame(selector, root.frostedOverlayForTest());
+        MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
+        Object[] pages = ReflectionHelpers.getField(adapter, "pages");
+        Object shows = pages[MainPagerAdapter.PAGE_SERIES];
+        androidx.swiperefreshlayout.widget.SwipeRefreshLayout refresh =
+                ReflectionHelpers.getField(shows, "refresh");
+        androidx.recyclerview.widget.RecyclerView recycler =
+                ReflectionHelpers.getField(shows, "recycler");
+        assertEquals(0, ((android.widget.FrameLayout.LayoutParams)
+                refresh.getLayoutParams()).topMargin);
+        assertEquals(BrowseUi.dp(activity, 61), recycler.getPaddingTop());
+        assertFalse(recycler.getClipToPadding());
         assertNull(findByDescription(activity.getWindow().getDecorView(), "My profile"));
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("Shows", title.getText().toString());
