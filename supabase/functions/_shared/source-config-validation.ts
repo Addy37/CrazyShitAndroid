@@ -152,8 +152,6 @@ function validateSource(id: string, value: unknown): string | null {
     if (missing) return missing;
   }
   if (id === "onlyhaven") {
-    const mediaBaseError = safeHttpsBase(value.mediaBaseUrl, `${id}.mediaBaseUrl`);
-    if (mediaBaseError) return mediaBaseError;
     const routeError = unknown(value.routes, ONLYHAVEN_ROUTES, `${id}.routes`);
     const selectorError = unknown(value.selectors, ONLYHAVEN_SELECTORS, `${id}.selectors`);
     const patternError = unknown(value.patterns, ONLYHAVEN_PATTERNS, `${id}.patterns`);
