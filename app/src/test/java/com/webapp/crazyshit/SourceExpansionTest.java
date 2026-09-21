@@ -109,6 +109,8 @@ public final class SourceExpansionTest {
         assertEquals(2, items.size());
         assertEquals(NativeContentItem.KIND_MEDIA, items.get(0).kind);
         assertEquals("https://e1.cum.st/media/" + videoKey + "/original.mp4", items.get(0).url);
+        assertEquals("https://img.cum.st/thumbnail/" + videoKey + "/preview.webp",
+                items.get(0).imageUrl);
         assertEquals(NativeContentItem.KIND_IMAGE, items.get(1).kind);
         assertEquals("https://e1.cum.st/media/" + imageKey + "/original.jpg", items.get(1).url);
     }
@@ -124,6 +126,23 @@ public final class SourceExpansionTest {
                 Jsoup.parse(html, "https://theync.com/video/12345/sample-title")
         );
         assertEquals("https://media.theync.com/videos/real-video.mp4", media);
+    }
+
+    @Test public void theYncPlayerParserUsesRenderedPlayerMedia() {
+        String html = "<source data-player-media='1' "
+                + "src='https://media.theync.com/videos/rendered.mp4'>"
+                + "<source data-resource-media='1' src='https://ads.example/ad.mp4'>";
+        String media = new WebVideoSourceRepository().theYncPlayableFromDocument(
+                Jsoup.parse(html, "https://theync.com/video/12345/sample-title")
+        );
+        assertEquals("https://media.theync.com/videos/rendered.mp4", media);
+    }
+
+    @Test public void theYncThumbnailCanRecoverLegacyVideoUrl() {
+        String media = new WebVideoSourceRepository().theYncVideoFromThumbnail(
+                "https://media.theync.com/thumbs/6/5/4/2/8/65428412ba3de.mp4.jpg"
+        );
+        assertEquals("https://media.theync.com/videos/6/5/4/2/8/65428412ba3de.mp4", media);
     }
 
     @Test public void theYncPlayerParserReadsThisPlayerSetupScript() {
