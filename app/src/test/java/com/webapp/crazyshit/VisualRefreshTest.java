@@ -246,8 +246,8 @@ public class VisualRefreshTest {
                 "https://crazyshit.com/video/example",
                 "",
                 "41100",
-                "12000",
                 "",
+                "12000",
                 ""
         );
         RecyclerView parent = new RecyclerView(host.get());
