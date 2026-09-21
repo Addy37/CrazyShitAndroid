@@ -15,13 +15,19 @@ final class HomeSourceRepository {
     private final SourceLoader loader;
     private final long timeoutMillis;
     HomeSourceRepository() {
-        this((context, source, page) -> {
+        this(defaultLoader(), 25_000L);
+    }
+
+    private static SourceLoader defaultLoader() {
+        RedditSourceRepository reddit = new RedditSourceRepository();
+        return (context, source, page) -> {
             if (source == 1) return new CrazyShitRepository().fetchFeed(context, CrazyShitRepository.HOME, page);
             if (source == 2) return page == 1 ? new EfuktRepository().fetchLatest(context) : Collections.emptyList();
             WebVideoSourceRepository web = new WebVideoSourceRepository();
             if (source == 3) return web.fetchFeed(context, WebVideoSourceRepository.Source.KAOTIC, page);
+            if (source == 4) return reddit.fetchMayhem(context, page);
             throw new IOException("Unknown Home source");
-        }, 25_000L);
+        };
     }
     HomeSourceRepository(SourceLoader loader, long timeoutMillis) {
         this.loader = loader;
@@ -35,7 +41,7 @@ final class HomeSourceRepository {
         CompletionService<List<NativeContentItem>> completed = new ExecutorCompletionService<>(IO);
         List<Future<List<NativeContentItem>>> requests = new ArrayList<>();
         int first = source == 0 ? 1 : source;
-        int last = source == 0 ? 3 : source;
+        int last = source == 0 ? 4 : source;
         for (int i = first; i <= last; i++) {
             final int selected = i;
             requests.add(completed.submit(() -> loader.fetch(context, selected, page)));
