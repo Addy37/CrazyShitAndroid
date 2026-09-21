@@ -688,9 +688,13 @@ final class OnlyHavenRepository {
                 .matches(".*\\.(?:mp4|m3u8|mpd|webm|m4v)(?:\\?.*)?$");
     }
 
-    private static boolean isDirectImage(String url) {
+    static boolean isDirectImageUrl(String url) {
         return cleanStatic(url).toLowerCase(Locale.US)
                 .matches(".*\\.(?:jpg|jpeg|png|webp|gif|avif)(?:\\?.*)?$");
+    }
+
+    private static boolean isDirectImage(String url) {
+        return isDirectImageUrl(url);
     }
 
     private String clean(String value) {
