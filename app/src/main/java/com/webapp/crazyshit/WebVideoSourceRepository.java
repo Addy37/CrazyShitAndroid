@@ -264,7 +264,9 @@ final class WebVideoSourceRepository {
             );
         }
         String title = clean(page.title());
-        String media = playableFromDocument(page, config);
+        String media = source == Source.THEYNC
+                ? theYncPlayableFromDocument(page)
+                : playableFromDocument(page, config);
         if (media.isEmpty() && source == Source.THEYNC) {
             try {
                 Document rendered = RenderedSourcePageFetcher.fetchMedia(
@@ -274,7 +276,7 @@ final class WebVideoSourceRepository {
                         config.requestHeaders,
                         config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride
                 );
-                media = playableFromDocument(rendered, config);
+                media = theYncPlayableFromDocument(rendered);
                 if (title.isEmpty()) title = clean(rendered.title());
             } catch (IOException ignored) {
             }
@@ -296,6 +298,61 @@ final class WebVideoSourceRepository {
         return media.isEmpty()
                 ? null
                 : new CrazyShitRepository.StreamInfo(media, pageUrl, title.isEmpty() ? source.label : title);
+    }
+
+    String theYncPlayableFromDocument(Document document) {
+        if (document == null) return "";
+
+        for (Element video : document.select(
+                ".stage-video > .inner-stage video[src], #thisPlayer video[src], #thisPlayer source[src]"
+        )) {
+            String candidate = absolute(video, "src", document.location());
+            if (isDirectMedia(candidate) && isTheYncVideoMedia(candidate)) return candidate;
+        }
+
+        Element player = document.getElementById("thisPlayer");
+        if (player != null) {
+            Element sibling = player.nextElementSibling();
+            if (sibling != null && "script".equalsIgnoreCase(sibling.tagName())) {
+                String candidate = theYncMediaFromScript(sibling.data().isEmpty()
+                        ? sibling.html()
+                        : sibling.data());
+                if (!candidate.isEmpty()) return candidate;
+            }
+        }
+
+        for (Element script : document.select("script")) {
+            String body = script.data();
+            if (body == null || body.isEmpty()) body = script.html();
+            String candidate = theYncMediaFromScript(body);
+            if (!candidate.isEmpty()) return candidate;
+        }
+
+        return "";
+    }
+
+    private String theYncMediaFromScript(String body) {
+        if (body == null || body.isEmpty()) return "";
+        String normalized = body.replace("\\/", "/").replace("&amp;", "&");
+        Pattern direct = Pattern.compile(
+                "(?i)(https?://(?:(?:www\\.)?theync\\.(?:com|org|net)/media|"
+                        + "media\\.theync\\.(?:com|org|net))/videos/"
+                        + "[^\\s\\\"'<>]+?\\.(?:mp4|m4v|mov|f4v)(?:\\?[^\\s\\\"'<>]*)?)"
+        );
+        Matcher matcher = direct.matcher(normalized);
+        if (!matcher.find()) return "";
+        try {
+            return java.net.URLDecoder.decode(matcher.group(1), "UTF-8");
+        } catch (Exception ignored) {
+            return matcher.group(1);
+        }
+    }
+
+    private boolean isTheYncVideoMedia(String value) {
+        if (value == null) return false;
+        String lower = value.toLowerCase(Locale.US);
+        return (lower.contains("media.theync.") || lower.contains("/media/videos/"))
+                && lower.contains("/videos/");
     }
 
     private String playableFromDocument(Document document, SourceConfig.WebVideo config) {
