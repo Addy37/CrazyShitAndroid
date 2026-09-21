@@ -17,6 +17,8 @@ jobs:
       FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
       SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+      REDDIT_API_USERNAME: ${{ secrets.REDDIT_API_USERNAME }}
 
     steps:
       - name: Check out project
