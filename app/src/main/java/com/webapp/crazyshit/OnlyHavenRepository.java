@@ -254,9 +254,10 @@ final class OnlyHavenRepository {
                     boolean video = isDirectVideo(candidate);
                     boolean image = isDirectImage(candidate);
                     if (!video && !image) continue;
-                    String itemPreview = image
-                            ? candidate
-                            : firstUseful(videoPreviewUrl(config, file), preview);
+                    String itemPreview = firstUseful(
+                            videoPreviewUrl(config, file),
+                            image ? candidate : preview
+                    );
                     NativeContentItem item = new NativeContentItem(
                             video ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE,
                             title,

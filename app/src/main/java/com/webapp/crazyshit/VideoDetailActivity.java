@@ -87,6 +87,7 @@ public class VideoDetailActivity extends Activity {
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final WebVideoSourceRepository webVideoSourceRepository = new WebVideoSourceRepository();
     private final Map<String, ImageView> relatedImages = new LinkedHashMap<>();
     private final Map<String, String> resolvedRelatedThumbnails = new LinkedHashMap<>();
     private final Set<String> requestedRelatedThumbnails = new HashSet<>();
@@ -646,6 +647,20 @@ public class VideoDetailActivity extends Activity {
                     List<NativeContentItem> series = efuktRepository.fetchSeriesFeed(this, feed, 1);
                     for (NativeContentItem item : series) {
                         if (!item.url.equals(excludeUrl)) merged.put(item.url, item);
+                    }
+                } catch (Exception ignored) {
+                }
+            } else if (isKaotic()) {
+                try {
+                    List<NativeContentItem> kaotic = webVideoSourceRepository.fetchFeed(
+                            this,
+                            WebVideoSourceRepository.Source.KAOTIC,
+                            1
+                    );
+                    for (NativeContentItem item : kaotic) {
+                        if (item != null && !item.isSection() && !item.url.equals(excludeUrl)) {
+                            merged.put(item.url, item);
+                        }
                     }
                 } catch (Exception ignored) {
                 }
@@ -1294,6 +1309,10 @@ public class VideoDetailActivity extends Activity {
 
     private boolean isBunkr() {
         return NativeFeedBrowserActivity.SOURCE_BUNKR.equals(source) || BunkrRepository.isBunkrUrl(pageUrl);
+    }
+
+    private boolean isKaotic() {
+        return "kaotic".equals(source) || WebVideoSourceRepository.isKaoticUrl(pageUrl);
     }
 
     private boolean supportsComments() {

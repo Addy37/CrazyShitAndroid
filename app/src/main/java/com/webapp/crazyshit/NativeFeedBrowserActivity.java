@@ -341,7 +341,14 @@ public final class NativeFeedBrowserActivity extends Activity {
             @Override
             public void onPageSelected(int position) {
                 RecyclerView active = activeCreatorRecycler();
-                if (active != null) recycler = active;
+                if (active != null) {
+                    recycler = active;
+                    BunkrGalleryAdapter activeAdapter = activeCreatorAdapter();
+                    if (activeAdapter != null) {
+                        int[] range = visibleRange(active.getLayoutManager());
+                        activeAdapter.preloadVisible(range[0], range[1]);
+                    }
+                }
                 updateCreatorEmptyState();
                 creatorTabsPager.postDelayed(() -> {
                     if (isFinishing()) return;
@@ -594,9 +601,13 @@ public final class NativeFeedBrowserActivity extends Activity {
             if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.replace(items);
             return;
         }
+        int activeTab = activeCreatorTab();
         for (int tab = 0; tab < CREATOR_TAB_COUNT; tab++) {
             if (creatorTabAdapters[tab] != null) {
-                creatorTabAdapters[tab].replace(filterCreatorItems(items, tab));
+                creatorTabAdapters[tab].replace(
+                        filterCreatorItems(items, tab),
+                        tab == activeTab
+                );
             }
         }
         updateCreatorTabLabels();
@@ -607,9 +618,13 @@ public final class NativeFeedBrowserActivity extends Activity {
             if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.append(items);
             return;
         }
+        int activeTab = activeCreatorTab();
         for (int tab = 0; tab < CREATOR_TAB_COUNT; tab++) {
             if (creatorTabAdapters[tab] != null) {
-                creatorTabAdapters[tab].append(filterCreatorItems(items, tab));
+                creatorTabAdapters[tab].append(
+                        filterCreatorItems(items, tab),
+                        tab == activeTab
+                );
             }
         }
         updateCreatorTabLabels();

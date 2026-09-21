@@ -40,6 +40,16 @@ public class HomeSourceTest {
             assertEquals(1, result.get(2, TimeUnit.SECONDS).size());
         } finally { releaseSlow.countDown(); host.shutdownNow(); }
     }
+    @Test public void combinedHomeOnlyRequestsCurrentSources() throws Exception {
+        Set<Integer> requested = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        HomeSourceRepository repo = new HomeSourceRepository((context, source, page) -> {
+            requested.add(source);
+            return Collections.singletonList(item("https://example.com/" + source));
+        }, 1000);
+        repo.fetch(null, 0, 1);
+        assertEquals(new HashSet<>(Arrays.asList(1, 2, 3)), requested);
+    }
+
     @Test public void directCrazyShitSourceKeepsSectionHeaders() throws Exception {
         HomeSourceRepository repo = new HomeSourceRepository((context, source, page) -> Arrays.asList(
                 section("TODAY'S CRAZY SHIT"),

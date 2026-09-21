@@ -113,6 +113,8 @@ public final class SourceExpansionTest {
                 items.get(0).imageUrl);
         assertEquals(NativeContentItem.KIND_IMAGE, items.get(1).kind);
         assertEquals("https://e1.cum.st/media/" + imageKey + "/original.jpg", items.get(1).url);
+        assertEquals("https://img.cum.st/thumbnail/" + imageKey + "/preview.webp",
+                items.get(1).imageUrl);
     }
 
     @Test public void theYncPlayerParserPrefersActualMediaTheYncVideo() {
