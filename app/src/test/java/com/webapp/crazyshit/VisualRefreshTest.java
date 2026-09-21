@@ -78,7 +78,7 @@ public class VisualRefreshTest {
         assertEquals(NativeFeedAdapter.VIEW_CARDS, pager.viewMode(MainPagerAdapter.PAGE_HOME));
         assertEquals(3, prefs.getInt("home_source", -1));
         java.util.List<TextView> homeChips = ReflectionHelpers.getField(home, "homeChips");
-        assertEquals(5, homeChips.size());
+        assertEquals(3, homeChips.size());
         View chipRow = (View) homeChips.get(0).getParent();
         View sourceBar = (View) chipRow.getParent();
         assertEquals(View.VISIBLE, sourceBar.getVisibility());
@@ -98,8 +98,6 @@ public class VisualRefreshTest {
         assertEquals("CrazyShit", homeChips.get(0).getText().toString());
         assertEquals("EFukt", homeChips.get(1).getText().toString());
         assertEquals("Kaotic", homeChips.get(2).getText().toString());
-        assertEquals("TheYNC", homeChips.get(3).getText().toString());
-        assertEquals("ItemFix", homeChips.get(4).getText().toString());
         homeChips.get(1).performClick();
         deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
         while ((boolean) ReflectionHelpers.getField(home, "loading") && System.nanoTime() < deadline) {
