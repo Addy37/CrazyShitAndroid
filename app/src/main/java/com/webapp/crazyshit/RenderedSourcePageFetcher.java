@@ -48,6 +48,28 @@ final class RenderedSourcePageFetcher {
             String referer,
             String readyHrefFragment
     ) throws IOException {
+        return fetchInternal(context, url, userAgent, headers, referer, readyHrefFragment, false);
+    }
+
+    static Document fetchMedia(
+            Context context,
+            String url,
+            String userAgent,
+            Map<String, String> headers,
+            String referer
+    ) throws IOException {
+        return fetchInternal(context, url, userAgent, headers, referer, "", true);
+    }
+
+    private static Document fetchInternal(
+            Context context,
+            String url,
+            String userAgent,
+            Map<String, String> headers,
+            String referer,
+            String readyHrefFragment,
+            boolean requireMedia
+    ) throws IOException {
         Activity activity = activity(context);
         if (activity == null) throw new IOException("No active screen was available for browser fallback");
         if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -58,6 +80,7 @@ final class RenderedSourcePageFetcher {
         AtomicReference<Document> result = new AtomicReference<>();
         AtomicReference<IOException> error = new AtomicReference<>();
         AtomicReference<WebView> activeWebView = new AtomicReference<>();
+        AtomicReference<String> capturedMedia = new AtomicReference<>("");
         AtomicBoolean completed = new AtomicBoolean();
         Handler main = new Handler(Looper.getMainLooper());
 
@@ -68,6 +91,8 @@ final class RenderedSourcePageFetcher {
                 headers,
                 referer,
                 readyHrefFragment,
+                requireMedia,
+                capturedMedia,
                 activeWebView,
                 completed,
                 result,
@@ -111,6 +136,8 @@ final class RenderedSourcePageFetcher {
             Map<String, String> headers,
             String referer,
             String readyHrefFragment,
+            boolean requireMedia,
+            AtomicReference<String> capturedMedia,
             AtomicReference<WebView> activeWebView,
             AtomicBoolean completed,
             AtomicReference<Document> result,
@@ -135,11 +162,24 @@ final class RenderedSourcePageFetcher {
                 private boolean extractionStarted;
 
                 @Override
+                public WebResourceResponse shouldInterceptRequest(
+                        WebView view,
+                        WebResourceRequest request
+                ) {
+                    if (requireMedia && request != null && request.getUrl() != null) {
+                        String requestUrl = request.getUrl().toString();
+                        if (isDirectMediaUrl(requestUrl)) capturedMedia.compareAndSet("", requestUrl);
+                    }
+                    return super.shouldInterceptRequest(view, request);
+                }
+
+                @Override
                 public void onPageFinished(WebView view, String finalUrl) {
                     if (extractionStarted || completed.get()) return;
                     extractionStarted = true;
                     view.postDelayed(
-                            () -> extract(view, 1, readyHrefFragment, completed, result, error, finished),
+                            () -> extract(view, 1, readyHrefFragment, requireMedia, capturedMedia,
+                                    completed, result, error, finished),
                             EXTRACTION_RETRY_MS
                     );
                 }
@@ -188,6 +228,8 @@ final class RenderedSourcePageFetcher {
             WebView webView,
             int attempt,
             String readyHrefFragment,
+            boolean requireMedia,
+            AtomicReference<String> capturedMedia,
             AtomicBoolean completed,
             AtomicReference<Document> result,
             AtomicReference<IOException> error,
@@ -201,6 +243,8 @@ final class RenderedSourcePageFetcher {
                 + "'>':'&gt;','\\\"':'&quot;',\"'\":'&#39;'}[c]));"
                 + "const node=e=>{let a='';for(const k of attrs){const v=e.getAttribute(k);"
                 + "if(v!==null&&v!=='')a+=' '+k+'=\\\"'+esc(v)+'\\\"';}"
+                + "if(e.tagName==='VIDEO'&&e.currentSrc&&/^https?:/i.test(e.currentSrc))"
+                + "a+=' data-current-src=\\\"'+esc(e.currentSrc)+'\\\"';"
                 + "let inner='';if(e.tagName==='A'){inner=(e.innerHTML||'').slice(0,8000);}"
                 + "else if(e.tagName==='SCRIPT'){inner=esc((e.textContent||'').slice(0,500000));}"
                 + "else if(/^H[1-6]$/.test(e.tagName)){inner=esc(e.textContent||'');}"
@@ -208,8 +252,11 @@ final class RenderedSourcePageFetcher {
                 + "const selectors='a[href],img,video,source,iframe[src],meta[property],meta[name],"
                 + "h1,h2,h3,h4,h5,h6,script';"
                 + "const nodes=Array.from(document.querySelectorAll(selectors)).slice(0,3000).map(node);"
+                + "const resources=(performance&&performance.getEntriesByType"
+                + "?performance.getEntriesByType('resource').map(e=>e.name).filter(u=>"
+                + "/^https?:/i.test(u)&&/\\.(m3u8|mpd|mp4|webm|m4v)(?:[?#]|$)/i.test(u)).slice(-40):[]);"
                 + "return JSON.stringify({url:location.href,title:document.title||'',"
-                + "text:(document.body?document.body.innerText:'').slice(0,16000),nodes});})()";
+                + "text:(document.body?document.body.innerText:'').slice(0,16000),nodes,resources});})()";
 
         webView.evaluateJavascript(script, encoded -> {
             try {
@@ -220,6 +267,7 @@ final class RenderedSourcePageFetcher {
                 String title = payload.optString("title");
                 String body = payload.optString("text");
                 JSONArray nodes = payload.optJSONArray("nodes");
+                JSONArray resources = payload.optJSONArray("resources");
                 StringBuilder html = new StringBuilder("<html><head><title>")
                         .append(Entities.escape(title)).append("</title></head><body>")
                         .append("<div id=\"rendered-source-text\">")
@@ -227,25 +275,40 @@ final class RenderedSourcePageFetcher {
                 if (nodes != null) {
                     for (int index = 0; index < nodes.length(); index++) html.append(nodes.optString(index));
                 }
+                if (resources != null) {
+                    for (int index = 0; index < resources.length(); index++) {
+                        String resource = resources.optString(index);
+                        if (isDirectMediaUrl(resource)) {
+                            html.append("<source src=\"").append(Entities.escape(resource)).append("\">");
+                        }
+                    }
+                }
+                String intercepted = capturedMedia.get();
+                if (isDirectMediaUrl(intercepted)) {
+                    html.append("<source src=\"").append(Entities.escape(intercepted)).append("\">");
+                }
                 html.append("</body></html>");
                 Document document = Jsoup.parse(html.toString(), finalUrl);
                 document.setBaseUri(finalUrl);
 
-                if (ready(document, readyHrefFragment) || attempt >= MAX_EXTRACTION_ATTEMPTS) {
+                boolean pageReady = requireMedia
+                        ? readyMedia(document, capturedMedia.get())
+                        : ready(document, readyHrefFragment);
+                if (pageReady || attempt >= MAX_EXTRACTION_ATTEMPTS) {
                     result.set(document);
                     complete(completed, error, finished, null);
                     return;
                 }
                 webView.postDelayed(
-                        () -> extract(webView, attempt + 1, readyHrefFragment,
-                                completed, result, error, finished),
+                        () -> extract(webView, attempt + 1, readyHrefFragment, requireMedia,
+                                capturedMedia, completed, result, error, finished),
                         EXTRACTION_RETRY_MS
                 );
             } catch (Exception failure) {
                 if (attempt < MAX_EXTRACTION_ATTEMPTS) {
                     webView.postDelayed(
-                            () -> extract(webView, attempt + 1, readyHrefFragment,
-                                    completed, result, error, finished),
+                            () -> extract(webView, attempt + 1, readyHrefFragment, requireMedia,
+                                    capturedMedia, completed, result, error, finished),
                             EXTRACTION_RETRY_MS
                     );
                 } else {
@@ -254,6 +317,32 @@ final class RenderedSourcePageFetcher {
                 }
             }
         });
+    }
+
+    private static boolean readyMedia(Document document, String capturedMedia) {
+        if (isDirectMediaUrl(capturedMedia)) return true;
+        if (document == null) return false;
+        for (org.jsoup.nodes.Element media : document.select(
+                "video[src],video[data-current-src],video source[src],source[src],"
+                        + "meta[property=og:video][content],meta[property=og:video:url][content],"
+                        + "meta[property=og:video:secure_url][content],meta[name=twitter:player:stream][content]"
+        )) {
+            String value = media.hasAttr("data-current-src")
+                    ? media.attr("data-current-src")
+                    : media.hasAttr("src") ? media.absUrl("src") : media.absUrl("content");
+            if (value.isEmpty()) {
+                value = media.hasAttr("src") ? media.attr("src") : media.attr("content");
+            }
+            if (isDirectMediaUrl(value)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isDirectMediaUrl(String value) {
+        if (value == null) return false;
+        return value.trim().matches(
+                "(?i)^https?://[^\\s]+\\.(?:m3u8|mpd|mp4|webm|m4v)(?:[?#].*)?$"
+        );
     }
 
     private static boolean ready(Document document, String hrefFragment) {
