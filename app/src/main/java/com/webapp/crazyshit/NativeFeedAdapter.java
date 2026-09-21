@@ -70,6 +70,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private final List<NativeContentItem> items = new ArrayList<>();
     private final Set<String> itemUrls = new HashSet<>();
     private final Listener listener;
+    private final boolean homePresentation;
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
     private final Set<String> failedDirectThumbnails = new HashSet<>();
@@ -84,8 +85,13 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private boolean closed;
 
     public NativeFeedAdapter(Context context, Listener listener) {
+        this(context, listener, false);
+    }
+
+    NativeFeedAdapter(Context context, Listener listener, boolean homePresentation) {
         this.context = context.getApplicationContext();
         this.listener = listener;
+        this.homePresentation = homePresentation;
         thumbnailResolvers = new RenderedThumbnailResolver[] {
                 new RenderedThumbnailResolver(this.context, this::setResolvedThumbnail),
                 new RenderedThumbnailResolver(this.context, this::setResolvedThumbnail)
@@ -314,7 +320,9 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private Holder createListHolder(ViewGroup parent) {
         boolean landscape = isLandscape(parent);
         int height = landscape ? 106 : 118;
-        int width = landscape ? 150 : 166;
+        int width = homePresentation
+                ? responsiveHomeListMediaWidthDp(parent, height)
+                : landscape ? 150 : 166;
         MaterialCardView card = baseCard(parent, 12, 4, 15, height);
         LinearLayout row = new LinearLayout(parent.getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -322,7 +330,15 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         card.addView(row, new MaterialCardView.LayoutParams(-1, -1));
 
         MediaViews media = addMedia(parent, row, height, width);
-        CopyViews copy = addCopy(parent, row, landscape ? 14 : 15, 11, 12, landscape ? 7 : 9, false);
+        CopyViews copy = addCopy(
+                parent,
+                row,
+                homePresentation ? 14 : landscape ? 14 : 15,
+                11,
+                homePresentation ? 9 : 12,
+                homePresentation ? 7 : landscape ? 7 : 9,
+                false
+        );
         return new Holder(card, media, copy);
     }
 
@@ -553,7 +569,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         LinearLayout metaRow = new LinearLayout(parent.getContext());
         metaRow.setOrientation(LinearLayout.HORIZONTAL);
         metaRow.setGravity(Gravity.CENTER_VERTICAL);
-        metaRow.setPadding(0, dp(parent, fillRemaining ? 4 : 6), 0, 0);
+        boolean compactHomeList = homePresentation && viewMode == VIEW_LIST;
+        metaRow.setPadding(0, dp(parent, compactHomeList ? 2 : fillRemaining ? 4 : 6), 0, 0);
         copy.addView(metaRow, new LinearLayout.LayoutParams(-1, -2));
 
         TextView info = new TextView(parent.getContext());
@@ -614,7 +631,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         }
 
         boolean meme = item.isMeme();
-        holder.title.setText(item.title);
+        holder.title.setText(displayTitle(item));
         holder.info.setText(buildInfo(item));
         boolean showDescription = viewMode != VIEW_CARDS && viewMode != VIEW_POSTERS && item.description != null &&
                 !item.description.trim().isEmpty();
@@ -873,6 +890,76 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return new GlideUrl(imageUrl, headers.build());
     }
 
+    private String displayTitle(NativeContentItem item) {
+        String title = item == null || item.title == null ? "" : item.title.trim();
+        if (!homePresentation || viewMode != VIEW_LIST || title.isEmpty()) return title;
+        return titleCaseIfAllCaps(title);
+    }
+
+    private static String titleCaseIfAllCaps(String raw) {
+        boolean hasLetter = false;
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (!Character.isLetter(c)) continue;
+            hasLetter = true;
+            if (Character.isLowerCase(c)) return raw;
+        }
+        if (!hasLetter) return raw;
+
+        String[] words = raw.toLowerCase(Locale.US).split("\\s+");
+        StringBuilder result = new StringBuilder(raw.length());
+        for (int i = 0; i < words.length; i++) {
+            if (i > 0) result.append(' ');
+            String token = words[i];
+            String core = titleWordCore(token);
+            boolean minor = i > 0 && i + 1 < words.length && isMinorTitleWord(core);
+            result.append(minor ? token : capitalizeTitleToken(token));
+        }
+        return result.toString();
+    }
+
+    private static String titleWordCore(String token) {
+        int start = 0;
+        while (start < token.length() && !Character.isLetterOrDigit(token.charAt(start))) start++;
+        int end = token.length();
+        while (end > start && !Character.isLetterOrDigit(token.charAt(end - 1))) end--;
+        return token.substring(start, end);
+    }
+
+    private static String capitalizeTitleToken(String token) {
+        char[] chars = token.toCharArray();
+        for (int i = 0; i < chars.length; i++) {
+            if (!Character.isLetter(chars[i])) continue;
+            chars[i] = Character.toUpperCase(chars[i]);
+            break;
+        }
+        return new String(chars);
+    }
+
+    private static boolean isMinorTitleWord(String word) {
+        switch (word) {
+            case "a":
+            case "an":
+            case "and":
+            case "as":
+            case "at":
+            case "but":
+            case "by":
+            case "for":
+            case "from":
+            case "in":
+            case "of":
+            case "on":
+            case "or":
+            case "the":
+            case "to":
+            case "with":
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private String buildInfo(NativeContentItem item) {
         ArrayList<String> parts = new ArrayList<>();
         if (viewMode == VIEW_CARDS) parts.add(EfuktRepository.isEfuktUrl(item.url) ? "EFukt"
@@ -916,6 +1003,14 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private static boolean isLandscape(View view) {
         return view.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    private static int responsiveHomeListMediaWidthDp(View parent, int heightDp) {
+        Configuration config = parent.getResources().getConfiguration();
+        int cardContentWidthDp = Math.max(240, config.screenWidthDp - 24);
+        int targetByShare = Math.round(cardContentWidthDp * 0.54f);
+        int targetByAspect = Math.round(heightDp * 16f / 9f);
+        return Math.max(heightDp, Math.min(targetByShare, targetByAspect));
     }
 
     private static int responsiveGridMediaHeightDp(View parent) {
