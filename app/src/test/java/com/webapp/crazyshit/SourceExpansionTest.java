@@ -113,6 +113,41 @@ public final class SourceExpansionTest {
         assertEquals("https://e1.cum.st/media/" + imageKey + "/original.jpg", items.get(1).url);
     }
 
+    @Test public void theYncPlayerParserPrefersActualMediaTheYncVideo() {
+        String html = "<div class='stage-video'><div class='inner-stage'>"
+                + "<video src='https://media.theync.com/videos/real-video.mp4'></video>"
+                + "</div></div>"
+                + "<video src='https://ads.example/ad.mp4'></video>"
+                + "<div id='thisPlayer'></div>"
+                + "<script>player.setup({file: \"https://media.theync.com/videos/script-video.mp4\"});</script>";
+        String media = new WebVideoSourceRepository().theYncPlayableFromDocument(
+                Jsoup.parse(html, "https://theync.com/video/12345/sample-title")
+        );
+        assertEquals("https://media.theync.com/videos/real-video.mp4", media);
+    }
+
+    @Test public void theYncPlayerParserReadsThisPlayerSetupScript() {
+        String html = "<video src='https://ads.example/ad.mp4'></video>"
+                + "<div id='thisPlayer'></div>"
+                + "<script>jwplayer('thisPlayer').setup({file: \"https://media.theync.com/videos/actual.mp4\"});</script>";
+        String media = new WebVideoSourceRepository().theYncPlayableFromDocument(
+                Jsoup.parse(html, "https://theync.com/video/12345/sample-title")
+        );
+        assertEquals("https://media.theync.com/videos/actual.mp4", media);
+    }
+
+    @Test public void onlyHavenDirectImagesAreRecognizedWithoutPageResolution() {
+        assertTrue(OnlyHavenRepository.isDirectImageUrl(
+                "https://e1.cum.st/media/abc/original.jpg"
+        ));
+        assertTrue(OnlyHavenRepository.isOnlyHavenUrl(
+                "https://e1.cum.st/media/abc/original.jpg"
+        ));
+        assertFalse(OnlyHavenRepository.isDirectImageUrl(
+                "https://e1.cum.st/media/abc/original.mp4"
+        ));
+    }
+
     @Test public void theYncParserDeduplicatesLinksForOneVideoAndKeepsRealTitle() {
         String html = "<article>"
                 + "<a href='/video/12345/comments'>59</a>"
