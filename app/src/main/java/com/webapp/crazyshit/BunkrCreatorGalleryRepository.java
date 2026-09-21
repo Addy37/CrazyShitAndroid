@@ -705,9 +705,11 @@ final class BunkrCreatorGalleryRepository {
                     .put("fapelloLoaded", state.fapelloCatalogLoaded)
                     .put("wikiFeetLoaded", state.wikiFeetCatalogLoaded)
                     .put("wikiFeetXLoaded", state.wikiFeetXCatalogLoaded)
+                    .put("onlyHavenLoaded", state.onlyHavenCatalogLoaded)
                     .put("albums", new org.json.JSONArray(state.albumUrls))
                     .put("models", new org.json.JSONArray(state.fapelloModelUrls))
                     .put("wikiFeetProfiles", new org.json.JSONArray(state.wikiFeetProfileUrls))
+                    .put("onlyHavenProfiles", new org.json.JSONArray(state.onlyHavenProfileUrls))
                     .put("media", new org.json.JSONArray(state.loadedMediaUrls));
             org.json.JSONArray pending = new org.json.JSONArray();
             for (AlbumCursor cursor : state.pending) pending.put(new org.json.JSONObject()
@@ -727,6 +729,15 @@ final class BunkrCreatorGalleryRepository {
                         .put("photos", creator.photoCount).put("next", cursor.nextPage));
             }
             json.put("pendingWikiFeet", wikiFeet);
+            org.json.JSONArray onlyHaven = new org.json.JSONArray();
+            for (OnlyHavenCursor cursor : state.onlyHavenPending) {
+                OnlyHavenRepository.Creator creator = cursor.creator;
+                onlyHaven.put(new org.json.JSONObject()
+                        .put("service", creator.service).put("id", creator.id)
+                        .put("name", creator.name).put("url", creator.url)
+                        .put("image", creator.imageUrl).put("next", cursor.nextPage));
+            }
+            json.put("pendingOnlyHaven", onlyHaven);
             BunkrGallerySessionStore.recordCreatorBatch(context, id, batch.items, batch.endReached, json);
         } catch (Exception ignored) { }
     }
@@ -743,9 +754,11 @@ final class BunkrCreatorGalleryRepository {
         state.fapelloCatalogLoaded = json.optBoolean("fapelloLoaded");
         state.wikiFeetCatalogLoaded = json.optBoolean("wikiFeetLoaded");
         state.wikiFeetXCatalogLoaded = json.optBoolean("wikiFeetXLoaded");
+        state.onlyHavenCatalogLoaded = json.optBoolean("onlyHavenLoaded");
         restoreSet(json.optJSONArray("albums"), state.albumUrls);
         restoreSet(json.optJSONArray("models"), state.fapelloModelUrls);
         restoreSet(json.optJSONArray("wikiFeetProfiles"), state.wikiFeetProfileUrls);
+        restoreSet(json.optJSONArray("onlyHavenProfiles"), state.onlyHavenProfileUrls);
         restoreSet(json.optJSONArray("media"), state.loadedMediaUrls);
         org.json.JSONArray pending = json.optJSONArray("pending");
         if (pending != null) for (int i = 0; i < pending.length(); i++) {
@@ -778,6 +791,16 @@ final class BunkrCreatorGalleryRepository {
             cursor.nextPage = Math.max(1, item.optInt("next", 1));
             state.wikiFeetPending.add(cursor);
         }
+        org.json.JSONArray onlyHaven = json.optJSONArray("pendingOnlyHaven");
+        if (onlyHaven != null) for (int i = 0; i < onlyHaven.length(); i++) {
+            org.json.JSONObject item = onlyHaven.optJSONObject(i);
+            if (item == null || !OnlyHavenRepository.isOnlyHavenUrl(item.optString("url"))) continue;
+            OnlyHavenCursor cursor = new OnlyHavenCursor(new OnlyHavenRepository.Creator(
+                    item.optString("service"), item.optString("id"), item.optString("name"),
+                    item.optString("url"), item.optString("image")));
+            cursor.nextPage = Math.max(1, item.optInt("next", 1));
+            state.onlyHavenPending.add(cursor);
+        }
         return state;
     }
 
@@ -797,19 +820,23 @@ final class BunkrCreatorGalleryRepository {
         final ArrayDeque<AlbumCursor> pending = new ArrayDeque<>();
         final ArrayDeque<FapelloCursor> fapelloPending = new ArrayDeque<>();
         final ArrayDeque<WikiFeetCursor> wikiFeetPending = new ArrayDeque<>();
+        final ArrayDeque<OnlyHavenCursor> onlyHavenPending = new ArrayDeque<>();
         final Set<String> albumUrls = new HashSet<>();
         final Set<String> fapelloModelUrls = new HashSet<>();
         final Set<String> wikiFeetProfileUrls = new HashSet<>();
+        final Set<String> onlyHavenProfileUrls = new HashSet<>();
         final Set<String> loadedMediaUrls = new HashSet<>();
         int nextSearchPage = 1;
         int bunkrSearchFailures;
         int fapelloSearchFailures;
         int wikiFeetSearchFailures;
         int wikiFeetXSearchFailures;
+        int onlyHavenSearchFailures;
         boolean searchFinished;
         boolean fapelloCatalogLoaded;
         boolean wikiFeetCatalogLoaded;
         boolean wikiFeetXCatalogLoaded;
+        boolean onlyHavenCatalogLoaded;
         FapelloSourceException lastFapelloFailure;
 
         State(String query) {
@@ -820,7 +847,8 @@ final class BunkrCreatorGalleryRepository {
             return searchFinished && pending.isEmpty() &&
                     fapelloCatalogLoaded && fapelloPending.isEmpty() &&
                     wikiFeetCatalogLoaded && wikiFeetXCatalogLoaded &&
-                    wikiFeetPending.isEmpty();
+                    wikiFeetPending.isEmpty() &&
+                    onlyHavenCatalogLoaded && onlyHavenPending.isEmpty();
         }
     }
 
@@ -868,6 +896,28 @@ final class BunkrCreatorGalleryRepository {
         ) {
             this.cursor = cursor;
             this.media = media;
+            this.error = error;
+        }
+    }
+
+    private static final class OnlyHavenCursor {
+        final OnlyHavenRepository.Creator creator;
+        int nextPage = 1;
+        int failures;
+
+        OnlyHavenCursor(OnlyHavenRepository.Creator creator) {
+            this.creator = creator;
+        }
+    }
+
+    private static final class OnlyHavenPage {
+        final OnlyHavenCursor cursor;
+        final List<NativeContentItem> items;
+        final Exception error;
+
+        OnlyHavenPage(OnlyHavenCursor cursor, List<NativeContentItem> items, Exception error) {
+            this.cursor = cursor;
+            this.items = items;
             this.error = error;
         }
     }
