@@ -35,24 +35,94 @@ final class WebVideoSourceRepository {
     private static final Pattern NUMBER = Pattern.compile(
             "(?i)(?:\\b\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?[KMB]?\\b|\\b\\d+(?:\\.\\d+)?[KMB]\\b)"
     );
+    private static final Pattern KAOTIC_SECTION = Pattern.compile(
+            "(?i)^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\s+"
+                    + "(?:january|february|march|april|may|june|july|august|september|october|november|december)\\s+"
+                    + "\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?$"
+    );
 
     List<NativeContentItem> fetchFeed(Context context, Source source, int page) throws IOException {
         SourceConfig.WebVideo config = config(source);
         if (!config.enabled) throw new IOException(source.label + " is temporarily unavailable");
         String route = page <= 1 ? config.feedFirstRoute : config.feedPageRoute;
         route = route.replace("{page}", String.valueOf(Math.max(1, page)));
-        Document document = fetchConfigured(context, config, config.baseUrl + route);
+        String requested = config.baseUrl + route;
 
-        LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
-        for (Element link : document.select(config.cardLinksSelector)) {
-            String pageUrl = absolute(link, "href", document.location());
+        Document document = null;
+        IOException directFailure = null;
+        try {
+            document = fetchConfigured(context, config, requested);
+        } catch (IOException error) {
+            directFailure = error;
+        }
+
+        List<NativeContentItem> result = document == null
+                ? new ArrayList<>()
+                : parseFeed(document, source, page, config);
+
+        if (source == Source.THEYNC && result.isEmpty()) {
+            try {
+                Document rendered = RenderedSourcePageFetcher.fetch(
+                        context,
+                        requested,
+                        config.userAgent,
+                        config.requestHeaders,
+                        config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride,
+                        "/video/"
+                );
+                result = parseFeed(rendered, source, page, config);
+            } catch (IOException browserFailure) {
+                if (directFailure == null) directFailure = browserFailure;
+            }
+        }
+
+        if (page <= 1 && result.isEmpty()) {
+            throw directFailure == null
+                    ? new IOException(source.label + " returned no playable feed items")
+                    : new IOException(source.label + " could not load its feed", directFailure);
+        }
+        return result;
+    }
+
+    List<NativeContentItem> parseFeed(Document document, Source source, int page) {
+        return parseFeed(document, source, page, config(source));
+    }
+
+    private List<NativeContentItem> parseFeed(
+            Document document,
+            Source source,
+            int page,
+            SourceConfig.WebVideo config
+    ) {
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        LinkedHashMap<String, Integer> positions = new LinkedHashMap<>();
+        String pendingHeader = "";
+        int sectionOrdinal = 0;
+        int mediaCount = 0;
+
+        for (Element node : document.getAllElements()) {
+            String tag = node.tagName();
+            if (!"a".equalsIgnoreCase(tag)) {
+                if (source == Source.KAOTIC) {
+                    String section = kaoticSection(node);
+                    if (!section.isEmpty()) pendingHeader = section;
+                } else if (source == Source.ITEMFIX && mediaCount > 0 &&
+                        "popular fixes".equalsIgnoreCase(clean(node.ownText()))) {
+                    break;
+                }
+                continue;
+            }
+
+            if (!node.is(config.cardLinksSelector)) continue;
+            String pageUrl = absolute(node, "href", document.location());
             if (pageUrl.isEmpty() || !config.pageUrlPattern.matcher(pageUrl).find()) continue;
-            Element scope = cardScope(link);
-            String title = title(link, scope, pageUrl);
+
+            Element scope = cardScope(node);
+            String title = title(node, scope, pageUrl);
             if (title.length() < 2) continue;
-            String image = image(link, scope, document.location());
+            String image = image(node, scope, document.location());
             String views = views(scope);
-            NativeContentItem item = new NativeContentItem(
+            NativeContentItem candidate = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA,
                     title,
                     pageUrl,
@@ -61,14 +131,51 @@ final class WebVideoSourceRepository {
                     source.label,
                     ""
             );
-            NativeContentItem old = items.get(pageUrl);
-            items.put(pageUrl, old == null ? item : old.merge(item));
-            if (items.size() >= 60) break;
+
+            Integer oldPosition = positions.get(pageUrl);
+            if (oldPosition != null) {
+                result.set(oldPosition, result.get(oldPosition).merge(candidate));
+                continue;
+            }
+
+            if (source == Source.KAOTIC && !pendingHeader.isEmpty()) {
+                result.add(new NativeContentItem(
+                        NativeContentItem.KIND_SECTION,
+                        pendingHeader,
+                        "section:kaotic:" + Math.max(1, page) + ":" + (++sectionOrdinal)
+                                + ":" + slug(pendingHeader),
+                        "",
+                        "",
+                        "",
+                        ""
+                ));
+                pendingHeader = "";
+            }
+
+            positions.put(pageUrl, result.size());
+            result.add(candidate);
+            mediaCount++;
+            if (mediaCount >= 60) break;
         }
-        if (page <= 1 && items.isEmpty()) {
-            throw new IOException(source.label + " returned no playable feed items");
+        return result;
+    }
+
+    private String kaoticSection(Element element) {
+        if (element == null) return "";
+        String own = clean(element.ownText());
+        if (KAOTIC_SECTION.matcher(own).matches()) return own;
+        String tag = element.tagName().toLowerCase(Locale.US);
+        if (tag.matches("h[1-6]")) {
+            String text = clean(element.text());
+            if (KAOTIC_SECTION.matcher(text).matches()) return text;
         }
-        return new ArrayList<>(items.values());
+        return "";
+    }
+
+    private String slug(String value) {
+        String text = clean(value).toLowerCase(Locale.US).replace('’', '\'');
+        text = text.replaceAll("[^a-z0-9]+", "-");
+        return text.replaceAll("(^-+|-+$)", "");
     }
 
     CrazyShitRepository.StreamInfo resolvePlayable(
@@ -81,9 +188,37 @@ final class WebVideoSourceRepository {
         }
         SourceConfig.WebVideo config = config(source);
         if (!config.enabled) throw new IOException(source.label + " is temporarily unavailable");
-        Document page = fetchConfigured(context, config, pageUrl);
+        Document page;
+        try {
+            page = fetchConfigured(context, config, pageUrl);
+        } catch (IOException error) {
+            if (source != Source.THEYNC) throw error;
+            page = RenderedSourcePageFetcher.fetch(
+                    context,
+                    pageUrl,
+                    config.userAgent,
+                    config.requestHeaders,
+                    config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride,
+                    "/video/"
+            );
+        }
         String title = clean(page.title());
         String media = playableFromDocument(page, config);
+        if (media.isEmpty() && source == Source.THEYNC) {
+            try {
+                Document rendered = RenderedSourcePageFetcher.fetch(
+                        context,
+                        pageUrl,
+                        config.userAgent,
+                        config.requestHeaders,
+                        config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride,
+                        "/video/"
+                );
+                media = playableFromDocument(rendered, config);
+                if (title.isEmpty()) title = clean(rendered.title());
+            } catch (IOException ignored) {
+            }
+        }
         if (media.isEmpty()) {
             int checked = 0;
             for (Element frame : page.select("iframe[src]")) {
