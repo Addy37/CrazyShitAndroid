@@ -31,13 +31,33 @@ final class OnlyHavenRepository {
         final String name;
         final String url;
         final String imageUrl;
+        final int postCount;
+        final int dmCount;
 
         Creator(String service, String id, String name, String url, String imageUrl) {
+            this(service, id, name, url, imageUrl, -1, -1);
+        }
+
+        Creator(
+                String service,
+                String id,
+                String name,
+                String url,
+                String imageUrl,
+                int postCount,
+                int dmCount
+        ) {
             this.service = cleanStatic(service);
             this.id = cleanStatic(id);
             this.name = cleanStatic(name);
             this.url = cleanStatic(url);
             this.imageUrl = cleanStatic(imageUrl);
+            this.postCount = postCount;
+            this.dmCount = dmCount;
+        }
+
+        boolean isKnownEmpty() {
+            return postCount == 0 && dmCount == 0;
         }
     }
 
@@ -102,6 +122,65 @@ final class OnlyHavenRepository {
         return new ArrayList<>(creators.values());
     }
 
+    /**
+     * Returns OnlyHaven's live creator ordering. The creators endpoint uses the same
+     * default popularity ordering as the website's creator search when no query is supplied.
+     * Known-empty profiles are skipped when the API exposes content counts.
+     */
+    List<Creator> fetchTrendingCreators(Context context, int limit) throws IOException {
+        SourceConfig.OnlyHaven config = config();
+        if (!config.enabled) throw new IOException("OnlyHaven is temporarily unavailable");
+        int safeLimit = Math.max(1, Math.min(50, limit));
+
+        IOException apiError = null;
+        try {
+            String apiRoute = config.creatorSearchApiRoute
+                    .replace("{query}", "")
+                    .replace("{limit}", String.valueOf(safeLimit))
+                    .replace("{offset}", "0");
+            String body = fetchConfiguredText(context, config, config.baseUrl + apiRoute);
+            List<Creator> apiCreators = parseCreatorSearchJson(body, config, "", safeLimit);
+            ArrayList<Creator> withContent = new ArrayList<>();
+            for (Creator creator : apiCreators) {
+                if (creator == null || creator.isKnownEmpty()) continue;
+                withContent.add(creator);
+                if (withContent.size() >= safeLimit) break;
+            }
+            if (!withContent.isEmpty()) return withContent;
+        } catch (IOException error) {
+            apiError = error;
+        }
+
+        String route = config.creatorSearchRoute.replace("{query}", "");
+        LinkedHashMap<String, Creator> creators = new LinkedHashMap<>();
+        try {
+            Document document = fetchConfigured(context, config, config.baseUrl + route);
+            parseCreators(document, config, creators, safeLimit);
+        } catch (IOException error) {
+            if (apiError == null) apiError = error;
+        }
+
+        if (creators.isEmpty()) {
+            try {
+                Document rendered = RenderedSourcePageFetcher.fetch(
+                        context,
+                        config.baseUrl + route,
+                        config.userAgent,
+                        config.requestHeaders,
+                        config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride,
+                        "/creators/"
+                );
+                parseCreators(rendered, config, creators, safeLimit);
+            } catch (IOException error) {
+                if (apiError == null) apiError = error;
+            }
+        }
+
+        if (!creators.isEmpty()) return new ArrayList<>(creators.values());
+        if (apiError != null) throw apiError;
+        throw new IOException("OnlyHaven returned no trending creators");
+    }
+
     List<Creator> parseCreatorSearchJson(
             String body,
             SourceConfig.OnlyHaven config,
@@ -136,8 +215,27 @@ final class OnlyHavenRepository {
                 String url = config.baseUrl + "creators/" + urlToken(service) + "/" + urlToken(id);
                 String image = firstJsonText(row, "avatarUrl", "avatar_url", "imageUrl", "image_url");
                 if (!image.startsWith("https://")) image = "";
+                int postCount = firstJsonInt(
+                        row,
+                        "postCount",
+                        "post_count",
+                        "postsCount",
+                        "posts_count",
+                        "posts"
+                );
+                int dmCount = firstJsonInt(
+                        row,
+                        "dmCount",
+                        "dm_count",
+                        "dmsCount",
+                        "dms_count",
+                        "dms"
+                );
                 String key = service.toLowerCase(Locale.US) + ":" + id.toLowerCase(Locale.US);
-                result.putIfAbsent(key, new Creator(service, id, name, url, image));
+                result.putIfAbsent(
+                        key,
+                        new Creator(service, id, name, url, image, postCount, dmCount)
+                );
             }
             return new ArrayList<>(result.values());
         } catch (Exception error) {
@@ -297,6 +395,21 @@ final class OnlyHavenRepository {
             if (!value.isEmpty() && !"null".equalsIgnoreCase(value)) return value;
         }
         return "";
+    }
+
+    private int firstJsonInt(JSONObject object, String... keys) {
+        for (String key : keys) {
+            Object raw = object.opt(key);
+            if (raw instanceof Number) return Math.max(0, ((Number) raw).intValue());
+            if (!(raw instanceof String)) continue;
+            String value = clean(String.valueOf(raw)).replace(",", "");
+            if (value.isEmpty()) continue;
+            try {
+                return Math.max(0, Integer.parseInt(value));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return -1;
     }
 
     private String mediaUrl(SourceConfig.OnlyHaven config, JSONObject file) {
