@@ -216,7 +216,6 @@ public final class SearchActivity extends Activity {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(7), 0, dp(14), 0);
-        ZeroChillUi.styleTopBar(bar);
 
         TextView back = new TextView(this);
         back.setText("‹");
