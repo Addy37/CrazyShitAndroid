@@ -243,7 +243,7 @@
       },
       "selectors": {
         "creatorLinks": "a[href*=/creators/]",
-        "mediaLinks": "a[href*=/posts/],a[href$=.jpg],a[href$=.jpeg],a[href$=.png],a[href$=.webp],a[href$=.gif],a[href$=.mp4],a[href$=.webm],a[href$=.m4v],video[src],video source[src],img[src]",
+        "mediaLinks": "a[href*=/posts/],a[href$='.jpg'],a[href$='.jpeg'],a[href$='.png'],a[href$='.webp'],a[href$='.gif'],a[href$='.mp4'],a[href$='.webm'],a[href$='.m4v'],video[src],video source[src],img[src]",
         "playableVideo": "video[src],video source[src],source[type*=video][src],meta[property=og:video][content],meta[property=og:video:url][content],meta[property=og:video:secure_url][content]",
         "playableImage": "meta[property=og:image][content],img[src]"
       },
