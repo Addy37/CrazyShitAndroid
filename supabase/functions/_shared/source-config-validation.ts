@@ -11,11 +11,11 @@ const WIKI_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "pictureHo
   "ajaxTimeoutMs", "retryCount", "searchRoute", "searchSelector"]);
 const WEB_VIDEO_FIELDS = new Set(["enabled", "baseUrl", "fallbackDomains", "userAgent",
   "requestHeaders", "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"]);
-const ONLYHAVEN_FIELDS = WEB_VIDEO_FIELDS;
+const ONLYHAVEN_FIELDS = new Set([...WEB_VIDEO_FIELDS, "mediaBaseUrl"]);
 const WEB_VIDEO_ROUTES = new Set(["feedFirst", "feedPage"]);
 const WEB_VIDEO_SELECTORS = new Set(["cardLinks", "playableVideo"]);
 const WEB_VIDEO_PATTERNS = new Set(["pageUrl", "scriptMediaUrl"]);
-const ONLYHAVEN_ROUTES = new Set(["creatorSearch", "creatorPage"]);
+const ONLYHAVEN_ROUTES = new Set(["creatorSearch", "creatorPage", "creatorPostsApi"]);
 const ONLYHAVEN_SELECTORS = new Set(["creatorLinks", "mediaLinks", "playableVideo", "playableImage"]);
 const ONLYHAVEN_PATTERNS = new Set(["creatorUrl", "scriptMediaUrl"]);
 const FAPELLO_ROUTES = new Set(["search", "creatorMedia", "creatorProfileFirst",
@@ -152,6 +152,8 @@ function validateSource(id: string, value: unknown): string | null {
     if (missing) return missing;
   }
   if (id === "onlyhaven") {
+    const mediaBaseError = safeHttpsBase(value.mediaBaseUrl, `${id}.mediaBaseUrl`);
+    if (mediaBaseError) return mediaBaseError;
     const routeError = unknown(value.routes, ONLYHAVEN_ROUTES, `${id}.routes`);
     const selectorError = unknown(value.selectors, ONLYHAVEN_SELECTORS, `${id}.selectors`);
     const patternError = unknown(value.patterns, ONLYHAVEN_PATTERNS, `${id}.patterns`);
@@ -184,6 +186,7 @@ function validateSource(id: string, value: unknown): string | null {
     popularVideosFirst: new Set(["page"]), popularVideosPage: new Set(["page"]),
     feedFirst: new Set(["page"]), feedPage: new Set(["page"]),
     creatorSearch: new Set(["query"]), creatorPage: new Set(["service", "id", "page"]),
+    creatorPostsApi: new Set(["service", "id", "offset", "limit"]),
   };
   for (const [key, route] of Object.entries(object(value.routes) ? value.routes : {})) {
     try {
