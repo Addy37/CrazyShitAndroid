@@ -99,15 +99,23 @@ final class FapzoneCreatorSearchRepository {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         for (OnlyHavenRepository.Creator creator :
                 new OnlyHavenRepository().searchCreators(context, query, limit)) {
+            StringBuilder description = new StringBuilder("OnlyHaven");
+            String service = serviceLabel(creator.service);
+            if (!service.isEmpty()) description.append(" · ").append(service);
+            if (creator.postCount >= 0) {
+                description.append(" · ")
+                        .append(String.format(java.util.Locale.US, "%,d", creator.postCount))
+                        .append(creator.postCount == 1 ? " post" : " posts");
+            }
             result.add(new NativeContentItem(
                     NativeContentItem.KIND_CREATOR,
                     creator.name,
                     creator.url,
                     creator.imageUrl,
-                    "",
+                    creator.postCount >= 0 ? String.valueOf(creator.postCount) : "",
                     creator.url,
                     "",
-                    "OnlyHaven",
+                    description.toString(),
                     creator.name
             ));
         }
@@ -125,6 +133,8 @@ final class FapzoneCreatorSearchRepository {
     private static final class CreatorGroup {
         private NativeContentItem preferred;
         private String fapelloProfileUrl = "";
+        private String onlyHavenDetails = "";
+        private String postCount = "";
         private final Set<String> sources = new LinkedHashSet<>();
 
         CreatorGroup(NativeContentItem first) { add(first); }
@@ -136,15 +146,18 @@ final class FapzoneCreatorSearchRepository {
             } else {
                 preferred = preferred.merge(item);
             }
-            String label = item.description == null ? "" : item.description.split(" ·", 2)[0].trim();
+            String description = item.description == null ? "" : item.description.trim();
+            String label = description.split(" ·", 2)[0].trim();
             if (!label.isEmpty()) sources.add(label);
+            if (description.startsWith("OnlyHaven")) onlyHavenDetails = description;
+            if (item.views != null && !item.views.trim().isEmpty()) postCount = item.views.trim();
         }
 
         NativeContentItem item() {
             return new NativeContentItem(NativeContentItem.KIND_CREATOR, preferred.title,
                     fapelloProfileUrl.isEmpty() ? preferred.url : fapelloProfileUrl,
-                    preferred.imageUrl, "", preferred.uploader, "",
-                    sourceLabel(), preferred.searchQuery);
+                    preferred.imageUrl, postCount, preferred.uploader, "",
+                    sourceDetails(), preferred.searchQuery);
         }
 
         private String sourceLabel() {
@@ -155,5 +168,21 @@ final class FapzoneCreatorSearchRepository {
             for (String label : sources) if (!ordered.contains(label)) ordered.add(label);
             return String.join(" + ", ordered);
         }
+
+        private String sourceDetails() {
+            String sourcesText = sourceLabel();
+            if (onlyHavenDetails.isEmpty()) return sourcesText;
+            int separator = onlyHavenDetails.indexOf(" · ");
+            if (separator < 0) return sourcesText;
+            return sourcesText + onlyHavenDetails.substring(separator);
+        }
+    }
+
+    private static String serviceLabel(String service) {
+        String value = service == null ? "" : service.trim().toLowerCase(java.util.Locale.US);
+        if ("onlyfans".equals(value)) return "OnlyFans";
+        if ("fansly".equals(value)) return "Fansly";
+        if ("patreon".equals(value)) return "Patreon";
+        return service == null ? "" : service.trim();
     }
 }

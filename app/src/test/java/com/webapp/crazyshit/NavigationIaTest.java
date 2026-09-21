@@ -50,7 +50,7 @@ public class NavigationIaTest {
         assertEquals("More", nav.getMenu().findItem(5).getTitle());
         assertNull(findMenuItem(nav, "Library"));
         View modeButton = findByDescription(activity.getWindow().getDecorView(),
-                "Show Top 50 OnlyFap creators");
+                "Show Trending OnlyFap creators");
         View badge = findByDescription(activity.getWindow().getDecorView(), "Creator list mode");
         assertNotNull(modeButton);
         assertNotNull(badge);
