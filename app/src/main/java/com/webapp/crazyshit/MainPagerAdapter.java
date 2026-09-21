@@ -431,7 +431,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         modes.setPadding(dp(12), dp(6), dp(12), dp(6));
         modes.setBackground(ZeroChillUi.navigationGlass(activity));
 
-        page.fapzoneTop = fapzoneModeButton("Top 50");
+        page.fapzoneTop = fapzoneModeButton("Trending");
         page.fapzoneNew = fapzoneModeButton("New");
         page.fapzoneHot = fapzoneModeButton("Hot");
         page.fapzonePopular = fapzoneModeButton("Popular");
