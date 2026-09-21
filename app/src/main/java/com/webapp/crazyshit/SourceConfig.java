@@ -45,6 +45,10 @@ final class SourceConfig {
     final Bunkr bunkr;
     final WikiFeet wikiFeet;
     final WikiFeet wikiFeetX;
+    final WebVideo kaotic;
+    final WebVideo theYnc;
+    final WebVideo itemFix;
+    final OnlyHaven onlyHaven;
     private final String serialized;
 
     private SourceConfig(
@@ -57,6 +61,10 @@ final class SourceConfig {
             Bunkr bunkr,
             WikiFeet wikiFeet,
             WikiFeet wikiFeetX,
+            WebVideo kaotic,
+            WebVideo theYnc,
+            WebVideo itemFix,
+            OnlyHaven onlyHaven,
             String serialized
     ) {
         this.schemaVersion = schemaVersion;
@@ -68,6 +76,10 @@ final class SourceConfig {
         this.bunkr = bunkr;
         this.wikiFeet = wikiFeet;
         this.wikiFeetX = wikiFeetX;
+        this.kaotic = kaotic;
+        this.theYnc = theYnc;
+        this.itemFix = itemFix;
+        this.onlyHaven = onlyHaven;
         this.serialized = serialized;
     }
 
@@ -98,15 +110,23 @@ final class SourceConfig {
             boolean fallbacksEnabled = requiredBoolean(global, "fallbacksEnabled");
 
             JSONObject sources = requiredObject(root, "sources");
-            rejectUnknown(sources, set("fapello", "bunkr", "wikifeet", "wikifeetx"), "sources");
+            rejectUnknown(sources, set(
+                    "fapello", "bunkr", "wikifeet", "wikifeetx",
+                    "kaotic", "theync", "itemfix", "onlyhaven"
+            ), "sources");
             Fapello fapello = parseFapello(requiredObject(sources, "fapello"));
             Bunkr bunkr = parseBunkr(requiredObject(sources, "bunkr"));
             WikiFeet wikiFeet = parseWikiFeet(requiredObject(sources, "wikifeet"), "wikifeet");
             WikiFeet wikiFeetX = parseWikiFeet(requiredObject(sources, "wikifeetx"), "wikifeetx");
+            WebVideo kaotic = parseWebVideo(requiredObject(sources, "kaotic"), "kaotic");
+            WebVideo theYnc = parseWebVideo(requiredObject(sources, "theync"), "theync");
+            WebVideo itemFix = parseWebVideo(requiredObject(sources, "itemfix"), "itemfix");
+            OnlyHaven onlyHaven = parseOnlyHaven(requiredObject(sources, "onlyhaven"));
             String canonical = root.toString();
             return new SourceConfig(schemaVersion, configVersion, updatedAt,
                     sourceKillSwitchesEnabled, fallbacksEnabled,
-                    fapello, bunkr, wikiFeet, wikiFeetX, canonical);
+                    fapello, bunkr, wikiFeet, wikiFeetX,
+                    kaotic, theYnc, itemFix, onlyHaven, canonical);
         } catch (ValidationException error) {
             throw error;
         } catch (JSONException error) {
@@ -214,6 +234,74 @@ final class SourceConfig {
                 timeout(value, "requestTimeoutMs"),
                 timeout(value, "ajaxTimeoutMs"), retryCount(value),
                 route(value, "searchRoute", set("query")), selector(value, "searchSelector")
+        );
+    }
+
+    private static WebVideo parseWebVideo(JSONObject value, String id)
+            throws ValidationException, JSONException {
+        rejectUnknown(value, set(
+                "enabled", "baseUrl", "fallbackDomains", "userAgent", "requestHeaders",
+                "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"
+        ), "sources." + id);
+        JSONObject routes = requiredObject(value, "routes");
+        rejectUnknown(routes, set("feedFirst", "feedPage"), "sources." + id + ".routes");
+        JSONObject selectors = requiredObject(value, "selectors");
+        rejectUnknown(selectors, set("cardLinks", "playableVideo"),
+                "sources." + id + ".selectors");
+        JSONObject patterns = requiredObject(value, "patterns");
+        rejectUnknown(patterns, set("pageUrl", "scriptMediaUrl"),
+                "sources." + id + ".patterns");
+        return new WebVideo(
+                requiredBoolean(value, "enabled"),
+                httpsBase(value, "baseUrl"),
+                httpsList(value, "fallbackDomains"),
+                userAgent(value),
+                headers(value, "requestHeaders"),
+                optionalHttpsUrl(value, "refererOverride"),
+                timeout(value, "requestTimeoutMs"),
+                retryCount(value),
+                route(routes, "feedFirst", set("page")),
+                route(routes, "feedPage", set("page")),
+                selector(selectors, "cardLinks"),
+                selector(selectors, "playableVideo"),
+                regex(patterns, "pageUrl"),
+                regex(patterns, "scriptMediaUrl")
+        );
+    }
+
+    private static OnlyHaven parseOnlyHaven(JSONObject value)
+            throws ValidationException, JSONException {
+        rejectUnknown(value, set(
+                "enabled", "baseUrl", "fallbackDomains", "userAgent", "requestHeaders",
+                "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"
+        ), "sources.onlyhaven");
+        JSONObject routes = requiredObject(value, "routes");
+        rejectUnknown(routes, set("creatorSearch", "creatorPage"),
+                "sources.onlyhaven.routes");
+        JSONObject selectors = requiredObject(value, "selectors");
+        rejectUnknown(selectors, set(
+                "creatorLinks", "mediaLinks", "playableVideo", "playableImage"
+        ), "sources.onlyhaven.selectors");
+        JSONObject patterns = requiredObject(value, "patterns");
+        rejectUnknown(patterns, set("creatorUrl", "scriptMediaUrl"),
+                "sources.onlyhaven.patterns");
+        return new OnlyHaven(
+                requiredBoolean(value, "enabled"),
+                httpsBase(value, "baseUrl"),
+                httpsList(value, "fallbackDomains"),
+                userAgent(value),
+                headers(value, "requestHeaders"),
+                optionalHttpsUrl(value, "refererOverride"),
+                timeout(value, "requestTimeoutMs"),
+                retryCount(value),
+                route(routes, "creatorSearch", set("query")),
+                route(routes, "creatorPage", set("service", "id", "page")),
+                selector(selectors, "creatorLinks"),
+                selector(selectors, "mediaLinks"),
+                selector(selectors, "playableVideo"),
+                selector(selectors, "playableImage"),
+                regex(patterns, "creatorUrl"),
+                regex(patterns, "scriptMediaUrl")
         );
     }
 
@@ -509,6 +597,56 @@ final class SourceConfig {
             this.refererOverride = refererOverride;
             this.requestTimeoutMs = requestTimeoutMs; this.ajaxTimeoutMs = ajaxTimeoutMs;
             this.retryCount = retryCount; this.searchRoute = searchRoute; this.searchSelector = searchSelector;
+        }
+    }
+
+    static final class WebVideo {
+        final boolean enabled;
+        final String baseUrl, userAgent, refererOverride, feedFirstRoute, feedPageRoute;
+        final List<String> fallbackDomains;
+        final Map<String, String> requestHeaders;
+        final int requestTimeoutMs, retryCount;
+        final String cardLinksSelector, playableVideoSelector;
+        final Pattern pageUrlPattern, scriptMediaUrlPattern;
+
+        WebVideo(boolean enabled, String baseUrl, List<String> fallbackDomains,
+                 String userAgent, Map<String, String> requestHeaders, String refererOverride,
+                 int requestTimeoutMs, int retryCount, String feedFirstRoute,
+                 String feedPageRoute, String cardLinksSelector, String playableVideoSelector,
+                 Pattern pageUrlPattern, Pattern scriptMediaUrlPattern) {
+            this.enabled = enabled; this.baseUrl = baseUrl; this.fallbackDomains = fallbackDomains;
+            this.userAgent = userAgent; this.requestHeaders = requestHeaders;
+            this.refererOverride = refererOverride; this.requestTimeoutMs = requestTimeoutMs;
+            this.retryCount = retryCount; this.feedFirstRoute = feedFirstRoute;
+            this.feedPageRoute = feedPageRoute; this.cardLinksSelector = cardLinksSelector;
+            this.playableVideoSelector = playableVideoSelector;
+            this.pageUrlPattern = pageUrlPattern; this.scriptMediaUrlPattern = scriptMediaUrlPattern;
+        }
+    }
+
+    static final class OnlyHaven {
+        final boolean enabled;
+        final String baseUrl, userAgent, refererOverride, creatorSearchRoute, creatorPageRoute;
+        final List<String> fallbackDomains;
+        final Map<String, String> requestHeaders;
+        final int requestTimeoutMs, retryCount;
+        final String creatorLinksSelector, mediaLinksSelector, playableVideoSelector, playableImageSelector;
+        final Pattern creatorUrlPattern, scriptMediaUrlPattern;
+
+        OnlyHaven(boolean enabled, String baseUrl, List<String> fallbackDomains,
+                  String userAgent, Map<String, String> requestHeaders, String refererOverride,
+                  int requestTimeoutMs, int retryCount, String creatorSearchRoute,
+                  String creatorPageRoute, String creatorLinksSelector, String mediaLinksSelector,
+                  String playableVideoSelector, String playableImageSelector,
+                  Pattern creatorUrlPattern, Pattern scriptMediaUrlPattern) {
+            this.enabled = enabled; this.baseUrl = baseUrl; this.fallbackDomains = fallbackDomains;
+            this.userAgent = userAgent; this.requestHeaders = requestHeaders;
+            this.refererOverride = refererOverride; this.requestTimeoutMs = requestTimeoutMs;
+            this.retryCount = retryCount; this.creatorSearchRoute = creatorSearchRoute;
+            this.creatorPageRoute = creatorPageRoute; this.creatorLinksSelector = creatorLinksSelector;
+            this.mediaLinksSelector = mediaLinksSelector; this.playableVideoSelector = playableVideoSelector;
+            this.playableImageSelector = playableImageSelector; this.creatorUrlPattern = creatorUrlPattern;
+            this.scriptMediaUrlPattern = scriptMediaUrlPattern;
         }
     }
 
