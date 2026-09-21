@@ -21,19 +21,52 @@ final class FapzoneCreatorSearchRepository {
     private static final ExecutorService SEARCH_IO = Executors.newFixedThreadPool(4);
     private static final long SEARCH_BUDGET_MS = 7_000L;
 
+    interface ResultListener {
+        void onUpdate(List<NativeContentItem> items, boolean complete);
+    }
+
+    interface SourceSearch {
+        List<NativeContentItem> search(Context context, String query, int limit) throws IOException;
+    }
+
+    private final ExecutorService searchIo;
+    private final List<SourceSearch> sources;
+
+    FapzoneCreatorSearchRepository() {
+        searchIo = SEARCH_IO;
+        sources = new ArrayList<>();
+        sources.add(this::fromFapello);
+        sources.add((context, query, limit) -> fromWikiFeet(
+                context, WikiFeetRepository.Site.WIKIFEET, query, limit));
+        sources.add((context, query, limit) -> fromWikiFeet(
+                context, WikiFeetRepository.Site.WIKIFEET_X, query, limit));
+        sources.add(this::fromOnlyHaven);
+    }
+
+    FapzoneCreatorSearchRepository(ExecutorService searchIo, List<SourceSearch> sources) {
+        this.searchIo = searchIo;
+        this.sources = new ArrayList<>(sources);
+    }
+
     List<NativeContentItem> search(Context context, String query, int limit) throws IOException {
+        return search(context, query, limit, null);
+    }
+
+    List<NativeContentItem> search(
+            Context context,
+            String query,
+            int limit,
+            ResultListener listener
+    ) throws IOException {
         String cleanQuery = query == null ? "" : query.trim();
         if (cleanQuery.length() < 2) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(20, limit));
         ExecutorCompletionService<List<NativeContentItem>> completed =
-                new ExecutorCompletionService<>(SEARCH_IO);
+                new ExecutorCompletionService<>(searchIo);
         ArrayList<Future<List<NativeContentItem>>> requests = new ArrayList<>();
-        requests.add(completed.submit(() -> fromFapello(context, cleanQuery, safeLimit)));
-        requests.add(completed.submit(() -> fromWikiFeet(
-                context, WikiFeetRepository.Site.WIKIFEET, cleanQuery, safeLimit)));
-        requests.add(completed.submit(() -> fromWikiFeet(
-                context, WikiFeetRepository.Site.WIKIFEET_X, cleanQuery, safeLimit)));
-        requests.add(completed.submit(() -> fromOnlyHaven(context, cleanQuery, safeLimit)));
+        for (SourceSearch source : sources) {
+            requests.add(completed.submit(() -> source.search(context, cleanQuery, safeLimit)));
+        }
 
         LinkedHashMap<String, CreatorGroup> groups = new LinkedHashMap<>();
         int replies = 0;
@@ -49,6 +82,9 @@ final class FapzoneCreatorSearchRepository {
                 List<NativeContentItem> items = reply.get();
                 successes++;
                 if (items != null) for (NativeContentItem item : items) add(groups, item);
+                if (listener != null && replies < requests.size() && !groups.isEmpty()) {
+                    publish(listener, snapshot(groups, safeLimit), false);
+                }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 break;
@@ -57,12 +93,32 @@ final class FapzoneCreatorSearchRepository {
         for (Future<?> request : requests) if (!request.isDone()) request.cancel(true);
         if (successes == 0) throw new IOException("OnlyFap creator search could not be reached");
 
+        ArrayList<NativeContentItem> output = snapshot(groups, safeLimit);
+        if (listener != null) publish(listener, output, true);
+        return output;
+    }
+
+    private ArrayList<NativeContentItem> snapshot(
+            LinkedHashMap<String, CreatorGroup> groups,
+            int limit
+    ) {
         ArrayList<NativeContentItem> output = new ArrayList<>();
         for (CreatorGroup group : groups.values()) {
             output.add(group.item());
-            if (output.size() >= safeLimit) break;
+            if (output.size() >= limit) break;
         }
         return output;
+    }
+
+    private void publish(
+            ResultListener listener,
+            List<NativeContentItem> items,
+            boolean complete
+    ) {
+        try {
+            listener.onUpdate(new ArrayList<>(items), complete);
+        } catch (RuntimeException ignored) {
+        }
     }
 
     private List<NativeContentItem> fromFapello(Context context, String query, int limit)
