@@ -158,6 +158,7 @@ final class SourceConfig {
                 requiredBoolean(value, "enabled"),
                 httpsBase(value, "baseUrl"),
                 httpsList(value, "fallbackDomains"),
+                httpsBase(value, "mediaBaseUrl"),
                 userAgent(value),
                 headers(value, "requestHeaders"),
                 headers(value, "ajaxHeaders"),
@@ -272,11 +273,11 @@ final class SourceConfig {
     private static OnlyHaven parseOnlyHaven(JSONObject value)
             throws ValidationException, JSONException {
         rejectUnknown(value, set(
-                "enabled", "baseUrl", "fallbackDomains", "userAgent", "requestHeaders",
+                "enabled", "baseUrl", "fallbackDomains", "mediaBaseUrl", "userAgent", "requestHeaders",
                 "refererOverride", "requestTimeoutMs", "retryCount", "routes", "selectors", "patterns"
         ), "sources.onlyhaven");
         JSONObject routes = requiredObject(value, "routes");
-        rejectUnknown(routes, set("creatorSearch", "creatorPage"),
+        rejectUnknown(routes, set("creatorSearch", "creatorPage", "creatorPostsApi"),
                 "sources.onlyhaven.routes");
         JSONObject selectors = requiredObject(value, "selectors");
         rejectUnknown(selectors, set(
@@ -296,6 +297,7 @@ final class SourceConfig {
                 retryCount(value),
                 route(routes, "creatorSearch", set("query")),
                 route(routes, "creatorPage", set("service", "id", "page")),
+                route(routes, "creatorPostsApi", set("service", "id", "offset", "limit")),
                 selector(selectors, "creatorLinks"),
                 selector(selectors, "mediaLinks"),
                 selector(selectors, "playableVideo"),
@@ -626,24 +628,27 @@ final class SourceConfig {
 
     static final class OnlyHaven {
         final boolean enabled;
-        final String baseUrl, userAgent, refererOverride, creatorSearchRoute, creatorPageRoute;
+        final String baseUrl, mediaBaseUrl, userAgent, refererOverride, creatorSearchRoute,
+                creatorPageRoute, creatorPostsApiRoute;
         final List<String> fallbackDomains;
         final Map<String, String> requestHeaders;
         final int requestTimeoutMs, retryCount;
         final String creatorLinksSelector, mediaLinksSelector, playableVideoSelector, playableImageSelector;
         final Pattern creatorUrlPattern, scriptMediaUrlPattern;
 
-        OnlyHaven(boolean enabled, String baseUrl, List<String> fallbackDomains,
+        OnlyHaven(boolean enabled, String baseUrl, List<String> fallbackDomains, String mediaBaseUrl,
                   String userAgent, Map<String, String> requestHeaders, String refererOverride,
                   int requestTimeoutMs, int retryCount, String creatorSearchRoute,
-                  String creatorPageRoute, String creatorLinksSelector, String mediaLinksSelector,
+                  String creatorPageRoute, String creatorPostsApiRoute,
+                  String creatorLinksSelector, String mediaLinksSelector,
                   String playableVideoSelector, String playableImageSelector,
                   Pattern creatorUrlPattern, Pattern scriptMediaUrlPattern) {
             this.enabled = enabled; this.baseUrl = baseUrl; this.fallbackDomains = fallbackDomains;
-            this.userAgent = userAgent; this.requestHeaders = requestHeaders;
+            this.mediaBaseUrl = mediaBaseUrl; this.userAgent = userAgent; this.requestHeaders = requestHeaders;
             this.refererOverride = refererOverride; this.requestTimeoutMs = requestTimeoutMs;
             this.retryCount = retryCount; this.creatorSearchRoute = creatorSearchRoute;
-            this.creatorPageRoute = creatorPageRoute; this.creatorLinksSelector = creatorLinksSelector;
+            this.creatorPageRoute = creatorPageRoute; this.creatorPostsApiRoute = creatorPostsApiRoute;
+            this.creatorLinksSelector = creatorLinksSelector;
             this.mediaLinksSelector = mediaLinksSelector; this.playableVideoSelector = playableVideoSelector;
             this.playableImageSelector = playableImageSelector; this.creatorUrlPattern = creatorUrlPattern;
             this.scriptMediaUrlPattern = scriptMediaUrlPattern;
