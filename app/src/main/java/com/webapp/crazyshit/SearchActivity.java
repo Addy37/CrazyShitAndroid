@@ -393,7 +393,21 @@ public final class SearchActivity extends Activity {
                 result = new FapzoneCreatorSearchRepository().search(
                         this,
                         requestedQuery,
-                        40
+                        40,
+                        (partial, complete) -> {
+                            if (complete || partial == null || partial.isEmpty()) return;
+                            List<NativeContentItem> visible = new ArrayList<>(partial);
+                            runOnUiThread(() -> {
+                                if (destroyed || isFinishing() || token != generation) return;
+                                progress.setVisibility(View.GONE);
+                                status.setVisibility(View.GONE);
+                                if (onlyFapAdapter != null) onlyFapAdapter.replace(visible);
+                                searchState.setText(visible.size() == 1
+                                        ? "1 creator · Searching…"
+                                        : visible.size() + " creators · Searching…");
+                                searchState.setContentDescription(searchState.getText());
+                            });
+                        }
                 );
             } catch (Exception ignored) {
             }
