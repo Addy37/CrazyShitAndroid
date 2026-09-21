@@ -126,6 +126,6 @@ public final class SourceExpansionTest {
         );
         assertEquals(1, items.size());
         assertEquals("Sample title", items.get(0).title);
-        assertEquals("https://theync.com/video/12345/comments", items.get(0).url);
+        assertEquals("https://theync.com/video/12345/sample-title", items.get(0).url);
     }
 }
