@@ -460,8 +460,7 @@ public final class BunkrGalleryActivity extends Activity {
         NativeContentItem item = adapter.itemAt(position);
         if (item == null || !item.isImage() || adapter.isLoading(position) ||
                 !adapter.resolvedUrl(position).isEmpty()) return;
-        if (OnlyHavenRepository.isOnlyHavenUrl(item.url) &&
-                OnlyHavenRepository.isDirectImageUrl(item.url)) {
+        if (isOnlyHavenDirectImage(item)) {
             adapter.setResolvedUrl(position, item.url);
             BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, item.url);
             return;
