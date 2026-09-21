@@ -46,7 +46,7 @@ the active cache.
 | Kaotic | Enabled, base/fallback domains, feed routes, User-Agent, Referer override, approved headers, request timeout/retry count, card/playable selectors, bounded page/media regex |
 | TheYNC | Same supported values as Kaotic, with an independent configuration |
 | ItemFix | Same supported values as Kaotic, with an independent configuration |
-| OnlyHaven (cum.st) | Enabled, base/fallback domains, creator-search/creator-page routes, User-Agent, Referer override, approved headers, request timeout/retry count, creator/media/playable selectors, bounded creator/media regex |
+| OnlyHaven (cum.st) | Enabled, base/fallback domains, creator-search UI/API, creator-page/posts routes, User-Agent, Referer override, approved headers, request timeout/retry count, creator/media/playable selectors, bounded creator/media regex |
 
 ## Values that remain compiled
 
@@ -93,9 +93,10 @@ ADMIN_SOURCE_CONFIG_ENDPOINT=https://fketutffusxgjxjlckci.supabase.co/functions/
 Do not add a secret/service-role Supabase key to GitHub Android-build secrets.
 
 Build and install the private admin APK. Open **Source Control** and publish a validated document
-newer than the app's bundled version 2 configuration. Version 2 adds Kaotic, TheYNC, ItemFix, and
-OnlyHaven. Until a newer compatible document is published, ZeroChill keeps the bundled version 2
-defaults and ignores older remote documents.
+newer than the app's bundled version 4 configuration. Version 4 keeps Kaotic, TheYNC, and ItemFix,
+and adds the current OnlyHaven creator-search API route used to resolve cum.st creators reliably.
+Until a newer compatible document is published, ZeroChill keeps the bundled version 4 defaults and
+ignores older remote documents.
 
 ## Publishing and rollback
 
@@ -109,5 +110,6 @@ The main app normally receives a publish within 45 minutes. Restarting does not 
 requests inside the refresh interval.
 
 When this source-expansion change is deployed, deploy the updated `app-config-admin` function before
-publishing a configuration that contains the four new source objects. No database migration is
-required for the added source fields because the configuration document remains stored as JSON.
+publishing a configuration that contains the expanded source objects or the OnlyHaven
+`creatorSearchApi` route. No database migration is required for these source fields because the
+configuration document remains stored as JSON.
