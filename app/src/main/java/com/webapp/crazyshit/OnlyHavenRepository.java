@@ -254,11 +254,14 @@ final class OnlyHavenRepository {
                     boolean video = isDirectVideo(candidate);
                     boolean image = isDirectImage(candidate);
                     if (!video && !image) continue;
+                    String itemPreview = image
+                            ? candidate
+                            : firstUseful(videoPreviewUrl(config, file), preview);
                     NativeContentItem item = new NativeContentItem(
                             video ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE,
                             title,
                             candidate,
-                            image ? candidate : preview,
+                            itemPreview,
                             "",
                             creator.url,
                             "",
@@ -301,9 +304,8 @@ final class OnlyHavenRepository {
         String direct = firstJsonText(file, "url", "src");
         if (direct.startsWith("https://")) return cleanUrl(direct);
 
-        String storageKey = firstJsonText(file, "storageKey", "storage_key", "sha256");
+        String storageKey = storageKey(file);
         String path = firstJsonText(file, "path");
-        if (storageKey.isEmpty() && path.matches("(?i)^[0-9a-f]{16,}$")) storageKey = path;
 
         if (!storageKey.isEmpty()) {
             String variant = preferredVariant(file.optJSONArray("variants"));
@@ -324,6 +326,21 @@ final class OnlyHavenRepository {
             return config.baseUrl + "data" + normalized;
         }
         return "";
+    }
+
+    String videoPreviewUrl(SourceConfig.OnlyHaven config, JSONObject file) {
+        if (config == null || file == null) return "";
+        String key = storageKey(file);
+        if (key.isEmpty()) return "";
+        return config.imageBaseUrl + "thumbnail/" + stripSlashes(key) + "/preview.webp";
+    }
+
+    private String storageKey(JSONObject file) {
+        if (file == null) return "";
+        String key = firstJsonText(file, "storageKey", "storage_key", "sha256", "id");
+        String path = firstJsonText(file, "path");
+        if (key.isEmpty() && path.matches("(?i)^[0-9a-f]{16,}$")) key = path;
+        return stripSlashes(key);
     }
 
     private String preferredVariant(JSONArray variants) {
