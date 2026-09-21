@@ -375,6 +375,7 @@ public final class SearchActivity extends Activity {
         }
 
         activeQuery = query == null ? "" : query.trim();
+        final String requestedQuery = activeQuery;
         final int token = ++generation;
         pendingSources = 1;
         errors.clear();
@@ -388,19 +389,16 @@ public final class SearchActivity extends Activity {
 
         requests.add(io.submit(() -> {
             List<NativeContentItem> result = null;
-            Exception failure = null;
             try {
                 result = new FapzoneCreatorSearchRepository().search(
                         this,
-                        activeQuery,
+                        requestedQuery,
                         40
                 );
-            } catch (Exception error) {
-                failure = error;
+            } catch (Exception ignored) {
             }
 
             List<NativeContentItem> creators = result;
-            Exception searchFailure = failure;
             runOnUiThread(() -> {
                 if (destroyed || isFinishing() || token != generation) return;
                 pendingSources = 0;
@@ -423,7 +421,7 @@ public final class SearchActivity extends Activity {
                 searchState.setContentDescription(searchState.getText());
 
                 if (creators.isEmpty()) {
-                    status.setText("No creator matches for “" + activeQuery + "”\n\nTry a shorter or more general search.");
+                    status.setText("No creator matches for “" + requestedQuery + "”\n\nTry a shorter or more general search.");
                     status.setVisibility(View.VISIBLE);
                 } else {
                     status.setVisibility(View.GONE);
