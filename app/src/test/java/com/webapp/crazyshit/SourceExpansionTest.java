@@ -63,6 +63,27 @@ public final class SourceExpansionTest {
         assertEquals("Saturday September 20th, 2026", items.get(2).title);
     }
 
+    @Test public void onlyHavenCreatorSearchApiFindsCanonicalCreator() throws Exception {
+        OnlyHavenRepository repository = new OnlyHavenRepository();
+        SourceConfig.OnlyHaven config = RemoteSourceConfigManager.snapshot().onlyHaven;
+        assertEquals("api/v1/creators?q={query}&n={limit}&o={offset}",
+                config.creatorSearchApiRoute);
+        String json = "{\"creators\":[{"
+                + "\"id\":\"30340311\","
+                + "\"name\":\"samplecreator\","
+                + "\"displayName\":\"Sample Creator\","
+                + "\"service\":\"onlyfans\"}]}";
+
+        List<OnlyHavenRepository.Creator> creators =
+                repository.parseCreatorSearchJson(json, config, "Sample Creator", 4);
+
+        assertEquals(1, creators.size());
+        assertEquals("onlyfans", creators.get(0).service);
+        assertEquals("30340311", creators.get(0).id);
+        assertEquals("Sample Creator", creators.get(0).name);
+        assertEquals("https://cum.st/creators/onlyfans/30340311", creators.get(0).url);
+    }
+
     @Test public void onlyHavenApiBuildsOriginalVariantMediaUrls() throws Exception {
         OnlyHavenRepository repository = new OnlyHavenRepository();
         OnlyHavenRepository.Creator creator = new OnlyHavenRepository.Creator(
@@ -92,15 +113,19 @@ public final class SourceExpansionTest {
         assertEquals("https://e1.cum.st/media/" + imageKey + "/original.jpg", items.get(1).url);
     }
 
-    @Test public void theYncParserAcceptsRenderedVideoLinks() {
-        String html = "<article><a href='/video/12345/sample-title' title='Sample title'>"
-                + "<img src='/sample.jpg'></a></article>";
+    @Test public void theYncParserDeduplicatesLinksForOneVideoAndKeepsRealTitle() {
+        String html = "<article>"
+                + "<a href='/video/12345/comments'>59</a>"
+                + "<a href='/video/12345/sample-title?ref=home#player' title='Sample title'>"
+                + "<img src='/sample.jpg'></a>"
+                + "</article>";
         List<NativeContentItem> items = new WebVideoSourceRepository().parseFeed(
                 Jsoup.parse(html, "https://theync.com/"),
                 WebVideoSourceRepository.Source.THEYNC,
                 1
         );
         assertEquals(1, items.size());
-        assertEquals("https://theync.com/video/12345/sample-title", items.get(0).url);
+        assertEquals("Sample title", items.get(0).title);
+        assertEquals("https://theync.com/video/12345/comments", items.get(0).url);
     }
 }
