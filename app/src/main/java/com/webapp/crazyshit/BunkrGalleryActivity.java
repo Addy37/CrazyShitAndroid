@@ -460,6 +460,12 @@ public final class BunkrGalleryActivity extends Activity {
         NativeContentItem item = adapter.itemAt(position);
         if (item == null || !item.isImage() || adapter.isLoading(position) ||
                 !adapter.resolvedUrl(position).isEmpty()) return;
+        if (OnlyHavenRepository.isOnlyHavenUrl(item.url) &&
+                OnlyHavenRepository.isDirectImageUrl(item.url)) {
+            adapter.setResolvedUrl(position, item.url);
+            BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, item.url);
+            return;
+        }
         adapter.setLoading(position, true);
         int requestGeneration = generation;
         mediaIo.execute(() -> {
@@ -854,6 +860,12 @@ public final class BunkrGalleryActivity extends Activity {
         view.setClickable(true);
         view.setFocusable(true);
         return view;
+    }
+
+    private boolean isOnlyHavenDirectImage(NativeContentItem item) {
+        return item != null && item.isImage() &&
+                OnlyHavenRepository.isOnlyHavenUrl(item.url) &&
+                OnlyHavenRepository.isDirectImageUrl(item.url);
     }
 
     private boolean isOnlyHavenDirectVideo(NativeContentItem item) {
