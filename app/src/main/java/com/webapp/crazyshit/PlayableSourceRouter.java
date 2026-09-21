@@ -19,6 +19,19 @@ final class PlayableSourceRouter {
         if (BunkrRepository.isBunkrUrl(pageUrl)) {
             return new BunkrRepository().resolvePlayable(context, pageUrl);
         }
+        if (OnlyHavenRepository.isOnlyHavenUrl(pageUrl)) {
+            return new OnlyHavenRepository().resolvePlayable(context, pageUrl);
+        }
+        WebVideoSourceRepository web = new WebVideoSourceRepository();
+        if (WebVideoSourceRepository.isKaoticUrl(pageUrl)) {
+            return web.resolvePlayable(context, WebVideoSourceRepository.Source.KAOTIC, pageUrl);
+        }
+        if (WebVideoSourceRepository.isTheYncUrl(pageUrl)) {
+            return web.resolvePlayable(context, WebVideoSourceRepository.Source.THEYNC, pageUrl);
+        }
+        if (WebVideoSourceRepository.isItemFixUrl(pageUrl)) {
+            return web.resolvePlayable(context, WebVideoSourceRepository.Source.ITEMFIX, pageUrl);
+        }
         if (EfuktRepository.isEfuktUrl(pageUrl)) {
             return new EfuktRepository().resolvePlayable(context, pageUrl);
         }
