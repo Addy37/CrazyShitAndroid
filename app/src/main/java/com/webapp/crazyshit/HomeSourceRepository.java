@@ -20,8 +20,6 @@ final class HomeSourceRepository {
             if (source == 2) return page == 1 ? new EfuktRepository().fetchLatest(context) : Collections.emptyList();
             WebVideoSourceRepository web = new WebVideoSourceRepository();
             if (source == 3) return web.fetchFeed(context, WebVideoSourceRepository.Source.KAOTIC, page);
-            if (source == 4) return web.fetchFeed(context, WebVideoSourceRepository.Source.THEYNC, page);
-            if (source == 5) return web.fetchFeed(context, WebVideoSourceRepository.Source.ITEMFIX, page);
             throw new IOException("Unknown Home source");
         }, 25_000L);
     }
@@ -37,7 +35,7 @@ final class HomeSourceRepository {
         CompletionService<List<NativeContentItem>> completed = new ExecutorCompletionService<>(IO);
         List<Future<List<NativeContentItem>>> requests = new ArrayList<>();
         int first = source == 0 ? 1 : source;
-        int last = source == 0 ? 5 : source;
+        int last = source == 0 ? 3 : source;
         for (int i = first; i <= last; i++) {
             final int selected = i;
             requests.add(completed.submit(() -> loader.fetch(context, selected, page)));
