@@ -23,6 +23,7 @@ import java.util.WeakHashMap;
 final class FeedViewStyleController {
     private static final String HOME_PREF = "native_view_home";
     private static final String COLLECTION_PREF = "native_view_collection";
+    private static final String HOME_LIST_DEFAULT = "home_list_default_3_0_13";
     private static final String[] LABELS = {"Cards", "List", "Grid", "Posters"};
 
     private static final Map<NativeMainActivity, ViewPager2.OnPageChangeCallback> MAIN_CALLBACKS =
@@ -35,12 +36,23 @@ final class FeedViewStyleController {
 
     static void prepareVisualRefresh(android.content.Context context) {
         android.content.SharedPreferences prefs = context.getSharedPreferences("app_prefs", 0);
-        if (prefs.getBoolean("visual_refresh_2_11_1", false)) return;
-        // Older lifecycle code saved List even when the user had never selected it.
-        // Apply the approved card layout once; subsequent user choices remain untouched.
-        prefs.edit().putInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS)
-                .putInt(COLLECTION_PREF, NativeFeedAdapter.VIEW_CARDS)
-                .putBoolean("visual_refresh_2_11_1", true).apply();
+        android.content.SharedPreferences.Editor editor = prefs.edit();
+        boolean changed = false;
+
+        // Product default: move Home to List once on upgrade, then preserve later user choices.
+        if (!prefs.getBoolean(HOME_LIST_DEFAULT, false)) {
+            editor.putInt(HOME_PREF, NativeFeedAdapter.VIEW_LIST)
+                    .putBoolean(HOME_LIST_DEFAULT, true);
+            changed = true;
+        }
+
+        if (!prefs.getBoolean("visual_refresh_2_11_1", false)) {
+            editor.putInt(COLLECTION_PREF, NativeFeedAdapter.VIEW_CARDS)
+                    .putBoolean("visual_refresh_2_11_1", true);
+            changed = true;
+        }
+
+        if (changed) editor.apply();
     }
 
     static void attachMain(NativeMainActivity activity) {
@@ -92,7 +104,7 @@ final class FeedViewStyleController {
         }
 
         int selected = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
+                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_LIST));
         AlertDialog dialog = new AlertDialog.Builder(activity)
                 .setTitle("View style")
                 .setSingleChoiceItems(LABELS, selected, null)
