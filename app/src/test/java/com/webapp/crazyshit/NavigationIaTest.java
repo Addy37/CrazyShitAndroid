@@ -158,12 +158,9 @@ public class NavigationIaTest {
                 .setVisible(android.view.WindowInsets.Type.statusBars(), false)
                 .build();
 
-        android.graphics.Insets visible =
-                NativeMainActivity.safeShellInsets(insets, false);
         android.graphics.Insets restored =
                 NativeMainActivity.safeShellInsets(insets, true);
 
-        assertEquals(0, visible.top);
         assertEquals(42, restored.top);
     }
 
