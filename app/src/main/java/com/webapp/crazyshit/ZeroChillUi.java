@@ -58,6 +58,10 @@ final class ZeroChillUi {
         return ContextCompat.getDrawable(context, R.drawable.zc_glass_navigation);
     }
 
+    static Drawable sourceRailGlass(Context context) {
+        return ContextCompat.getDrawable(context, R.drawable.zc_glass_source_rail);
+    }
+
     static Drawable panelGlass(Context context) {
         return ContextCompat.getDrawable(context, R.drawable.zc_glass_panel);
     }
@@ -136,7 +140,7 @@ final class ZeroChillUi {
         Context context = chip.getContext();
         chip.setTextColor(color(context, selected ? R.color.zc_cyan : R.color.zc_text_secondary));
         chip.setBackground(selected
-                ? ContextCompat.getDrawable(context, R.drawable.zc_nav_selected_glass)
+                ? ContextCompat.getDrawable(context, R.drawable.zc_source_rail_selected_glass)
                 : rounded(
                         context,
                         Color.argb(48, 17, 23, 30),

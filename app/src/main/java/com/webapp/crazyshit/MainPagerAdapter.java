@@ -249,7 +249,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         scroll.setHorizontalScrollBarEnabled(false);
         scroll.setClipChildren(false);
         scroll.setClipToPadding(false);
-        scroll.setBackground(ZeroChillUi.navigationGlass(activity));
+        scroll.setBackground(ZeroChillUi.sourceRailGlass(activity));
         scroll.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
         LinearLayout sources = new LinearLayout(activity);
         sources.setClipChildren(false);
@@ -385,7 +385,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         selector.setClipToPadding(false);
         selector.setGravity(Gravity.CENTER);
         selector.setPadding(dp(12), dp(8), dp(12), dp(8));
-        selector.setBackground(ZeroChillUi.navigationGlass(activity));
+        selector.setBackground(ZeroChillUi.sourceRailGlass(activity));
         selector.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
 
         page.crazyShitSource = seriesSourceButton("CrazyShit");
@@ -429,7 +429,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         modes.setOrientation(LinearLayout.HORIZONTAL);
         modes.setGravity(Gravity.CENTER);
         modes.setPadding(dp(12), dp(6), dp(12), dp(6));
-        modes.setBackground(ZeroChillUi.navigationGlass(activity));
+        modes.setBackground(ZeroChillUi.sourceRailGlass(activity));
 
         page.fapzoneTop = fapzoneModeButton("Trending");
         page.fapzoneNew = fapzoneModeButton("New");

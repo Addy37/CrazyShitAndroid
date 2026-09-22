@@ -40,7 +40,11 @@ public class ZeroChillFoundationTest {
         Drawable panel = ZeroChillUi.panelGlass(activity);
         assertNotNull(navigation);
         assertTrue(navigation instanceof LayerDrawable);
-        assertTrue(((LayerDrawable) navigation).getNumberOfLayers() >= 4);
+        assertEquals(3, ((LayerDrawable) navigation).getNumberOfLayers());
+        Drawable sourceRail = ZeroChillUi.sourceRailGlass(activity);
+        assertNotNull(sourceRail);
+        assertTrue(sourceRail instanceof LayerDrawable);
+        assertEquals(3, ((LayerDrawable) sourceRail).getNumberOfLayers());
         Drawable outerNavigationGlass = ((LayerDrawable) navigation).getDrawable(0);
         assertTrue(outerNavigationGlass instanceof GradientDrawable);
         int[] navigationColors = ((GradientDrawable) outerNavigationGlass).getColors();
@@ -61,6 +65,20 @@ public class ZeroChillFoundationTest {
 
         ZeroChillUi.styleChip(chip, false);
         assertEquals(activity.getColor(R.color.zc_text_secondary), chip.getCurrentTextColor());
+
+        TextView sourceChip = new TextView(activity);
+        ZeroChillUi.styleSourceRailChip(sourceChip, true);
+        assertTrue(sourceChip.isSelected());
+        assertEquals(activity.getColor(R.color.zc_cyan), sourceChip.getCurrentTextColor());
+        assertTrue(sourceChip.getBackground() instanceof LayerDrawable);
+        assertEquals(3, ((LayerDrawable) sourceChip.getBackground()).getNumberOfLayers());
+
+        Drawable selectedNavigation = activity.getDrawable(R.drawable.zc_nav_selected_glass);
+        Drawable shitTokRail = activity.getDrawable(R.drawable.zc_shittok_control_rail);
+        assertTrue(selectedNavigation instanceof LayerDrawable);
+        assertTrue(shitTokRail instanceof LayerDrawable);
+        assertEquals(3, ((LayerDrawable) selectedNavigation).getNumberOfLayers());
+        assertEquals(3, ((LayerDrawable) shitTokRail).getNumberOfLayers());
 
         ProgressBar progress = new ProgressBar(activity);
         ZeroChillUi.styleProgress(progress);
