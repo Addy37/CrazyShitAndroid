@@ -89,15 +89,21 @@ final class GestureGuideDialog {
         hint.setContentDescription("ShitTok gesture tip. Tap to dismiss.");
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, -2);
-        params.gravity = Gravity.TOP;
-        params.setMargins(dp(activity, 14), dp(activity, 14), dp(activity, 14), 0);
+        params.gravity = Gravity.BOTTOM;
+        int systemBottomInset = root.getRootWindowInsets() == null
+                ? 0
+                : root.getRootWindowInsets().getSystemWindowInsetBottom();
+        int bottomMargin = ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height)
+                + systemBottomInset
+                + dp(activity, 10);
+        params.setMargins(dp(activity, 14), 0, dp(activity, 14), bottomMargin);
         root.addView(hint, params);
 
         Runnable dismiss = () -> {
             if (hint.getParent() == null) return;
             hint.animate()
                     .alpha(0f)
-                    .translationY(-dp(activity, 6))
+                    .translationY(dp(activity, 6))
                     .setDuration(180L)
                     .withEndAction(() -> {
                         if (hint.getParent() instanceof FrameLayout) {
@@ -108,7 +114,7 @@ final class GestureGuideDialog {
                     .start();
         };
         hint.setAlpha(0f);
-        hint.setTranslationY(-dp(activity, 8));
+        hint.setTranslationY(dp(activity, 8));
         hint.animate().alpha(1f).translationY(0f).setDuration(220L).start();
         hint.setOnClickListener(v -> dismiss.run());
         hint.postDelayed(dismiss, 5200L);
