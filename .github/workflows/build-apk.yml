@@ -21,13 +21,16 @@ jobs:
     steps:
       - name: Check out project
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Verify current ZEROCHILL build lineage
         run: |
           set -euo pipefail
           BASELINE="8dad094162bef8b537daa9474e8cd647f55e910b"
+          SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           test -f ZEROCHILL_BUILD_LINEAGE.md
-          git merge-base --is-ancestor "$BASELINE" HEAD || {
+          git merge-base --is-ancestor "$BASELINE" "$SOURCE_SHA" || {
             echo "This branch predates the approved complete ZEROCHILL baseline $BASELINE."
             echo "Build from integration/zerochill-current or a descendant instead."
             exit 1
@@ -248,7 +251,8 @@ jobs:
           set -euo pipefail
           REF_NAME="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           SAFE_REF="$(printf '%s' "$REF_NAME" | tr '/ ' '--' | tr -cd 'A-Za-z0-9._-')"
-          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+          SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          SHORT_SHA="${SOURCE_SHA:0:7}"
           DEBUG_APK="ZeroChill-${SAFE_REF}-${SHORT_SHA}-debug.apk"
           RELEASE_APK="ZeroChill-${SAFE_REF}-${SHORT_SHA}-release.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$DEBUG_APK"
