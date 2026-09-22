@@ -149,6 +149,32 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Test public void shitTokFullscreenDoesNotClobberHomeFloatingRailPadding() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        Bundle state = new Bundle();
+        state.putInt("primary_page", MainPagerAdapter.PAGE_CHAOS);
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create(state).start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
+        Object[] pages = ReflectionHelpers.getField(adapter, "pages");
+        Object home = pages[MainPagerAdapter.PAGE_HOME];
+        androidx.recyclerview.widget.RecyclerView homeRecycler =
+                ReflectionHelpers.getField(home, "recycler");
+        int approvedTopPadding = Math.round(
+                65 * activity.getResources().getDisplayMetrics().density
+        );
+        assertEquals(approvedTopPadding, homeRecycler.getPaddingTop());
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void landscapeControllerRestoresCachedPortraitTopInset() {
         assertEquals(42, LandscapeUiController.resolveShellTopInset(false, 0, 42));
         assertEquals(36, LandscapeUiController.resolveShellTopInset(false, 36, 42));
