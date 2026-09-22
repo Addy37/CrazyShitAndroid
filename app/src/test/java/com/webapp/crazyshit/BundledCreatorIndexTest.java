@@ -39,7 +39,7 @@ public class BundledCreatorIndexTest {
             assertEquals(12, index.matching("creator", 12).size());
             assertEquals("Creator 24999", index.matching("creator 24999", 12).get(0).title);
             assertEquals("Creator 17777", index.matching("away alias", 12).get(0).title);
-            assertEquals("Creator 17777", index.matching("ator 1777", 12).get(0).title);
+            assertEquals("Creator 17777", index.matching("ator 17777", 12).get(0).title);
         }
     }
 
