@@ -1,51 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Diffuse outer rim. Layered strokes simulate glow without bitmap assets. -->
+    <!-- Selected state stays clear, marked by a brighter cyan optical rim. -->
     <item>
         <shape android:shape="rectangle">
-            <gradient
-                android:angle="270"
-                android:startColor="#C50B2634"
-                android:centerColor="#D5091822"
-                android:endColor="#ED070C11" />
-            <stroke android:width="3dp" android:color="#520892D0" />
+            <solid android:color="#00000000" />
+            <stroke android:width="2dp" android:color="#780892D0" />
             <corners android:radius="@dimen/zc_radius_pill" />
         </shape>
     </item>
 
-    <!-- Bright glass rim and darker translucent interior. -->
     <item android:left="2dp" android:top="2dp" android:right="2dp" android:bottom="2dp">
         <shape android:shape="rectangle">
-            <gradient
-                android:angle="270"
-                android:startColor="#740892D0"
-                android:centerColor="#CC0B2634"
-                android:endColor="#E00A1016" />
-            <stroke android:width="1dp" android:color="#E60892D0" />
+            <solid android:color="#00000000" />
+            <stroke android:width="1dp" android:color="#C80892D0" />
             <corners android:radius="28dp" />
         </shape>
     </item>
 
-    <!-- Upper internal sheen. -->
+    <!-- Restrained highlight, no milky fill. -->
     <item
-        android:left="7dp"
-        android:top="4dp"
-        android:right="7dp"
-        android:height="15dp"
-        android:gravity="top">
-        <shape android:shape="rectangle">
-            <gradient
-                android:angle="270"
-                android:startColor="#62B7E0F2"
-                android:centerColor="#2F0892D0"
-                android:endColor="#000892D0" />
-            <corners android:radius="@dimen/zc_radius_pill" />
-        </shape>
-    </item>
-
-    <!-- Concentrated, partial specular reflection. -->
-    <item
-        android:left="12dp"
+        android:left="10dp"
         android:top="3dp"
         android:right="18dp"
         android:height="2dp"
@@ -53,26 +27,9 @@
         <shape android:shape="rectangle">
             <gradient
                 android:angle="0"
-                android:startColor="#35FFFFFF"
-                android:centerColor="#F2F4FEFF"
-                android:endColor="#550892D0" />
-            <corners android:radius="1dp" />
-        </shape>
-    </item>
-
-    <!-- Secondary low reflection keeps the tall capsule from reading flat. -->
-    <item
-        android:left="14dp"
-        android:right="14dp"
-        android:bottom="4dp"
-        android:height="1dp"
-        android:gravity="bottom">
-        <shape android:shape="rectangle">
-            <gradient
-                android:angle="0"
-                android:startColor="#000892D0"
-                android:centerColor="#700892D0"
-                android:endColor="#000892D0" />
+                android:startColor="#00FFFFFF"
+                android:centerColor="#9CF4FCFF"
+                android:endColor="#360892D0" />
             <corners android:radius="1dp" />
         </shape>
     </item>
