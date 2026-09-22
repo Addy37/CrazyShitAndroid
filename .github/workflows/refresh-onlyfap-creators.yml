@@ -57,6 +57,14 @@ jobs:
           echo "Bundled creators: $COUNT"
           test "$COUNT" -ge 15000
 
+      - name: Upload generated catalog
+        uses: actions/upload-artifact@v4
+        with:
+          name: onlyfap-creator-catalog
+          path: app/src/main/assets/onlyfap_creators.tsv
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Run focused search tests
         run: |
           set -euo pipefail
@@ -66,14 +74,6 @@ jobs:
         run: |
           set -euo pipefail
           gradle --no-daemon :app:assembleDebug
-
-      - name: Upload generated catalog
-        uses: actions/upload-artifact@v4
-        with:
-          name: onlyfap-creator-catalog
-          path: app/src/main/assets/onlyfap_creators.tsv
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
