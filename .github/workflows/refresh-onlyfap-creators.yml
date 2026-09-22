@@ -1,43 +1,38 @@
-name: Refresh OnlyFap Creator Catalog
+name: Validate OnlyFap Creator Catalog
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/onlyfap-large-creator-catalog
+      - rebrand/zerochill
     paths:
       - tools/refresh_onlyfap_creator_index.py
       - app/src/main/assets/source_config_defaults.json
       - app/src/main/assets/onlyfap_creators.tsv
       - .github/workflows/refresh-onlyfap-creators.yml
-  pull_request:
-    branches:
-      - feature/onlyfap-local-search-glass
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: onlyfap-creator-catalog-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  refresh:
-    if: ${{ !contains(github.event.head_commit.message || '', '[creator catalog]') }}
+  validate:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out creator catalog branch
+      - name: Check out current ref
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: feature/onlyfap-large-creator-catalog
 
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '17'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
@@ -69,20 +64,6 @@ jobs:
           set -euo pipefail
           gradle --no-daemon :app:assembleDebug
 
-      - name: Commit refreshed catalog
-        if: ${{ github.event_name != 'pull_request' }}
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- app/src/main/assets/onlyfap_creators.tsv; then
-            echo "Creator catalog already current."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/src/main/assets/onlyfap_creators.tsv
-          git commit -m "Expand OnlyFap bundled creator catalog [creator catalog]"
-          git push origin HEAD:feature/onlyfap-large-creator-catalog
-
       - name: Upload generated catalog
         uses: actions/upload-artifact@v4
         with:
@@ -94,7 +75,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: zerochill-onlyfap-large-catalog-debug
+          name: zerochill-onlyfap-catalog-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
