@@ -108,7 +108,7 @@ public final class CrazyShitApplication extends Application {
             migration.putBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS,
                     appPrefs.getBoolean("auto_update_enabled", true));
         if (!appPrefs.contains(NotificationCoordinator.PREF_SHOW_TITLES))
-            migration.putBoolean(NotificationCoordinator.PREF_SHOW_TITLES, false);
+            migration.putBoolean(NotificationCoordinator.PREF_SHOW_TITLES, true);
         if (!appPrefs.contains(NotificationCoordinator.PREF_FREQUENCY_HOURS))
             migration.putInt(NotificationCoordinator.PREF_FREQUENCY_HOURS, 1);
         migration.remove("auto_update_enabled").apply();
