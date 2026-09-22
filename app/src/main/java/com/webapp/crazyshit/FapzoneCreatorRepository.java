@@ -202,7 +202,7 @@ final class FapzoneCreatorRepository {
                 String.valueOf(rank + 1),
                 imageReferer,
                 "",
-                "Bunkr + Fapello + WikiFeet + WikiFeet X",
+                "Bunkr + Fapello + OnlyHaven + WikiFeet + WikiFeet X",
                 model.name
         );
         return new ResolvedCreator(rank, item);
@@ -333,7 +333,7 @@ final class FapzoneCreatorRepository {
                         value.optString("rank", ""),
                         value.optString("referer", url),
                         "",
-                        "Bunkr + Fapello + WikiFeet + WikiFeet X",
+                        "Bunkr + Fapello + OnlyHaven + WikiFeet + WikiFeet X",
                         query
                 ));
             }

@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Fast creator lookup across every source that feeds the unified Fapzone gallery. */
 final class FapzoneCreatorSearchRepository {
-    private static final ExecutorService SEARCH_IO = Executors.newFixedThreadPool(3);
+    private static final ExecutorService SEARCH_IO = Executors.newFixedThreadPool(4);
     private static final long SEARCH_BUDGET_MS = 7_000L;
 
     List<NativeContentItem> search(Context context, String query, int limit) throws IOException {
@@ -33,6 +33,7 @@ final class FapzoneCreatorSearchRepository {
                 context, WikiFeetRepository.Site.WIKIFEET, cleanQuery, safeLimit)));
         requests.add(completed.submit(() -> fromWikiFeet(
                 context, WikiFeetRepository.Site.WIKIFEET_X, cleanQuery, safeLimit)));
+        requests.add(completed.submit(() -> fromOnlyHaven(context, cleanQuery, safeLimit)));
 
         LinkedHashMap<String, CreatorGroup> groups = new LinkedHashMap<>();
         int replies = 0;
@@ -90,6 +91,29 @@ final class FapzoneCreatorSearchRepository {
         return result;
     }
 
+    private List<NativeContentItem> fromOnlyHaven(
+            Context context,
+            String query,
+            int limit
+    ) throws IOException {
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        for (OnlyHavenRepository.Creator creator :
+                new OnlyHavenRepository().searchCreators(context, query, limit)) {
+            result.add(new NativeContentItem(
+                    NativeContentItem.KIND_CREATOR,
+                    creator.name,
+                    creator.url,
+                    creator.imageUrl,
+                    "",
+                    creator.url,
+                    "",
+                    "OnlyHaven",
+                    creator.name
+            ));
+        }
+        return result;
+    }
+
     private void add(Map<String, CreatorGroup> groups, NativeContentItem item) {
         if (item == null || !item.isCreator() || item.title.trim().isEmpty()) return;
         String key = CreatorNameMatcher.normalized(item.title);
@@ -125,7 +149,7 @@ final class FapzoneCreatorSearchRepository {
 
         private String sourceLabel() {
             ArrayList<String> ordered = new ArrayList<>();
-            for (String label : new String[]{"Fapello", "WikiFeet", "WikiFeet X"}) {
+            for (String label : new String[]{"Fapello", "OnlyHaven", "WikiFeet", "WikiFeet X"}) {
                 if (sources.contains(label)) ordered.add(label);
             }
             for (String label : sources) if (!ordered.contains(label)) ordered.add(label);

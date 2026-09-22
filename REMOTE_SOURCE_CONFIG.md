@@ -43,6 +43,10 @@ the active cache.
 | Bunkr | Enabled, Balbums index, page/fallback origins, legacy API endpoints, signing URL, download root, User-Agent, Referer override, approved headers, request/sign timeouts, retry count, album/video/image selectors, CDN hosts |
 | WikiFeet | Enabled, base/fallback domains, picture/thumbnail hosts, search route/selector, User-Agent, Referer override, approved headers, request/ajax timeouts, retry count |
 | WikiFeet X | Same supported values as WikiFeet, with an independent configuration |
+| Kaotic | Enabled, base/fallback domains, feed routes, User-Agent, Referer override, approved headers, request timeout/retry count, card/playable selectors, bounded page/media regex |
+| TheYNC | Same supported values as Kaotic, with an independent configuration |
+| ItemFix | Same supported values as Kaotic, with an independent configuration |
+| OnlyHaven (cum.st) | Enabled, base/fallback domains, media/image CDN bases, creator-search UI/API, creator-page/posts routes, User-Agent, Referer override, approved headers, request timeout/retry count, creator/media/playable selectors, bounded creator/media regex |
 
 ## Values that remain compiled
 
@@ -88,8 +92,11 @@ ADMIN_SOURCE_CONFIG_ENDPOINT=https://fketutffusxgjxjlckci.supabase.co/functions/
 
 Do not add a secret/service-role Supabase key to GitHub Android-build secrets.
 
-Build and install the private admin APK. Open **Source Control**, validate the bundled version 1
-document, then publish it. Until the first publish, ZeroChill continues using its bundled defaults.
+Build and install the private admin APK. Open **Source Control** and publish a validated document
+newer than the app's bundled version 5 configuration. Version 5 keeps Kaotic, TheYNC, and ItemFix,
+uses the current OnlyHaven creator-search API, and adds the OnlyHaven image CDN base used for fast
+video preview thumbnails. Until a newer compatible document is published, ZeroChill keeps the
+bundled version 5 defaults and ignores older remote documents.
 
 ## Publishing and rollback
 
@@ -101,3 +108,8 @@ document, then publish it. Until the first publish, ZeroChill continues using it
 
 The main app normally receives a publish within 45 minutes. Restarting does not force repeated
 requests inside the refresh interval.
+
+When this source-expansion change is deployed, deploy the updated `app-config-admin` function before
+publishing a configuration that contains the expanded source objects or the OnlyHaven
+`creatorSearchApi` / `imageBaseUrl` fields. No database migration is required for these source fields because the
+configuration document remains stored as JSON.

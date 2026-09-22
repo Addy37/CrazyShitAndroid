@@ -460,6 +460,11 @@ public final class BunkrGalleryActivity extends Activity {
         NativeContentItem item = adapter.itemAt(position);
         if (item == null || !item.isImage() || adapter.isLoading(position) ||
                 !adapter.resolvedUrl(position).isEmpty()) return;
+        if (isOnlyHavenDirectImage(item)) {
+            adapter.setResolvedUrl(position, item.url);
+            BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, item.url);
+            return;
+        }
         adapter.setLoading(position, true);
         int requestGeneration = generation;
         mediaIo.execute(() -> {
@@ -505,6 +510,10 @@ public final class BunkrGalleryActivity extends Activity {
         String cached = adapter.resolvedUrl(position);
         if (!cached.isEmpty()) {
             startPlayer(position, item, cached, item.url);
+            return;
+        }
+        if (isOnlyHavenDirectVideo(item)) {
+            startPlayer(position, item, item.url, value(item.uploader));
             return;
         }
 
@@ -850,6 +859,21 @@ public final class BunkrGalleryActivity extends Activity {
         view.setClickable(true);
         view.setFocusable(true);
         return view;
+    }
+
+    private boolean isOnlyHavenDirectImage(NativeContentItem item) {
+        return item != null && item.isImage() &&
+                OnlyHavenRepository.isOnlyHavenUrl(item.url) &&
+                OnlyHavenRepository.isDirectImageUrl(item.url);
+    }
+
+    private boolean isOnlyHavenDirectVideo(NativeContentItem item) {
+        if (item == null || !item.isVideo()) return false;
+        boolean onlyHaven = OnlyHavenRepository.isOnlyHavenUrl(item.uploader) ||
+                value(item.description).toLowerCase(java.util.Locale.US).contains("onlyhaven");
+        if (!onlyHaven) return false;
+        String lower = value(item.url).toLowerCase(java.util.Locale.US);
+        return lower.matches(".*\\.(?:mp4|m3u8|mpd|webm|m4v)(?:\\?.*)?$");
     }
 
     private String value(String value) {

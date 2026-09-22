@@ -331,6 +331,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
         if (item != null && !FapelloRepository.isPostUrl(item.url) &&
                 FapelloRepository.isModelUrl(item.uploader)) return item.uploader;
+        if (item != null && OnlyHavenRepository.isOnlyHavenUrl(item.uploader)) {
+            return item.uploader;
+        }
         return item == null ? null : item.url;
     }
 
@@ -339,6 +342,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (FapelloRepository.isFapelloUrl(item.url) ||
                 FapelloRepository.isModelUrl(item.uploader)) {
             return new SourceBadge(R.drawable.ic_source_fapello, "Fapello", false);
+        }
+        if (OnlyHavenRepository.isOnlyHavenUrl(item.url) ||
+                OnlyHavenRepository.isOnlyHavenUrl(item.uploader) ||
+                containsIgnoreCase(item.description, "OnlyHaven")) {
+            return new SourceBadge(R.drawable.ic_source_onlyhaven, "OnlyHaven", false);
         }
         if (WikiFeetRepository.isWikiFeetUrl(item.url) ||
                 WikiFeetRepository.isWikiFeetUrl(item.uploader)) {
