@@ -25,18 +25,18 @@
         </shape>
     </item>
 
-    <!-- Short diffuse sheen keeps the rail dimensional without a visible white dash. -->
+    <!-- Centered source-rail sheen stays subtle and aligned with the outer curve. -->
     <item
-        android:left="18dp"
+        android:left="24dp"
         android:top="3dp"
-        android:right="28dp"
-        android:height="8dp"
+        android:right="24dp"
+        android:height="7dp"
         android:gravity="top">
         <shape android:shape="rectangle">
             <gradient
                 android:angle="270"
-                android:startColor="#14B7E0F2"
-                android:centerColor="#085BBBE2"
+                android:startColor="#10B7E0F2"
+                android:centerColor="#065BBBE2"
                 android:endColor="#00FFFFFF" />
             <corners android:radius="@dimen/zc_radius_pill" />
         </shape>

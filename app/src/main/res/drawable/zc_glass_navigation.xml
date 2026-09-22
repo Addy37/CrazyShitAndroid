@@ -26,18 +26,18 @@
         </shape>
     </item>
 
-    <!-- Wide, low-contrast sheen reads as reflected light instead of a white streak. -->
+    <!-- Centered, low-contrast sheen follows the capsule instead of reading as an offset bar. -->
     <item
-        android:left="18dp"
-        android:top="2dp"
-        android:right="30dp"
-        android:height="10dp"
+        android:left="24dp"
+        android:top="3dp"
+        android:right="24dp"
+        android:height="8dp"
         android:gravity="top">
         <shape android:shape="rectangle">
             <gradient
                 android:angle="270"
-                android:startColor="#1CB7E0F2"
-                android:centerColor="#0B5BBBE2"
+                android:startColor="#14B7E0F2"
+                android:centerColor="#075BBBE2"
                 android:endColor="#00FFFFFF" />
             <corners android:radius="@dimen/zc_radius_pill" />
         </shape>

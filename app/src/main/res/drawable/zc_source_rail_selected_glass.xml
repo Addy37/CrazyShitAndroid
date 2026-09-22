@@ -25,19 +25,20 @@
         </shape>
     </item>
 
+    <!-- Small selected pills get a centered, shortened sheen with softer falloff. -->
     <item
-        android:left="8dp"
+        android:left="10dp"
         android:top="3dp"
-        android:right="14dp"
-        android:height="8dp"
+        android:right="10dp"
+        android:height="7dp"
         android:gravity="top">
         <shape android:shape="rectangle">
             <gradient
                 android:angle="270"
-                android:startColor="#18B7E0F2"
-                android:centerColor="#0B0892D0"
+                android:startColor="#12B7E0F2"
+                android:centerColor="#080892D0"
                 android:endColor="#000892D0" />
-            <corners android:radius="@dimen/zc_radius_pill" />
+            <corners android:radius="28dp" />
         </shape>
     </item>
 </layer-list>
