@@ -123,6 +123,16 @@ Also use these rules:
 5. Check nearby flows that share changed code.
 6. Report what changed, what was tested, and any remaining limitation.
 
+## Build lineage guard
+
+Before building or sharing any ZEROCHILL APK, read `ZEROCHILL_BUILD_LINEAGE.md`.
+
+- Verify the candidate commit is the documented minimum baseline or a descendant of it.
+- Use `integration/zerochill-current` as the current complete-product integration pointer unless the user explicitly selects another base.
+- Do not use `rebrand/zerochill` directly for a product test APK when it is behind the documented integration baseline.
+- Test APK filenames must include the source branch and short commit SHA.
+- When the user approves a newer complete build, advance the integration pointer and update the lineage document.
+
 ## Git and pull requests
 
 - Use a focused branch for substantial work.
