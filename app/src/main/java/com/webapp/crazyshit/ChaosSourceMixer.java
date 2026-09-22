@@ -291,7 +291,7 @@ final class ChaosSourceMixer {
 
         LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
         HashSet<String> usedCreators = new HashSet<>();
-        int attempts = Math.min(12, Math.max(6, onlyHavenCreators.size()));
+        int attempts = Math.min(4, onlyHavenCreators.size());
 
         while (combined.size() < ONLY_HAVEN_ITEMS_PER_BATCH && attempts-- > 0) {
             if (onlyHavenCreatorDeck.isEmpty()) refillOnlyHavenDeck();
@@ -300,27 +300,23 @@ final class ChaosSourceMixer {
             if (!usedCreators.add(creator.url)) continue;
 
             ArrayList<NativeContentItem> candidates = new ArrayList<>();
-            int preferredPage = 1 + random.nextInt(2);
-            for (int pageAttempt = 0; pageAttempt < 2 && candidates.isEmpty(); pageAttempt++) {
-                int page = pageAttempt == 0 ? preferredPage : 1;
-                try {
-                    for (NativeContentItem item :
-                            onlyHaven.fetchCreatorMedia(context, creator, page, 18)) {
-                        if (item == null || !item.isVideo()) continue;
-                        candidates.add(new NativeContentItem(
-                                item.kind,
-                                item.title,
-                                item.url,
-                                item.imageUrl,
-                                item.views,
-                                "OnlyHaven",
-                                item.comments,
-                                item.description,
-                                item.searchQuery
-                        ));
-                    }
-                } catch (Exception ignored) {
+            try {
+                for (NativeContentItem item :
+                        onlyHaven.fetchCreatorMedia(context, creator, 1, 18)) {
+                    if (item == null || !item.isVideo()) continue;
+                    candidates.add(new NativeContentItem(
+                            item.kind,
+                            item.title,
+                            item.url,
+                            item.imageUrl,
+                            item.views,
+                            "OnlyHaven",
+                            item.comments,
+                            item.description,
+                            item.searchQuery
+                    ));
                 }
+            } catch (Exception ignored) {
             }
 
             Collections.shuffle(candidates, random);
