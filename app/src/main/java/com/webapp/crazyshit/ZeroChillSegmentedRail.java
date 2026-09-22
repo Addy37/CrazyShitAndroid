@@ -39,7 +39,8 @@ final class ZeroChillSegmentedRail extends LinearLayout {
         if (index < 0) return;
         selectedIndex = index;
         if (getWidth() <= 0 || index >= getChildCount() || getChildAt(index).getWidth() <= 0) {
-            post(() -> setSelectedIndex(index, animate));
+            requestLayout();
+            post(this::syncSelectedIndicator);
             return;
         }
 
@@ -135,6 +136,15 @@ final class ZeroChillSegmentedRail extends LinearLayout {
             );
         }
         super.dispatchDraw(canvas);
+    }
+
+    private void syncSelectedIndicator() {
+        if (selectedIndex < 0 || selectedIndex >= getChildCount() || getWidth() <= 0) return;
+        View child = getChildAt(selectedIndex);
+        if (child == null || child.getWidth() <= 0) return;
+        fillChildBounds(selectedIndex, indicatorBounds);
+        hasIndicatorBounds = true;
+        invalidate();
     }
 
     private void fillChildBounds(int index, RectF out) {
