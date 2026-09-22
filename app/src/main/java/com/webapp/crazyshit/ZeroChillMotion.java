@@ -8,8 +8,9 @@ import android.view.animation.DecelerateInterpolator;
 
 /** Responsive shell motion with a single reduced-motion gate. */
 final class ZeroChillMotion {
-    static final long QUICK_MS = 120L;
-    static final long STANDARD_MS = 180L;
+    static final long PRESS_IN_MS = 80L;
+    static final long QUICK_MS = 140L;
+    static final long STANDARD_MS = 190L;
 
     private ZeroChillMotion() {
     }
@@ -28,12 +29,16 @@ final class ZeroChillMotion {
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_DOWN) {
                 target.animate().cancel();
-                target.animate().scaleX(0.975f).scaleY(0.975f).alpha(0.88f)
-                        .setDuration(QUICK_MS).start();
+                target.animate().scaleX(0.965f).scaleY(0.965f).alpha(0.94f)
+                        .setDuration(PRESS_IN_MS)
+                        .setInterpolator(new DecelerateInterpolator())
+                        .start();
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                 target.animate().cancel();
                 target.animate().scaleX(1f).scaleY(1f).alpha(1f)
-                        .setDuration(QUICK_MS).start();
+                        .setDuration(QUICK_MS)
+                        .setInterpolator(new DecelerateInterpolator())
+                        .start();
             }
             return false;
         });
