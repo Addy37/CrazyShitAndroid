@@ -119,6 +119,36 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Test public void shitTokOffersManualFullscreenOnlyForHorizontalVideo() {
+        assertTrue(ChaosFeedView.shouldOfferLandscapeFullscreen(16f / 9f));
+        assertTrue(ChaosFeedView.shouldOfferLandscapeFullscreen(4f / 3f));
+        assertFalse(ChaosFeedView.shouldOfferLandscapeFullscreen(1f));
+        assertFalse(ChaosFeedView.shouldOfferLandscapeFullscreen(9f / 16f));
+
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        Bundle state = new Bundle();
+        state.putInt("primary_page", MainPagerAdapter.PAGE_CHAOS);
+        ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
+                .create(state).start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        NativeMainActivity activity = controller.get();
+        MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
+        ChaosFeedView chaosView = ReflectionHelpers.getField(adapter, "chaosView");
+        androidx.recyclerview.widget.RecyclerView.Adapter chaosAdapter =
+                ReflectionHelpers.getField(chaosView, "adapter");
+        androidx.recyclerview.widget.RecyclerView parent =
+                new androidx.recyclerview.widget.RecyclerView(activity);
+        androidx.recyclerview.widget.RecyclerView.ViewHolder holder =
+                chaosAdapter.onCreateViewHolder(parent, 0);
+        View fullscreen = findByDescription(holder.itemView, "Watch horizontal video fullscreen");
+        assertNotNull(fullscreen);
+        assertEquals(View.GONE, fullscreen.getVisibility());
+        controller.pause().stop().destroy();
+    }
+
     @Test public void libraryHubActionsOpenExistingActivities() {
         ActivityController<LibraryHubActivity> controller =
                 Robolectric.buildActivity(LibraryHubActivity.class).setup();
