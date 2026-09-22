@@ -156,7 +156,7 @@ public class VisualRefreshTest {
         assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
                 nav.getLayoutParams().height);
         assertSame(nav, ((FrostedNavigationLayout) shell).frostedNavigationViewForTest());
-        assertEquals(BrowseUi.dp(main, 12),
+        assertEquals(BrowseUi.dp(main, 1),
                 main.getResources().getDimensionPixelSize(R.dimen.zc_navigation_blur_radius));
         assertEquals(BrowseUi.dp(main, 3),
                 main.getResources().getDimensionPixelSize(R.dimen.zc_glass_refraction_strength));
