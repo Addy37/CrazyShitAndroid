@@ -50,6 +50,7 @@ final class BrowseUi {
         action.setContentDescription(description);
         action.setBackground(rounded(context, SURFACE, 14));
         action.setFocusable(true);
+        ZeroChillMotion.installPressFeedback(action);
         action.setOnClickListener(click);
         return action;
     }

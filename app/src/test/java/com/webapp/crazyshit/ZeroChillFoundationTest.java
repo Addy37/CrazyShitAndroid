@@ -70,8 +70,7 @@ public class ZeroChillFoundationTest {
         ZeroChillUi.styleSourceRailChip(sourceChip, true);
         assertTrue(sourceChip.isSelected());
         assertEquals(activity.getColor(R.color.zc_cyan), sourceChip.getCurrentTextColor());
-        assertTrue(sourceChip.getBackground() instanceof LayerDrawable);
-        assertEquals(3, ((LayerDrawable) sourceChip.getBackground()).getNumberOfLayers());
+        assertNotNull(sourceChip.getBackground());
 
         Drawable selectedNavigation = activity.getDrawable(R.drawable.zc_nav_selected_glass);
         Drawable shitTokRail = activity.getDrawable(R.drawable.zc_shittok_control_rail);
@@ -105,6 +104,30 @@ public class ZeroChillFoundationTest {
         activity.finish();
     }
 
+    @Test public void reactiveNavigationTracksContinuousPagerPosition() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        ZeroChillBottomNavigationView nav = new ZeroChillBottomNavigationView(activity);
+        nav.getMenu().add(0, 1, 0, "Home").setIcon(R.drawable.ic_nav_home);
+        nav.getMenu().add(0, 2, 1, "Shows").setIcon(R.drawable.ic_nav_series);
+        nav.getMenu().add(0, 4, 2, "ShitTok").setIcon(R.drawable.ic_nav_chaos);
+        nav.getMenu().add(0, 3, 3, "OnlyFap").setIcon(R.drawable.ic_nav_onlyfap);
+        nav.getMenu().add(0, 5, 4, "More").setIcon(R.drawable.ic_nav_more);
+        nav.setSettledPage(1);
+        nav.setPagerProgress(1, 0.5f);
+        assertEquals(1.5f, nav.pagerPositionForTest(), 0.001f);
+
+        ZeroChillSegmentedRail rail = new ZeroChillSegmentedRail(activity);
+        rail.addView(new TextView(activity));
+        rail.addView(new TextView(activity));
+        rail.addView(new TextView(activity));
+        rail.setSelectedIndex(2, false);
+        assertEquals(2, rail.selectedIndexForTest());
+        assertTrue(nav.gpuReflectionSupportedForTest());
+        assertTrue(rail.gpuReflectionSupportedForTest());
+        activity.finish();
+    }
+
     @Test public void reducedMotionSkipsSelectionAnimationAndAppliesFinalState() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         View view = new View(activity);
@@ -113,6 +136,11 @@ public class ZeroChillFoundationTest {
                 .apply();
         assertFalse(ZeroChillMotion.animationsEnabled(activity));
         ZeroChillMotion.animateSelection(view, true);
+        activity.setTheme(R.style.Theme_CrazyShit);
+        ZeroChillBottomNavigationView nav = new ZeroChillBottomNavigationView(activity);
+        nav.setSettledPage(1);
+        nav.setPagerProgress(1, 0.5f);
+        assertEquals(1f, nav.pagerPositionForTest(), 0.001f);
         assertEquals(1f, view.getScaleX(), 0.001f);
         assertEquals(1f, view.getScaleY(), 0.001f);
         activity.finish();

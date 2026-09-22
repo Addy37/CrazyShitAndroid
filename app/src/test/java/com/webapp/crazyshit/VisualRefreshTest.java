@@ -168,7 +168,11 @@ public class VisualRefreshTest {
         android.view.ViewGroup navMenu = (android.view.ViewGroup) nav.getChildAt(0);
         assertFalse(navMenu.getClipChildren());
         assertFalse(navMenu.getClipToPadding());
-        assertEquals(UiPalette.PRIMARY, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
+        assertTrue(nav instanceof ZeroChillBottomNavigationView);
+        assertEquals(main.getColor(R.color.zc_text_secondary),
+                nav.getItemIconTintList().getDefaultColor());
+        assertEquals(MainPagerAdapter.PAGE_HOME,
+                ((ZeroChillBottomNavigationView) nav).pagerPositionForTest(), 0.001f);
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertEquals(5, nav.getMenu().size());
         assertEquals("Home", nav.getMenu().findItem(1).getTitle());

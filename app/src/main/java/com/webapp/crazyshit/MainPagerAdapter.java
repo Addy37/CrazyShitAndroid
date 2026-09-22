@@ -251,7 +251,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         scroll.setClipToPadding(false);
         scroll.setBackground(ZeroChillUi.sourceRailGlass(activity));
         scroll.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
-        LinearLayout sources = new LinearLayout(activity);
+        ZeroChillSegmentedRail sources = new ZeroChillSegmentedRail(activity);
         sources.setClipChildren(false);
         sources.setClipToPadding(false);
         sources.setGravity(Gravity.CENTER_VERTICAL);
@@ -265,6 +265,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     if (!page.loading && page.itemCount() == 0) refresh(page.index);
                     return;
                 }
+                ZeroChillMotion.performSelectionHaptic(v);
                 page.homeSource = selected;
                 homePrefs.edit().putInt("home_source", selected).apply();
                 styleHomeSources(page);
@@ -279,6 +280,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.homeChips.add(chip);
         }
         scroll.addView(sources);
+        page.homeSourceRail = sources;
         page.recycler.setPadding(0, dp(65), 0, dp(18));
         FrameLayout.LayoutParams sourceParams = new FrameLayout.LayoutParams(-1, dp(56));
         sourceParams.setMargins(dp(8), dp(2), dp(8), dp(2));
@@ -379,7 +381,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             prefs.edit().putInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT).apply();
         }
 
-        LinearLayout selector = new LinearLayout(activity);
+        ZeroChillSegmentedRail selector = new ZeroChillSegmentedRail(activity);
         selector.setOrientation(LinearLayout.HORIZONTAL);
         selector.setClipChildren(false);
         selector.setClipToPadding(false);
@@ -411,6 +413,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         selectorParams.gravity = Gravity.TOP;
         selectorParams.setMargins(dp(8), 0, dp(8), 0);
         page.root.addView(selector, selectorParams);
+        page.seriesSourceRail = selector;
         ((FrostedOverlayLayout) page.root).setFrostedOverlay(selector);
         updateSeriesSourceButtons(page);
     }
@@ -425,7 +428,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             prefs.edit().putInt(PREF_FAPZONE_MODE, page.fapzoneMode).apply();
         }
 
-        LinearLayout modes = new LinearLayout(activity);
+        ZeroChillSegmentedRail modes = new ZeroChillSegmentedRail(activity);
         modes.setOrientation(LinearLayout.HORIZONTAL);
         modes.setGravity(Gravity.CENTER);
         modes.setPadding(dp(12), dp(6), dp(12), dp(6));
@@ -457,6 +460,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.fapzonePopular.setOnClickListener(v -> switchFapzoneMode(
                 page, FapzoneCreatorRepository.MODE_POPULAR));
         page.fapzoneModes = modes;
+        page.fapzoneModeRail = modes;
 
         FrameLayout.LayoutParams modeParams = new FrameLayout.LayoutParams(-1, dp(52));
         modeParams.gravity = Gravity.TOP;
@@ -539,6 +543,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         button.setClickable(true);
         button.setFocusable(true);
         button.setContentDescription("Show " + label + " OnlyFap creators");
+        ZeroChillMotion.installPressFeedback(button);
         return button;
     }
 
@@ -551,11 +556,18 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         button.setClickable(true);
         button.setFocusable(true);
         button.setContentDescription("Show " + label + " collections");
+        ZeroChillMotion.installPressFeedback(button);
         return button;
     }
 
     private void switchSeriesSource(Page page, int source) {
         if (page == null || page.kind != PageKind.SERIES || page.seriesSource == source) return;
+        View selectedButton = source == SERIES_SOURCE_CRAZYSHIT
+                ? page.crazyShitSource
+                : source == SERIES_SOURCE_EFUKT
+                ? page.efuktSource
+                : page.categoriesSource;
+        ZeroChillMotion.performSelectionHaptic(selectedButton);
         page.seriesSource = source;
         activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
                 .edit()
@@ -574,6 +586,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private void switchFapzoneMode(Page page, int mode) {
         if (page == null || page.kind != PageKind.ONLYFAP || page.fapzoneMode == mode) return;
+        View selectedButton = mode == FapzoneCreatorRepository.MODE_TOP_50
+                ? page.fapzoneTop
+                : mode == FapzoneCreatorRepository.MODE_NEW
+                ? page.fapzoneNew
+                : mode == FapzoneCreatorRepository.MODE_HOT
+                ? page.fapzoneHot
+                : page.fapzonePopular;
+        ZeroChillMotion.performSelectionHaptic(selectedButton);
         page.fapzoneMode = mode;
         activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
                 .edit()
@@ -595,6 +615,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         styleSeriesSourceButton(page.crazyShitSource, page.seriesSource == SERIES_SOURCE_CRAZYSHIT);
         styleSeriesSourceButton(page.efuktSource, page.seriesSource == SERIES_SOURCE_EFUKT);
         styleSeriesSourceButton(page.categoriesSource, page.seriesSource == SERIES_SOURCE_CATEGORIES);
+        if (page.seriesSourceRail != null) {
+            int selectedIndex = page.seriesSource == SERIES_SOURCE_CRAZYSHIT
+                    ? 0
+                    : page.seriesSource == SERIES_SOURCE_EFUKT ? 1 : 2;
+            page.seriesSourceRail.setSelectedIndex(selectedIndex, true);
+        }
         if (page.refresh != null) {
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
             params.topMargin = 0;
@@ -627,6 +653,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 page.fapzonePopular,
                 page.fapzoneMode == FapzoneCreatorRepository.MODE_POPULAR
         );
+        if (page.fapzoneModeRail != null) {
+            int selectedIndex = page.fapzoneMode == FapzoneCreatorRepository.MODE_TOP_50
+                    ? 0
+                    : page.fapzoneMode == FapzoneCreatorRepository.MODE_NEW
+                    ? 1
+                    : page.fapzoneMode == FapzoneCreatorRepository.MODE_HOT ? 2 : 3;
+            page.fapzoneModeRail.setSelectedIndex(selectedIndex, true);
+        }
     }
 
     private void updateFapzoneCaption(Page page) {
@@ -757,6 +791,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             TextView chip = page.homeChips.get(i);
             boolean selected = (i + 1) == page.homeSource;
             ZeroChillUi.styleSourceRailChip(chip, selected);
+        }
+        if (page.homeSourceRail != null) {
+            page.homeSourceRail.setSelectedIndex(Math.max(0, page.homeSource - 1), true);
         }
     }
 
@@ -932,6 +969,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         TextView efuktSource;
         TextView bunkrSource;
         TextView categoriesSource;
+        ZeroChillSegmentedRail homeSourceRail;
+        ZeroChillSegmentedRail seriesSourceRail;
+        ZeroChillSegmentedRail fapzoneModeRail;
         View fapzoneModes;
         TextView fapzoneTop;
         TextView fapzoneNew;
