@@ -268,7 +268,8 @@ def fetch_fapello(
                 if looks_blocked(body):
                     raise RuntimeError("Fapello returned a browser challenge")
             except RuntimeError as error:
-                requests += 1
+                if 'body' not in locals():
+                    requests += 1
                 stale_pages += 1
                 print(f"Skipping Fapello {listing} page {page}: {error}")
                 if listing == "new":
@@ -285,8 +286,6 @@ def fetch_fapello(
                 if add_record(records, name, aliases):
                     added += 1
                     new_this_page += 1
-                    if len(records) >= target:
-                        break
 
             print(
                 f"Fapello {listing} page {page}: "
