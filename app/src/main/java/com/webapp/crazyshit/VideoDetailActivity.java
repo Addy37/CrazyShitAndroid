@@ -105,6 +105,8 @@ public class VideoDetailActivity extends Activity {
     private TextView playerTitleView;
     private ImageButton portraitFullscreenButton;
     private ProgressBar loading;
+    private FrameLayout portraitProgressTrack;
+    private View portraitProgressFill;
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
     private OnBackInvokedCallback backCallback;
@@ -139,6 +141,16 @@ public class VideoDetailActivity extends Activity {
     private int thumbnailResolverCursor;
     private int relatedLoadGeneration;
     private int relatedPlayGeneration;
+
+    private final Runnable portraitProgressTicker = new Runnable() {
+        @Override
+        public void run() {
+            updatePortraitProgress();
+            if (portraitProgressTrack != null) {
+                portraitProgressTrack.postDelayed(this, 350L);
+            }
+        }
+    };
 
     private static final class VideoHistoryEntry {
         final String mediaUrl;
@@ -307,6 +319,23 @@ public class VideoDetailActivity extends Activity {
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
+
+        portraitProgressTrack = new FrameLayout(this);
+        portraitProgressTrack.setBackgroundColor(Color.argb(112, 255, 255, 255));
+        portraitProgressTrack.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams portraitTrackParams =
+                new FrameLayout.LayoutParams(-1, dp(3));
+        portraitTrackParams.gravity = Gravity.BOTTOM;
+        playerContainer.addView(portraitProgressTrack, portraitTrackParams);
+
+        portraitProgressFill = new View(this);
+        portraitProgressFill.setBackgroundColor(UiPalette.PRIMARY);
+        portraitProgressFill.setPivotX(0f);
+        portraitProgressFill.setScaleX(0f);
+        portraitProgressTrack.addView(
+                portraitProgressFill,
+                new FrameLayout.LayoutParams(-1, -1)
+        );
 
         View playerBack = playerView.findViewById(R.id.player_back);
         playerTitleView = playerView.findViewById(R.id.player_title);
@@ -602,6 +631,38 @@ public class VideoDetailActivity extends Activity {
             }
         });
         player.prepare();
+        startPortraitProgressTicker();
+    }
+
+    static float portraitProgressFraction(long positionMs, long durationMs) {
+        if (durationMs <= 0L || positionMs <= 0L) return 0f;
+        return Math.max(0f, Math.min(1f, positionMs / (float) durationMs));
+    }
+
+    private void startPortraitProgressTicker() {
+        if (portraitProgressTrack == null) return;
+        portraitProgressTrack.removeCallbacks(portraitProgressTicker);
+        updatePortraitProgress();
+        portraitProgressTrack.postDelayed(portraitProgressTicker, 350L);
+    }
+
+    private void stopPortraitProgressTicker() {
+        if (portraitProgressTrack != null) {
+            portraitProgressTrack.removeCallbacks(portraitProgressTicker);
+        }
+    }
+
+    private void updatePortraitProgress() {
+        if (portraitProgressTrack == null || portraitProgressFill == null) return;
+        boolean portrait = getResources().getConfiguration().orientation
+                != Configuration.ORIENTATION_LANDSCAPE;
+        boolean visible = portrait && !portraitFullscreen && !rotatableFullscreen;
+        portraitProgressTrack.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (!visible) return;
+
+        long position = player == null ? 0L : Math.max(0L, player.getCurrentPosition());
+        long duration = player == null ? 0L : Math.max(0L, player.getDuration());
+        portraitProgressFill.setScaleX(portraitProgressFraction(position, duration));
     }
 
     private void updateMetadataUi() {
@@ -1405,6 +1466,7 @@ public class VideoDetailActivity extends Activity {
         playerContainer.setAlpha(1f);
         updatePortraitFullscreenButton();
         updateSwipeEnabled();
+        updatePortraitProgress();
         shell.requestApplyInsets();
     }
 
@@ -1607,6 +1669,8 @@ public class VideoDetailActivity extends Activity {
 
     private void releasePlayer() {
         playbackRecovery.cancel();
+        stopPortraitProgressTicker();
+        if (portraitProgressFill != null) portraitProgressFill.setScaleX(0f);
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
             try {
@@ -1676,12 +1740,14 @@ public class VideoDetailActivity extends Activity {
         recoveryResumed = true;
         if (orientationListener != null) orientationListener.enable();
         updateSwipeEnabled();
+        startPortraitProgressTicker();
         if (detailsScroll != null) applyDetailsBackground();
     }
 
     @Override
     protected void onPause() {
         if (orientationListener != null) orientationListener.disable();
+        stopPortraitProgressTicker();
         super.onPause();
     }
 
