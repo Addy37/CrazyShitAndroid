@@ -33,7 +33,6 @@ final class ChaosSourceMixer {
     private static final int ONLY_HAVEN_ITEMS_PER_BATCH = 6;
     private static final int ONLY_HAVEN_ITEMS_PER_CREATOR = 3;
     private static final int ONLY_HAVEN_TRENDING_CREATORS = 30;
-    private static final int STARTER_ITEMS = 1;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
 
@@ -67,9 +66,9 @@ final class ChaosSourceMixer {
 
     List<NativeContentItem> loadRandomBatch(Context context) {
         // Cold-start optimization: warm Shit Show immediately, but let the first Chaos request
-        // return one known regular clip instead of waiting for the full catalog + Shit Show mix.
-        // The splash normally preloads and warms this exact clip first, and ChaosFeedView asks for
-        // the full near-50/50 pool immediately afterward because the starter is under 14 items.
+        // return a small regular-video queue instead of waiting for the full catalog + Shit Show
+        // mix. The splash normally seeds this queue first, and ChaosFeedView asks for the full
+        // mixed pool immediately afterward because the starter is still under 14 items.
         shitShow.prewarm(context);
         if (starterPending) {
             starterPending = false;
@@ -158,7 +157,7 @@ final class ChaosSourceMixer {
                 }
                 if (candidates.isEmpty()) continue;
                 Collections.shuffle(candidates, random);
-                int take = Math.min(STARTER_ITEMS, candidates.size());
+                int take = Math.min(ChaosStartupPreloader.STARTER_ITEMS, candidates.size());
                 return new ArrayList<>(candidates.subList(0, take));
             } catch (Exception ignored) {
             }
