@@ -200,6 +200,7 @@ def fetch_onlyhaven(
     base, route, headers = configured_onlyhaven(config_path)
     harvested = 0
     requests = 0
+    failed_requests = 0
 
     for query in query_terms():
         if len(records) >= target or requests >= max_requests:
@@ -216,7 +217,14 @@ def fetch_onlyhaven(
                 .replace("{offset}", str(offset))
             )
             url = urllib.parse.urljoin(base, relative)
-            rows = creator_rows(request_json(url, headers))
+            try:
+                rows = creator_rows(request_json(url, headers))
+            except RuntimeError as error:
+                failed_requests += 1
+                requests += 1
+                print(f"Skipping creator query {query!r} at offset {offset}: {error}")
+                time.sleep(max(1.0, pause * 5))
+                break
             requests += 1
             if not rows:
                 break
@@ -234,6 +242,8 @@ def fetch_onlyhaven(
         if pause > 0:
             time.sleep(pause)
 
+    if failed_requests:
+        print(f"Creator API transient failures skipped: {failed_requests}")
     return harvested, requests
 
 
