@@ -445,7 +445,7 @@ public final class ChaosFeedView extends FrameLayout {
     private CrazyShitRepository.StreamInfo resolvePlayable(NativeContentItem item)
             throws Exception {
         if (item == null || item.url == null || item.url.isEmpty()) return null;
-        return PlayableSourceRouter.resolve(activity, item.url);
+        return PlayableSourceRouter.resolve(activity, item);
     }
 
     private boolean shouldRetryResolution(NativeContentItem item, int position) {
@@ -914,7 +914,9 @@ public final class ChaosFeedView extends FrameLayout {
         return item != null
                 && !EfuktRepository.isEfuktUrl(item.url)
                 && !BunkrRepository.isBunkrUrl(item.url)
-                && !FapelloRepository.isFapelloUrl(item.url);
+                && !FapelloRepository.isFapelloUrl(item.url)
+                && !WebVideoSourceRepository.isKaoticUrl(item.url)
+                && !OnlyHavenRepository.isOnlyHavenUrl(item.url);
     }
 
     private void haptic(View view) {
