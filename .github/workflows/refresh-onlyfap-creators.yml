@@ -50,7 +50,7 @@ jobs:
             --min-count 3000 \
             --page-size 50 \
             --pause 0.10 \
-            --max-requests 200
+            --max-requests 400
 
       - name: Verify catalog size
         run: |
