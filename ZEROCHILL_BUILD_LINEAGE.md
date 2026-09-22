@@ -4,22 +4,15 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `18519c33b878db2b4f09733c76dd8b312058c0e3`
-- Approved checkpoint branch: `checkpoint/zerochill-approved-18519c3`
-- CI build: Build Android APK #985
+- Approved product baseline commit: `4b9e3938cb775acdc985f225f128e63059604aef`
+- Approved checkpoint branch: `checkpoint/zerochill-approved-4b9e393`
+- CI build: ZeroChill Signed Upgrade Candidate #84
 - Approval date: 2026-09-22
 
-The approved baseline contains the current complete ZEROCHILL stack, including Home/Collections glass UI, OnlyFap and OnlyHaven work, ShitTok all-source/fullscreen and preload work, notification and gesture-guide polish, portrait video seek bar, the approved glass navigation treatment, GPU-reactive reflection on supported Android versions, and synchronized capsule/icon/label motion during pager swipes.
+The approved baseline contains the current complete ZEROCHILL stack, including Home/Collections glass UI, OnlyFap and OnlyHaven work, ShitTok all-source/fullscreen and preload work, notification and gesture-guide polish, portrait video seek bar, the approved glass navigation treatment, GPU-reactive reflection on supported Android versions, synchronized capsule/icon/label motion during pager swipes, the approved instant OnlyFap creator search treatment, and the 3,395-creator bundled catalog.
 
 The checkpoint branch preserves the exact device-tested product commit before this documentation update.
 
-
-## Current test candidate
-
-- Candidate source branch: `rebrand/zerochill`
-- Candidate feature commit: `4b9e3938cb775acdc985f225f128e63059604aef`
-- Candidate scope: approved OnlyFap instant local creator search plus a bundled catalog of 3,395 source-confirmed creator names and aliases.
-- Status: merged and CI-validated as a test candidate. Do not replace the approved product baseline above until this candidate is device-tested and accepted.
 
 ## APK rule
 
