@@ -61,6 +61,7 @@ final class FrostedBackdropRenderer {
         private RenderEffect blurEffect;
         private int blurRadius;
         private Api33LensState lensState;
+        private boolean lensUnavailable;
 
         void draw(
                 ViewGroup layout,
@@ -103,22 +104,29 @@ final class FrostedBackdropRenderer {
 
             if (sampleWidth > 0 && sampleHeight > 0) {
                 RenderEffect backdropEffect = blurEffect;
-                if (supportsLensRefraction(Build.VERSION.SDK_INT)) {
-                    if (lensState == null) lensState = new Api33LensState();
-                    float lensLeft = overlay.getLeft() - sampleLeft;
-                    float lensTop = overlay.getTop() - sampleTop;
-                    float strength = layout.getResources().getDimension(
-                            R.dimen.zc_glass_refraction_strength);
-                    backdropEffect = lensState.effect(
-                            blurEffect,
-                            sampleWidth,
-                            sampleHeight,
-                            lensLeft,
-                            lensTop,
-                            overlay.getWidth(),
-                            overlay.getHeight(),
-                            strength
-                    );
+                if (supportsLensRefraction(Build.VERSION.SDK_INT) && !lensUnavailable) {
+                    try {
+                        if (lensState == null) lensState = new Api33LensState();
+                        float lensLeft = overlay.getLeft() - sampleLeft;
+                        float lensTop = overlay.getTop() - sampleTop;
+                        float strength = layout.getResources().getDimension(
+                                R.dimen.zc_glass_refraction_strength);
+                        backdropEffect = lensState.effect(
+                                blurEffect,
+                                sampleWidth,
+                                sampleHeight,
+                                lensLeft,
+                                lensTop,
+                                overlay.getWidth(),
+                                overlay.getHeight(),
+                                strength
+                        );
+                    } catch (Throwable ignored) {
+                        // Keep the proven blur path if AGSL compilation is unavailable on a device.
+                        lensUnavailable = true;
+                        lensState = null;
+                        backdropEffect = blurEffect;
+                    }
                 }
 
                 blurNode.setRenderEffect(backdropEffect);
@@ -164,7 +172,7 @@ final class FrostedBackdropRenderer {
                 "uniform float2 lensSize;\n" +
                 "uniform float strength;\n" +
                 "half4 main(float2 p) {\n" +
-                "    float2 halfLens = max(lensSize * 0.5, float2(1.0));\n" +
+                "    float2 halfLens = max(lensSize * 0.5, float2(1.0, 1.0));\n" +
                 "    float2 center = lensOrigin + halfLens;\n" +
                 "    float2 n = (p - center) / halfLens;\n" +
                 "    float radial = min(1.0, length(n));\n" +
@@ -176,7 +184,7 @@ final class FrostedBackdropRenderer {
                 "    float2 warped = center + (p - center) * (1.0 - centerBulge);\n" +
                 "    warped += direction * (edge * strength);\n" +
                 "    warped.x += sin(n.y * 3.14159265) * strength * 0.12 * (1.0 - abs(n.x));\n" +
-                "    warped = clamp(warped, float2(0.0), sampleSize - float2(1.0));\n" +
+                "    warped = clamp(warped, float2(0.0, 0.0), sampleSize - float2(1.0, 1.0));\n" +
                 "    return content.eval(warped);\n" +
                 "}";
 
