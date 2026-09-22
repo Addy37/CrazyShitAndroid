@@ -669,6 +669,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
             intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
             intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
+            if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
+                intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
+            }
         }
         try {
             intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, WebSettings.getDefaultUserAgent(this));
