@@ -1811,8 +1811,7 @@ public final class ChaosFeedView extends FrameLayout {
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(hideSeekBarRunnable);
             lower.animate().cancel();
-            mute.animate().cancel();
-            fullscreen.animate().cancel();
+            playbackRail.animate().cancel();
             seekBar.animate().cancel();
             controlsVisible = true;
             lower.setVisibility(View.VISIBLE);
