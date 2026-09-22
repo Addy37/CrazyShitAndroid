@@ -111,7 +111,6 @@ public final class ChaosFeedView extends FrameLayout {
     private final Set<String> resolveRetried = new HashSet<>();
     private final Random random = new Random();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
-    private final SensorMediaOrientationListener orientationListener;
 
     private ViewPager2 pager;
     private ChaosAdapter adapter;
@@ -124,7 +123,7 @@ public final class ChaosFeedView extends FrameLayout {
     private volatile boolean closed;
     private boolean autoAdvancePending;
     private boolean chaosMuted;
-    private boolean sensorFullscreen;
+    private boolean manualFullscreen;
     private int autoAdvanceFrom = -1;
     private int consecutiveDryLoads;
     private int selectedPosition;
@@ -134,7 +133,6 @@ public final class ChaosFeedView extends FrameLayout {
         super(activity);
         this.activity = activity;
         this.host = host;
-        orientationListener = new SensorMediaOrientationListener(activity, this::onPhysicalOrientation);
         setBackgroundColor(Color.BLACK);
         loadRecent();
         loadHidden();
@@ -176,6 +174,7 @@ public final class ChaosFeedView extends FrameLayout {
                     autoAdvancePending = false;
                     autoAdvanceFrom = -1;
                 }
+                if (manualFullscreen && position != selectedPosition) exitManualFullscreen();
                 selectedPosition = position;
                 markSeen(position);
                 pauseNonSelected(position);
@@ -199,8 +198,7 @@ public final class ChaosFeedView extends FrameLayout {
             pauseAll();
             releaseVisiblePlayers();
         }
-        updateOrientationListener();
-        if (!active) exitSensorFullscreen();
+        if (!active) exitManualFullscreen();
     }
 
     public void onHostResume() {
@@ -210,7 +208,6 @@ public final class ChaosFeedView extends FrameLayout {
             playSelected();
             syncVisibleChrome();
         }
-        updateOrientationListener();
     }
 
     public void onHostPause() {
@@ -218,7 +215,6 @@ public final class ChaosFeedView extends FrameLayout {
         pauseAll();
         releaseVisiblePlayers();
         flushRecent();
-        orientationListener.disable();
     }
 
     public void onConfigurationChanged() {
@@ -239,8 +235,7 @@ public final class ChaosFeedView extends FrameLayout {
     resolveRetried.clear();
     // Keep sessionUrls so Refresh cannot immediately deal the same clips back again.
     items.clear();
-    updateOrientationListener();
-    exitSensorFullscreen();
+    exitManualFullscreen();
     adapter.notifyDataSetChanged();
     initialProgress.setVisibility(View.VISIBLE);
     empty.setVisibility(View.GONE);
@@ -254,8 +249,7 @@ public final class ChaosFeedView extends FrameLayout {
         poolLoading = false;
         active = false;
         hostResumed = false;
-        orientationListener.disable();
-        exitSensorFullscreen();
+        exitManualFullscreen();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
         pauseAll();
         releaseVisiblePlayers();
@@ -311,7 +305,6 @@ public final class ChaosFeedView extends FrameLayout {
                 empty.setVisibility(View.GONE);
                 resolveAhead(selectedPosition);
                 if (active && hostResumed) playSelected();
-                updateOrientationListener();
                 tryPendingAutoAdvance();
             }
 
@@ -667,8 +660,7 @@ public final class ChaosFeedView extends FrameLayout {
         Toast.makeText(activity, "Won't show this clip again.", Toast.LENGTH_SHORT).show();
 
         if (items.isEmpty()) {
-            updateOrientationListener();
-            exitSensorFullscreen();
+            exitManualFullscreen();
             selectedPosition = 0;
             initialProgress.setVisibility(View.VISIBLE);
             loadMorePool();
@@ -683,30 +675,27 @@ public final class ChaosFeedView extends FrameLayout {
         playSelected();
     }
 
-    private void updateOrientationListener() {
-        if (active && hostResumed && !items.isEmpty()) orientationListener.enable();
-        else orientationListener.disable();
+    static boolean shouldOfferLandscapeFullscreen(float aspectRatio) {
+        return aspectRatio > 1.1f;
     }
 
-    private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
-        if (!active || !hostResumed || items.isEmpty()) return;
-        if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
-            sensorFullscreen = true;
-            PhoneOrientationPolicy.enterSensorFullscreen(activity);
-        } else if (sensorFullscreen) {
-            exitSensorFullscreen();
-        }
+    private void enterManualFullscreen(ChaosHolder holder) {
+        if (manualFullscreen || holder == null || !holder.horizontalVideo) return;
+        manualFullscreen = true;
+        PhoneOrientationPolicy.enterSensorFullscreen(activity);
+        holder.syncOrientationChrome();
     }
 
-    private void exitSensorFullscreen() {
-        if (!sensorFullscreen) return;
-        sensorFullscreen = false;
+    private void exitManualFullscreen() {
+        if (!manualFullscreen) return;
+        manualFullscreen = false;
         PhoneOrientationPolicy.exitFullscreenVideo(activity);
+        syncVisibleChrome();
     }
 
     boolean exitSensorFullscreenForBack() {
-        if (!sensorFullscreen) return false;
-        exitSensorFullscreen();
+        if (!manualFullscreen) return false;
+        exitManualFullscreen();
         return true;
     }
 
@@ -1004,6 +993,7 @@ public final class ChaosFeedView extends FrameLayout {
         final TextView save;
         final TextView comments;
         final TextView mute;
+        final ImageView fullscreen;
         final TextView speedBadge;
         final SeekBar seekBar;
         ExoPlayer player;
@@ -1137,6 +1127,24 @@ public final class ChaosFeedView extends FrameLayout {
             muteParams.setMargins(0, dp(14), dp(12), 0);
             root.addView(mute, muteParams);
 
+            fullscreen = new ImageView(activity);
+            fullscreen.setImageResource(R.drawable.ic_action_fullscreen);
+            fullscreen.setPadding(dp(12), dp(12), dp(12), dp(12));
+            fullscreen.setContentDescription("Watch horizontal video fullscreen");
+            fullscreen.setBackground(ZeroChillUi.rounded(
+                    activity,
+                    Color.argb(145, 0, 0, 0),
+                    Color.argb(135, 8, 146, 208),
+                    R.dimen.zc_radius_pill
+            ));
+            fullscreen.setClickable(true);
+            fullscreen.setFocusable(true);
+            fullscreen.setVisibility(View.GONE);
+            FrameLayout.LayoutParams fullscreenParams = new FrameLayout.LayoutParams(dp(48), dp(48));
+            fullscreenParams.gravity = Gravity.TOP | Gravity.END;
+            fullscreenParams.setMargins(0, dp(72), dp(14), 0);
+            root.addView(fullscreen, fullscreenParams);
+
             speedBadge = new TextView(activity);
             speedBadge.setText("2×");
             speedBadge.setTextColor(Color.WHITE);
@@ -1214,6 +1222,13 @@ public final class ChaosFeedView extends FrameLayout {
             mute.setOnClickListener(v -> {
                 haptic(v);
                 setChaosMuted(!chaosMuted);
+                showControlsTemporarily();
+            });
+            fullscreen.setOnClickListener(v -> {
+                if (!horizontalVideo) return;
+                haptic(v);
+                if (manualFullscreen) exitManualFullscreen();
+                else enterManualFullscreen(this);
                 showControlsTemporarily();
             });
             save.setOnClickListener(v -> {
@@ -1305,6 +1320,7 @@ public final class ChaosFeedView extends FrameLayout {
             failurePending = false;
             horizontalVideo = false;
             videoAspectRatio = 0f;
+            fullscreen.setVisibility(View.GONE);
             seekBar.setProgress(0);
             seekBar.setEnabled(false);
             seekBar.setAlpha(1f);
@@ -1474,7 +1490,8 @@ public final class ChaosFeedView extends FrameLayout {
                     float width = videoSize.width * Math.max(0.01f, videoSize.pixelWidthHeightRatio);
                     float height = videoSize.height;
                     videoAspectRatio = width / Math.max(1f, height);
-                    horizontalVideo = videoAspectRatio > 1.1f;
+                    horizontalVideo = shouldOfferLandscapeFullscreen(videoAspectRatio);
+                    root.post(ChaosHolder.this::syncOrientationChrome);
                 }
 
                 @Override
@@ -1736,6 +1753,7 @@ public final class ChaosFeedView extends FrameLayout {
             root.removeCallbacks(hideSeekBarRunnable);
             lower.animate().cancel();
             mute.animate().cancel();
+            fullscreen.animate().cancel();
             seekBar.animate().cancel();
 
             controlsVisible = true;
@@ -1743,6 +1761,14 @@ public final class ChaosFeedView extends FrameLayout {
             mute.setVisibility(View.VISIBLE);
             lower.setAlpha(1f);
             mute.setAlpha(1f);
+            fullscreen.setImageResource(manualFullscreen
+                    ? R.drawable.ic_action_fullscreen_exit
+                    : R.drawable.ic_action_fullscreen);
+            fullscreen.setContentDescription(manualFullscreen
+                    ? "Exit fullscreen"
+                    : "Watch horizontal video fullscreen");
+            fullscreen.setVisibility(horizontalVideo ? View.VISIBLE : View.GONE);
+            fullscreen.setAlpha(1f);
 
             if (seekBar.getVisibility() != View.VISIBLE) {
                 seekBar.setVisibility(View.VISIBLE);
@@ -1760,13 +1786,16 @@ public final class ChaosFeedView extends FrameLayout {
             root.removeCallbacks(hideSeekBarRunnable);
             lower.animate().cancel();
             mute.animate().cancel();
+            fullscreen.animate().cancel();
             seekBar.animate().cancel();
             controlsVisible = true;
             lower.setVisibility(View.VISIBLE);
             mute.setVisibility(View.VISIBLE);
+            fullscreen.setVisibility(horizontalVideo ? View.VISIBLE : View.GONE);
             seekBar.setVisibility(View.VISIBLE);
             lower.setAlpha(1f);
             mute.setAlpha(1f);
+            fullscreen.setAlpha(1f);
             seekBar.setAlpha(1f);
             if (!scrubbing) root.postDelayed(hideSeekBarRunnable, 2200L);
             if (autoHide && !scrubbing && !portrait()) {
@@ -1779,8 +1808,10 @@ public final class ChaosFeedView extends FrameLayout {
                 controlsVisible = true;
                 lower.setVisibility(View.VISIBLE);
                 mute.setVisibility(View.VISIBLE);
+                fullscreen.setVisibility(horizontalVideo ? View.VISIBLE : View.GONE);
                 lower.setAlpha(1f);
                 mute.setAlpha(1f);
+                fullscreen.setAlpha(1f);
                 return;
             }
             if (scrubbing || player == null || !player.isPlaying()) return;
@@ -1797,6 +1828,13 @@ public final class ChaosFeedView extends FrameLayout {
                     .setDuration(180L)
                     .withEndAction(() -> {
                         if (!controlsVisible) mute.setVisibility(View.INVISIBLE);
+                    })
+                    .start();
+            fullscreen.animate()
+                    .alpha(0f)
+                    .setDuration(180L)
+                    .withEndAction(() -> {
+                        if (!controlsVisible && horizontalVideo) fullscreen.setVisibility(View.INVISIBLE);
                     })
                     .start();
         }
