@@ -6,6 +6,7 @@ import android.graphics.RecordingCanvas;
 import android.graphics.RectF;
 import android.graphics.RenderEffect;
 import android.graphics.RenderNode;
+import android.graphics.RuntimeShader;
 import android.graphics.Shader;
 import android.os.Build;
 import android.view.View;
@@ -22,6 +23,10 @@ final class FrostedBackdropRenderer {
 
     private Api31RenderState renderState;
     private boolean blurDisabled;
+
+    static boolean supportsLensRefraction(int sdkInt) {
+        return sdkInt >= 33;
+    }
 
     boolean draw(
             ViewGroup layout,
@@ -50,11 +55,12 @@ final class FrostedBackdropRenderer {
     @RequiresApi(31)
     private static final class Api31RenderState {
         private final RenderNode contentNode = new RenderNode("ZeroChill content");
-        private final RenderNode blurNode = new RenderNode("ZeroChill backdrop blur");
+        private final RenderNode blurNode = new RenderNode("ZeroChill backdrop glass");
         private final Path clipPath = new Path();
         private final RectF clipBounds = new RectF();
         private RenderEffect blurEffect;
         private int blurRadius;
+        private Api33LensState lensState;
 
         void draw(
                 ViewGroup layout,
@@ -85,7 +91,6 @@ final class FrostedBackdropRenderer {
                         radius,
                         Shader.TileMode.CLAMP
                 );
-                blurNode.setRenderEffect(blurEffect);
             }
 
             int padding = Math.max(1, radius);
@@ -97,6 +102,26 @@ final class FrostedBackdropRenderer {
             int sampleHeight = sampleBottom - sampleTop;
 
             if (sampleWidth > 0 && sampleHeight > 0) {
+                RenderEffect backdropEffect = blurEffect;
+                if (supportsLensRefraction(Build.VERSION.SDK_INT)) {
+                    if (lensState == null) lensState = new Api33LensState();
+                    float lensLeft = overlay.getLeft() - sampleLeft;
+                    float lensTop = overlay.getTop() - sampleTop;
+                    float strength = layout.getResources().getDimension(
+                            R.dimen.zc_glass_refraction_strength);
+                    backdropEffect = lensState.effect(
+                            blurEffect,
+                            sampleWidth,
+                            sampleHeight,
+                            lensLeft,
+                            lensTop,
+                            overlay.getWidth(),
+                            overlay.getHeight(),
+                            strength
+                    );
+                }
+
+                blurNode.setRenderEffect(backdropEffect);
                 blurNode.setPosition(0, 0, sampleWidth, sampleHeight);
                 blurNode.setTranslationX(sampleLeft);
                 blurNode.setTranslationY(sampleTop);
@@ -127,6 +152,68 @@ final class FrostedBackdropRenderer {
             }
 
             drawer.drawOverlay(canvas, overlay, drawingTime);
+        }
+    }
+
+    @RequiresApi(33)
+    private static final class Api33LensState {
+        private static final String SHADER =
+                "uniform shader content;\n" +
+                "uniform float2 sampleSize;\n" +
+                "uniform float2 lensOrigin;\n" +
+                "uniform float2 lensSize;\n" +
+                "uniform float strength;\n" +
+                "half4 main(float2 p) {\n" +
+                "    float2 halfLens = max(lensSize * 0.5, float2(1.0));\n" +
+                "    float2 center = lensOrigin + halfLens;\n" +
+                "    float2 n = (p - center) / halfLens;\n" +
+                "    float radial = min(1.0, length(n));\n" +
+                "    float centerBulge = (1.0 - smoothstep(0.0, 1.0, radial)) * 0.018;\n" +
+                "    float edgeX = smoothstep(0.72, 1.0, abs(n.x));\n" +
+                "    float edgeY = smoothstep(0.55, 1.0, abs(n.y));\n" +
+                "    float edge = max(edgeX * 0.35, edgeY);\n" +
+                "    float2 direction = n / max(length(n), 0.001);\n" +
+                "    float2 warped = center + (p - center) * (1.0 - centerBulge);\n" +
+                "    warped += direction * (edge * strength);\n" +
+                "    warped.x += sin(n.y * 3.14159265) * strength * 0.12 * (1.0 - abs(n.x));\n" +
+                "    warped = clamp(warped, float2(0.0), sampleSize - float2(1.0));\n" +
+                "    return content.eval(warped);\n" +
+                "}";
+
+        private final RuntimeShader shader = new RuntimeShader(SHADER);
+        private final RenderEffect lensEffect =
+                RenderEffect.createRuntimeShaderEffect(shader, "content");
+        private RenderEffect chainedEffect;
+        private RenderEffect chainedBlur;
+        private boolean disabled;
+
+        RenderEffect effect(
+                RenderEffect blur,
+                float sampleWidth,
+                float sampleHeight,
+                float lensLeft,
+                float lensTop,
+                float lensWidth,
+                float lensHeight,
+                float strength
+        ) {
+            if (disabled) return blur;
+            try {
+                shader.setFloatUniform("sampleSize", sampleWidth, sampleHeight);
+                shader.setFloatUniform("lensOrigin", lensLeft, lensTop);
+                shader.setFloatUniform("lensSize", lensWidth, lensHeight);
+                shader.setFloatUniform("strength", strength);
+                if (chainedEffect == null || chainedBlur != blur) {
+                    chainedBlur = blur;
+                    chainedEffect = RenderEffect.createChainEffect(lensEffect, blur);
+                }
+                return chainedEffect;
+            } catch (Throwable ignored) {
+                disabled = true;
+                chainedEffect = null;
+                chainedBlur = null;
+                return blur;
+            }
         }
     }
 }
