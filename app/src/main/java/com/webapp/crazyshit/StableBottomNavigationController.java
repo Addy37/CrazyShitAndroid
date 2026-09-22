@@ -63,14 +63,18 @@ final class StableBottomNavigationController {
             nav.setItemIconSize(ZeroChillUi.dimension(context, R.dimen.zc_nav_icon));
             nav.setItemPaddingTop(dp(context, 7));
             nav.setItemPaddingBottom(dp(context, 1));
-            nav.setItemBackgroundResource(R.drawable.zc_nav_item_background);
+            // The checked capsule is drawn by ZeroChillBottomNavigationView so it can move
+            // continuously with ViewPager drag progress instead of jumping between items.
+            nav.setItemBackgroundResource(android.R.color.transparent);
             nav.setClipChildren(false);
             nav.setClipToPadding(false);
-            View menu = nav.getChildAt(0);
-            if (menu instanceof ViewGroup) {
-                ViewGroup menuGroup = (ViewGroup) menu;
-                menuGroup.setClipChildren(false);
-                menuGroup.setClipToPadding(false);
+            for (int index = 0; index < nav.getChildCount(); index++) {
+                View child = nav.getChildAt(index);
+                if (child instanceof ViewGroup) {
+                    ViewGroup menuGroup = (ViewGroup) child;
+                    menuGroup.setClipChildren(false);
+                    menuGroup.setClipToPadding(false);
+                }
             }
         } catch (Throwable ignored) {
         }
@@ -133,7 +137,17 @@ final class StableBottomNavigationController {
             if (pager != null) {
                 pageCallback = new ViewPager2.OnPageChangeCallback() {
                     @Override
+                    public void onPageScrolled(
+                            int position,
+                            float positionOffset,
+                            int positionOffsetPixels
+                    ) {
+                        updateSlidingIndicator(position + positionOffset);
+                    }
+
+                    @Override
                     public void onPageSelected(int position) {
+                        updateSlidingIndicator(position);
                         pager.post(State.this::apply);
                         pager.postDelayed(State.this::apply, 80L);
                         pager.postDelayed(State.this::apply, 500L);
@@ -193,6 +207,7 @@ final class StableBottomNavigationController {
             styleBar(nav);
             applyGeometry();
             resetLegacyItemTransforms();
+            if (pager != null) updateSlidingIndicator(pager.getCurrentItem());
             stylePageChrome();
         }
 
@@ -263,6 +278,13 @@ final class StableBottomNavigationController {
                     item.setLayoutParams(itemParams);
                 }
                 item.setAlpha(1f);
+                ZeroChillMotion.installPressFeedback(item);
+            }
+        }
+
+        private void updateSlidingIndicator(float pagerPosition) {
+            if (nav instanceof ZeroChillBottomNavigationView) {
+                ((ZeroChillBottomNavigationView) nav).setPagerPosition(pagerPosition);
             }
         }
 
