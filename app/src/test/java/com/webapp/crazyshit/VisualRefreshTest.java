@@ -158,7 +158,7 @@ public class VisualRefreshTest {
         assertSame(nav, ((FrostedNavigationLayout) shell).frostedNavigationViewForTest());
         assertEquals(BrowseUi.dp(main, 1),
                 main.getResources().getDimensionPixelSize(R.dimen.zc_navigation_blur_radius));
-        assertEquals(BrowseUi.dp(main, 3),
+        assertEquals(BrowseUi.dp(main, 4),
                 main.getResources().getDimensionPixelSize(R.dimen.zc_glass_refraction_strength));
         assertFalse(FrostedBackdropRenderer.supportsLensRefraction(32));
         assertTrue(FrostedBackdropRenderer.supportsLensRefraction(33));
