@@ -19,6 +19,11 @@ public final class ShitTokPreloadPolicyTest {
     }
 
     @Test
+    public void startupQueue_seedsSixSwipeableItems() {
+        assertEquals(6, ChaosStartupPreloader.STARTER_ITEMS);
+    }
+
+    @Test
     public void mediaCache_isCappedAtTwoHundredMiB() {
         assertEquals(200L * 1024L * 1024L, ShitTokMediaCache.MAX_CACHE_BYTES);
     }
