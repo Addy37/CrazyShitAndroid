@@ -98,25 +98,15 @@ public class SettingsActivity extends Activity {
 
         addSection(root, "Notifications");
         addSwitch(root,
-                "New video alerts",
-                "Notify you when followed sites add fresh uploads.",
+                "New content alerts",
+                "Notify you when supported ZEROCHILL sources add fresh content.",
                 NotificationCoordinator.PREF_NEW_VIDEO_ALERTS,
                 true);
         addSwitch(root,
-                "CrazyShit alerts",
-                "Include new uploads from CrazyShit.",
-                NotificationCoordinator.PREF_CRAZYSHIT_ALERTS,
-                true);
-        addSwitch(root,
-                "EFukt alerts",
-                "Include new uploads from EFukt when the site is available in your region.",
-                NotificationCoordinator.PREF_EFUKT_ALERTS,
-                true);
-        addSwitch(root,
-                "Show video titles",
-                "List titles inside expanded alerts. Leave this off for discreet notifications.",
+                "Show content titles",
+                "Show titles inside expanded content alerts.",
                 NotificationCoordinator.PREF_SHOW_TITLES,
-                false);
+                true);
         addAction(root,
                 "Check frequency",
                 NotificationCoordinator.frequencySummary(this),
@@ -331,10 +321,10 @@ public class SettingsActivity extends Activity {
 
     private void checkNotificationsNow() {
         if (notificationStatusView != null) {
-            notificationStatusView.setText("Checking CrazyShit and EFukt now…");
+            notificationStatusView.setText("Checking ZEROCHILL sources now…");
         }
         NotificationCoordinator.checkNow(this);
-        Toast.makeText(this, "Checking both sites in the background.", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Checking all supported sources in the background.", Toast.LENGTH_SHORT).show();
     }
 
     private String sourceConfigSummary() {
