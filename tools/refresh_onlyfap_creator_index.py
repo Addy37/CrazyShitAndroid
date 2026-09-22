@@ -48,6 +48,7 @@ BLOCKED_MARKERS = (
     "attention required",
     "just a moment",
 )
+FAPELLO_CURSOR = re.compile(r"^# Fapello new listing next page:\s*([0-9]+)\s*$")
 
 
 def normalized(value: str) -> str:
@@ -62,11 +63,16 @@ def clean(value: object, max_length: int = 160) -> str:
     return text[:max_length].strip()
 
 
-def load_seed(path: pathlib.Path) -> dict[str, tuple[str, set[str]]]:
+def load_seed(path: pathlib.Path) -> tuple[dict[str, tuple[str, set[str]]], int]:
     records: dict[str, tuple[str, set[str]]] = {}
+    fapello_next_page = 1
     if not path.exists():
-        return records
+        return records, fapello_next_page
     for raw in path.read_text(encoding="utf-8").splitlines():
+        cursor = FAPELLO_CURSOR.fullmatch(raw)
+        if cursor:
+            fapello_next_page = max(1, int(cursor.group(1)))
+            continue
         if not raw or raw.startswith("#"):
             continue
         columns = raw.split("\t", 1)
@@ -78,7 +84,7 @@ def load_seed(path: pathlib.Path) -> dict[str, tuple[str, set[str]]]:
         if len(columns) > 1:
             aliases.update(clean(alias) for alias in columns[1].split("|") if clean(alias))
         records[key] = (name, aliases)
-    return records
+    return records, fapello_next_page
 
 
 def add_record(
@@ -240,7 +246,8 @@ def fetch_fapello(
     target: int,
     max_requests: int,
     pause: float,
-) -> tuple[int, int]:
+    start_page: int,
+) -> tuple[int, int, int]:
     source = source_config(config_path, "fapello")
     base = clean(source.get("baseUrl"))
     if not base:
@@ -248,10 +255,11 @@ def fetch_fapello(
     headers = configured_headers(source, False)
     added = 0
     requests = 0
+    next_new_page = max(1, start_page)
 
     for listing in ("new", "popular", "hot"):
         stale_pages = 0
-        page = 1
+        page = next_new_page if listing == "new" else 1
         while len(records) < target and requests < max_requests and stale_pages < 3:
             url = fapello_listing_url(source, listing, page)
             try:
@@ -263,6 +271,8 @@ def fetch_fapello(
                 requests += 1
                 stale_pages += 1
                 print(f"Skipping Fapello {listing} page {page}: {error}")
+                if listing == "new":
+                    next_new_page = page + 1
                 page += 1
                 time.sleep(max(0.75, pause * 5))
                 continue
@@ -283,6 +293,8 @@ def fetch_fapello(
                 f"{len(parser.creators)} creators, {new_this_page} new, {len(records)} total"
             )
             stale_pages = stale_pages + 1 if new_this_page == 0 else 0
+            if listing == "new":
+                next_new_page = page + 1
             page += 1
             if pause > 0:
                 time.sleep(pause)
@@ -290,7 +302,7 @@ def fetch_fapello(
         if len(records) >= target or requests >= max_requests:
             break
 
-    return added, requests
+    return added, requests, next_new_page
 
 
 def first_text(row: dict, *keys: str) -> str:
@@ -426,10 +438,15 @@ def fetch_onlyhaven(
     return harvested, requests
 
 
-def write_index(path: pathlib.Path, records: dict[str, tuple[str, set[str]]]) -> None:
+def write_index(
+    path: pathlib.Path,
+    records: dict[str, tuple[str, set[str]]],
+    fapello_next_page: int,
+) -> None:
     lines = [
         "# Source-confirmed OnlyFap creator names; name<TAB>aliases.",
         "# Generated at development time from reviewed seed and configured creator sources.",
+        f"# Fapello new listing next page: {max(1, fapello_next_page)}",
     ]
     for key in sorted(records):
         name, aliases = records[key]
@@ -449,11 +466,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=pathlib.Path, default=DEFAULT_CONFIG)
     parser.add_argument("--output", type=pathlib.Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--target", type=int, default=5_000)
-    parser.add_argument("--min-count", type=int, default=3_000)
+    parser.add_argument("--target", type=int, default=20_000)
+    parser.add_argument("--min-count", type=int, default=15_000)
     parser.add_argument("--page-size", type=int, default=50)
     parser.add_argument("--pause", type=float, default=0.10)
-    parser.add_argument("--max-requests", type=int, default=200)
+    parser.add_argument("--max-requests", type=int, default=3_000)
     args = parser.parse_args()
 
     if min(args.target, args.min_count, args.page_size, args.max_requests) < 1:
@@ -461,19 +478,21 @@ def main() -> None:
     if args.min_count > args.target:
         parser.error("min-count cannot exceed target")
 
-    records = load_seed(args.output)
+    records, fapello_start_page = load_seed(args.output)
     seed_count = len(records)
     request_budget = args.max_requests
 
     fapello_added = 0
     fapello_requests = 0
+    fapello_next_page = fapello_start_page
     try:
-        fapello_added, fapello_requests = fetch_fapello(
+        fapello_added, fapello_requests, fapello_next_page = fetch_fapello(
             args.config,
             records,
             args.target,
             request_budget,
             max(0.0, args.pause),
+            fapello_start_page,
         )
     except RuntimeError as error:
         print(f"Fapello catalog source unavailable: {error}")
@@ -502,11 +521,12 @@ def main() -> None:
             f"(Fapello +{fapello_added:,}, OnlyHaven +{onlyhaven_added:,})"
         )
 
-    write_index(args.output, records)
+    write_index(args.output, records, fapello_next_page)
     print(
         f"Wrote {len(records):,} creators to {args.output} "
         f"(seed {seed_count:,}, Fapello +{fapello_added:,}, "
-        f"OnlyHaven +{onlyhaven_added:,}, requests {total_requests:,})"
+        f"OnlyHaven +{onlyhaven_added:,}, requests {total_requests:,}, "
+        f"next Fapello page {fapello_next_page:,})"
     )
 
 
