@@ -170,6 +170,11 @@ public class VisualRefreshTest {
         assertFalse(navMenu.getClipToPadding());
         assertEquals(UiPalette.PRIMARY, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
         assertTrue(nav.isItemActiveIndicatorEnabled());
+        assertTrue(nav instanceof ZeroChillBottomNavigationView);
+        assertEquals(
+                MainPagerAdapter.PAGE_HOME,
+                Math.round(((ZeroChillBottomNavigationView) nav).pagerPositionForTest())
+        );
         assertEquals(5, nav.getMenu().size());
         assertEquals("Home", nav.getMenu().findItem(1).getTitle());
         assertEquals("Shows", nav.getMenu().findItem(2).getTitle());
