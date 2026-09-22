@@ -29,6 +29,10 @@ final class ChaosSourceMixer {
     private static final int BUNKR_ITEMS_PER_BATCH = 6;
     private static final int BUNKR_ALBUMS_PER_BATCH = 2;
     private static final int FAPELLO_ITEMS_PER_BATCH = 4;
+    private static final int KAOTIC_ITEMS_PER_BATCH = 8;
+    private static final int ONLY_HAVEN_ITEMS_PER_BATCH = 6;
+    private static final int ONLY_HAVEN_ITEMS_PER_CREATOR = 3;
+    private static final int ONLY_HAVEN_TRENDING_CREATORS = 30;
     private static final int STARTER_ITEMS = 1;
     private static final String VIDEOS = CrazyShitRepository.BASE + "videos/";
     private static final String USER_UPLOADS = CrazyShitRepository.BASE + "submissions/";
@@ -39,16 +43,21 @@ final class ChaosSourceMixer {
     private final EfuktRepository efukt = new EfuktRepository();
     private final BunkrRepository bunkr = new BunkrRepository();
     private final FapelloRepository fapello = new FapelloRepository();
+    private final WebVideoSourceRepository webVideo = new WebVideoSourceRepository();
+    private final OnlyHavenRepository onlyHaven = new OnlyHavenRepository();
     private final ArrayList<NativeContentItem> efuktSeries = new ArrayList<>();
     private final ArrayDeque<NativeContentItem> efuktSeriesDeck = new ArrayDeque<>();
     private final ArrayList<NativeContentItem> bunkrAlbums = new ArrayList<>();
     private final ArrayDeque<NativeContentItem> bunkrAlbumDeck = new ArrayDeque<>();
+    private final ArrayList<OnlyHavenRepository.Creator> onlyHavenCreators = new ArrayList<>();
+    private final ArrayDeque<OnlyHavenRepository.Creator> onlyHavenCreatorDeck = new ArrayDeque<>();
     private final ArrayList<String> catalog = new ArrayList<>();
     private final ArrayDeque<String> sourceDeck = new ArrayDeque<>();
     private final Set<String> usedSourcePages = new HashSet<>();
     private boolean catalogLoaded;
     private boolean efuktCatalogAttempted;
     private boolean bunkrCatalogAttempted;
+    private boolean onlyHavenCatalogAttempted;
     private boolean starterPending = true;
 
     ChaosSourceMixer(CrazyShitRepository repository, Random random) {
@@ -72,8 +81,9 @@ final class ChaosSourceMixer {
             if (!starter.isEmpty()) return starter;
         }
 
-        // Keep all six CrazyShit source slots broad, add EFukt clips and a smaller Fapzone sample,
-        // then weave in Shit Show stories. Every source degrades cleanly when unavailable.
+        // Pull video from every active video-capable ZeroChill source. This is ShitTok's own
+        // randomized pool; it does not reroute or remove items from Home, Shows, or OnlyFap.
+        // Every source degrades cleanly when unavailable.
         ensureCatalog(context);
 
         LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
@@ -96,12 +106,21 @@ final class ChaosSourceMixer {
         ArrayList<NativeContentItem> efuktItems = new ArrayList<>(loadEfuktBatch(context));
         Collections.shuffle(efuktItems, random);
         List<NativeContentItem> regularAndEfukt = weaveEfukt(regularItems, efuktItems);
+
+        ArrayList<NativeContentItem> kaoticItems = new ArrayList<>(loadKaoticBatch(context));
+        Collections.shuffle(kaoticItems, random);
+        List<NativeContentItem> homeSources = weaveEfukt(regularAndEfukt, kaoticItems);
+
         ArrayList<NativeContentItem> bunkrItems = new ArrayList<>(loadBunkrBatch(context));
         Collections.shuffle(bunkrItems, random);
         ArrayList<NativeContentItem> fapelloItems = new ArrayList<>(loadFapelloBatch(context));
         Collections.shuffle(fapelloItems, random);
+        ArrayList<NativeContentItem> onlyHavenItems = new ArrayList<>(loadOnlyHavenBatch(context));
+        Collections.shuffle(onlyHavenItems, random);
+
         List<NativeContentItem> fapzoneItems = weaveEfukt(bunkrItems, fapelloItems);
-        List<NativeContentItem> mixedExternal = weaveEfukt(regularAndEfukt, fapzoneItems);
+        fapzoneItems = weaveEfukt(fapzoneItems, onlyHavenItems);
+        List<NativeContentItem> mixedExternal = weaveEfukt(homeSources, fapzoneItems);
         return weaveShitShow(mixedExternal, shitShowItems);
     }
 
@@ -114,6 +133,8 @@ final class ChaosSourceMixer {
         if (efuktSeries.isEmpty()) efuktCatalogAttempted = false;
         bunkrAlbumDeck.clear();
         if (bunkrAlbums.isEmpty()) bunkrCatalogAttempted = false;
+        onlyHavenCreatorDeck.clear();
+        if (onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
     }
 
     private List<NativeContentItem> loadStarterBatch(Context context) {
@@ -244,6 +265,94 @@ final class ChaosSourceMixer {
         } catch (Exception ignored) {
             return new ArrayList<>();
         }
+    }
+
+    private List<NativeContentItem> loadKaoticBatch(Context context) {
+        try {
+            ArrayList<NativeContentItem> candidates = new ArrayList<>(
+                    webVideo.fetchFeed(
+                            context,
+                            WebVideoSourceRepository.Source.KAOTIC,
+                            1 + random.nextInt(MAX_SOURCE_PAGE)
+                    )
+            );
+            candidates.removeIf(item -> item == null || !item.isVideo());
+            Collections.shuffle(candidates, random);
+            int take = Math.min(KAOTIC_ITEMS_PER_BATCH, candidates.size());
+            return new ArrayList<>(candidates.subList(0, take));
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private List<NativeContentItem> loadOnlyHavenBatch(Context context) {
+        ensureOnlyHavenCatalog(context);
+        if (onlyHavenCreators.isEmpty()) return new ArrayList<>();
+
+        LinkedHashMap<String, NativeContentItem> combined = new LinkedHashMap<>();
+        HashSet<String> usedCreators = new HashSet<>();
+        int attempts = Math.min(4, onlyHavenCreators.size());
+
+        while (combined.size() < ONLY_HAVEN_ITEMS_PER_BATCH && attempts-- > 0) {
+            if (onlyHavenCreatorDeck.isEmpty()) refillOnlyHavenDeck();
+            OnlyHavenRepository.Creator creator = onlyHavenCreatorDeck.pollFirst();
+            if (creator == null || creator.url == null || creator.url.isEmpty()) continue;
+            if (!usedCreators.add(creator.url)) continue;
+
+            ArrayList<NativeContentItem> candidates = new ArrayList<>();
+            try {
+                for (NativeContentItem item :
+                        onlyHaven.fetchCreatorMedia(context, creator, 1, 18)) {
+                    if (item == null || !item.isVideo()) continue;
+                    candidates.add(new NativeContentItem(
+                            item.kind,
+                            item.title,
+                            item.url,
+                            item.imageUrl,
+                            item.views,
+                            "OnlyHaven",
+                            item.comments,
+                            item.description,
+                            item.searchQuery
+                    ));
+                }
+            } catch (Exception ignored) {
+            }
+
+            Collections.shuffle(candidates, random);
+            int perCreator = Math.min(ONLY_HAVEN_ITEMS_PER_CREATOR, candidates.size());
+            for (int i = 0; i < perCreator; i++) {
+                NativeContentItem item = candidates.get(i);
+                if (item.url == null || item.url.isEmpty()) continue;
+                combined.putIfAbsent(item.url, item);
+                if (combined.size() >= ONLY_HAVEN_ITEMS_PER_BATCH) break;
+            }
+        }
+
+        return new ArrayList<>(combined.values());
+    }
+
+    private void ensureOnlyHavenCatalog(Context context) {
+        if (onlyHavenCatalogAttempted) return;
+        onlyHavenCatalogAttempted = true;
+        try {
+            for (OnlyHavenRepository.Creator creator :
+                    onlyHaven.fetchTrendingCreators(context, ONLY_HAVEN_TRENDING_CREATORS)) {
+                if (creator == null || creator.url == null || creator.url.isEmpty()) continue;
+                if (creator.isKnownEmpty()) continue;
+                onlyHavenCreators.add(creator);
+            }
+        } catch (Exception ignored) {
+        }
+        refillOnlyHavenDeck();
+    }
+
+    private void refillOnlyHavenDeck() {
+        if (onlyHavenCreators.isEmpty()) return;
+        ArrayList<OnlyHavenRepository.Creator> shuffled =
+                new ArrayList<>(onlyHavenCreators);
+        Collections.shuffle(shuffled, random);
+        onlyHavenCreatorDeck.addAll(shuffled);
     }
 
     private void ensureBunkrCatalog(Context context) {
