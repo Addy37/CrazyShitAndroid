@@ -10,12 +10,13 @@ import java.util.Random;
 
 /**
  * One-shot process startup cache used to overlap the splash animation with useful Chaos work.
- * The first regular item is exposed as soon as its feed metadata arrives, then its playable page
- * is resolved once during the remaining splash time and handed to Chaos when ready. Shit Show
+ * A small regular-video starter queue is exposed as soon as one feed page arrives, then the first
+ * item's playable page is resolved during the remaining splash time and handed to Chaos when ready.
+ * Shit Show
  * keeps its proven WebView warmup path once native Chaos exists.
  */
 final class ChaosStartupPreloader {
-    private static final int STARTER_ITEMS = 1;
+    static final int STARTER_ITEMS = 6;
     private static final Object LOCK = new Object();
     private static final ArrayList<NativeContentItem> READY = new ArrayList<>();
     private static final java.util.HashMap<String, CrazyShitRepository.StreamInfo> RESOLVED =
@@ -92,10 +93,13 @@ final class ChaosStartupPreloader {
                 if (candidates.isEmpty()) continue;
 
                 Collections.shuffle(candidates, random);
-                first = candidates.get(0);
+                int take = Math.min(STARTER_ITEMS, candidates.size());
+                List<NativeContentItem> starterItems =
+                        new ArrayList<>(candidates.subList(0, take));
+                first = starterItems.get(0);
                 synchronized (LOCK) {
                     READY.clear();
-                    READY.add(first);
+                    READY.addAll(starterItems);
                 }
                 break;
             }
