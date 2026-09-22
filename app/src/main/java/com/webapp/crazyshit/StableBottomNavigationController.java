@@ -51,7 +51,9 @@ final class StableBottomNavigationController {
         };
         int active = ZeroChillUi.color(context, R.color.zc_cyan);
         int inactive = ZeroChillUi.color(context, R.color.zc_text_secondary);
-        ColorStateList colors = new ColorStateList(states, new int[] {active, inactive});
+        ColorStateList colors = nav instanceof ZeroChillBottomNavigationView
+                ? ColorStateList.valueOf(inactive)
+                : new ColorStateList(states, new int[] {active, inactive});
         nav.setItemIconTintList(colors);
         nav.setItemTextColor(colors);
 
@@ -68,6 +70,9 @@ final class StableBottomNavigationController {
             nav.setItemBackgroundResource(android.R.color.transparent);
             nav.setClipChildren(false);
             nav.setClipToPadding(false);
+            if (nav instanceof ZeroChillBottomNavigationView) {
+                ((ZeroChillBottomNavigationView) nav).refreshItemColors();
+            }
             for (int index = 0; index < nav.getChildCount(); index++) {
                 View child = nav.getChildAt(index);
                 if (child instanceof ViewGroup) {
@@ -112,6 +117,7 @@ final class StableBottomNavigationController {
         ViewPager2 pager;
         MainPagerAdapter pagerAdapter;
         ViewPager2.OnPageChangeCallback pageCallback;
+        boolean pagerScrolling;
         View.OnLayoutChangeListener layoutListener;
 
         State(NativeMainActivity activity) {
@@ -142,15 +148,21 @@ final class StableBottomNavigationController {
                             float positionOffset,
                             int positionOffsetPixels
                     ) {
+                        pagerScrolling = true;
                         updateSlidingIndicator(position + positionOffset);
                     }
 
                     @Override
                     public void onPageSelected(int position) {
-                        updateSlidingIndicator(position);
                         pager.post(State.this::apply);
                         pager.postDelayed(State.this::apply, 80L);
                         pager.postDelayed(State.this::apply, 500L);
+                    }
+
+                    @Override
+                    public void onPageScrollStateChanged(int scrollState) {
+                        pagerScrolling = scrollState != ViewPager2.SCROLL_STATE_IDLE;
+                        if (!pagerScrolling) updateSlidingIndicator(pager.getCurrentItem());
                     }
                 };
                 pager.registerOnPageChangeCallback(pageCallback);
@@ -207,7 +219,7 @@ final class StableBottomNavigationController {
             styleBar(nav);
             applyGeometry();
             resetLegacyItemTransforms();
-            if (pager != null) updateSlidingIndicator(pager.getCurrentItem());
+            if (pager != null && !pagerScrolling) updateSlidingIndicator(pager.getCurrentItem());
             stylePageChrome();
         }
 

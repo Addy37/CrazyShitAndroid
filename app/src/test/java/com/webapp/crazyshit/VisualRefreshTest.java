@@ -168,13 +168,28 @@ public class VisualRefreshTest {
         android.view.ViewGroup navMenu = (android.view.ViewGroup) nav.getChildAt(0);
         assertFalse(navMenu.getClipChildren());
         assertFalse(navMenu.getClipToPadding());
-        assertEquals(UiPalette.PRIMARY, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
+        assertEquals(main.getColor(R.color.zc_text_secondary),
+                nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertTrue(nav instanceof ZeroChillBottomNavigationView);
         assertEquals(
                 MainPagerAdapter.PAGE_HOME,
                 Math.round(((ZeroChillBottomNavigationView) nav).pagerPositionForTest())
         );
+        ZeroChillBottomNavigationView slidingNav = (ZeroChillBottomNavigationView) nav;
+        slidingNav.setPagerPosition(0.5f);
+        Bitmap navBitmap = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
+        nav.draw(new Canvas(navBitmap));
+        navBitmap.recycle();
+        android.graphics.RectF capsule = ReflectionHelpers.getField(slidingNav, "indicatorRect");
+        View homeTab = nav.findViewById(1);
+        View showsTab = nav.findViewById(2);
+        assertEquals((homeTab.getWidth() + showsTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
+                capsule.width(), 1f);
+        assertEquals(BrowseUi.dp(main, 4), capsule.top, 1f);
+        assertEquals(nav.getHeight() + BrowseUi.dp(main, 10), capsule.bottom, 1f);
+        assertEquals(0.5f, slidingNav.pagerPositionForTest(), 0.001f);
+        slidingNav.setPagerPosition(0f);
         assertEquals(5, nav.getMenu().size());
         assertEquals("Home", nav.getMenu().findItem(1).getTitle());
         assertEquals("Shows", nav.getMenu().findItem(2).getTitle());
