@@ -474,6 +474,11 @@ final class LandscapeUiController {
             boolean landscape = isLandscape(activity);
             boolean chaosFullscreen = landscape && state.bottomNavigation != null &&
                     state.bottomNavigation.getSelectedItemId() == NAV_CHAOS;
+            top = resolveShellTopInset(
+                    landscape,
+                    top,
+                    activity.cachedPortraitInsetTop()
+            );
             view.setPadding(landscape && !chaosFullscreen ? 0 : left, top, right, bottom);
 
             if (state.rail != null) {
@@ -490,6 +495,13 @@ final class LandscapeUiController {
             return insets;
         });
         activity.getWindow().getDecorView().requestApplyInsets();
+    }
+
+    static int resolveShellTopInset(boolean landscape, int visibleTop, int cachedPortraitTop) {
+        if (!landscape && visibleTop <= 0 && cachedPortraitTop > 0) {
+            return cachedPortraitTop;
+        }
+        return visibleTop;
     }
 
     private static void setShellStartMargin(State state, int margin) {
