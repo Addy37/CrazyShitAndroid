@@ -13,6 +13,14 @@ The approved baseline contains the current complete ZEROCHILL stack, including H
 
 The checkpoint branch preserves the exact device-tested product commit before this documentation update.
 
+
+## Current test candidate
+
+- Candidate source branch: `rebrand/zerochill`
+- Candidate feature commit: `4b9e3938cb775acdc985f225f128e63059604aef`
+- Candidate scope: approved OnlyFap instant local creator search plus a bundled catalog of 3,395 source-confirmed creator names and aliases.
+- Status: merged and CI-validated as a test candidate. Do not replace the approved product baseline above until this candidate is device-tested and accepted.
+
 ## APK rule
 
 Before producing or sharing a ZEROCHILL test APK:
