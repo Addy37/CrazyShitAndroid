@@ -389,30 +389,18 @@ final class NotificationCoordinator {
     }
 
     private static Bitmap brandIcon(Context context, String mark) {
-        int size = Math.max(96, Math.round(64f * context.getResources().getDisplayMetrics().density));
+        int size = Math.max(96, Math.round(
+                64f * context.getResources().getDisplayMetrics().density
+        ));
         Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
-        float center = size / 2f;
-
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        paint.setColor(Color.rgb(10, 10, 12));
-        canvas.drawCircle(center, center, center * 0.94f, paint);
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(Math.max(4f, size * 0.055f));
-        paint.setColor(UiPalette.PRIMARY);
-        canvas.drawCircle(center, center, center * 0.82f, paint);
-
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(Color.WHITE);
-        paint.setTextAlign(Paint.Align.CENTER);
-        paint.setTypeface(android.graphics.Typeface.create(
-                android.graphics.Typeface.DEFAULT,
-                android.graphics.Typeface.BOLD
-        ));
-        paint.setTextSize(size * (mark.length() > 2 ? 0.30f : 0.38f));
-        Paint.FontMetrics metrics = paint.getFontMetrics();
-        float baseline = center - (metrics.ascent + metrics.descent) / 2f;
-        canvas.drawText(mark, center, baseline, paint);
+        android.graphics.drawable.Drawable icon = context.getDrawable(R.mipmap.ic_launcher);
+        if (icon != null) {
+            icon.setBounds(0, 0, size, size);
+            icon.draw(canvas);
+        } else {
+            canvas.drawColor(Color.BLACK);
+        }
         return bitmap;
     }
 
@@ -496,7 +484,7 @@ final class NotificationCoordinator {
 
         NotificationChannel videos = new NotificationChannel(
                 CHANNEL_VIDEOS,
-                "New videos",
+                "New content",
                 NotificationManager.IMPORTANCE_DEFAULT
         );
         videos.setDescription("Alerts when supported ZEROCHILL sources add fresh content");
