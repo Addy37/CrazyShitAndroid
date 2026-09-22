@@ -271,7 +271,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
         });
 
-        bottomNavigation = new BottomNavigationView(this);
+        bottomNavigation = new ZeroChillBottomNavigationView(this);
         bottomNavigation.setBackground(ZeroChillUi.navigationGlass(this));
         bottomNavigation.setElevation(ZeroChillUi.dimension(this, R.dimen.zc_elevation_navigation));
         bottomNavigation.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
@@ -359,6 +359,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         ));
         search.setClickable(true);
         search.setFocusable(true);
+        ZeroChillMotion.installPressFeedback(search);
         search.setOnClickListener(v -> {
             haptic(v);
             openContextualSearch();
