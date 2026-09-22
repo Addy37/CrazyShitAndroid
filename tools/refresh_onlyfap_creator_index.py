@@ -116,7 +116,7 @@ def configured_onlyhaven(config_path: pathlib.Path) -> tuple[str, str, dict[str,
     return base, route, headers
 
 
-def request_json(url: str, headers: dict[str, str], retries: int = 3) -> object:
+def request_json(url: str, headers: dict[str, str], retries: int = 2) -> object:
     last_error: Exception | None = None
     for attempt in range(retries):
         try:
