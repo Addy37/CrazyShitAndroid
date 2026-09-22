@@ -176,14 +176,13 @@ final class FrostedBackdropRenderer {
                 "    float2 center = lensOrigin + halfLens;\n" +
                 "    float2 n = (p - center) / halfLens;\n" +
                 "    float radial = min(1.0, length(n));\n" +
-                "    float centerBulge = (1.0 - smoothstep(0.0, 1.0, radial)) * 0.018;\n" +
-                "    float edgeX = smoothstep(0.72, 1.0, abs(n.x));\n" +
-                "    float edgeY = smoothstep(0.55, 1.0, abs(n.y));\n" +
-                "    float edge = max(edgeX * 0.35, edgeY);\n" +
+                "    float edgeX = smoothstep(0.78, 1.0, abs(n.x));\n" +
+                "    float edgeY = smoothstep(0.68, 1.0, abs(n.y));\n" +
+                "    float rim = smoothstep(0.74, 1.0, radial);\n" +
+                "    float edge = max(rim, max(edgeX * 0.65, edgeY));\n" +
                 "    float2 direction = n / max(length(n), 0.001);\n" +
-                "    float2 warped = center + (p - center) * (1.0 - centerBulge);\n" +
-                "    warped += direction * (edge * strength);\n" +
-                "    warped.x += sin(n.y * 3.14159265) * strength * 0.12 * (1.0 - abs(n.x));\n" +
+                "    float2 warped = p + direction * (edge * strength);\n" +
+                "    warped.x += sin(n.y * 3.14159265) * strength * 0.08 * edge;\n" +
                 "    warped = clamp(warped, float2(0.0, 0.0), sampleSize - float2(1.0, 1.0));\n" +
                 "    return content.eval(warped);\n" +
                 "}";
