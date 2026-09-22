@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
@@ -28,15 +29,27 @@ final class ZeroChillMotion {
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_DOWN) {
                 target.animate().cancel();
-                target.animate().scaleX(0.975f).scaleY(0.975f).alpha(0.88f)
-                        .setDuration(QUICK_MS).start();
+                target.animate().scaleX(0.965f).scaleY(0.965f).alpha(0.90f)
+                        .setDuration(70L)
+                        .setInterpolator(new DecelerateInterpolator())
+                        .start();
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                 target.animate().cancel();
                 target.animate().scaleX(1f).scaleY(1f).alpha(1f)
-                        .setDuration(QUICK_MS).start();
+                        .setDuration(150L)
+                        .setInterpolator(new DecelerateInterpolator())
+                        .start();
             }
             return false;
         });
+    }
+
+    static void performSelectionHaptic(View view) {
+        if (view == null) return;
+        Context context = view.getContext();
+        if (!context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                .getBoolean("haptics_enabled", true)) return;
+        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
     }
 
     static void animateSelection(View view, boolean selected) {

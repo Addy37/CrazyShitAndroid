@@ -45,15 +45,22 @@ final class StableBottomNavigationController {
         nav.setItemRippleColor(ColorStateList.valueOf(
                 ZeroChillUi.color(context, R.color.zc_cyan_container)));
 
-        int[][] states = new int[][] {
-                new int[] {android.R.attr.state_checked},
-                new int[] {}
-        };
         int active = ZeroChillUi.color(context, R.color.zc_cyan);
         int inactive = ZeroChillUi.color(context, R.color.zc_text_secondary);
-        ColorStateList colors = new ColorStateList(states, new int[] {active, inactive});
-        nav.setItemIconTintList(colors);
-        nav.setItemTextColor(colors);
+        if (nav instanceof ZeroChillBottomNavigationView) {
+            // The reactive navigation owns per-item interpolation while the pager moves.
+            ColorStateList inactiveColors = ColorStateList.valueOf(inactive);
+            nav.setItemIconTintList(inactiveColors);
+            nav.setItemTextColor(inactiveColors);
+        } else {
+            int[][] states = new int[][] {
+                    new int[] {android.R.attr.state_checked},
+                    new int[] {}
+            };
+            ColorStateList colors = new ColorStateList(states, new int[] {active, inactive});
+            nav.setItemIconTintList(colors);
+            nav.setItemTextColor(colors);
+        }
 
         try {
             nav.setItemActiveIndicatorEnabled(true);
@@ -109,6 +116,7 @@ final class StableBottomNavigationController {
         MainPagerAdapter pagerAdapter;
         ViewPager2.OnPageChangeCallback pageCallback;
         View.OnLayoutChangeListener layoutListener;
+        int pagerScrollState = ViewPager2.SCROLL_STATE_IDLE;
 
         State(NativeMainActivity activity) {
             this.activity = activity;
@@ -133,10 +141,34 @@ final class StableBottomNavigationController {
             if (pager != null) {
                 pageCallback = new ViewPager2.OnPageChangeCallback() {
                     @Override
+                    public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
+                        if (nav instanceof ZeroChillBottomNavigationView) {
+                            ((ZeroChillBottomNavigationView) nav)
+                                    .setPagerProgress(position, positionOffset);
+                        }
+                    }
+
+                    @Override
                     public void onPageSelected(int position) {
-                        pager.post(State.this::apply);
-                        pager.postDelayed(State.this::apply, 80L);
-                        pager.postDelayed(State.this::apply, 500L);
+                        if (pagerScrollState == ViewPager2.SCROLL_STATE_IDLE &&
+                                nav instanceof ZeroChillBottomNavigationView) {
+                            ((ZeroChillBottomNavigationView) nav).setSettledPage(position);
+                        }
+                        pager.postDelayed(State.this::apply, 220L);
+                    }
+
+                    @Override
+                    public void onPageScrollStateChanged(int state) {
+                        pagerScrollState = state;
+                        if (nav instanceof ZeroChillBottomNavigationView) {
+                            ZeroChillBottomNavigationView reactive =
+                                    (ZeroChillBottomNavigationView) nav;
+                            reactive.onPagerScrollStateChanged(state);
+                            if (state == ViewPager2.SCROLL_STATE_IDLE) {
+                                reactive.setSettledPage(pager.getCurrentItem());
+                            }
+                        }
+                        if (state == ViewPager2.SCROLL_STATE_IDLE) pager.post(State.this::apply);
                     }
                 };
                 pager.registerOnPageChangeCallback(pageCallback);
@@ -193,6 +225,10 @@ final class StableBottomNavigationController {
             styleBar(nav);
             applyGeometry();
             resetLegacyItemTransforms();
+            if (pagerScrollState == ViewPager2.SCROLL_STATE_IDLE &&
+                    pager != null && nav instanceof ZeroChillBottomNavigationView) {
+                ((ZeroChillBottomNavigationView) nav).setSettledPage(pager.getCurrentItem());
+            }
             stylePageChrome();
         }
 
@@ -263,6 +299,7 @@ final class StableBottomNavigationController {
                     item.setLayoutParams(itemParams);
                 }
                 item.setAlpha(1f);
+                ZeroChillMotion.installPressFeedback(item);
             }
         }
 

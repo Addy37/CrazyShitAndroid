@@ -1332,6 +1332,7 @@ public final class ChaosFeedView extends FrameLayout {
             button.setTag(tag);
             button.setCompoundDrawablesWithIntrinsicBounds(0, icon, 0, 0);
             button.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
+            ZeroChillMotion.installPressFeedback(button);
             return button;
         }
 
@@ -1346,6 +1347,7 @@ public final class ChaosFeedView extends FrameLayout {
             button.setClickable(true);
             button.setFocusable(false);
             button.setTag(tag);
+            ZeroChillMotion.installPressFeedback(button);
             return button;
         }
 

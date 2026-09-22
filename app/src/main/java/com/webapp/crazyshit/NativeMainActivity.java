@@ -271,7 +271,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
         });
 
-        bottomNavigation = new BottomNavigationView(this);
+        bottomNavigation = new ZeroChillBottomNavigationView(this);
         bottomNavigation.setBackground(ZeroChillUi.navigationGlass(this));
         bottomNavigation.setElevation(ZeroChillUi.dimension(this, R.dimen.zc_elevation_navigation));
         bottomNavigation.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
@@ -283,6 +283,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
         bottomNavigation.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
+            if (bottomNavigation instanceof ZeroChillBottomNavigationView &&
+                    ((ZeroChillBottomNavigationView) bottomNavigation).isUserInteractionActive()) {
+                View touched = bottomNavigation.findViewById(id);
+                ZeroChillMotion.performSelectionHaptic(touched == null ? bottomNavigation : touched);
+            }
             if (id == NAV_HOME) {
                 showHome();
                 return true;
@@ -313,6 +318,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             View chaosItem = bottomNavigation.findViewById(NAV_CHAOS);
             if (chaosItem != null) {
                 chaosItem.setContentDescription("ShitTok featured tab");
+            }
+            if (bottomNavigation instanceof ZeroChillBottomNavigationView && primaryPager != null) {
+                ((ZeroChillBottomNavigationView) bottomNavigation)
+                        .setSettledPage(primaryPager.getCurrentItem());
             }
         });
 
@@ -359,6 +368,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         ));
         search.setClickable(true);
         search.setFocusable(true);
+        ZeroChillMotion.installPressFeedback(search);
         search.setOnClickListener(v -> {
             haptic(v);
             openContextualSearch();
