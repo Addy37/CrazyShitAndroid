@@ -98,7 +98,7 @@ final class LandscapeUiController {
         ensureRail(activity, state);
         adaptTopBar(activity, state, landscape, chaosFullscreen);
         adaptNavigation(activity, state, landscape, chaosFullscreen, selected);
-        adaptFeedLayouts(activity, state, landscape);
+        adaptFeedLayouts(activity, state, landscape, chaosFullscreen);
         installAdaptiveInsets(activity, state);
     }
 
@@ -337,7 +337,16 @@ final class LandscapeUiController {
         }
     }
 
-    private static void adaptFeedLayouts(NativeMainActivity activity, State state, boolean landscape) {
+    private static void adaptFeedLayouts(
+            NativeMainActivity activity,
+            State state,
+            boolean landscape,
+            boolean chaosFullscreen
+    ) {
+        // ShitTok fullscreen should not mutate hidden Home/Shows feed geometry.
+        // Those pages keep their approved portrait padding while Chaos owns the screen.
+        if (chaosFullscreen) return;
+
         View content = activity.findViewById(android.R.id.content);
         if (content == null) return;
 
@@ -352,6 +361,14 @@ final class LandscapeUiController {
             if (rawAdapter instanceof NativeFeedAdapter) {
                 NativeFeedAdapter adapter = (NativeFeedAdapter) rawAdapter;
                 if (landscape) {
+                    if (!state.originalFeedPadding.containsKey(recycler)) {
+                        state.originalFeedPadding.put(recycler, new int[] {
+                                recycler.getPaddingLeft(),
+                                recycler.getPaddingTop(),
+                                recycler.getPaddingRight(),
+                                recycler.getPaddingBottom()
+                        });
+                    }
                     if (adapter.getViewMode() != NativeFeedAdapter.VIEW_GRID) {
                         state.originalFeedModes.put(adapter, adapter.getViewMode());
                         adapter.setViewMode(NativeFeedAdapter.VIEW_GRID);
@@ -367,7 +384,16 @@ final class LandscapeUiController {
                     } else {
                         useLinear(activity, recycler);
                     }
-                    setRecyclerPadding(activity, recycler, 0, 5, 0, 18);
+                    int[] originalPadding = state.originalFeedPadding.remove(recycler);
+                    if (originalPadding != null) {
+                        setRecyclerPaddingPx(
+                                recycler,
+                                originalPadding[0],
+                                originalPadding[1],
+                                originalPadding[2],
+                                originalPadding[3]
+                        );
+                    }
                 }
             } else if (rawAdapter instanceof NativeCategoryAdapter) {
                 useGrid(activity, recycler, landscape ? categoryColumns : 2);
@@ -429,6 +455,18 @@ final class LandscapeUiController {
             return Math.max(0, ((LinearLayoutManager) manager).findFirstVisibleItemPosition());
         }
         return 0;
+    }
+
+    private static void setRecyclerPaddingPx(
+            RecyclerView recycler,
+            int left,
+            int top,
+            int right,
+            int bottom
+    ) {
+        if (recycler.getPaddingLeft() == left && recycler.getPaddingTop() == top &&
+                recycler.getPaddingRight() == right && recycler.getPaddingBottom() == bottom) return;
+        recycler.setPadding(left, top, right, bottom);
     }
 
     private static void setRecyclerPadding(
@@ -582,5 +620,6 @@ final class LandscapeUiController {
         ViewTreeObserver.OnGlobalLayoutListener globalLayoutListener;
         final Map<Integer, TextView> railButtons = new HashMap<>();
         final Map<NativeFeedAdapter, Integer> originalFeedModes = new WeakHashMap<>();
+        final Map<RecyclerView, int[]> originalFeedPadding = new WeakHashMap<>();
     }
 }
