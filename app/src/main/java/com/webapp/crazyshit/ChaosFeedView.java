@@ -191,6 +191,7 @@ public final class ChaosFeedView extends FrameLayout {
     public void setActive(boolean value) {
         active = value;
         if (active && hostResumed) {
+            pager.setUserInputEnabled(true);
             resolveAhead(selectedPosition);
             playSelected();
             syncVisibleChrome();
@@ -807,7 +808,7 @@ public final class ChaosFeedView extends FrameLayout {
         activity.startActivity(Intent.createChooser(share, "Share playback report"));
     }
 
-    private void toggleSaved(NativeContentItem item, ImageView button) {
+    private void toggleSaved(NativeContentItem item, TextView button) {
         if (item == null) return;
         if (FavoriteStore.contains(activity, item.url)) {
             FavoriteStore.remove(activity, item.url);
@@ -819,11 +820,16 @@ public final class ChaosFeedView extends FrameLayout {
         updateSaveButton(item, button);
     }
 
-    private void updateSaveButton(NativeContentItem item, ImageView button) {
+    private void updateSaveButton(NativeContentItem item, TextView button) {
         if (button == null || item == null) return;
         boolean saved = FavoriteStore.contains(activity, item.url);
-        button.setImageResource(saved ? R.drawable.ic_nav_saved : R.drawable.ic_action_save_outline);
-        button.setImageTintList(ColorStateList.valueOf(saved ? UiPalette.PRIMARY : Color.WHITE));
+        button.setCompoundDrawablesWithIntrinsicBounds(
+                0,
+                saved ? R.drawable.ic_nav_saved : R.drawable.ic_action_save_outline,
+                0,
+                0
+        );
+        button.setCompoundDrawableTintList(ColorStateList.valueOf(saved ? UiPalette.PRIMARY : Color.WHITE));
         button.setContentDescription(saved ? "Remove from Watch Later" : "Save to Watch Later");
     }
 
@@ -993,9 +999,9 @@ public final class ChaosFeedView extends FrameLayout {
         final LinearLayout playbackRail;
         final TextView title;
         final TextView meta;
-        final ImageView save;
-        final ImageView comments;
-        final ImageView mute;
+        final TextView save;
+        final TextView comments;
+        final TextView mute;
         final ImageView fullscreen;
         final TextView speedBadge;
         final SeekBar seekBar;
@@ -1113,28 +1119,28 @@ public final class ChaosFeedView extends FrameLayout {
             actionRail.setTag("shittok_action_rail");
             lower.addView(actionRail, new LinearLayout.LayoutParams(dp(58), -2));
 
-            save = imageActionButton(
+            save = textIconActionButton(
                     R.drawable.ic_action_save_outline,
                     "Save to Watch Later",
                     "shittok_save"
             );
             actionRail.addView(save, actionParams());
 
-            comments = imageActionButton(
+            comments = textIconActionButton(
                     R.drawable.ic_action_comments,
                     "Open comments",
                     "shittok_comments"
             );
             actionRail.addView(comments, actionParams());
 
-            ImageView share = imageActionButton(
+            TextView share = textIconActionButton(
                     R.drawable.ic_action_share,
                     "Share video",
                     "shittok_share"
             );
             actionRail.addView(share, actionParams());
 
-            ImageView more = imageActionButton(
+            TextView more = textIconActionButton(
                     R.drawable.ic_nav_more,
                     "More video actions",
                     "shittok_more"
@@ -1148,7 +1154,7 @@ public final class ChaosFeedView extends FrameLayout {
             playbackRail.setBackground(activity.getDrawable(R.drawable.zc_shittok_control_rail));
             playbackRail.setTag("shittok_playback_rail");
 
-            mute = imageActionButton(
+            mute = textIconActionButton(
                     chaosMuted ? R.drawable.ic_action_volume_off : R.drawable.ic_action_volume_on,
                     chaosMuted ? "Unmute video" : "Mute video",
                     "shittok_mute"
@@ -1301,6 +1307,20 @@ public final class ChaosFeedView extends FrameLayout {
             });
         }
 
+        private TextView textIconActionButton(int icon, String description, String tag) {
+            TextView button = new TextView(activity);
+            button.setGravity(Gravity.CENTER);
+            button.setContentDescription(description);
+            button.setBackgroundColor(Color.TRANSPARENT);
+            button.setPadding(dp(12), dp(12), dp(12), dp(12));
+            button.setClickable(true);
+            button.setFocusable(false);
+            button.setTag(tag);
+            button.setCompoundDrawablesWithIntrinsicBounds(0, icon, 0, 0);
+            button.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
+            return button;
+        }
+
         private ImageView imageActionButton(int icon, String description, String tag) {
             ImageView button = new ImageView(activity);
             button.setImageResource(icon);
@@ -1310,9 +1330,8 @@ public final class ChaosFeedView extends FrameLayout {
             button.setBackgroundColor(Color.TRANSPARENT);
             button.setPadding(dp(12), dp(12), dp(12), dp(12));
             button.setClickable(true);
-            button.setFocusable(true);
+            button.setFocusable(false);
             button.setTag(tag);
-            ZeroChillMotion.installPressFeedback(button);
             return button;
         }
 
@@ -1737,10 +1756,13 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void applyMuteState() {
-            mute.setImageResource(chaosMuted
-                    ? R.drawable.ic_action_volume_off
-                    : R.drawable.ic_action_volume_on);
-            mute.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+            mute.setCompoundDrawablesWithIntrinsicBounds(
+                    0,
+                    chaosMuted ? R.drawable.ic_action_volume_off : R.drawable.ic_action_volume_on,
+                    0,
+                    0
+            );
+            mute.setCompoundDrawableTintList(ColorStateList.valueOf(Color.WHITE));
             mute.setContentDescription(chaosMuted ? "Unmute video" : "Mute video");
             if (player != null) player.setVolume(chaosMuted ? 0f : 1f);
         }
