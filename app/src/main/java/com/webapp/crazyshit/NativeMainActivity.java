@@ -554,6 +554,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         portraitInsetBottom = bottom;
     }
 
+    int cachedPortraitInsetTop() {
+        return portraitInsetTop;
+    }
+
     private boolean restoreCachedPortraitInsets() {
         if (shell == null || portraitInsetTop < 0) return false;
         shell.setPadding(
