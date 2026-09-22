@@ -1,21 +1,26 @@
 # ZEROCHILL build lineage
 
-This file identifies the minimum approved ZEROCHILL product baseline for test APKs.
+This file identifies the current approved ZEROCHILL product baseline for test APKs and future feature work.
 
+- Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Minimum baseline commit: `8dad094162bef8b537daa9474e8cd647f55e910b`
-- Baseline build: Build Android APK #957
-- Baseline date: 2026-09-22
+- Approved product baseline commit: `18519c33b878db2b4f09733c76dd8b312058c0e3`
+- Approved checkpoint branch: `checkpoint/zerochill-approved-18519c3`
+- CI build: Build Android APK #985
+- Approval date: 2026-09-22
 
-The baseline contains the approved modern ZEROCHILL stack, including the Home/Collections glass UI, OnlyFap and OnlyHaven work, ShitTok all-source/fullscreen changes, notification and gesture-guide polish, and portrait video seek bar.
+The approved baseline contains the current complete ZEROCHILL stack, including Home/Collections glass UI, OnlyFap and OnlyHaven work, ShitTok all-source/fullscreen and preload work, notification and gesture-guide polish, portrait video seek bar, the approved glass navigation treatment, GPU-reactive reflection on supported Android versions, and synchronized capsule/icon/label motion during pager swipes.
+
+The checkpoint branch preserves the exact device-tested product commit before this documentation update.
 
 ## APK rule
 
 Before producing or sharing a ZEROCHILL test APK:
 
-1. Verify the candidate commit is the baseline commit or a descendant of it.
-2. Do not use `rebrand/zerochill` directly as a test-APK base unless the user explicitly requests that historical baseline.
-3. Keep `integration/zerochill-current` pointed at the latest user-approved complete build.
-4. Include the source branch and short commit SHA in the APK filename.
+1. Verify the candidate commit is the approved product baseline commit or a descendant of it.
+2. Treat `rebrand/zerochill` as the current ZEROCHILL source of truth until it is merged into `main`.
+3. Keep `integration/zerochill-current` synchronized with the latest approved complete ZEROCHILL lineage.
+4. Do not build from an older feature branch when a newer compatible approved lineage exists.
+5. Include the source branch and short commit SHA in the APK filename.
 
-If a newer complete build replaces this baseline, advance `integration/zerochill-current` and update the minimum baseline commit here.
+If a newer complete build replaces this baseline, advance both current branches as appropriate, preserve a rollback checkpoint for the last approved build, and update the approved product baseline commit here.
