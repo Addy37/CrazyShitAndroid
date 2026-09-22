@@ -141,25 +141,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(ZeroChillUi.background(this));
         shell.setOnApplyWindowInsetsListener((view, insets) -> {
-            int left;
-            int top;
-            int right;
-            int bottom;
-            if (Build.VERSION.SDK_INT >= 30) {
-                android.graphics.Insets safe = insets.getInsets(
-                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
-                );
-                left = safe.left;
-                top = safe.top;
-                right = safe.right;
-                bottom = safe.bottom;
-            } else {
-                left = insets.getSystemWindowInsetLeft();
-                top = insets.getSystemWindowInsetTop();
-                right = insets.getSystemWindowInsetRight();
-                bottom = insets.getSystemWindowInsetBottom();
-            }
-            view.setPadding(left, top, right, bottom);
+            applyShellInsets(view, insets, false);
             return insets;
         });
         overlayRoot.addView(shell, new FrameLayout.LayoutParams(-1, -1));
@@ -511,6 +493,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     );
                 } else {
                     controller.show(types);
+                    restoreShellInsetsAfterFullscreen();
                 }
             }
         } else {
@@ -525,8 +508,44 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 );
             } else {
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+                restoreShellInsetsAfterFullscreen();
             }
         }
+    }
+
+    private void applyShellInsets(View view, WindowInsets insets, boolean includeHiddenSystemBars) {
+        if (view == null || insets == null) return;
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.graphics.Insets safe = safeShellInsets(insets, includeHiddenSystemBars);
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+            return;
+        }
+        view.setPadding(
+                insets.getSystemWindowInsetLeft(),
+                insets.getSystemWindowInsetTop(),
+                insets.getSystemWindowInsetRight(),
+                insets.getSystemWindowInsetBottom()
+        );
+    }
+
+    static android.graphics.Insets safeShellInsets(
+            WindowInsets insets,
+            boolean includeHiddenSystemBars
+    ) {
+        int types = WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout();
+        return includeHiddenSystemBars
+                ? insets.getInsetsIgnoringVisibility(types)
+                : insets.getInsets(types);
+    }
+
+    private void restoreShellInsetsAfterFullscreen() {
+        if (shell == null) return;
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsets current = shell.getRootWindowInsets();
+            if (current != null) applyShellInsets(shell, current, true);
+        }
+        shell.requestApplyInsets();
+        shell.post(shell::requestApplyInsets);
     }
 
     private void exitChaosFullscreenChrome() {
