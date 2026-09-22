@@ -42,10 +42,10 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/refresh_onlyfap_creator_index.py \
-            --target 10000 \
+            --target 5000 \
             --min-count 5000 \
-            --page-size 100 \
-            --pause 0.15 \\
+            --page-size 50 \
+            --pause 0.15 \
             --max-requests 400
 
       - name: Verify catalog size
