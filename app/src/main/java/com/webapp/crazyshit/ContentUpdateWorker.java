@@ -22,11 +22,12 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Polls site feeds and GitHub only while the user has the matching alert enabled. */
+/** Polls current ZEROCHILL source feeds and GitHub while the matching alert type is enabled. */
 public final class ContentUpdateWorker extends Worker {
     private static final String APP_PREFS = "app_prefs";
     private static final String STATE_PREFS = "notification_state";
@@ -49,75 +50,35 @@ public final class ContentUpdateWorker extends Worker {
         SharedPreferences prefs = context.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE);
         SharedPreferences state = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE);
         ArrayList<NotificationCoordinator.SourceAlert> alerts = new ArrayList<>();
+        LinkedHashMap<String, String> statuses = new LinkedHashMap<>();
         boolean manual = getInputData().getBoolean(NotificationCoordinator.INPUT_MANUAL_CHECK, false);
         int attempted = 0;
         int succeeded = 0;
-        String crazyShitStatus = prefs.getBoolean(NotificationCoordinator.PREF_CRAZYSHIT_ALERTS, true)
-                ? "Waiting to check"
-                : "Off";
-        String efuktStatus = prefs.getBoolean(NotificationCoordinator.PREF_EFUKT_ALERTS, true)
-                ? "Waiting to check"
-                : "Off";
-        String updateStatus = prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)
-                ? "Waiting to check"
-                : "Off";
 
         state.edit()
                 .putLong(NotificationCoordinator.KEY_CHECK_STARTED, System.currentTimeMillis())
                 .apply();
 
         if (prefs.getBoolean(NotificationCoordinator.PREF_NEW_VIDEO_ALERTS, true)) {
-            if (prefs.getBoolean(NotificationCoordinator.PREF_CRAZYSHIT_ALERTS, true)) {
+            for (SourceCheck check : sourceChecks(context)) {
                 attempted++;
-                try {
-                    List<NativeContentItem> items = new CrazyShitRepository()
-                            .fetchFeed(context, CrazyShitRepository.HOME, 1);
-                    int itemCount = countFeedItems(items);
-                    if (itemCount == 0) throw new Exception("No videos found");
-                    boolean alreadyWatching = state.getBoolean("seen_initialized_crazyshit", false);
-                    NotificationCoordinator.SourceAlert alert = findNew(
-                            context,
-                            "crazyshit",
-                            "CrazyShit",
-                            false,
-                            items
-                    );
-                    if (alert != null) alerts.add(alert);
-                    crazyShitStatus = sourceStatus(alreadyWatching, itemCount, alert);
-                    succeeded++;
-                } catch (Exception error) {
-                    crazyShitStatus = friendlyError(error);
-                }
-            }
-
-            if (prefs.getBoolean(NotificationCoordinator.PREF_EFUKT_ALERTS, true)) {
-                attempted++;
-                try {
-                    List<NativeContentItem> items = new EfuktRepository().fetchLatest(context);
-                    int itemCount = countFeedItems(items);
-                    if (itemCount == 0) throw new Exception("No videos found");
-                    boolean alreadyWatching = state.getBoolean("seen_initialized_efukt", false);
-                    NotificationCoordinator.SourceAlert alert = findNew(
-                            context,
-                            "efukt",
-                            "EFukt",
-                            true,
-                            items
-                    );
-                    if (alert != null) alerts.add(alert);
-                    efuktStatus = sourceStatus(alreadyWatching, itemCount, alert);
-                    succeeded++;
-                } catch (Exception error) {
-                    efuktStatus = friendlyError(error);
-                }
+                CheckResult result = runSourceCheck(context, state, check, alerts);
+                statuses.put(check.key, result.status);
+                if (result.success) succeeded++;
             }
         } else {
-            crazyShitStatus = "Video alerts off";
-            efuktStatus = "Video alerts off";
+            for (SourceCheck check : sourceChecks(context)) {
+                statuses.put(check.key, "Content alerts off");
+            }
         }
 
-        if (!alerts.isEmpty()) NotificationCoordinator.showNewVideoNotifications(context, alerts);
+        if (!alerts.isEmpty()) {
+            NotificationCoordinator.showNewVideoNotifications(context, alerts);
+        }
 
+        String updateStatus = prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)
+                ? "Waiting to check"
+                : "Off";
         if (prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)) {
             attempted++;
             try {
@@ -129,22 +90,139 @@ public final class ContentUpdateWorker extends Worker {
             }
         }
 
-        state.edit()
+        SharedPreferences.Editor finished = state.edit()
                 .putLong(NotificationCoordinator.KEY_CHECK_FINISHED, System.currentTimeMillis())
-                .putString(NotificationCoordinator.KEY_STATUS_CRAZYSHIT, crazyShitStatus)
-                .putString(NotificationCoordinator.KEY_STATUS_EFUKT, efuktStatus)
-                .putString(NotificationCoordinator.KEY_STATUS_UPDATES, updateStatus)
-                .apply();
+                .putString(
+                        NotificationCoordinator.KEY_STATUS_CRAZYSHIT,
+                        status(statuses, "crazyshit")
+                )
+                .putString(
+                        NotificationCoordinator.KEY_STATUS_EFUKT,
+                        status(statuses, "efukt")
+                )
+                .putString(
+                        NotificationCoordinator.KEY_STATUS_KAOTIC,
+                        status(statuses, "kaotic")
+                )
+                .putString(
+                        NotificationCoordinator.KEY_STATUS_BUNKR,
+                        status(statuses, "bunkr")
+                )
+                .putString(
+                        NotificationCoordinator.KEY_STATUS_FAPELLO,
+                        status(statuses, "fapello")
+                )
+                .putString(
+                        NotificationCoordinator.KEY_STATUS_ONLYHAVEN,
+                        status(statuses, "onlyhaven")
+                )
+                .putString(NotificationCoordinator.KEY_STATUS_UPDATES, updateStatus);
+        finished.apply();
 
-        Intent finished = new Intent(NotificationCoordinator.ACTION_CHECK_FINISHED)
+        Intent complete = new Intent(NotificationCoordinator.ACTION_CHECK_FINISHED)
                 .setPackage(context.getPackageName())
                 .putExtra(NotificationCoordinator.EXTRA_MANUAL_CHECK, manual);
-        context.sendBroadcast(finished);
+        context.sendBroadcast(complete);
 
         if (!manual && attempted > 0 && succeeded == 0 && getRunAttemptCount() < 2) {
             return Result.retry();
         }
         return Result.success();
+    }
+
+    private List<SourceCheck> sourceChecks(Context context) {
+        ArrayList<SourceCheck> checks = new ArrayList<>();
+        checks.add(new SourceCheck(
+                "crazyshit",
+                "CrazyShit",
+                () -> new CrazyShitRepository()
+                        .fetchFeed(context, CrazyShitRepository.HOME, 1)
+        ));
+        checks.add(new SourceCheck(
+                "efukt",
+                "EFukt",
+                () -> new EfuktRepository().fetchLatest(context)
+        ));
+        checks.add(new SourceCheck(
+                "kaotic",
+                "Kaotic",
+                () -> new WebVideoSourceRepository().fetchFeed(
+                        context,
+                        WebVideoSourceRepository.Source.KAOTIC,
+                        1
+                )
+        ));
+        checks.add(new SourceCheck(
+                "bunkr",
+                "Bunkr",
+                () -> new BunkrRepository().fetchAlbums(context, 1)
+        ));
+        checks.add(new SourceCheck(
+                "fapello",
+                "Fapello",
+                () -> new FapelloRepository().fetchPopularVideos(context, 1)
+        ));
+        checks.add(new SourceCheck(
+                "onlyhaven",
+                "OnlyHaven",
+                () -> onlyHavenTrending(context)
+        ));
+        return checks;
+    }
+
+    private CheckResult runSourceCheck(
+            Context context,
+            SharedPreferences state,
+            SourceCheck check,
+            List<NotificationCoordinator.SourceAlert> alerts
+    ) {
+        try {
+            List<NativeContentItem> items = check.loader.load();
+            int itemCount = countFeedItems(items);
+            if (itemCount == 0) throw new Exception("No content found");
+            boolean alreadyWatching =
+                    state.getBoolean("seen_initialized_" + check.key, false);
+            NotificationCoordinator.SourceAlert alert = findNew(
+                    context,
+                    check.key,
+                    check.label,
+                    items
+            );
+            if (alert != null) alerts.add(alert);
+            return new CheckResult(true, sourceStatus(alreadyWatching, itemCount, alert));
+        } catch (Exception error) {
+            return new CheckResult(false, friendlyError(error));
+        }
+    }
+
+    private List<NativeContentItem> onlyHavenTrending(Context context) throws Exception {
+        ArrayList<NativeContentItem> items = new ArrayList<>();
+        for (OnlyHavenRepository.Creator creator :
+                new OnlyHavenRepository().fetchTrendingCreators(context, 24)) {
+            if (creator == null || creator.url == null || creator.url.trim().isEmpty()) continue;
+            if (creator.isKnownEmpty()) continue;
+            String title = creator.name == null || creator.name.trim().isEmpty()
+                    ? "OnlyHaven creator"
+                    : creator.name.trim();
+            String count = creator.postCount >= 0
+                    ? creator.postCount + (creator.postCount == 1 ? " post" : " posts")
+                    : "";
+            items.add(new NativeContentItem(
+                    NativeContentItem.KIND_SERIES,
+                    title,
+                    creator.url,
+                    creator.imageUrl,
+                    count,
+                    "OnlyHaven",
+                    ""
+            ));
+        }
+        return items;
+    }
+
+    private String status(Map<String, String> statuses, String key) {
+        String value = statuses.get(key);
+        return value == null ? "Not checked" : value;
     }
 
     private int countFeedItems(List<NativeContentItem> items) {
@@ -163,10 +241,10 @@ public final class ContentUpdateWorker extends Worker {
             int itemCount,
             NotificationCoordinator.SourceAlert alert
     ) {
-        if (!alreadyWatching) return "Watching " + itemCount + " current videos";
-        if (alert == null || alert.items.isEmpty()) return "No new videos";
+        if (!alreadyWatching) return "Watching " + itemCount + " current items";
+        if (alert == null || alert.items.isEmpty()) return "No new content";
         int count = alert.items.size();
-        return count + (count == 1 ? " new video found" : " new videos found");
+        return count + (count == 1 ? " new item found" : " new items found");
     }
 
     private String friendlyError(Exception error) {
@@ -178,15 +256,16 @@ public final class ContentUpdateWorker extends Worker {
         if (message.contains("unable to resolve host") || message.contains("unknown host")) {
             return "No connection";
         }
-        if (message.contains("no videos")) return "Site changed or returned no videos";
-        return "Could not check site";
+        if (message.contains("no content") || message.contains("no videos")) {
+            return "Source returned no content";
+        }
+        return "Could not check source";
     }
 
     private NotificationCoordinator.SourceAlert findNew(
             Context context,
             String key,
             String source,
-            boolean efukt,
             List<NativeContentItem> rawItems
     ) {
         LinkedHashMap<String, NativeContentItem> current = new LinkedHashMap<>();
@@ -214,10 +293,8 @@ public final class ContentUpdateWorker extends Worker {
         }
         saveSeen(state, initializedKey, seenKey, current.keySet(), seen);
 
-        // A large jump usually means the site changed its URL format. Re-baseline instead of
-        // flooding the notification shade with old uploads presented as new ones.
         if (added.isEmpty() || added.size() > MAX_REASONABLE_NEW_ITEMS) return null;
-        return new NotificationCoordinator.SourceAlert(source, efukt, added);
+        return new NotificationCoordinator.SourceAlert(key, source, added);
     }
 
     private void saveSeen(
@@ -252,6 +329,32 @@ public final class ContentUpdateWorker extends Worker {
             if (!value.isEmpty()) result.add(value);
         }
         return result;
+    }
+
+    private interface SourceLoader {
+        List<NativeContentItem> load() throws Exception;
+    }
+
+    private static final class SourceCheck {
+        final String key;
+        final String label;
+        final SourceLoader loader;
+
+        SourceCheck(String key, String label, SourceLoader loader) {
+            this.key = key;
+            this.label = label;
+            this.loader = loader;
+        }
+    }
+
+    private static final class CheckResult {
+        final boolean success;
+        final String status;
+
+        CheckResult(boolean success, String status) {
+            this.success = success;
+            this.status = status;
+        }
     }
 
     private void checkForAppUpdate(Context context) throws Exception {
