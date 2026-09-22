@@ -7,6 +7,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -53,8 +54,70 @@ final class GestureGuideDialog {
                 else clearPending(activity);
                 return;
             }
-            show(activity, true);
+            showHint(activity);
         }, attempt == 0 ? 900L : 260L);
+    }
+
+    private static void showHint(Activity activity) {
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            clearPending(activity);
+            return;
+        }
+        activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_SEEN, true)
+                .apply();
+
+        FrameLayout root = activity.findViewById(android.R.id.content);
+        if (root == null) {
+            clearPending(activity);
+            return;
+        }
+
+        TextView hint = text(
+                activity,
+                "ShitTok tip  •  Swipe for the next clip  •  Hold for 2×",
+                13,
+                Color.WHITE,
+                true
+        );
+        hint.setGravity(Gravity.CENTER_VERTICAL);
+        hint.setPadding(dp(activity, 16), dp(activity, 12), dp(activity, 16), dp(activity, 12));
+        hint.setBackground(cardBackground(activity));
+        hint.setElevation(dp(activity, 10));
+        hint.setClickable(true);
+        hint.setContentDescription("ShitTok gesture tip. Tap to dismiss.");
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, -2);
+        params.gravity = Gravity.BOTTOM;
+        int systemBottomInset = root.getRootWindowInsets() == null
+                ? 0
+                : root.getRootWindowInsets().getSystemWindowInsetBottom();
+        int bottomMargin = ZeroChillUi.dimension(activity, R.dimen.zc_bottom_nav_height)
+                + systemBottomInset
+                + dp(activity, 10);
+        params.setMargins(dp(activity, 14), 0, dp(activity, 14), bottomMargin);
+        root.addView(hint, params);
+
+        Runnable dismiss = () -> {
+            if (hint.getParent() == null) return;
+            hint.animate()
+                    .alpha(0f)
+                    .translationY(dp(activity, 6))
+                    .setDuration(180L)
+                    .withEndAction(() -> {
+                        if (hint.getParent() instanceof FrameLayout) {
+                            ((FrameLayout) hint.getParent()).removeView(hint);
+                        }
+                        clearPending(activity);
+                    })
+                    .start();
+        };
+        hint.setAlpha(0f);
+        hint.setTranslationY(dp(activity, 8));
+        hint.animate().alpha(1f).translationY(0f).setDuration(220L).start();
+        hint.setOnClickListener(v -> dismiss.run());
+        hint.postDelayed(dismiss, 5200L);
     }
 
     private static void show(Activity activity, boolean markSeen) {

@@ -61,6 +61,10 @@ final class NotificationCoordinator {
     static final String KEY_CHECK_FINISHED = "content_check_finished_at";
     static final String KEY_STATUS_CRAZYSHIT = "content_check_status_crazyshit";
     static final String KEY_STATUS_EFUKT = "content_check_status_efukt";
+    static final String KEY_STATUS_KAOTIC = "content_check_status_kaotic";
+    static final String KEY_STATUS_BUNKR = "content_check_status_bunkr";
+    static final String KEY_STATUS_FAPELLO = "content_check_status_fapello";
+    static final String KEY_STATUS_ONLYHAVEN = "content_check_status_onlyhaven";
     static final String KEY_STATUS_UPDATES = "content_check_status_updates";
     static final String INPUT_MANUAL_CHECK = "manual_check";
     static final String EXTRA_MANUAL_CHECK = "manual_check";
@@ -71,8 +75,6 @@ final class NotificationCoordinator {
     private static final long STUCK_CHECK_AGE_MS = TimeUnit.MINUTES.toMillis(3);
 
     private static final int REQUEST_NOTIFICATIONS = 731;
-    private static final int ID_CRAZYSHIT = 4101;
-    private static final int ID_EFUKT = 4102;
     private static final int ID_GROUP = 4199;
     private static final int ID_UPDATE = 4201;
     private static final int ID_TEST = 4301;
@@ -125,12 +127,12 @@ final class NotificationCoordinator {
         long finished = state.getLong(KEY_CHECK_FINISHED, 0L);
         long now = System.currentTimeMillis();
         if (started > finished && now - started <= STUCK_CHECK_AGE_MS) {
-            return "Checking CrazyShit and EFukt now…";
+            return "Checking ZEROCHILL sources now…";
         }
         if (finished == 0L) {
             return started > 0L
                     ? "The last check did not finish. Tap to try again."
-                    : "No completed check yet. Tap to scan both sites now.";
+                    : "No completed check yet. Tap to scan all supported sources now.";
         }
 
         CharSequence relative = DateUtils.getRelativeTimeSpanString(
@@ -141,7 +143,17 @@ final class NotificationCoordinator {
         );
         String crazyShit = state.getString(KEY_STATUS_CRAZYSHIT, "Not checked");
         String efukt = state.getString(KEY_STATUS_EFUKT, "Not checked");
-        return "Last checked " + relative + ". CrazyShit: " + crazyShit + ". EFukt: " + efukt + ".";
+        String kaotic = state.getString(KEY_STATUS_KAOTIC, "Not checked");
+        String bunkr = state.getString(KEY_STATUS_BUNKR, "Not checked");
+        String fapello = state.getString(KEY_STATUS_FAPELLO, "Not checked");
+        String onlyHaven = state.getString(KEY_STATUS_ONLYHAVEN, "Not checked");
+        return "Last checked " + relative + ". "
+                + "CrazyShit: " + crazyShit + " · "
+                + "EFukt: " + efukt + " · "
+                + "Kaotic: " + kaotic + " · "
+                + "Bunkr: " + bunkr + " · "
+                + "Fapello: " + fapello + " · "
+                + "OnlyHaven: " + onlyHaven + ".";
     }
 
     static UUID checkNow(Context context) {
@@ -163,15 +175,60 @@ final class NotificationCoordinator {
         if (!alertsEnabled(prefs)) return;
         prefs.edit().putBoolean(KEY_EDUCATION_SHOWN, true).apply();
 
-        new AlertDialog.Builder(activity)
-                .setTitle("Stay in the loop")
-                .setMessage(
-                        "Get alerts when new videos or app updates arrive. " +
-                        "Video titles stay hidden by default, and you can change each alert in Settings."
-                )
+        AlertDialog dialog = new AlertDialog.Builder(activity)
+                .setView(notificationEducationView(activity))
                 .setNegativeButton("Not now", null)
-                .setPositiveButton("Turn on alerts", (dialog, which) -> requestPermission(activity))
-                .show();
+                .setPositiveButton("Enable", (ignored, which) -> requestPermission(activity))
+                .create();
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getButton(AlertDialog.BUTTON_POSITIVE) != null) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(UiPalette.PRIMARY);
+            }
+        });
+        dialog.show();
+    }
+
+    private static android.view.View notificationEducationView(Activity activity) {
+        android.widget.LinearLayout card = new android.widget.LinearLayout(activity);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        card.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        int pad = Math.round(20f * activity.getResources().getDisplayMetrics().density);
+        card.setPadding(pad, pad, pad, pad);
+        card.setBackground(ZeroChillUi.panelGlass(activity));
+
+        android.widget.ImageView icon = new android.widget.ImageView(activity);
+        icon.setImageResource(R.mipmap.ic_launcher);
+        icon.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+        int iconSize = Math.round(72f * activity.getResources().getDisplayMetrics().density);
+        android.widget.LinearLayout.LayoutParams iconParams =
+                new android.widget.LinearLayout.LayoutParams(iconSize, iconSize);
+        iconParams.bottomMargin = Math.round(
+                12f * activity.getResources().getDisplayMetrics().density
+        );
+        card.addView(icon, iconParams);
+
+        android.widget.TextView title = new android.widget.TextView(activity);
+        title.setText("ZEROCHILL ALERTS");
+        title.setTextColor(android.graphics.Color.WHITE);
+        title.setTextSize(22f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        title.setGravity(android.view.Gravity.CENTER);
+        card.addView(title, new android.widget.LinearLayout.LayoutParams(-1, -2));
+
+        android.widget.TextView body = new android.widget.TextView(activity);
+        body.setText(
+                "Fresh content from supported ZEROCHILL sources plus app updates. "
+                        + "Titles are shown by default and can be changed anytime in Settings."
+        );
+        body.setTextColor(android.graphics.Color.rgb(184, 190, 198));
+        body.setTextSize(14f);
+        body.setGravity(android.view.Gravity.CENTER);
+        body.setPadding(0,
+                Math.round(8f * activity.getResources().getDisplayMetrics().density),
+                0,
+                0);
+        card.addView(body, new android.widget.LinearLayout.LayoutParams(-1, -2));
+        return card;
     }
 
     static void requestPermissionFromSettings(Activity activity) {
@@ -202,11 +259,11 @@ final class NotificationCoordinator {
 
         PendingIntent open = appPendingIntent(activity, 9301);
         Notification notification = baseBuilder(activity, CHANNEL_VIDEOS, "ZC")
-                .setContentTitle("Notifications are ready")
-                .setContentText("New video and app update alerts will appear here.")
+                .setContentTitle("ZEROCHILL alerts are ready")
+                .setContentText("Fresh content and app updates will appear here.")
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(
-                        "New video and app update alerts will appear here. " +
-                        "You can keep video titles hidden in Notification Settings."
+                        "Fresh content from supported ZEROCHILL sources and app update alerts "
+                                + "will appear here."
                 ))
                 .setContentIntent(open)
                 .addAction(R.drawable.ic_nav_home, "Open app", open)
@@ -220,8 +277,6 @@ final class NotificationCoordinator {
         createChannels(context);
 
         NotificationManagerCompat manager = NotificationManagerCompat.from(context);
-        manager.cancel(ID_CRAZYSHIT);
-        manager.cancel(ID_EFUKT);
         manager.cancel(ID_GROUP);
 
         boolean grouped = alerts.size() > 1;
@@ -234,15 +289,15 @@ final class NotificationCoordinator {
                 builder.setGroup(GROUP_NEW_CONTENT)
                         .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY);
             }
-            manager.notify(alert.efukt ? ID_EFUKT : ID_CRAZYSHIT, builder.build());
+            manager.notify(sourceNotificationId(alert.key), builder.build());
         }
 
         if (grouped) {
             PendingIntent open = appPendingIntent(context, 9302);
-            String text = total + (total == 1 ? " new video" : " new videos") +
-                    " across CrazyShit and EFukt";
+            String text = total + (total == 1 ? " new item" : " new items") +
+                    " across " + alerts.size() + " ZEROCHILL sources";
             Notification summary = baseBuilder(context, CHANNEL_VIDEOS, "ZC")
-                    .setContentTitle("Fresh uploads are ready")
+                    .setContentTitle("Fresh content is ready")
                     .setContentText(text)
                     .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
                     .setContentIntent(open)
@@ -313,10 +368,10 @@ final class NotificationCoordinator {
 
     private static NotificationCompat.Builder videoBuilder(Context context, SourceAlert alert) {
         boolean showTitles = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getBoolean(PREF_SHOW_TITLES, false);
+                .getBoolean(PREF_SHOW_TITLES, true);
         int count = alert.items.size();
         String source = alert.source;
-        String title = count + (count == 1 ? " new video on " : " new videos on ") + source;
+        String title = count + (count == 1 ? " new item on " : " new items on ") + source;
         String body = showTitles && count == 1
                 ? alert.items.get(0).title
                 : "Tap to see what was added.";
@@ -336,24 +391,24 @@ final class NotificationCoordinator {
         } else {
             style = new NotificationCompat.BigTextStyle().bigText(
                     count == 1
-                            ? "A fresh upload from " + source + " is ready. Tap to open the latest feed."
-                            : count + " fresh uploads from " + source + " are ready. Tap to open the latest feed."
+                            ? "Fresh content from " + source + " is ready. Tap to open ZEROCHILL."
+                            : count + " fresh items from " + source + " are ready. Tap to open ZEROCHILL."
             );
         }
 
         Notification publicVersion = new NotificationCompat.Builder(context, CHANNEL_VIDEOS)
                 .setSmallIcon(R.drawable.ic_notification_crazyshit)
-                .setContentTitle("New videos available")
-                .setContentText("Open ZeroChill to view them.")
+                .setContentTitle("New ZEROCHILL content")
+                .setContentText("Open ZEROCHILL to view it.")
                 .build();
 
-        return baseBuilder(context, CHANNEL_VIDEOS, alert.efukt ? "EF" : "CS")
+        return baseBuilder(context, CHANNEL_VIDEOS, "ZC")
                 .setContentTitle(title)
                 .setContentText(body)
                 .setSubText(source)
                 .setStyle(style)
                 .setContentIntent(open)
-                .addAction(R.drawable.ic_nav_home, "View new videos", open)
+                .addAction(R.drawable.ic_nav_home, "Open ZEROCHILL", open)
                 .setPublicVersion(publicVersion)
                 .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
                 .setNumber(count)
@@ -373,54 +428,54 @@ final class NotificationCoordinator {
     }
 
     private static Bitmap brandIcon(Context context, String mark) {
-        int size = Math.max(96, Math.round(64f * context.getResources().getDisplayMetrics().density));
+        int size = Math.max(96, Math.round(
+                64f * context.getResources().getDisplayMetrics().density
+        ));
         Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
-        float center = size / 2f;
-
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        paint.setColor(Color.rgb(10, 10, 12));
-        canvas.drawCircle(center, center, center * 0.94f, paint);
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(Math.max(4f, size * 0.055f));
-        paint.setColor(UiPalette.PRIMARY);
-        canvas.drawCircle(center, center, center * 0.82f, paint);
-
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(Color.WHITE);
-        paint.setTextAlign(Paint.Align.CENTER);
-        paint.setTypeface(android.graphics.Typeface.create(
-                android.graphics.Typeface.DEFAULT,
-                android.graphics.Typeface.BOLD
-        ));
-        paint.setTextSize(size * (mark.length() > 2 ? 0.30f : 0.38f));
-        Paint.FontMetrics metrics = paint.getFontMetrics();
-        float baseline = center - (metrics.ascent + metrics.descent) / 2f;
-        canvas.drawText(mark, center, baseline, paint);
+        android.graphics.drawable.Drawable icon = context.getDrawable(R.mipmap.ic_launcher);
+        if (icon != null) {
+            icon.setBounds(0, 0, size, size);
+            icon.draw(canvas);
+        } else {
+            canvas.drawColor(Color.BLACK);
+        }
         return bitmap;
     }
 
     private static PendingIntent feedPendingIntent(Context context, SourceAlert alert) {
-        Intent intent = new Intent(context, NativeFeedBrowserActivity.class);
-        intent.putExtra(NativeFeedBrowserActivity.EXTRA_TITLE, alert.efukt ? "New on EFukt" : "New on CrazyShit");
-        intent.putExtra(
-                NativeFeedBrowserActivity.EXTRA_BASE_URL,
-                alert.efukt ? EfuktRepository.BASE : CrazyShitRepository.HOME
-        );
-        intent.putExtra(NativeFeedBrowserActivity.EXTRA_MEME_MODE, false);
-        intent.putExtra(
-                NativeFeedBrowserActivity.EXTRA_SOURCE,
-                alert.efukt
-                        ? NativeFeedBrowserActivity.SOURCE_EFUKT
-                        : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT
-        );
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        return PendingIntent.getActivity(
-                context,
-                alert.efukt ? 9202 : 9201,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
+        if ("crazyshit".equals(alert.key) || "efukt".equals(alert.key)) {
+            boolean efukt = "efukt".equals(alert.key);
+            Intent intent = new Intent(context, NativeFeedBrowserActivity.class);
+            intent.putExtra(
+                    NativeFeedBrowserActivity.EXTRA_TITLE,
+                    efukt ? "New on EFukt" : "New on CrazyShit"
+            );
+            intent.putExtra(
+                    NativeFeedBrowserActivity.EXTRA_BASE_URL,
+                    efukt ? EfuktRepository.BASE : CrazyShitRepository.HOME
+            );
+            intent.putExtra(NativeFeedBrowserActivity.EXTRA_MEME_MODE, false);
+            intent.putExtra(
+                    NativeFeedBrowserActivity.EXTRA_SOURCE,
+                    efukt
+                            ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                            : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT
+            );
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            return PendingIntent.getActivity(
+                    context,
+                    sourceNotificationId(alert.key) + 5000,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            );
+        }
+        return appPendingIntent(context, sourceNotificationId(alert.key) + 5000);
+    }
+
+    private static int sourceNotificationId(String key) {
+        String value = key == null ? "source" : key;
+        return 4100 + Math.abs(value.hashCode() % 700);
     }
 
     private static PendingIntent appPendingIntent(Context context, int requestCode) {
@@ -468,10 +523,10 @@ final class NotificationCoordinator {
 
         NotificationChannel videos = new NotificationChannel(
                 CHANNEL_VIDEOS,
-                "New videos",
+                "New content",
                 NotificationManager.IMPORTANCE_DEFAULT
         );
-        videos.setDescription("Alerts when followed sites add new videos");
+        videos.setDescription("Alerts when supported ZEROCHILL sources add fresh content");
         videos.enableLights(true);
         videos.setLightColor(UiPalette.PRIMARY);
         videos.setShowBadge(true);
@@ -546,10 +601,8 @@ final class NotificationCoordinator {
     }
 
     private static boolean alertsEnabled(SharedPreferences prefs) {
-        boolean videos = prefs.getBoolean(PREF_NEW_VIDEO_ALERTS, true) &&
-                (prefs.getBoolean(PREF_CRAZYSHIT_ALERTS, true) ||
-                        prefs.getBoolean(PREF_EFUKT_ALERTS, true));
-        return videos || prefs.getBoolean(PREF_UPDATE_ALERTS, true);
+        boolean content = prefs.getBoolean(PREF_NEW_VIDEO_ALERTS, true);
+        return content || prefs.getBoolean(PREF_UPDATE_ALERTS, true);
     }
 
     private static int normalizedHours(int value) {
@@ -559,13 +612,13 @@ final class NotificationCoordinator {
     }
 
     static final class SourceAlert {
+        final String key;
         final String source;
-        final boolean efukt;
         final List<NativeContentItem> items;
 
-        SourceAlert(String source, boolean efukt, List<NativeContentItem> items) {
-            this.source = source;
-            this.efukt = efukt;
+        SourceAlert(String key, String source, List<NativeContentItem> items) {
+            this.key = key == null ? "source" : key.trim().toLowerCase(java.util.Locale.US);
+            this.source = source == null ? "ZEROCHILL" : source;
             this.items = items == null ? new ArrayList<>() : items;
         }
     }
