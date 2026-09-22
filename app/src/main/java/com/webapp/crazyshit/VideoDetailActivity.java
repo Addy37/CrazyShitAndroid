@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -16,6 +17,7 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
+import android.view.MotionEvent;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,6 +33,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.window.OnBackInvokedCallback;
@@ -105,8 +108,7 @@ public class VideoDetailActivity extends Activity {
     private TextView playerTitleView;
     private ImageButton portraitFullscreenButton;
     private ProgressBar loading;
-    private FrameLayout portraitProgressTrack;
-    private View portraitProgressFill;
+    private SeekBar portraitSeekBar;
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
     private OnBackInvokedCallback backCallback;
@@ -141,15 +143,28 @@ public class VideoDetailActivity extends Activity {
     private int thumbnailResolverCursor;
     private int relatedLoadGeneration;
     private int relatedPlayGeneration;
+    private boolean portraitSeekScrubbing;
 
     private final Runnable portraitProgressTicker = new Runnable() {
         @Override
         public void run() {
             updatePortraitProgress();
-            if (portraitProgressTrack != null) {
-                portraitProgressTrack.postDelayed(this, 350L);
+            if (portraitSeekBar != null) {
+                portraitSeekBar.postDelayed(this, 350L);
             }
         }
+    };
+    private final Runnable hidePortraitSeekBar = () -> {
+        if (portraitSeekBar == null || portraitSeekScrubbing || !canShowPortraitSeekBar()) return;
+        portraitSeekBar.animate()
+                .alpha(0f)
+                .setDuration(180L)
+                .withEndAction(() -> {
+                    if (portraitSeekBar != null && portraitSeekBar.getAlpha() == 0f) {
+                        portraitSeekBar.setVisibility(View.INVISIBLE);
+                    }
+                })
+                .start();
     };
 
     private static final class VideoHistoryEntry {
@@ -320,22 +335,52 @@ public class VideoDetailActivity extends Activity {
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
-        portraitProgressTrack = new FrameLayout(this);
-        portraitProgressTrack.setBackgroundColor(Color.argb(112, 255, 255, 255));
-        portraitProgressTrack.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        FrameLayout.LayoutParams portraitTrackParams =
-                new FrameLayout.LayoutParams(-1, dp(3));
-        portraitTrackParams.gravity = Gravity.BOTTOM;
-        playerContainer.addView(portraitProgressTrack, portraitTrackParams);
-
-        portraitProgressFill = new View(this);
-        portraitProgressFill.setBackgroundColor(UiPalette.PRIMARY);
-        portraitProgressFill.setPivotX(0f);
-        portraitProgressFill.setScaleX(0f);
-        portraitProgressTrack.addView(
-                portraitProgressFill,
-                new FrameLayout.LayoutParams(-1, -1)
+        portraitSeekBar = new SeekBar(this);
+        portraitSeekBar.setMax(1000);
+        portraitSeekBar.setProgress(0);
+        portraitSeekBar.setSplitTrack(false);
+        portraitSeekBar.setPadding(dp(8), 0, dp(8), 0);
+        portraitSeekBar.setProgressTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+        portraitSeekBar.setProgressBackgroundTintList(
+                ColorStateList.valueOf(Color.argb(100, 255, 255, 255))
         );
+        portraitSeekBar.setThumbTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+        portraitSeekBar.setContentDescription("Video progress. Drag to seek.");
+        FrameLayout.LayoutParams portraitSeekParams =
+                new FrameLayout.LayoutParams(-1, dp(28));
+        portraitSeekParams.gravity = Gravity.BOTTOM;
+        playerContainer.addView(portraitSeekBar, portraitSeekParams);
+        portraitSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (!fromUser || player == null) return;
+                long duration = Math.max(0L, player.getDuration());
+                if (duration <= 0L) return;
+                player.seekTo(portraitSeekPosition(progress, seekBar.getMax(), duration));
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                portraitSeekScrubbing = true;
+                showPortraitSeekBar();
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                portraitSeekScrubbing = false;
+                updatePortraitProgress();
+                schedulePortraitSeekBarHide();
+            }
+        });
+        portraitSeekBar.setVisibility(View.INVISIBLE);
+        portraitSeekBar.setAlpha(0f);
+
+        playerView.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+                showPortraitSeekBar();
+            }
+            return false;
+        });
 
         View playerBack = playerView.findViewById(R.id.player_back);
         playerTitleView = playerView.findViewById(R.id.player_title);
@@ -632,6 +677,7 @@ public class VideoDetailActivity extends Activity {
         });
         player.prepare();
         startPortraitProgressTicker();
+        showPortraitSeekBar();
     }
 
     static float portraitProgressFraction(long positionMs, long durationMs) {
@@ -639,30 +685,67 @@ public class VideoDetailActivity extends Activity {
         return Math.max(0f, Math.min(1f, positionMs / (float) durationMs));
     }
 
+    static long portraitSeekPosition(int progress, int max, long durationMs) {
+        if (max <= 0 || durationMs <= 0L) return 0L;
+        int clamped = Math.max(0, Math.min(max, progress));
+        return Math.round(durationMs * (clamped / (double) max));
+    }
+
+    private boolean canShowPortraitSeekBar() {
+        return getResources().getConfiguration().orientation
+                != Configuration.ORIENTATION_LANDSCAPE
+                && !portraitFullscreen
+                && !rotatableFullscreen;
+    }
+
+    private void showPortraitSeekBar() {
+        if (portraitSeekBar == null || !canShowPortraitSeekBar()) return;
+        portraitSeekBar.removeCallbacks(hidePortraitSeekBar);
+        portraitSeekBar.animate().cancel();
+        portraitSeekBar.setVisibility(View.VISIBLE);
+        portraitSeekBar.animate().alpha(1f).setDuration(120L).start();
+        schedulePortraitSeekBarHide();
+    }
+
+    private void schedulePortraitSeekBarHide() {
+        if (portraitSeekBar == null || portraitSeekScrubbing || !canShowPortraitSeekBar()) return;
+        portraitSeekBar.removeCallbacks(hidePortraitSeekBar);
+        portraitSeekBar.postDelayed(hidePortraitSeekBar, CONTROL_TIMEOUT_MS);
+    }
+
     private void startPortraitProgressTicker() {
-        if (portraitProgressTrack == null) return;
-        portraitProgressTrack.removeCallbacks(portraitProgressTicker);
+        if (portraitSeekBar == null) return;
+        portraitSeekBar.removeCallbacks(portraitProgressTicker);
         updatePortraitProgress();
-        portraitProgressTrack.postDelayed(portraitProgressTicker, 350L);
+        portraitSeekBar.postDelayed(portraitProgressTicker, 350L);
     }
 
     private void stopPortraitProgressTicker() {
-        if (portraitProgressTrack != null) {
-            portraitProgressTrack.removeCallbacks(portraitProgressTicker);
+        if (portraitSeekBar != null) {
+            portraitSeekBar.removeCallbacks(portraitProgressTicker);
+            portraitSeekBar.removeCallbacks(hidePortraitSeekBar);
         }
     }
 
     private void updatePortraitProgress() {
-        if (portraitProgressTrack == null || portraitProgressFill == null) return;
-        boolean portrait = getResources().getConfiguration().orientation
-                != Configuration.ORIENTATION_LANDSCAPE;
-        boolean visible = portrait && !portraitFullscreen && !rotatableFullscreen;
-        portraitProgressTrack.setVisibility(visible ? View.VISIBLE : View.GONE);
-        if (!visible) return;
+        if (portraitSeekBar == null) return;
+        if (!canShowPortraitSeekBar()) {
+            portraitSeekBar.animate().cancel();
+            portraitSeekBar.setVisibility(View.GONE);
+            return;
+        }
+        if (portraitSeekBar.getVisibility() == View.GONE) {
+            portraitSeekBar.setVisibility(View.INVISIBLE);
+            portraitSeekBar.setAlpha(0f);
+        }
+        if (portraitSeekScrubbing) return;
 
         long position = player == null ? 0L : Math.max(0L, player.getCurrentPosition());
         long duration = player == null ? 0L : Math.max(0L, player.getDuration());
-        portraitProgressFill.setScaleX(portraitProgressFraction(position, duration));
+        int progress = Math.round(
+                portraitProgressFraction(position, duration) * portraitSeekBar.getMax()
+        );
+        portraitSeekBar.setProgress(progress);
     }
 
     private void updateMetadataUi() {
@@ -1467,6 +1550,7 @@ public class VideoDetailActivity extends Activity {
         updatePortraitFullscreenButton();
         updateSwipeEnabled();
         updatePortraitProgress();
+        if (canShowPortraitSeekBar()) showPortraitSeekBar();
         shell.requestApplyInsets();
     }
 
@@ -1670,7 +1754,8 @@ public class VideoDetailActivity extends Activity {
     private void releasePlayer() {
         playbackRecovery.cancel();
         stopPortraitProgressTicker();
-        if (portraitProgressFill != null) portraitProgressFill.setScaleX(0f);
+        portraitSeekScrubbing = false;
+        if (portraitSeekBar != null) portraitSeekBar.setProgress(0);
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
             try {
