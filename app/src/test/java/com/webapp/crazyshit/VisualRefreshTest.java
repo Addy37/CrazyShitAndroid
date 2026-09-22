@@ -318,7 +318,11 @@ public class VisualRefreshTest {
             }) {
                 View control = root.findViewWithTag(tag);
                 assertNotNull(tag, control);
-                assertTrue(tag, control instanceof ImageView);
+                if ("shittok_fullscreen".equals(tag)) {
+                    assertTrue(tag, control instanceof ImageView);
+                } else {
+                    assertTrue(tag, control instanceof TextView);
+                }
                 assertTrue(tag, control.getLayoutParams().width >= BrowseUi.dp(host.get(), 48));
                 assertTrue(tag, control.getLayoutParams().height >= BrowseUi.dp(host.get(), 48));
                 assertNotNull(tag, control.getContentDescription());
