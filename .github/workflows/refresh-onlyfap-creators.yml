@@ -37,6 +37,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      - name: Validate catalog tool syntax
+        run: python3 -m py_compile tools/refresh_onlyfap_creator_index.py
+
       - name: Refresh source-confirmed creator names
         run: |
           set -euo pipefail
