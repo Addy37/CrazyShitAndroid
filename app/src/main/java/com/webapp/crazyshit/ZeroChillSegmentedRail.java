@@ -44,9 +44,9 @@ final class ZeroChillSegmentedRail extends LinearLayout {
             return;
         }
 
+        cancelIndicatorAnimation();
         fillChildBounds(index, targetBounds);
         if (!hasIndicatorBounds || !animate || !ZeroChillMotion.animationsEnabled(getContext())) {
-            cancelIndicatorAnimation();
             indicatorBounds.set(targetBounds);
             hasIndicatorBounds = true;
             motionBias = 0f;
@@ -56,7 +56,6 @@ final class ZeroChillSegmentedRail extends LinearLayout {
 
         startBounds.set(indicatorBounds);
         float direction = Math.signum(targetBounds.centerX() - startBounds.centerX());
-        cancelIndicatorAnimation();
         indicatorAnimator = ValueAnimator.ofFloat(0f, 1f);
         indicatorAnimator.setDuration(ZeroChillMotion.STANDARD_MS);
         indicatorAnimator.setInterpolator(new DecelerateInterpolator());
@@ -182,8 +181,11 @@ final class ZeroChillSegmentedRail extends LinearLayout {
 
     private void cancelIndicatorAnimation() {
         if (indicatorAnimator != null) {
-            indicatorAnimator.cancel();
+            ValueAnimator running = indicatorAnimator;
             indicatorAnimator = null;
+            running.removeAllListeners();
+            running.removeAllUpdateListeners();
+            running.cancel();
         }
     }
 
