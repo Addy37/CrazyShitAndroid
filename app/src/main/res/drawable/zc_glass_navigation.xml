@@ -1,77 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Clearer smoked body so the refracted backdrop remains visible. -->
+    <!-- Clear optical shell. No smoked or dark fill. -->
     <item>
         <shape android:shape="rectangle">
-            <gradient
-                android:angle="270"
-                android:startColor="#581B222A"
-                android:centerColor="#3D11171E"
-                android:endColor="#64070A0E" />
-            <stroke android:width="1dp" android:color="#705BBBE2" />
+            <solid android:color="#00000000" />
+            <stroke android:width="1dp" android:color="#780892D0" />
             <corners android:radius="@dimen/zc_radius_pill" />
         </shape>
     </item>
 
-    <!-- Inner glass volume. -->
+    <!-- Faint inner rim gives the clear surface thickness without tinting content. -->
     <item android:left="2dp" android:top="2dp" android:right="2dp" android:bottom="2dp">
         <shape android:shape="rectangle">
-            <gradient
-                android:angle="270"
-                android:startColor="#2CFFFFFF"
-                android:centerColor="#110892D0"
-                android:endColor="#24000000" />
-            <stroke android:width="1dp" android:color="#24FFFFFF" />
+            <solid android:color="#00000000" />
+            <stroke android:width="1dp" android:color="#22FFFFFF" />
             <corners android:radius="28dp" />
         </shape>
     </item>
 
-    <!-- Broad upper reflection, like a curved glass face catching ambient light. -->
+    <!-- Small top reflection only. -->
     <item
-        android:left="9dp"
+        android:left="18dp"
         android:top="2dp"
-        android:right="9dp"
-        android:height="15dp"
-        android:gravity="top">
-        <shape android:shape="rectangle">
-            <gradient
-                android:angle="270"
-                android:startColor="#5CE6F7FF"
-                android:centerColor="#260892D0"
-                android:endColor="#00FFFFFF" />
-            <corners android:radius="@dimen/zc_radius_pill" />
-        </shape>
-    </item>
-
-    <!-- Bright partial specular streak. -->
-    <item
-        android:left="20dp"
-        android:top="1dp"
-        android:right="52dp"
-        android:height="2dp"
+        android:right="42dp"
+        android:height="3dp"
         android:gravity="top">
         <shape android:shape="rectangle">
             <gradient
                 android:angle="0"
                 android:startColor="#00FFFFFF"
-                android:centerColor="#E8F4FCFF"
-                android:endColor="#350892D0" />
-            <corners android:radius="1dp" />
+                android:centerColor="#6EEAF8FF"
+                android:endColor="#200892D0" />
+            <corners android:radius="2dp" />
         </shape>
     </item>
 
-    <!-- Faint lower caustic keeps the pill from reading like a flat gradient. -->
+    <!-- Very faint lower light catch. -->
     <item
-        android:left="18dp"
-        android:right="18dp"
-        android:bottom="3dp"
+        android:left="24dp"
+        android:right="24dp"
+        android:bottom="2dp"
         android:height="1dp"
         android:gravity="bottom">
         <shape android:shape="rectangle">
             <gradient
                 android:angle="0"
                 android:startColor="#000892D0"
-                android:centerColor="#5C9BDCF4"
+                android:centerColor="#380892D0"
                 android:endColor="#000892D0" />
             <corners android:radius="1dp" />
         </shape>
