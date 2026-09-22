@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Refresh ZEROCHILL's bundled OnlyFap creator-name index.
 
-This is a development-time tool. It reads the current bundled source configuration,
-pages the configured OnlyHaven creator API, merges those source-confirmed creators
+Development-time only. The tool reads the current bundled source configuration,
+queries the configured OnlyHaven creator API, merges source-confirmed creators
 with the reviewed seed already in the APK, and writes a compact name/alias TSV.
 
 No media is downloaded and no runtime source behavior is changed.
@@ -11,6 +11,7 @@ No media is downloaded and no runtime source behavior is changed.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import pathlib
 import re
@@ -23,6 +24,7 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = ROOT / "app/src/main/assets/source_config_defaults.json"
 DEFAULT_OUTPUT = ROOT / "app/src/main/assets/onlyfap_creators.tsv"
+QUERY_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 
 def normalized(value: str) -> str:
@@ -69,12 +71,9 @@ def load_seed(path: pathlib.Path) -> dict[str, tuple[str, set[str]]]:
         key = normalized(name)
         if not name or not key:
             continue
-        aliases = set()
+        aliases: set[str] = set()
         if len(columns) > 1:
-            for alias in columns[1].split("|"):
-                alias = clean(alias)
-                if alias:
-                    aliases.add(alias)
+            aliases.update(clean(alias) for alias in columns[1].split("|") if clean(alias))
         records[key] = (name, aliases)
     return records
 
@@ -143,64 +142,95 @@ def creator_rows(payload: object) -> list[dict]:
     return []
 
 
+def query_terms() -> list[str]:
+    single = list(QUERY_CHARS)
+    double = ["".join(pair) for pair in itertools.product(QUERY_CHARS, repeat=2)]
+    return [""] + single + double
+
+
+def matches_query(query: str, name: str, creator_id: str) -> bool:
+    wanted = normalized(query).replace(" ", "")
+    if not wanted:
+        return True
+    named = normalized(name).replace(" ", "")
+    identifier = normalized(creator_id).replace(" ", "")
+    return wanted in named or wanted in identifier
+
+
+def ingest_rows(
+    rows: list[dict],
+    query: str,
+    records: dict[str, tuple[str, set[str]]],
+    target: int,
+) -> int:
+    added = 0
+    for row in rows:
+        service = first_text(row, "service")
+        creator_id = first_text(row, "id", "creatorId", "creator_id", "user")
+        name = first_text(row, "displayName", "display_name", "name", "username") or creator_id
+        if not service or not creator_id or not name or not matches_query(query, name, creator_id):
+            continue
+
+        post_count = first_int(row, "postCount", "post_count", "postsCount", "posts_count", "posts")
+        dm_count = first_int(row, "dmCount", "dm_count", "dmsCount", "dms_count", "dms")
+        if post_count == 0 and dm_count == 0:
+            continue
+
+        aliases: set[str] = set()
+        for alias in (creator_id, first_text(row, "username"), first_text(row, "handle")):
+            alias = clean(alias)
+            if alias and normalized(alias) != normalized(name):
+                aliases.add(alias)
+
+        if add_record(records, name, aliases):
+            added += 1
+            if len(records) >= target:
+                break
+    return added
+
+
 def fetch_onlyhaven(
     config_path: pathlib.Path,
     records: dict[str, tuple[str, set[str]]],
     target: int,
     page_size: int,
     pause: float,
+    max_requests: int,
 ) -> tuple[int, int]:
     base, route, headers = configured_onlyhaven(config_path)
     harvested = 0
     requests = 0
-    offset = 0
-    stale_pages = 0
 
-    while len(records) < target and stale_pages < 3:
-        relative = (
-            route.replace("{query}", "")
-            .replace("{limit}", str(page_size))
-            .replace("{offset}", str(offset))
-        )
-        url = urllib.parse.urljoin(base, relative)
-        rows = creator_rows(request_json(url, headers))
-        requests += 1
-        if not rows:
+    for query in query_terms():
+        if len(records) >= target or requests >= max_requests:
             break
 
-        new_this_page = 0
-        for row in rows:
-            service = first_text(row, "service")
-            creator_id = first_text(row, "id", "creatorId", "creator_id", "user")
-            name = first_text(row, "displayName", "display_name", "name", "username") or creator_id
-            if not service or not creator_id or not name:
-                continue
+        offset = 0
+        for _ in range(3):
+            if len(records) >= target or requests >= max_requests:
+                break
 
-            post_count = first_int(row, "postCount", "post_count", "postsCount", "posts_count", "posts")
-            dm_count = first_int(row, "dmCount", "dm_count", "dmsCount", "dms_count", "dms")
-            if post_count == 0 and dm_count == 0:
-                continue
+            relative = (
+                route.replace("{query}", urllib.parse.quote(query, safe=""))
+                .replace("{limit}", str(page_size))
+                .replace("{offset}", str(offset))
+            )
+            url = urllib.parse.urljoin(base, relative)
+            rows = creator_rows(request_json(url, headers))
+            requests += 1
+            if not rows:
+                break
 
-            aliases: set[str] = set()
-            for alias in (
-                creator_id,
-                first_text(row, "username"),
-                first_text(row, "handle"),
-            ):
-                alias = clean(alias)
-                if alias and normalized(alias) != normalized(name):
-                    aliases.add(alias)
+            harvested += ingest_rows(rows, query, records, target)
+            offset += len(rows)
 
-            if add_record(records, name, aliases):
-                harvested += 1
-                new_this_page += 1
-                if len(records) >= target:
-                    break
+            # Most source searches return a bounded result set. Stop when this
+            # page is shorter than requested or when the source repeats it.
+            if len(rows) < page_size:
+                break
+            if pause > 0:
+                time.sleep(pause)
 
-        stale_pages = stale_pages + 1 if new_this_page == 0 else 0
-        offset += len(rows)
-        if len(rows) < page_size:
-            break
         if pause > 0:
             time.sleep(pause)
 
@@ -233,11 +263,12 @@ def main() -> None:
     parser.add_argument("--target", type=int, default=10_000)
     parser.add_argument("--min-count", type=int, default=5_000)
     parser.add_argument("--page-size", type=int, default=100)
-    parser.add_argument("--pause", type=float, default=0.10)
+    parser.add_argument("--pause", type=float, default=0.05)
+    parser.add_argument("--max-requests", type=int, default=700)
     args = parser.parse_args()
 
-    if args.target < 1 or args.min_count < 1 or args.page_size < 1:
-        parser.error("target, min-count and page-size must be positive")
+    if min(args.target, args.min_count, args.page_size, args.max_requests) < 1:
+        parser.error("target, min-count, page-size and max-requests must be positive")
     if args.min_count > args.target:
         parser.error("min-count cannot exceed target")
 
@@ -249,12 +280,13 @@ def main() -> None:
         args.target,
         min(args.page_size, 250),
         max(0.0, args.pause),
+        args.max_requests,
     )
 
     if len(records) < args.min_count:
         raise SystemExit(
             f"Refusing to replace creator index: got {len(records):,}, "
-            f"minimum is {args.min_count:,}"
+            f"minimum is {args.min_count:,} after {request_count:,} source requests"
         )
 
     write_index(args.output, records)
