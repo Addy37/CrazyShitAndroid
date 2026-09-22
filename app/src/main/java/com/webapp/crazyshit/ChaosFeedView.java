@@ -807,7 +807,7 @@ public final class ChaosFeedView extends FrameLayout {
         activity.startActivity(Intent.createChooser(share, "Share playback report"));
     }
 
-    private void toggleSaved(NativeContentItem item, TextView button) {
+    private void toggleSaved(NativeContentItem item, ImageView button) {
         if (item == null) return;
         if (FavoriteStore.contains(activity, item.url)) {
             FavoriteStore.remove(activity, item.url);
@@ -819,10 +819,11 @@ public final class ChaosFeedView extends FrameLayout {
         updateSaveButton(item, button);
     }
 
-    private void updateSaveButton(NativeContentItem item, TextView button) {
+    private void updateSaveButton(NativeContentItem item, ImageView button) {
         if (button == null || item == null) return;
         boolean saved = FavoriteStore.contains(activity, item.url);
-        button.setText(saved ? "★\nSaved" : "☆\nSave");
+        button.setImageResource(saved ? R.drawable.ic_nav_saved : R.drawable.ic_action_save_outline);
+        button.setImageTintList(ColorStateList.valueOf(saved ? UiPalette.PRIMARY : Color.WHITE));
         button.setContentDescription(saved ? "Remove from Watch Later" : "Save to Watch Later");
     }
 
@@ -988,11 +989,13 @@ public final class ChaosFeedView extends FrameLayout {
         final ProgressBar loading;
         final TextView failure;
         final LinearLayout lower;
+        final LinearLayout actionRail;
+        final LinearLayout playbackRail;
         final TextView title;
         final TextView meta;
-        final TextView save;
-        final TextView comments;
-        final TextView mute;
+        final ImageView save;
+        final ImageView comments;
+        final ImageView mute;
         final ImageView fullscreen;
         final TextView speedBadge;
         final SeekBar seekBar;
@@ -1102,48 +1105,69 @@ public final class ChaosFeedView extends FrameLayout {
             meta.setPadding(0, dp(5), 0, 0);
             copy.addView(meta, new LinearLayout.LayoutParams(-1, -2));
 
-            LinearLayout actions = new LinearLayout(activity);
-            actions.setOrientation(LinearLayout.VERTICAL);
-            actions.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-            actions.setBackgroundColor(Color.TRANSPARENT);
-            lower.addView(actions, new LinearLayout.LayoutParams(dp(82), -2));
+            actionRail = new LinearLayout(activity);
+            actionRail.setOrientation(LinearLayout.VERTICAL);
+            actionRail.setGravity(Gravity.CENTER);
+            actionRail.setPadding(dp(4), dp(5), dp(4), dp(5));
+            actionRail.setBackground(activity.getDrawable(R.drawable.zc_shittok_control_rail));
+            actionRail.setTag("shittok_action_rail");
+            lower.addView(actionRail, new LinearLayout.LayoutParams(dp(58), -2));
 
-            save = actionButton("☆\nSave", "Save to Watch Later");
-            actions.addView(save, actionParams());
+            save = imageActionButton(
+                    R.drawable.ic_action_save_outline,
+                    "Save to Watch Later",
+                    "shittok_save"
+            );
+            actionRail.addView(save, actionParams());
 
-            comments = actionButton("💬\nComments", "Open comments");
-            actions.addView(comments, actionParams());
+            comments = imageActionButton(
+                    R.drawable.ic_action_comments,
+                    "Open comments",
+                    "shittok_comments"
+            );
+            actionRail.addView(comments, actionParams());
 
-            TextView share = actionButton("↗\nShare", "Share video");
-            actions.addView(share, actionParams());
+            ImageView share = imageActionButton(
+                    R.drawable.ic_action_share,
+                    "Share video",
+                    "shittok_share"
+            );
+            actionRail.addView(share, actionParams());
 
-            TextView more = actionButton("⋯\nMore", "More video actions");
-            actions.addView(more, actionParams());
+            ImageView more = imageActionButton(
+                    R.drawable.ic_nav_more,
+                    "More video actions",
+                    "shittok_more"
+            );
+            actionRail.addView(more, actionParams());
 
-            mute = actionButton(chaosMuted ? "🔇" : "🔊", chaosMuted ? "Unmute video" : "Mute video");
-            mute.setTextSize(20);
-            FrameLayout.LayoutParams muteParams = new FrameLayout.LayoutParams(dp(52), dp(52));
-            muteParams.gravity = Gravity.TOP | Gravity.END;
-            muteParams.setMargins(0, dp(14), dp(12), 0);
-            root.addView(mute, muteParams);
+            playbackRail = new LinearLayout(activity);
+            playbackRail.setOrientation(LinearLayout.VERTICAL);
+            playbackRail.setGravity(Gravity.CENTER);
+            playbackRail.setPadding(dp(4), dp(4), dp(4), dp(4));
+            playbackRail.setBackground(activity.getDrawable(R.drawable.zc_shittok_control_rail));
+            playbackRail.setTag("shittok_playback_rail");
 
-            fullscreen = new ImageView(activity);
-            fullscreen.setImageResource(R.drawable.ic_action_fullscreen);
-            fullscreen.setPadding(dp(12), dp(12), dp(12), dp(12));
-            fullscreen.setContentDescription("Watch horizontal video fullscreen");
-            fullscreen.setBackground(ZeroChillUi.rounded(
-                    activity,
-                    Color.argb(145, 0, 0, 0),
-                    Color.argb(135, 8, 146, 208),
-                    R.dimen.zc_radius_pill
-            ));
-            fullscreen.setClickable(true);
-            fullscreen.setFocusable(true);
+            mute = imageActionButton(
+                    chaosMuted ? R.drawable.ic_action_volume_off : R.drawable.ic_action_volume_on,
+                    chaosMuted ? "Unmute video" : "Mute video",
+                    "shittok_mute"
+            );
+            playbackRail.addView(mute, actionParams());
+
+            fullscreen = imageActionButton(
+                    R.drawable.ic_action_fullscreen,
+                    "Watch horizontal video fullscreen",
+                    "shittok_fullscreen"
+            );
             fullscreen.setVisibility(View.GONE);
-            FrameLayout.LayoutParams fullscreenParams = new FrameLayout.LayoutParams(dp(48), dp(48));
-            fullscreenParams.gravity = Gravity.TOP | Gravity.END;
-            fullscreenParams.setMargins(0, dp(72), dp(14), 0);
-            root.addView(fullscreen, fullscreenParams);
+            playbackRail.addView(fullscreen, actionParams());
+
+            FrameLayout.LayoutParams playbackParams =
+                    new FrameLayout.LayoutParams(dp(56), ViewGroup.LayoutParams.WRAP_CONTENT);
+            playbackParams.gravity = Gravity.TOP | Gravity.END;
+            playbackParams.setMargins(0, dp(14), dp(12), 0);
+            root.addView(playbackRail, playbackParams);
 
             speedBadge = new TextView(activity);
             speedBadge.setText("2×");
@@ -1277,24 +1301,24 @@ public final class ChaosFeedView extends FrameLayout {
             });
         }
 
-        private TextView actionButton(String value, String description) {
-            TextView button = new TextView(activity);
-            button.setText(value);
+        private ImageView imageActionButton(int icon, String description, String tag) {
+            ImageView button = new ImageView(activity);
+            button.setImageResource(icon);
+            button.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+            button.setScaleType(ImageView.ScaleType.CENTER);
             button.setContentDescription(description);
-            button.setTextColor(Color.WHITE);
-            button.setTextSize(10);
-            button.setGravity(Gravity.CENTER);
             button.setBackgroundColor(Color.TRANSPARENT);
-            button.setShadowLayer(dp(2), 0f, dp(1), Color.BLACK);
-            button.setPadding(dp(2), dp(3), dp(2), dp(3));
+            button.setPadding(dp(12), dp(12), dp(12), dp(12));
             button.setClickable(true);
             button.setFocusable(true);
+            button.setTag(tag);
+            ZeroChillMotion.installPressFeedback(button);
             return button;
         }
 
         private LinearLayout.LayoutParams actionParams() {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(54), dp(48));
-            params.setMargins(0, dp(2), 0, dp(2));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(48), dp(48));
+            params.setMargins(0, dp(1), 0, dp(1));
             return params;
         }
 
@@ -1327,8 +1351,8 @@ public final class ChaosFeedView extends FrameLayout {
             seekBar.setVisibility(View.VISIBLE);
             lower.setAlpha(1f);
             lower.setVisibility(View.VISIBLE);
-            mute.setAlpha(1f);
-            mute.setVisibility(View.VISIBLE);
+            playbackRail.setAlpha(1f);
+            playbackRail.setVisibility(View.VISIBLE);
             speedBadge.setVisibility(View.GONE);
             applyMuteState();
             title.setText(next.title == null || next.title.isEmpty() ? "Random video" : next.title);
@@ -1713,7 +1737,10 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void applyMuteState() {
-            mute.setText(chaosMuted ? "🔇" : "🔊");
+            mute.setImageResource(chaosMuted
+                    ? R.drawable.ic_action_volume_off
+                    : R.drawable.ic_action_volume_on);
+            mute.setImageTintList(ColorStateList.valueOf(Color.WHITE));
             mute.setContentDescription(chaosMuted ? "Unmute video" : "Mute video");
             if (player != null) player.setVolume(chaosMuted ? 0f : 1f);
         }
@@ -1752,15 +1779,14 @@ public final class ChaosFeedView extends FrameLayout {
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(hideSeekBarRunnable);
             lower.animate().cancel();
-            mute.animate().cancel();
-            fullscreen.animate().cancel();
+            playbackRail.animate().cancel();
             seekBar.animate().cancel();
 
             controlsVisible = true;
             lower.setVisibility(View.VISIBLE);
-            mute.setVisibility(View.VISIBLE);
+            playbackRail.setVisibility(View.VISIBLE);
             lower.setAlpha(1f);
-            mute.setAlpha(1f);
+            playbackRail.setAlpha(1f);
             fullscreen.setImageResource(manualFullscreen
                     ? R.drawable.ic_action_fullscreen_exit
                     : R.drawable.ic_action_fullscreen);
@@ -1768,7 +1794,7 @@ public final class ChaosFeedView extends FrameLayout {
                     ? "Exit fullscreen"
                     : "Watch horizontal video fullscreen");
             fullscreen.setVisibility(horizontalVideo ? View.VISIBLE : View.GONE);
-            fullscreen.setAlpha(1f);
+            playbackRail.setAlpha(1f);
 
             if (seekBar.getVisibility() != View.VISIBLE) {
                 seekBar.setVisibility(View.VISIBLE);
@@ -1790,12 +1816,11 @@ public final class ChaosFeedView extends FrameLayout {
             seekBar.animate().cancel();
             controlsVisible = true;
             lower.setVisibility(View.VISIBLE);
-            mute.setVisibility(View.VISIBLE);
+            playbackRail.setVisibility(View.VISIBLE);
             fullscreen.setVisibility(horizontalVideo ? View.VISIBLE : View.GONE);
             seekBar.setVisibility(View.VISIBLE);
             lower.setAlpha(1f);
-            mute.setAlpha(1f);
-            fullscreen.setAlpha(1f);
+            playbackRail.setAlpha(1f);
             seekBar.setAlpha(1f);
             if (!scrubbing) root.postDelayed(hideSeekBarRunnable, 2200L);
             if (autoHide && !scrubbing && !portrait()) {
@@ -1807,11 +1832,10 @@ public final class ChaosFeedView extends FrameLayout {
             if (portrait()) {
                 controlsVisible = true;
                 lower.setVisibility(View.VISIBLE);
-                mute.setVisibility(View.VISIBLE);
+                playbackRail.setVisibility(View.VISIBLE);
                 fullscreen.setVisibility(horizontalVideo ? View.VISIBLE : View.GONE);
                 lower.setAlpha(1f);
-                mute.setAlpha(1f);
-                fullscreen.setAlpha(1f);
+                playbackRail.setAlpha(1f);
                 return;
             }
             if (scrubbing || player == null || !player.isPlaying()) return;
@@ -1823,18 +1847,11 @@ public final class ChaosFeedView extends FrameLayout {
                         if (!controlsVisible) lower.setVisibility(View.INVISIBLE);
                     })
                     .start();
-            mute.animate()
+            playbackRail.animate()
                     .alpha(0f)
                     .setDuration(180L)
                     .withEndAction(() -> {
-                        if (!controlsVisible) mute.setVisibility(View.INVISIBLE);
-                    })
-                    .start();
-            fullscreen.animate()
-                    .alpha(0f)
-                    .setDuration(180L)
-                    .withEndAction(() -> {
-                        if (!controlsVisible && horizontalVideo) fullscreen.setVisibility(View.INVISIBLE);
+                        if (!controlsVisible) playbackRail.setVisibility(View.INVISIBLE);
                     })
                     .start();
         }
