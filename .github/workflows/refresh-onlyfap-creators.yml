@@ -1,0 +1,100 @@
+name: Refresh OnlyFap Creator Catalog
+
+on:
+  push:
+    branches:
+      - feature/onlyfap-large-creator-catalog
+    paths:
+      - tools/refresh_onlyfap_creator_index.py
+      - app/src/main/assets/source_config_defaults.json
+      - app/src/main/assets/onlyfap_creators.tsv
+      - .github/workflows/refresh-onlyfap-creators.yml
+  pull_request:
+    branches:
+      - feature/onlyfap-local-search-glass
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: onlyfap-creator-catalog-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: ${{ !contains(github.event.head_commit.message || '', '[creator catalog]') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out creator catalog branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: feature/onlyfap-large-creator-catalog
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Refresh source-confirmed creator names
+        run: |
+          set -euo pipefail
+          python3 tools/refresh_onlyfap_creator_index.py \
+            --target 5000 \
+            --min-count 3000 \
+            --page-size 50 \
+            --pause 0.10 \
+            --max-requests 400
+
+      - name: Verify catalog size
+        run: |
+          set -euo pipefail
+          COUNT="$(grep -v '^#' app/src/main/assets/onlyfap_creators.tsv | sed '/^$/d' | wc -l)"
+          echo "Bundled creators: $COUNT"
+          test "$COUNT" -ge 3000
+
+      - name: Run focused search tests
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:testDebugUnitTest --tests 'com.webapp.crazyshit.BundledCreatorIndexTest'
+
+      - name: Build debug APK
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:assembleDebug
+
+      - name: Commit refreshed catalog
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- app/src/main/assets/onlyfap_creators.tsv; then
+            echo "Creator catalog already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/assets/onlyfap_creators.tsv
+          git commit -m "Expand OnlyFap bundled creator catalog [creator catalog]"
+          git push origin HEAD:feature/onlyfap-large-creator-catalog
+
+      - name: Upload generated catalog
+        uses: actions/upload-artifact@v4
+        with:
+          name: onlyfap-creator-catalog
+          path: app/src/main/assets/onlyfap_creators.tsv
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: zerochill-onlyfap-large-catalog-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
