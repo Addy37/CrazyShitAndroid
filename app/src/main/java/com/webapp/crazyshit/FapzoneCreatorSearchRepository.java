@@ -88,9 +88,15 @@ final class FapzoneCreatorSearchRepository {
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 break;
-            } catch (Exception ignored) { }
+            } catch (Exception failure) {
+                android.util.Log.w("OnlyFapSearch", "Creator source request failed", failure);
+            }
         }
         for (Future<?> request : requests) if (!request.isDone()) request.cancel(true);
+        if (replies < requests.size()) {
+            android.util.Log.w("OnlyFapSearch", (requests.size() - replies)
+                    + " creator sources timed out or were cancelled");
+        }
         if (successes == 0) throw new IOException("OnlyFap creator search could not be reached");
 
         ArrayList<NativeContentItem> output = snapshot(groups, safeLimit);

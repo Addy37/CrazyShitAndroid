@@ -12,8 +12,11 @@ import java.util.Set;
 /** Creator metadata learned from real listings and search responses, plus existing favorites. */
 final class CreatorCatalog {
     static final String PREFS = "creator_catalog_v1";
-    private static final int MAX_CACHED = 600;
+    // Learned rich metadata is bounded separately from the immutable bundled names.
+    private static final int MAX_CACHED = 2000;
     private static final String[] SHELVES = {"popular_creator_feed_v3", "popular_creator_feed_v2",
+            "onlyfap_trending_v4", "fapzone_creator_feed_v3_1",
+            "fapzone_creator_feed_v3_2", "fapzone_creator_feed_v3_3",
             "fapzone_creator_feed_v1_1", "fapzone_creator_feed_v1_2", "fapzone_creator_feed_v1_3"};
 
     private CreatorCatalog() { }
@@ -39,13 +42,15 @@ final class CreatorCatalog {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         for (NativeContentItem item : all(context)) {
             if (favoritesOnly && !favorites.contains(CreatorFavoriteStore.key(item))) continue;
-            if (CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE) result.add(item);
+            if (CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
+                    || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE) result.add(item);
         }
         Comparator<NativeContentItem> names = Comparator.comparing(
                 item -> CreatorNameMatcher.normalized(item.title));
         if (favoritesOnly || query.trim().isEmpty()) result.sort(names);
         else result.sort(Comparator.<NativeContentItem>comparingInt(
-                        item -> CreatorNameMatcher.rank(item.title, query))
+                        item -> Math.min(CreatorNameMatcher.rank(item.title, query),
+                                CreatorNameMatcher.rank(item.searchQuery, query)))
                 .thenComparingInt(item -> favorites.contains(CreatorFavoriteStore.key(item)) ? 0 : 1)
                 .thenComparing(names));
         return result.size() > limit ? new ArrayList<>(result.subList(0, limit)) : result;

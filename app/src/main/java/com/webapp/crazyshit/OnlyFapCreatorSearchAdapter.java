@@ -2,7 +2,6 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -20,11 +19,11 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -74,10 +73,10 @@ final class OnlyFapCreatorSearchAdapter
             public boolean areContentsTheSame(int oldPosition, int newPosition) {
                 NativeContentItem a = old.get(oldPosition);
                 NativeContentItem b = replacement.get(newPosition);
-                return a.title.equals(b.title) &&
+                return a.title.equals(b.title) && a.url.equals(b.url) &&
                         a.imageUrl.equals(b.imageUrl) &&
                         a.description.equals(b.description) &&
-                        a.views.equals(b.views);
+                        a.views.equals(b.views) && a.searchQuery.equals(b.searchQuery);
             }
         });
         items = replacement;
@@ -99,10 +98,12 @@ final class OnlyFapCreatorSearchAdapter
         Context context = parent.getContext();
 
         MaterialCardView card = new MaterialCardView(context);
-        card.setCardBackgroundColor(Color.rgb(16, 19, 23));
+        card.setCardBackgroundColor(ZeroChillUi.color(context, R.color.zc_surface_glass));
         card.setRadius(dp(context, 16));
         card.setStrokeWidth(dp(context, 1));
-        card.setStrokeColor(Color.rgb(41, 62, 72));
+        card.setStrokeColor(ZeroChillUi.color(context, R.color.zc_divider));
+        card.setRippleColor(android.content.res.ColorStateList.valueOf(
+                ZeroChillUi.color(context, R.color.zc_cyan_container)));
         card.setClickable(true);
         card.setFocusable(true);
 
@@ -129,7 +130,7 @@ final class OnlyFapCreatorSearchAdapter
 
         ImageView avatar = new ImageView(context);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        avatar.setBackgroundColor(Color.rgb(28, 33, 38));
+        avatar.setBackgroundColor(ZeroChillUi.color(context, R.color.zc_surface_pressed));
         avatar.setContentDescription(null);
         row.addView(avatar, new LinearLayout.LayoutParams(dp(context, 54), dp(context, 54)));
 
@@ -160,14 +161,14 @@ final class OnlyFapCreatorSearchAdapter
         copy.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
         TextView handle = new TextView(context);
-        handle.setTextColor(Color.rgb(161, 176, 184));
+        handle.setTextColor(ZeroChillUi.color(context, R.color.zc_text_muted));
         handle.setTextSize(11.5f);
         handle.setSingleLine(true);
         handle.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(handle, new LinearLayout.LayoutParams(-1, -2));
 
         TextView meta = new TextView(context);
-        meta.setTextColor(Color.rgb(192, 199, 204));
+        meta.setTextColor(ZeroChillUi.color(context, R.color.zc_text_secondary));
         meta.setTextSize(11f);
         meta.setMaxLines(2);
         meta.setEllipsize(TextUtils.TruncateAt.END);
@@ -176,7 +177,8 @@ final class OnlyFapCreatorSearchAdapter
         copy.addView(meta, metaParams);
 
         FrameLayout previewFrame = new FrameLayout(context);
-        previewFrame.setBackground(BrowseUi.rounded(context, Color.rgb(24, 29, 34), 12));
+        previewFrame.setBackground(BrowseUi.rounded(context,
+                ZeroChillUi.color(context, R.color.zc_surface_pressed), 12));
         LinearLayout.LayoutParams previewParams =
                 new LinearLayout.LayoutParams(dp(context, 112), -1);
         row.addView(previewFrame, previewParams);
@@ -198,14 +200,18 @@ final class OnlyFapCreatorSearchAdapter
         holder.card.setContentDescription(item.title + ", OnlyFap creator");
         holder.card.setOnClickListener(v -> open.accept(item));
 
-        load(holder.avatar, item, true);
-        load(holder.preview, item, false);
+        if (!item.imageUrl.equals(holder.imageUrl)) {
+            load(holder.avatar, item, true);
+            load(holder.preview, item, false);
+            holder.imageUrl = item.imageUrl;
+        }
     }
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
         Glide.with(holder.avatar).clear(holder.avatar);
         Glide.with(holder.preview).clear(holder.preview);
+        holder.imageUrl = null;
         holder.card.setOnClickListener(null);
         super.onViewRecycled(holder);
     }
@@ -216,9 +222,11 @@ final class OnlyFapCreatorSearchAdapter
     }
 
     private void load(ImageView target, NativeContentItem item, boolean circle) {
-        Glide.with(target).clear(target);
-        target.setImageResource(R.drawable.ic_more_account);
-        if (item.imageUrl == null || item.imageUrl.trim().isEmpty()) return;
+        if (item.imageUrl == null || item.imageUrl.trim().isEmpty()) {
+            Glide.with(target).clear(target);
+            target.setImageResource(R.drawable.ic_more_account);
+            return;
+        }
 
         String referer = item.uploader != null &&
                 (item.uploader.startsWith("https://") || item.uploader.startsWith("http://"))
@@ -236,9 +244,9 @@ final class OnlyFapCreatorSearchAdapter
                 Glide.with(target)
                         .load(source)
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                        .dontAnimate()
-                        .placeholder(new ColorDrawable(Color.rgb(28, 33, 38)))
-                        .error(new ColorDrawable(Color.rgb(28, 33, 38)));
+                        .transition(DrawableTransitionOptions.withCrossFade(200))
+                        .placeholder(R.drawable.ic_more_account)
+                        .error(R.drawable.ic_more_account);
         if (circle) request.circleCrop();
         else request.centerCrop();
         request.into(target);
@@ -273,9 +281,7 @@ final class OnlyFapCreatorSearchAdapter
 
     private String creatorKey(NativeContentItem item) {
         if (item == null) return "";
-        String title = item.title == null ? "" : item.title.trim().toLowerCase(Locale.US);
-        String url = item.url == null ? "" : item.url.trim().toLowerCase(Locale.US);
-        return title + "\n" + url;
+        return OnlyFapCreatorResults.key(item);
     }
 
     private static int dp(Context context, int value) {
@@ -289,6 +295,7 @@ final class OnlyFapCreatorSearchAdapter
         final TextView name;
         final TextView handle;
         final TextView meta;
+        String imageUrl;
 
         Holder(
                 MaterialCardView card,

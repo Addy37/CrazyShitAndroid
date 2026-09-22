@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/zc_surface_glass" />
+            <stroke android:width="1dp" android:color="@color/zc_edge" />
+            <corners android:radius="@dimen/zc_radius_medium" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/zc_search_field" />
+</selector>

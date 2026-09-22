@@ -37,6 +37,15 @@ public class CreatorBackupTest {
         assertEquals("Anna", CreatorCatalog.matching(context, "anna", false, 8).get(0).title);
     }
 
+    @Test public void currentOnlyFapListingCachesAppearOffline() throws Exception {
+        NativeContentItem hot = creator("Hot Listing Creator");
+        context.getSharedPreferences("fapzone_creator_feed_v3_2", 0).edit()
+                .putString("items", ContentItemCodec.encodeList(Arrays.asList(hot), 5).toString())
+                .commit();
+        List<NativeContentItem> results = CreatorCatalog.matching(context, "hot listing", false, 8);
+        assertEquals("Hot Listing Creator", results.get(0).title);
+    }
+
     @Test public void similarSearchNamesDoNotHideALegacyFavorite() throws Exception {
         context.getSharedPreferences("creator_favorites", 0).edit()
                 .putStringSet("creators", new HashSet<>(Arrays.asList("mia"))).commit();

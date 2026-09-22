@@ -94,6 +94,7 @@ public final class SearchActivity extends Activity {
     private Parcelable restoredScroll;
     private long searchStarted;
     private boolean firstResultsRecorded;
+    private List<NativeContentItem> onlyFapLocal = new ArrayList<>();
 
 
     static Intent createBunkrSearch(Activity activity) {
@@ -108,6 +109,7 @@ public final class SearchActivity extends Activity {
         bunkrOnly = SCOPE_BUNKR.equals(getIntent().getStringExtra(EXTRA_SCOPE));
         ZeroChillUi.applySystemBars(this);
         buildUi();
+        if (bunkrOnly) io.execute(() -> BundledCreatorIndex.get(getApplicationContext()));
 
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         if (state != null) {
@@ -290,9 +292,19 @@ public final class SearchActivity extends Activity {
             return false;
         });
         row.addView(input, new LinearLayout.LayoutParams(0, -1, 1f));
-        row.addView(BrowseUi.action(this, "×", "Clear search", v -> {
+        TextView clear = BrowseUi.action(this, "×", "Clear search", v -> {
             input.setText(""); input.requestFocus();
-        }), new LinearLayout.LayoutParams(dp(48), dp(48)));
+        });
+        if (bunkrOnly) {
+            clear.setBackgroundResource(R.drawable.zc_glass_surface);
+            clear.setTextColor(ZeroChillUi.color(this, R.color.zc_text_secondary));
+        }
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(dp(48), dp(48));
+        clearParams.leftMargin = dp(6);
+        row.addView(clear, clearParams);
+        if (bunkrOnly) {
+            input.setBackgroundResource(R.drawable.zc_onlyfap_search_field);
+        }
 
         return row;
     }
@@ -379,15 +391,31 @@ public final class SearchActivity extends Activity {
         final int token = ++generation;
         pendingSources = 1;
         errors.clear();
-        if (onlyFapAdapter != null) onlyFapAdapter.replace(new ArrayList<>());
+        onlyFapLocal = new ArrayList<>();
+        if (onlyFapAdapter != null) onlyFapAdapter.replace(onlyFapLocal);
         recycler.scrollToPosition(0);
-        progress.setVisibility(View.VISIBLE);
+        progress.setVisibility(View.GONE);
         status.setVisibility(View.GONE);
         searchState.setVisibility(View.VISIBLE);
-        searchState.setText("Searching OnlyFap creators…");
+        searchState.setText("Finding saved creators · Checking sources…");
         searchState.setContentDescription(searchState.getText());
 
         requests.add(io.submit(() -> {
+            BundledCreatorIndex index = BundledCreatorIndex.get(getApplicationContext());
+            List<NativeContentItem> bundled = index.matching(requestedQuery, 60);
+            List<NativeContentItem> learned = CreatorCatalog.matching(
+                    getApplicationContext(), requestedQuery, false, 60);
+            List<NativeContentItem> local = OnlyFapCreatorResults.merge(bundled, learned, 60);
+            local.sort(java.util.Comparator.comparingInt(
+                    (NativeContentItem item) -> index.rank(item, requestedQuery))
+                    .thenComparing(item -> CreatorNameMatcher.normalized(item.title)));
+            runOnUiThread(() -> {
+                if (destroyed || isFinishing() || token != generation) return;
+                onlyFapLocal = local;
+                if (onlyFapAdapter != null) onlyFapAdapter.replace(local);
+                status.setVisibility(View.GONE);
+                searchState.setText(local.size() + " saved creators · Checking sources…");
+            });
             List<NativeContentItem> result = null;
             try {
                 result = new FapzoneCreatorSearchRepository().search(
@@ -399,12 +427,11 @@ public final class SearchActivity extends Activity {
                             List<NativeContentItem> visible = new ArrayList<>(partial);
                             runOnUiThread(() -> {
                                 if (destroyed || isFinishing() || token != generation) return;
-                                progress.setVisibility(View.GONE);
                                 status.setVisibility(View.GONE);
-                                if (onlyFapAdapter != null) onlyFapAdapter.replace(visible);
-                                searchState.setText(visible.size() == 1
-                                        ? "1 creator · Searching…"
-                                        : visible.size() + " creators · Searching…");
+                                List<NativeContentItem> combined = OnlyFapCreatorResults.merge(
+                                        onlyFapLocal, visible, 80);
+                                if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
+                                searchState.setText(combined.size() + " creators · Checking sources…");
                                 searchState.setContentDescription(searchState.getText());
                             });
                         }
@@ -413,28 +440,31 @@ public final class SearchActivity extends Activity {
             }
 
             List<NativeContentItem> creators = result;
+            if (creators != null) CreatorCatalog.remember(getApplicationContext(), creators);
             runOnUiThread(() -> {
                 if (destroyed || isFinishing() || token != generation) return;
                 pendingSources = 0;
                 progress.setVisibility(View.GONE);
 
                 if (creators == null) {
-                    if (onlyFapAdapter != null) onlyFapAdapter.replace(new ArrayList<>());
-                    searchState.setText("OnlyFap search unavailable · Tap to retry");
+                    searchState.setText("Live sources unavailable · Saved creators shown · Tap to retry");
                     searchState.setContentDescription(searchState.getText());
-                    status.setText("Couldn't reach the creator sources right now.\nTap the message above to retry.");
-                    status.setVisibility(View.VISIBLE);
+                    if (onlyFapLocal.isEmpty()) {
+                        status.setText("Couldn't reach the creator sources right now.\nTap the message above to retry.");
+                        status.setVisibility(View.VISIBLE);
+                    }
                     return;
                 }
 
-                CreatorCatalog.remember(this, creators);
-                if (onlyFapAdapter != null) onlyFapAdapter.replace(creators);
-                searchState.setText(creators.size() == 1
+                List<NativeContentItem> combined = OnlyFapCreatorResults.merge(
+                        onlyFapLocal, creators, 80);
+                if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
+                searchState.setText(combined.size() == 1
                         ? "1 creator"
-                        : creators.size() + " creators");
+                        : combined.size() + " creators");
                 searchState.setContentDescription(searchState.getText());
 
-                if (creators.isEmpty()) {
+                if (combined.isEmpty()) {
                     status.setText("No creator matches for “" + requestedQuery + "”\n\nTry a shorter or more general search.");
                     status.setVisibility(View.VISIBLE);
                 } else {
