@@ -30,7 +30,13 @@ final class ZeroChillReactiveGlassRenderer {
     ) {
         if (canvas == null || bounds == null || bounds.isEmpty()) return;
         if (!canvas.isHardwareAccelerated() || Build.VERSION.SDK_INT < 33) return;
-        if (backend == null) backend = new Api33ReflectionBackend();
+        if (backend == null) {
+            try {
+                backend = new Api33ReflectionBackend();
+            } catch (RuntimeException ignored) {
+                backend = NoOpReflectionBackend.INSTANCE;
+            }
+        }
         backend.draw(
                 canvas,
                 bounds,
@@ -56,6 +62,23 @@ final class ZeroChillReactiveGlassRenderer {
                 float velocityBias,
                 float strength
         );
+    }
+
+    private enum NoOpReflectionBackend implements ReflectionBackend {
+        INSTANCE;
+
+        @Override
+        public void draw(
+                Canvas canvas,
+                RectF bounds,
+                float radius,
+                float motionBias,
+                float touchPosition,
+                float velocityBias,
+                float strength
+        ) {
+            // Static XML glass remains visible if the device cannot compile the runtime shader.
+        }
     }
 
     @android.annotation.TargetApi(33)
