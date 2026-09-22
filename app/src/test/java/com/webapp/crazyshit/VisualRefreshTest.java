@@ -291,6 +291,49 @@ public class VisualRefreshTest {
         host.pause().stop().destroy();
     }
 
+    @Test public void shitTokActionsUseCompactGlassRails() {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        host.get().setTheme(R.style.Theme_CrazyShit);
+        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { });
+        try {
+            RecyclerView.Adapter<?> rawAdapter = ReflectionHelpers.getField(feed, "adapter");
+            RecyclerView parent = new RecyclerView(host.get());
+            RecyclerView.ViewHolder holder = rawAdapter.onCreateViewHolder(parent, 0);
+            View root = holder.itemView;
+
+            View actionRail = root.findViewWithTag("shittok_action_rail");
+            View playbackRail = root.findViewWithTag("shittok_playback_rail");
+            assertNotNull(actionRail);
+            assertNotNull(playbackRail);
+            assertNotNull(actionRail.getBackground());
+            assertNotNull(playbackRail.getBackground());
+
+            for (String tag : new String[] {
+                    "shittok_save",
+                    "shittok_comments",
+                    "shittok_share",
+                    "shittok_more",
+                    "shittok_mute",
+                    "shittok_fullscreen"
+            }) {
+                View control = root.findViewWithTag(tag);
+                assertNotNull(tag, control);
+                assertTrue(tag, control instanceof ImageView);
+                assertTrue(tag, control.getLayoutParams().width >= BrowseUi.dp(host.get(), 48));
+                assertTrue(tag, control.getLayoutParams().height >= BrowseUi.dp(host.get(), 48));
+                assertNotNull(tag, control.getContentDescription());
+            }
+
+            View save = root.findViewWithTag("shittok_save");
+            assertEquals("Save to Watch Later", String.valueOf(save.getContentDescription()));
+            View fullscreen = root.findViewWithTag("shittok_fullscreen");
+            assertEquals(View.GONE, fullscreen.getVisibility());
+        } finally {
+            feed.close();
+            host.pause().stop().destroy();
+        }
+    }
+
     @Test public void creatorGalleryRendersTheSavedGridWithoutFetching() throws Exception {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         String id = BunkrGallerySessionStore.createCreator("Alex Rivera", creator().url, "Alex Rivera");
