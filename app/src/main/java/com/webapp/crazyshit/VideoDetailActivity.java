@@ -1623,7 +1623,6 @@ public class VideoDetailActivity extends Activity {
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
         setResult(RESULT_OK, result);
         finish();
-        suppressCloseTransition();
     }
 
     @Override
