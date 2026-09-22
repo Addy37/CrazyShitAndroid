@@ -149,6 +149,12 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @Test public void landscapeControllerRestoresCachedPortraitTopInset() {
+        assertEquals(42, LandscapeUiController.resolveShellTopInset(false, 0, 42));
+        assertEquals(36, LandscapeUiController.resolveShellTopInset(false, 36, 42));
+        assertEquals(0, LandscapeUiController.resolveShellTopInset(true, 0, 42));
+    }
+
     @Test public void libraryHubActionsOpenExistingActivities() {
         ActivityController<LibraryHubActivity> controller =
                 Robolectric.buildActivity(LibraryHubActivity.class).setup();
