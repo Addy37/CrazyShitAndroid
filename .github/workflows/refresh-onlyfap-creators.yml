@@ -9,6 +9,9 @@ on:
       - app/src/main/assets/source_config_defaults.json
       - app/src/main/assets/onlyfap_creators.tsv
       - .github/workflows/refresh-onlyfap-creators.yml
+  pull_request:
+    branches:
+      - feature/onlyfap-local-search-glass
   workflow_dispatch:
 
 permissions:
@@ -62,6 +65,7 @@ jobs:
           gradle --no-daemon :app:assembleDebug
 
       - name: Commit refreshed catalog
+        if: ${{ github.event_name != 'pull_request' }}
         run: |
           set -euo pipefail
           if git diff --quiet -- app/src/main/assets/onlyfap_creators.tsv; then
@@ -73,6 +77,14 @@ jobs:
           git add app/src/main/assets/onlyfap_creators.tsv
           git commit -m "Expand OnlyFap bundled creator catalog [creator catalog]"
           git push origin HEAD:feature/onlyfap-large-creator-catalog
+
+      - name: Upload generated catalog
+        uses: actions/upload-artifact@v4
+        with:
+          name: onlyfap-creator-catalog
+          path: app/src/main/assets/onlyfap_creators.tsv
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
