@@ -165,5 +165,6 @@ final class ZeroChillUi {
         card.setStrokeWidth(dimension(context, R.dimen.zc_stroke));
         card.setStrokeColor(color(context, R.color.zc_edge));
         card.setRippleColor(ColorStateList.valueOf(color(context, R.color.zc_cyan_container)));
+        ZeroChillMotion.installPressFeedback(card);
     }
 }
