@@ -262,14 +262,12 @@ def fetch_fapello(
         page = next_new_page if listing == "new" else 1
         while len(records) < target and requests < max_requests and stale_pages < 3:
             url = fapello_listing_url(source, listing, page)
+            requests += 1
             try:
                 body = request_text(url, headers)
-                requests += 1
                 if looks_blocked(body):
                     raise RuntimeError("Fapello returned a browser challenge")
             except RuntimeError as error:
-                if 'body' not in locals():
-                    requests += 1
                 stale_pages += 1
                 print(f"Skipping Fapello {listing} page {page}: {error}")
                 if listing == "new":
