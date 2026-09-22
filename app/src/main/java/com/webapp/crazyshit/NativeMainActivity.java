@@ -95,6 +95,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private boolean endReached;
     private int generation;
     private int restoredPrimaryPage = -1;
+    private int portraitInsetLeft = -1;
+    private int portraitInsetTop = -1;
+    private int portraitInsetRight = -1;
+    private int portraitInsetBottom = -1;
+    private boolean restoringPortraitFromFullscreen;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -141,25 +146,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(ZeroChillUi.background(this));
         shell.setOnApplyWindowInsetsListener((view, insets) -> {
-            int left;
-            int top;
-            int right;
-            int bottom;
-            if (Build.VERSION.SDK_INT >= 30) {
-                android.graphics.Insets safe = insets.getInsets(
-                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
-                );
-                left = safe.left;
-                top = safe.top;
-                right = safe.right;
-                bottom = safe.bottom;
-            } else {
-                left = insets.getSystemWindowInsetLeft();
-                top = insets.getSystemWindowInsetTop();
-                right = insets.getSystemWindowInsetRight();
-                bottom = insets.getSystemWindowInsetBottom();
+            boolean landscape = getResources().getConfiguration().orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+            if (!(restoringPortraitFromFullscreen && landscape)) {
+                applyShellInsets(view, insets, false);
             }
-            view.setPadding(left, top, right, bottom);
             return insets;
         });
         overlayRoot.addView(shell, new FrameLayout.LayoutParams(-1, -1));
@@ -511,6 +502,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     );
                 } else {
                     controller.show(types);
+                    restoreShellInsetsAfterFullscreen();
                 }
             }
         } else {
@@ -525,8 +517,77 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 );
             } else {
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+                restoreShellInsetsAfterFullscreen();
             }
         }
+    }
+
+    private void applyShellInsets(View view, WindowInsets insets, boolean includeHiddenSystemBars) {
+        if (view == null || insets == null) return;
+        int left;
+        int top;
+        int right;
+        int bottom;
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.graphics.Insets safe = safeShellInsets(insets, includeHiddenSystemBars);
+            left = safe.left;
+            top = safe.top;
+            right = safe.right;
+            bottom = safe.bottom;
+        } else {
+            left = insets.getSystemWindowInsetLeft();
+            top = insets.getSystemWindowInsetTop();
+            right = insets.getSystemWindowInsetRight();
+            bottom = insets.getSystemWindowInsetBottom();
+        }
+        view.setPadding(left, top, right, bottom);
+        cachePortraitShellInsets(left, top, right, bottom);
+    }
+
+    private void cachePortraitShellInsets(int left, int top, int right, int bottom) {
+        boolean portrait = getResources().getConfiguration().orientation !=
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        if (!portrait || top <= 0) return;
+        portraitInsetLeft = left;
+        portraitInsetTop = top;
+        portraitInsetRight = right;
+        portraitInsetBottom = bottom;
+    }
+
+    int cachedPortraitInsetTop() {
+        return portraitInsetTop;
+    }
+
+    private boolean restoreCachedPortraitInsets() {
+        if (shell == null || portraitInsetTop < 0) return false;
+        shell.setPadding(
+                portraitInsetLeft,
+                portraitInsetTop,
+                portraitInsetRight,
+                portraitInsetBottom
+        );
+        return true;
+    }
+
+    static android.graphics.Insets safeShellInsets(
+            WindowInsets insets,
+            boolean includeHiddenSystemBars
+    ) {
+        int types = WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout();
+        return includeHiddenSystemBars
+                ? insets.getInsetsIgnoringVisibility(types)
+                : insets.getInsets(types);
+    }
+
+    private void restoreShellInsetsAfterFullscreen() {
+        if (shell == null) return;
+        restoringPortraitFromFullscreen = true;
+        boolean restored = restoreCachedPortraitInsets();
+        if (!restored && Build.VERSION.SDK_INT >= 30) {
+            WindowInsets current = shell.getRootWindowInsets();
+            if (current != null) applyShellInsets(shell, current, true);
+        }
+        shell.requestApplyInsets();
     }
 
     private void exitChaosFullscreenChrome() {
@@ -949,6 +1010,15 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     public void onConfigurationChanged(android.content.res.Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         if (primaryPagerAdapter != null) primaryPagerAdapter.onConfigurationChanged();
+        if (newConfig.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                && restoringPortraitFromFullscreen) {
+            restoreCachedPortraitInsets();
+            restoringPortraitFromFullscreen = false;
+            if (shell != null) {
+                shell.requestApplyInsets();
+                shell.post(shell::requestApplyInsets);
+            }
+        }
         applyChaosFullscreenChrome();
     }
 
