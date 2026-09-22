@@ -77,11 +77,14 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_RELATED_FEED_URL = "related_feed_url";
     public static final String EXTRA_SOURCE = "content_source";
     public static final String EXTRA_MEDIA_REFERER = "media_referer";
+    public static final String EXTRA_POSTER_URL = "poster_url";
 
     private static final String SITE = "https://crazyshit.com/";
     private static final int CONTROL_TIMEOUT_MS = 2600;
     private static final int RELATED_HISTORY_LIMIT = 24;
     private static final int RELATED_THUMBNAIL_WORKERS = 4;
+    private static final long RELATED_SLIDE_OUT_MS = 105L;
+    private static final long RELATED_SLIDE_IN_MS = 175L;
     private static final String THUMB_UA =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -108,6 +111,8 @@ public class VideoDetailActivity extends Activity {
     private TextView playerTitleView;
     private ImageButton portraitFullscreenButton;
     private ProgressBar loading;
+    private ImageView startupPoster;
+    private ProgressBar startupPosterLoading;
     private SeekBar portraitSeekBar;
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
@@ -128,6 +133,7 @@ public class VideoDetailActivity extends Activity {
     private String relatedFeedUrl;
     private String source;
     private String mediaReferer;
+    private String posterUrl;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
     private long requestedStartPosition;
@@ -135,6 +141,8 @@ public class VideoDetailActivity extends Activity {
     private boolean failureShown;
     private boolean minimizing;
     private boolean entrancePlayed;
+    private boolean startupPosterDismissed;
+    private boolean relatedTransitionRunning;
     private boolean portraitVideo;
     private boolean portraitFullscreen;
     private boolean rotatableFullscreen;
@@ -177,6 +185,7 @@ public class VideoDetailActivity extends Activity {
         final String userAgent;
         final String cookies;
         final String mediaReferer;
+        final String posterUrl;
         final long positionMs;
         final Bitmap previewBitmap;
 
@@ -190,6 +199,7 @@ public class VideoDetailActivity extends Activity {
                 String userAgent,
                 String cookies,
                 String mediaReferer,
+                String posterUrl,
                 long positionMs,
                 Bitmap previewBitmap
         ) {
@@ -202,6 +212,7 @@ public class VideoDetailActivity extends Activity {
             this.userAgent = userAgent;
             this.cookies = cookies;
             this.mediaReferer = mediaReferer;
+            this.posterUrl = posterUrl;
             this.positionMs = positionMs;
             this.previewBitmap = previewBitmap;
         }
@@ -210,9 +221,6 @@ public class VideoDetailActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        if (Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0);
-        }
 
         mediaUrl = getIntent().getStringExtra(PlayerActivity.EXTRA_MEDIA_URL);
         pageUrl = getIntent().getStringExtra(PlayerActivity.EXTRA_PAGE_URL);
@@ -225,6 +233,7 @@ public class VideoDetailActivity extends Activity {
         relatedFeedUrl = clean(getIntent().getStringExtra(EXTRA_RELATED_FEED_URL));
         source = clean(getIntent().getStringExtra(EXTRA_SOURCE));
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
+        posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -375,6 +384,21 @@ public class VideoDetailActivity extends Activity {
         portraitSeekBar.setVisibility(View.INVISIBLE);
         portraitSeekBar.setAlpha(0f);
 
+        startupPoster = new ImageView(this);
+        startupPoster.setBackgroundColor(Color.BLACK);
+        startupPoster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        startupPoster.setClickable(false);
+        playerContainer.addView(startupPoster, new FrameLayout.LayoutParams(-1, -1));
+
+        startupPosterLoading = new ProgressBar(this);
+        startupPosterLoading.setClickable(false);
+        if (startupPosterLoading.getIndeterminateDrawable() != null) {
+            startupPosterLoading.getIndeterminateDrawable().setTint(UiPalette.PRIMARY);
+        }
+        FrameLayout.LayoutParams startupLoadingParams =
+                new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER);
+        playerContainer.addView(startupPosterLoading, startupLoadingParams);
+
         playerView.setOnTouchListener((view, event) -> {
             if (event.getActionMasked() == MotionEvent.ACTION_UP) {
                 showPortraitSeekBar();
@@ -490,6 +514,122 @@ public class VideoDetailActivity extends Activity {
                 .getBoolean("oled_black_enabled", true);
     }
 
+    private void showStartupPoster() {
+        if (startupPoster == null) return;
+
+        startupPosterDismissed = false;
+        startupPoster.animate().cancel();
+        startupPoster.setAlpha(1f);
+        startupPoster.setVisibility(View.VISIBLE);
+        try {
+            Glide.with(startupPoster).clear(startupPoster);
+        } catch (Exception ignored) {
+        }
+        startupPoster.setImageDrawable(null);
+
+        if (startupPosterLoading != null) {
+            startupPosterLoading.animate().cancel();
+            startupPosterLoading.setAlpha(1f);
+            startupPosterLoading.setVisibility(View.VISIBLE);
+        }
+
+        if (posterUrl != null && !posterUrl.isEmpty()) {
+            loadImage(startupPoster, posterUrl, pageUrl);
+        }
+    }
+
+    private void dismissStartupPoster() {
+        if (startupPosterDismissed || startupPoster == null) return;
+        startupPosterDismissed = true;
+
+        if (!ZeroChillMotion.animationsEnabled(this)) {
+            hideStartupPosterNow();
+            return;
+        }
+
+        if (startupPosterLoading != null) {
+            startupPosterLoading.animate().cancel();
+            startupPosterLoading.animate()
+                    .alpha(0f)
+                    .setDuration(100L)
+                    .start();
+        }
+
+        startupPoster.animate().cancel();
+        startupPoster.animate()
+                .alpha(0f)
+                .setDuration(140L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(this::hideStartupPosterNow)
+                .start();
+    }
+
+    private void hideStartupPosterNow() {
+        if (startupPoster != null) {
+            startupPoster.animate().cancel();
+            startupPoster.setAlpha(1f);
+            startupPoster.setVisibility(View.GONE);
+            try {
+                Glide.with(startupPoster).clear(startupPoster);
+            } catch (Exception ignored) {
+            }
+            startupPoster.setImageDrawable(null);
+        }
+        if (startupPosterLoading != null) {
+            startupPosterLoading.animate().cancel();
+            startupPosterLoading.setAlpha(1f);
+            startupPosterLoading.setVisibility(View.GONE);
+        }
+    }
+
+    private boolean canAnimateRelatedTransition() {
+        return ZeroChillMotion.animationsEnabled(this)
+                && !isFinishing()
+                && shell != null
+                && root != null
+                && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE
+                && !portraitFullscreen
+                && !rotatableFullscreen;
+    }
+
+    private void animateRelatedTransition(boolean forward, Runnable swapContent) {
+        if (swapContent == null) return;
+        if (!canAnimateRelatedTransition()) {
+            swapContent.run();
+            return;
+        }
+
+        relatedTransitionRunning = true;
+        shell.animate().cancel();
+        float travel = Math.max(dp(92), root.getWidth() * 0.28f);
+        float exitX = forward ? -travel : travel;
+        float enterX = -exitX;
+
+        shell.animate()
+                .translationX(exitX)
+                .alpha(0.94f)
+                .setDuration(RELATED_SLIDE_OUT_MS)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> {
+                    swapContent.run();
+                    if (shell == null || isFinishing()) {
+                        relatedTransitionRunning = false;
+                        return;
+                    }
+                    shell.animate().cancel();
+                    shell.setTranslationX(enterX);
+                    shell.setAlpha(0.94f);
+                    shell.animate()
+                            .translationX(0f)
+                            .alpha(1f)
+                            .setDuration(RELATED_SLIDE_IN_MS)
+                            .setInterpolator(new DecelerateInterpolator())
+                            .withEndAction(() -> relatedTransitionRunning = false)
+                            .start();
+                })
+                .start();
+    }
+
     private void playEntranceOnce() {
         if (entrancePlayed || isFinishing()) return;
         entrancePlayed = true;
@@ -603,6 +743,7 @@ public class VideoDetailActivity extends Activity {
         else updatePortraitFullscreenButton();
         releasePlayer();
         failureShown = false;
+        showStartupPoster();
 
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory();
         if (!userAgent.isEmpty()) httpFactory.setUserAgent(userAgent);
@@ -657,7 +798,13 @@ public class VideoDetailActivity extends Activity {
             }
 
             @Override
+            public void onRenderedFirstFrame() {
+                dismissStartupPoster();
+            }
+
+            @Override
             public void onPlayerError(PlaybackException error) {
+                dismissStartupPoster();
                 if (!recoverPlayback(error)) showPlaybackFailure();
             }
 
@@ -1006,7 +1153,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void playRelated(NativeContentItem item) {
-        if (item == null || item.url == null || item.url.isEmpty()) return;
+        if (item == null || item.url == null || item.url.isEmpty() || relatedTransitionRunning) return;
         loading.setVisibility(View.VISIBLE);
         final int requestGeneration = ++relatedPlayGeneration;
         io.execute(() -> {
@@ -1025,20 +1172,25 @@ public class VideoDetailActivity extends Activity {
                 }
                 pushCurrentVideo();
                 savePlaybackState(false);
-                mediaUrl = resolved.mediaUrl;
-                pageUrl = item.url;
-                mediaReferer = resolved.requestReferer;
-                title = clean(item.title).isEmpty() ? resolved.title : item.title;
-                views = clean(item.views);
-                uploader = clean(item.uploader);
-                comments = clean(item.comments);
-                userAgent = defaultUserAgent();
-                cookies = cookiesFor(mediaUrl, pageUrl);
-                requestedStartPosition = -1L;
-                updateMetadataUi();
-                buildPlayer(-1L);
-                if (detailsScroll != null) detailsScroll.smoothScrollTo(0, 0);
-                loadRelated();
+                Runnable swap = () -> {
+                    mediaUrl = resolved.mediaUrl;
+                    pageUrl = item.url;
+                    mediaReferer = resolved.requestReferer;
+                    String resolvedPoster = resolvedRelatedThumbnails.get(item.url);
+                    posterUrl = clean(resolvedPoster).isEmpty() ? clean(item.imageUrl) : clean(resolvedPoster);
+                    title = clean(item.title).isEmpty() ? resolved.title : item.title;
+                    views = clean(item.views);
+                    uploader = clean(item.uploader);
+                    comments = clean(item.comments);
+                    userAgent = defaultUserAgent();
+                    cookies = cookiesFor(mediaUrl, pageUrl);
+                    requestedStartPosition = -1L;
+                    updateMetadataUi();
+                    buildPlayer(-1L);
+                    if (detailsScroll != null) detailsScroll.smoothScrollTo(0, 0);
+                    loadRelated();
+                };
+                animateRelatedTransition(true, swap);
             });
         });
     }
@@ -1056,6 +1208,7 @@ public class VideoDetailActivity extends Activity {
                 userAgent,
                 cookies,
                 mediaReferer,
+                posterUrl,
                 position,
                 captureRelatedBackPreview()
         ));
@@ -1064,7 +1217,16 @@ public class VideoDetailActivity extends Activity {
         }
     }
 
-    private boolean restorePreviousRelatedVideo() {
+    private boolean restorePreviousRelatedVideo(boolean animate) {
+        if (relatedTransitionRunning || relatedHistory.isEmpty()) return false;
+        if (animate && canAnimateRelatedTransition()) {
+            animateRelatedTransition(false, this::restorePreviousRelatedVideoNow);
+            return true;
+        }
+        return restorePreviousRelatedVideoNow();
+    }
+
+    private boolean restorePreviousRelatedVideoNow() {
         VideoHistoryEntry previous = relatedHistory.pollLast();
         if (previous == null) return false;
 
@@ -1080,6 +1242,7 @@ public class VideoDetailActivity extends Activity {
         userAgent = previous.userAgent;
         cookies = previous.cookies;
         mediaReferer = previous.mediaReferer;
+        posterUrl = previous.posterUrl;
         requestedStartPosition = previous.positionMs;
         updateMetadataUi();
         buildPlayer(previous.positionMs);
@@ -1278,7 +1441,7 @@ public class VideoDetailActivity extends Activity {
                 .setInterpolator(new DecelerateInterpolator())
                 .withEndAction(() -> {
                     clearRelatedBackPreviewLayer();
-                    boolean restored = restorePreviousRelatedVideo();
+                    boolean restored = restorePreviousRelatedVideo(false);
                     resetRelatedBackForeground();
                     if (!restored) handleBack();
                 })
@@ -1664,14 +1827,13 @@ public class VideoDetailActivity extends Activity {
             PhoneOrientationPolicy.exitFullscreenVideo(this);
             return;
         }
-        if (restorePreviousRelatedVideo()) return;
+        if (restorePreviousRelatedVideo(true)) return;
         if (getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("minimize_on_back", true)) {
             minimizing = true;
             minimizeToFeed();
         } else {
             savePlaybackState(false);
             finish();
-            suppressCloseTransition();
         }
     }
 
@@ -1695,16 +1857,6 @@ public class VideoDetailActivity extends Activity {
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
         setResult(RESULT_OK, result);
         finish();
-        suppressCloseTransition();
-    }
-
-    @SuppressWarnings("deprecation")
-    private void suppressCloseTransition() {
-        if (Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0);
-        } else {
-            overridePendingTransition(0, 0);
-        }
     }
 
     @Override
