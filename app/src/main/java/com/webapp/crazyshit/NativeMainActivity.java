@@ -95,6 +95,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private boolean endReached;
     private int generation;
     private int restoredPrimaryPage = -1;
+    private int portraitInsetLeft = -1;
+    private int portraitInsetTop = -1;
+    private int portraitInsetRight = -1;
+    private int portraitInsetBottom = -1;
+    private boolean restoringPortraitFromFullscreen;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -141,7 +146,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackgroundColor(ZeroChillUi.background(this));
         shell.setOnApplyWindowInsetsListener((view, insets) -> {
-            applyShellInsets(view, insets, false);
+            boolean landscape = getResources().getConfiguration().orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+            if (!(restoringPortraitFromFullscreen && landscape)) {
+                applyShellInsets(view, insets, false);
+            }
             return insets;
         });
         overlayRoot.addView(shell, new FrameLayout.LayoutParams(-1, -1));
@@ -515,17 +524,45 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void applyShellInsets(View view, WindowInsets insets, boolean includeHiddenSystemBars) {
         if (view == null || insets == null) return;
+        int left;
+        int top;
+        int right;
+        int bottom;
         if (Build.VERSION.SDK_INT >= 30) {
             android.graphics.Insets safe = safeShellInsets(insets, includeHiddenSystemBars);
-            view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
-            return;
+            left = safe.left;
+            top = safe.top;
+            right = safe.right;
+            bottom = safe.bottom;
+        } else {
+            left = insets.getSystemWindowInsetLeft();
+            top = insets.getSystemWindowInsetTop();
+            right = insets.getSystemWindowInsetRight();
+            bottom = insets.getSystemWindowInsetBottom();
         }
-        view.setPadding(
-                insets.getSystemWindowInsetLeft(),
-                insets.getSystemWindowInsetTop(),
-                insets.getSystemWindowInsetRight(),
-                insets.getSystemWindowInsetBottom()
+        view.setPadding(left, top, right, bottom);
+        cachePortraitShellInsets(left, top, right, bottom);
+    }
+
+    private void cachePortraitShellInsets(int left, int top, int right, int bottom) {
+        boolean portrait = getResources().getConfiguration().orientation !=
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        if (!portrait || top <= 0) return;
+        portraitInsetLeft = left;
+        portraitInsetTop = top;
+        portraitInsetRight = right;
+        portraitInsetBottom = bottom;
+    }
+
+    private boolean restoreCachedPortraitInsets() {
+        if (shell == null || portraitInsetTop < 0) return false;
+        shell.setPadding(
+                portraitInsetLeft,
+                portraitInsetTop,
+                portraitInsetRight,
+                portraitInsetBottom
         );
+        return true;
     }
 
     static android.graphics.Insets safeShellInsets(
@@ -540,12 +577,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void restoreShellInsetsAfterFullscreen() {
         if (shell == null) return;
-        if (Build.VERSION.SDK_INT >= 30) {
+        restoringPortraitFromFullscreen = true;
+        boolean restored = restoreCachedPortraitInsets();
+        if (!restored && Build.VERSION.SDK_INT >= 30) {
             WindowInsets current = shell.getRootWindowInsets();
             if (current != null) applyShellInsets(shell, current, true);
         }
         shell.requestApplyInsets();
-        shell.post(shell::requestApplyInsets);
     }
 
     private void exitChaosFullscreenChrome() {
@@ -968,6 +1006,15 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     public void onConfigurationChanged(android.content.res.Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         if (primaryPagerAdapter != null) primaryPagerAdapter.onConfigurationChanged();
+        if (newConfig.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                && restoringPortraitFromFullscreen) {
+            restoreCachedPortraitInsets();
+            restoringPortraitFromFullscreen = false;
+            if (shell != null) {
+                shell.requestApplyInsets();
+                shell.post(shell::requestApplyInsets);
+            }
+        }
         applyChaosFullscreenChrome();
     }
 
