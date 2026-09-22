@@ -74,6 +74,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_RELATED_FEED_URL = "related_feed_url";
     public static final String EXTRA_SOURCE = "content_source";
     public static final String EXTRA_MEDIA_REFERER = "media_referer";
+    public static final String EXTRA_POSTER_URL = "poster_url";
 
     private static final String SITE = "https://crazyshit.com/";
     private static final int CONTROL_TIMEOUT_MS = 2600;
@@ -104,6 +105,8 @@ public class VideoDetailActivity extends Activity {
     private TextView playerTitleView;
     private ImageButton portraitFullscreenButton;
     private ProgressBar loading;
+    private ImageView startupPoster;
+    private ProgressBar startupPosterLoading;
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
     private OnBackInvokedCallback backCallback;
@@ -123,6 +126,7 @@ public class VideoDetailActivity extends Activity {
     private String relatedFeedUrl;
     private String source;
     private String mediaReferer;
+    private String posterUrl;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
     private long requestedStartPosition;
@@ -130,6 +134,7 @@ public class VideoDetailActivity extends Activity {
     private boolean failureShown;
     private boolean minimizing;
     private boolean entrancePlayed;
+    private boolean startupPosterDismissed;
     private boolean portraitVideo;
     private boolean portraitFullscreen;
     private boolean rotatableFullscreen;
@@ -182,10 +187,6 @@ public class VideoDetailActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        if (Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0);
-        }
-
         mediaUrl = getIntent().getStringExtra(PlayerActivity.EXTRA_MEDIA_URL);
         pageUrl = getIntent().getStringExtra(PlayerActivity.EXTRA_PAGE_URL);
         title = clean(getIntent().getStringExtra(PlayerActivity.EXTRA_TITLE));
@@ -197,6 +198,7 @@ public class VideoDetailActivity extends Activity {
         relatedFeedUrl = clean(getIntent().getStringExtra(EXTRA_RELATED_FEED_URL));
         source = clean(getIntent().getStringExtra(EXTRA_SOURCE));
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
+        posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -307,6 +309,21 @@ public class VideoDetailActivity extends Activity {
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
+        startupPoster = new ImageView(this);
+        startupPoster.setBackgroundColor(Color.BLACK);
+        startupPoster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        startupPoster.setClickable(false);
+        playerContainer.addView(startupPoster, new FrameLayout.LayoutParams(-1, -1));
+
+        startupPosterLoading = new ProgressBar(this);
+        startupPosterLoading.setClickable(false);
+        if (startupPosterLoading.getIndeterminateDrawable() != null) {
+            startupPosterLoading.getIndeterminateDrawable().setTint(UiPalette.PRIMARY);
+        }
+        FrameLayout.LayoutParams startupLoadingParams =
+                new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER);
+        playerContainer.addView(startupPosterLoading, startupLoadingParams);
+
         View playerBack = playerView.findViewById(R.id.player_back);
         playerTitleView = playerView.findViewById(R.id.player_title);
         portraitFullscreenButton = playerView.findViewById(R.id.player_portrait_fullscreen);
@@ -413,6 +430,74 @@ public class VideoDetailActivity extends Activity {
     private boolean oledEnabled() {
         return getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean("oled_black_enabled", true);
+    }
+
+    private void showStartupPoster() {
+        if (startupPoster == null) return;
+
+        startupPosterDismissed = false;
+        startupPoster.animate().cancel();
+        startupPoster.setAlpha(1f);
+        startupPoster.setVisibility(View.VISIBLE);
+        try {
+            Glide.with(startupPoster).clear(startupPoster);
+        } catch (Exception ignored) {
+        }
+        startupPoster.setImageDrawable(null);
+
+        if (startupPosterLoading != null) {
+            startupPosterLoading.animate().cancel();
+            startupPosterLoading.setAlpha(1f);
+            startupPosterLoading.setVisibility(View.VISIBLE);
+        }
+
+        if (posterUrl != null && !posterUrl.isEmpty()) {
+            loadImage(startupPoster, posterUrl, pageUrl);
+        }
+    }
+
+    private void dismissStartupPoster() {
+        if (startupPosterDismissed || startupPoster == null) return;
+        startupPosterDismissed = true;
+
+        if (!ZeroChillMotion.animationsEnabled(this)) {
+            hideStartupPosterNow();
+            return;
+        }
+
+        if (startupPosterLoading != null) {
+            startupPosterLoading.animate().cancel();
+            startupPosterLoading.animate()
+                    .alpha(0f)
+                    .setDuration(100L)
+                    .start();
+        }
+
+        startupPoster.animate().cancel();
+        startupPoster.animate()
+                .alpha(0f)
+                .setDuration(140L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(this::hideStartupPosterNow)
+                .start();
+    }
+
+    private void hideStartupPosterNow() {
+        if (startupPoster != null) {
+            startupPoster.animate().cancel();
+            startupPoster.setAlpha(1f);
+            startupPoster.setVisibility(View.GONE);
+            try {
+                Glide.with(startupPoster).clear(startupPoster);
+            } catch (Exception ignored) {
+            }
+            startupPoster.setImageDrawable(null);
+        }
+        if (startupPosterLoading != null) {
+            startupPosterLoading.animate().cancel();
+            startupPosterLoading.setAlpha(1f);
+            startupPosterLoading.setVisibility(View.GONE);
+        }
     }
 
     private void playEntranceOnce() {
@@ -528,6 +613,7 @@ public class VideoDetailActivity extends Activity {
         else updatePortraitFullscreenButton();
         releasePlayer();
         failureShown = false;
+        showStartupPoster();
 
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory();
         if (!userAgent.isEmpty()) httpFactory.setUserAgent(userAgent);
@@ -582,7 +668,13 @@ public class VideoDetailActivity extends Activity {
             }
 
             @Override
+            public void onRenderedFirstFrame() {
+                dismissStartupPoster();
+            }
+
+            @Override
             public void onPlayerError(PlaybackException error) {
+                dismissStartupPoster();
                 if (!recoverPlayback(error)) showPlaybackFailure();
             }
 
@@ -869,6 +961,7 @@ public class VideoDetailActivity extends Activity {
                 mediaUrl = resolved.mediaUrl;
                 pageUrl = item.url;
                 mediaReferer = resolved.requestReferer;
+                posterUrl = clean(item.imageUrl);
                 title = clean(item.title).isEmpty() ? resolved.title : item.title;
                 views = clean(item.views);
                 uploader = clean(item.uploader);
@@ -921,6 +1014,7 @@ public class VideoDetailActivity extends Activity {
         userAgent = previous.userAgent;
         cookies = previous.cookies;
         mediaReferer = previous.mediaReferer;
+        posterUrl = "";
         requestedStartPosition = previous.positionMs;
         updateMetadataUi();
         buildPlayer(previous.positionMs);
@@ -1506,7 +1600,6 @@ public class VideoDetailActivity extends Activity {
         } else {
             savePlaybackState(false);
             finish();
-            suppressCloseTransition();
         }
     }
 
@@ -1531,15 +1624,6 @@ public class VideoDetailActivity extends Activity {
         setResult(RESULT_OK, result);
         finish();
         suppressCloseTransition();
-    }
-
-    @SuppressWarnings("deprecation")
-    private void suppressCloseTransition() {
-        if (Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0);
-        } else {
-            overridePendingTransition(0, 0);
-        }
     }
 
     @Override
