@@ -22,6 +22,17 @@ jobs:
       - name: Check out project
         uses: actions/checkout@v6
 
+      - name: Verify current ZEROCHILL build lineage
+        run: |
+          set -euo pipefail
+          BASELINE="8dad094162bef8b537daa9474e8cd647f55e910b"
+          test -f ZEROCHILL_BUILD_LINEAGE.md
+          git merge-base --is-ancestor "$BASELINE" HEAD || {
+            echo "This branch predates the approved complete ZEROCHILL baseline $BASELINE."
+            echo "Build from integration/zerochill-current or a descendant instead."
+            exit 1
+          }
+
       - name: Verify 2.8 compatibility cleanup
         run: |
           set -euo pipefail
@@ -231,17 +242,27 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Rename APK
+      - name: Rename APK with build lineage
+        id: apk_lineage
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk ZeroChill-debug.apk
-          cp app/build/outputs/apk/release/app-release.apk ZeroChill-release.apk
+          set -euo pipefail
+          REF_NAME="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          SAFE_REF="$(printf '%s' "$REF_NAME" | tr '/ ' '--' | tr -cd 'A-Za-z0-9._-')"
+          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+          DEBUG_APK="ZeroChill-${SAFE_REF}-${SHORT_SHA}-debug.apk"
+          RELEASE_APK="ZeroChill-${SAFE_REF}-${SHORT_SHA}-release.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$DEBUG_APK"
+          cp app/build/outputs/apk/release/app-release.apk "$RELEASE_APK"
+          echo "debug_apk=$DEBUG_APK" >> "$GITHUB_OUTPUT"
+          echo "release_apk=$RELEASE_APK" >> "$GITHUB_OUTPUT"
+          echo "Built from $REF_NAME @ $SHORT_SHA"
 
       - name: Upload APK
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ZeroChill-debug
-          path: ZeroChill-debug.apk
+          path: ${{ steps.apk_lineage.outputs.debug_apk }}
           if-no-files-found: error
           retention-days: 14
 
@@ -250,6 +271,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ZeroChill-release
-          path: ZeroChill-release.apk
+          path: ${{ steps.apk_lineage.outputs.release_apk }}
           if-no-files-found: error
           retention-days: 14
