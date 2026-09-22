@@ -35,6 +35,7 @@ import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -86,6 +87,11 @@ public final class ChaosFeedView extends FrameLayout {
     private static final long RECENT_SAVE_DELAY_MS = 750L;
     private static final long STREAM_RETRY_DELAY_MS = 450L;
     private static final long FAILED_CLIP_SKIP_DELAY_MS = 1200L;
+    private static final int SHITTOK_MAX_VIDEO_WIDTH = 1920;
+    private static final int SHITTOK_MAX_VIDEO_HEIGHT = 1080;
+    private static final int SHITTOK_MAX_VIDEO_BITRATE = 8_000_000;
+    private static final int NEXT_PRELOAD_MIN_BUFFER_MS = 2_500;
+    private static final int NEXT_PRELOAD_MAX_BUFFER_MS = 6_000;
     private static final String SITE = "https://crazyshit.com/";
 
     private final Activity activity;
@@ -325,6 +331,10 @@ public final class ChaosFeedView extends FrameLayout {
     });
 }
 
+    static boolean shouldPreparePlayer(int position, int selectedPosition) {
+        return position == selectedPosition || position == selectedPosition + 1;
+    }
+
     private static boolean isMedia(NativeContentItem item) {
         return item != null
                 && NativeContentItem.KIND_MEDIA.equals(item.kind)
@@ -480,7 +490,11 @@ public final class ChaosFeedView extends FrameLayout {
         CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
         if (stream != null) {
             holder.noteResolutionRetryIfNeeded(resolveRetried.contains(item.url));
-            holder.prepare(stream, active && hostResumed && position == selectedPosition);
+            if (shouldPreparePlayer(position, selectedPosition)) {
+                holder.prepare(stream, active && hostResumed && position == selectedPosition);
+            } else {
+                holder.releasePlayer();
+            }
         } else if (unplayable.contains(item.url)) {
             holder.showResolutionFailureAndSkip(resolveRetried.contains(item.url));
         }
@@ -516,7 +530,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (!(raw instanceof ChaosHolder)) continue;
             ChaosHolder holder = (ChaosHolder) raw;
             int position = holder.getBindingAdapterPosition();
-            if (position != RecyclerView.NO_POSITION && Math.abs(position - selected) > 1) {
+            if (position != RecyclerView.NO_POSITION && !shouldPreparePlayer(position, selected)) {
                 holder.releasePlayer();
             }
         }
@@ -1509,13 +1523,33 @@ public final class ChaosFeedView extends FrameLayout {
             if (!headers.isEmpty()) http.setDefaultRequestProperties(headers);
 
             DefaultMediaSourceFactory sourceFactory = new DefaultMediaSourceFactory(activity)
-                    .setDataSourceFactory(http);
-            player = new ExoPlayer.Builder(activity)
-                    .setMediaSourceFactory(sourceFactory)
-                    .build();
+                    .setDataSourceFactory(ShitTokMediaCache.wrap(activity, http));
+            ExoPlayer.Builder playerBuilder = new ExoPlayer.Builder(activity)
+                    .setMediaSourceFactory(sourceFactory);
+            if (!autoplay) {
+                playerBuilder.setLoadControl(
+                        new DefaultLoadControl.Builder()
+                                .setBufferDurationsMs(
+                                        NEXT_PRELOAD_MIN_BUFFER_MS,
+                                        NEXT_PRELOAD_MAX_BUFFER_MS,
+                                        350,
+                                        1_000
+                                )
+                                .setPrioritizeTimeOverSizeThresholds(true)
+                                .build()
+                );
+            }
+            player = playerBuilder.build();
             ExoPlayer createdPlayer = player;
             player.setRepeatMode(Player.REPEAT_MODE_OFF);
             player.setVolume(chaosMuted ? 0f : 1f);
+            player.setTrackSelectionParameters(
+                    player.getTrackSelectionParameters()
+                            .buildUpon()
+                            .setMaxVideoSize(SHITTOK_MAX_VIDEO_WIDTH, SHITTOK_MAX_VIDEO_HEIGHT)
+                            .setMaxVideoBitrate(SHITTOK_MAX_VIDEO_BITRATE)
+                            .build()
+            );
             playerView.setPlayer(player);
 
             MediaItem.Builder media = new MediaItem.Builder().setUri(nextStream.mediaUrl);
