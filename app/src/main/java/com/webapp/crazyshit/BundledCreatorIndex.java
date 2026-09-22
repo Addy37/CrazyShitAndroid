@@ -5,20 +5,36 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Compact, immutable creator names. Load once off the main thread; never store this in preferences. */
 final class BundledCreatorIndex {
     private static volatile BundledCreatorIndex cached;
     private final List<Entry> entries;
     private final Map<String, Entry> byName = new HashMap<>();
+    private final Map<String, List<Entry>> byBigram = new HashMap<>();
 
     private BundledCreatorIndex(List<Entry> entries) {
         this.entries = entries;
-        for (Entry entry : entries) byName.put(entry.searchable.get(0), entry);
+        for (Entry entry : entries) {
+            byName.put(entry.searchable.get(0), entry);
+            Set<String> grams = new HashSet<>();
+            for (String alias : entry.searchable) {
+                String compact = compact(alias);
+                for (int i = 0; i + 1 < compact.length(); i++) {
+                    grams.add(compact.substring(i, i + 2));
+                }
+            }
+            for (String gram : grams) {
+                byBigram.computeIfAbsent(gram, ignored -> new ArrayList<>()).add(entry);
+            }
+        }
     }
 
     static BundledCreatorIndex get(Context context) {
@@ -75,7 +91,8 @@ final class BundledCreatorIndex {
 
     List<NativeContentItem> matching(String query, int limit) {
         ArrayList<Match> matches = new ArrayList<>();
-        for (Entry entry : entries) {
+        String compactQuery = compact(CreatorNameMatcher.normalized(query));
+        for (Entry entry : candidates(compactQuery)) {
             int rank = Integer.MAX_VALUE;
             for (String alias : entry.searchable) {
                 rank = Math.min(rank, CreatorNameMatcher.rank(alias, query));
@@ -91,6 +108,24 @@ final class BundledCreatorIndex {
                     "", "", "", "", "", "", name));
         }
         return out;
+    }
+
+    private List<Entry> candidates(String compactQuery) {
+        if (compactQuery.length() < 2) return entries;
+        List<Entry> smallest = null;
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i + 1 < compactQuery.length(); i++) {
+            String gram = compactQuery.substring(i, i + 2);
+            if (!seen.add(gram)) continue;
+            List<Entry> bucket = byBigram.get(gram);
+            if (bucket == null) return Collections.emptyList();
+            if (smallest == null || bucket.size() < smallest.size()) smallest = bucket;
+        }
+        return smallest == null ? entries : smallest;
+    }
+
+    private static String compact(String normalized) {
+        return normalized == null ? "" : normalized.replace(" ", "");
     }
 
     private static final class Entry {
