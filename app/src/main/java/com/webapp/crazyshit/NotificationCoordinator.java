@@ -176,11 +176,7 @@ final class NotificationCoordinator {
         prefs.edit().putBoolean(KEY_EDUCATION_SHOWN, true).apply();
 
         AlertDialog dialog = new AlertDialog.Builder(activity)
-                .setTitle("ZEROCHILL alerts")
-                .setMessage(
-                        "Get fresh-content alerts from supported ZEROCHILL sources plus app updates. "
-                                + "Titles are shown by default and can be changed in Settings."
-                )
+                .setView(notificationEducationView(activity))
                 .setNegativeButton("Not now", null)
                 .setPositiveButton("Enable", (ignored, which) -> requestPermission(activity))
                 .create();
@@ -190,6 +186,49 @@ final class NotificationCoordinator {
             }
         });
         dialog.show();
+    }
+
+    private static android.view.View notificationEducationView(Activity activity) {
+        android.widget.LinearLayout card = new android.widget.LinearLayout(activity);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        card.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        int pad = Math.round(20f * activity.getResources().getDisplayMetrics().density);
+        card.setPadding(pad, pad, pad, pad);
+        card.setBackground(ZeroChillUi.panelGlass(activity));
+
+        android.widget.ImageView icon = new android.widget.ImageView(activity);
+        icon.setImageResource(R.mipmap.ic_launcher);
+        icon.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+        int iconSize = Math.round(72f * activity.getResources().getDisplayMetrics().density);
+        android.widget.LinearLayout.LayoutParams iconParams =
+                new android.widget.LinearLayout.LayoutParams(iconSize, iconSize);
+        iconParams.bottomMargin = Math.round(
+                12f * activity.getResources().getDisplayMetrics().density
+        );
+        card.addView(icon, iconParams);
+
+        android.widget.TextView title = new android.widget.TextView(activity);
+        title.setText("ZEROCHILL ALERTS");
+        title.setTextColor(android.graphics.Color.WHITE);
+        title.setTextSize(22f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        title.setGravity(android.view.Gravity.CENTER);
+        card.addView(title, new android.widget.LinearLayout.LayoutParams(-1, -2));
+
+        android.widget.TextView body = new android.widget.TextView(activity);
+        body.setText(
+                "Fresh content from supported ZEROCHILL sources plus app updates. "
+                        + "Titles are shown by default and can be changed anytime in Settings."
+        );
+        body.setTextColor(android.graphics.Color.rgb(184, 190, 198));
+        body.setTextSize(14f);
+        body.setGravity(android.view.Gravity.CENTER);
+        body.setPadding(0,
+                Math.round(8f * activity.getResources().getDisplayMetrics().density),
+                0,
+                0);
+        card.addView(body, new android.widget.LinearLayout.LayoutParams(-1, -2));
+        return card;
     }
 
     static void requestPermissionFromSettings(Activity activity) {
