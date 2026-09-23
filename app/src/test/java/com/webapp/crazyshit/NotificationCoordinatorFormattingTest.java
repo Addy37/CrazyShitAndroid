@@ -1,6 +1,8 @@
 package com.webapp.crazyshit;
 
 import org.junit.Test;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -110,6 +112,30 @@ public class NotificationCoordinatorFormattingTest {
         assertTrue(lines.contains("Jillian Beyor · new content"));
         assertTrue(lines.contains("Miss Lam · new content"));
         for (String line : lines) assertFalse(line.contains("Bunkr"));
+    }
+
+    @Test
+    public void fapelloPopularParserCarriesCreatorMetadataForNotifications() {
+        String html = "<div class='card'>"
+                + "<a href='/emily-rinaudo/' title='Emily Rinaudo'>Emily Rinaudo</a>"
+                + "<a href='/video/32318226/'><img src='/thumb.jpg'></a>"
+                + "</div>";
+        Document document = Jsoup.parse(
+                html,
+                "https://fapello.com/popular_videos/week/"
+        );
+
+        List<NativeContentItem> items = new FapelloRepository().parsePopularVideos(
+                document,
+                "https://fapello.com/popular_videos/week/"
+        );
+
+        assertEquals(1, items.size());
+        assertEquals("Emily Rinaudo", items.get(0).uploader);
+
+        NotificationCoordinator.ExperienceItem wrapped =
+                new NotificationCoordinator.ExperienceItem("fapello", items.get(0));
+        assertEquals("Emily Rinaudo", NotificationCoordinator.onlyFapCreatorName(wrapped));
     }
 
     @Test
