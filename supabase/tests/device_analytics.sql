@@ -7,6 +7,7 @@ declare
   result jsonb;
 begin
   perform public.record_analytics_metric('app_open', 'all', key_a, key_a, key_a);
+  perform public.record_analytics_metric('app_version', '3.1.1', key_a, key_a, key_a);
   perform public.record_analytics_metric('device_model', 'OnePlus CPH2655', key_a, key_a, key_a);
   perform public.record_analytics_metric('device_model', 'OnePlus CPH2655', key_a, key_a, key_a);
   perform public.record_analytics_metric('device_model', 'OnePlus CPH2655', key_b, key_b, key_b);
@@ -45,7 +46,7 @@ begin
     or result #>> '{android_versions,0,unique_users}' <> '2'
     or result #>> '{device_manufacturers,0,value}' <> 'OnePlus'
     or result #>> '{device_manufacturers,0,unique_users}' <> '2'
-    or result -> 'versions' is null
+    or result #>> '{versions,0,users_today}' <> '1'
     or has_function_privilege('anon', 'public.analytics_dashboard()', 'EXECUTE')
   then
     raise exception 'Analytics dashboard or privileges changed unexpectedly: %', result;

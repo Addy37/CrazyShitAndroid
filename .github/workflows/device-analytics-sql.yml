@@ -46,4 +46,5 @@ jobs:
       - name: Apply device migration and validate aggregates
         run: |
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/202609230001_device_analytics.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/202609230002_preserve_version_analytics.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/device_analytics.sql
