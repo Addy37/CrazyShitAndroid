@@ -497,7 +497,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                                 if (requestGeneration != generation || isFinishing() || isDestroyed()) return;
                                 appendBunkrItems(items);
                                 if (itemCount() > 0) {
-                                    progress.setVisibility(View.GONE);
+                                    if (progress instanceof ZeroChillLoadingView) {
+                                        ((ZeroChillLoadingView) progress).finish();
+                                    }
                                     if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
                                     empty.setVisibility(View.GONE);
                                 }

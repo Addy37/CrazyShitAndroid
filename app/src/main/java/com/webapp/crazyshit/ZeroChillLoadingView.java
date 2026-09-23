@@ -47,11 +47,31 @@ final class ZeroChillLoadingView extends LinearLayout {
 
     @Override protected void onDetachedFromWindow() {
         stopAnimation();
+        mascot.animate().cancel();
         super.onDetachedFromWindow();
+    }
+
+    /** Briefly acknowledges the first usable result while content is already visible underneath. */
+    void finish() {
+        if (getVisibility() != View.VISIBLE) return;
+        stopAnimation();
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            setVisibility(View.GONE);
+            return;
+        }
+        mascot.animate().cancel();
+        mascot.animate().alpha(1f).scaleX(1.08f).scaleY(1.08f)
+                .setDuration(110L)
+                .withEndAction(() -> {
+                    setVisibility(View.GONE);
+                    mascot.setScaleX(1f);
+                    mascot.setScaleY(1f);
+                }).start();
     }
 
     private void updateAnimation() {
         if (mascot == null) return;
+        mascot.animate().cancel();
         if (!isAttachedToWindow() || getVisibility() != View.VISIBLE ||
                 !ValueAnimator.areAnimatorsEnabled()) {
             stopAnimation();
