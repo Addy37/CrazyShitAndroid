@@ -33,7 +33,9 @@ import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -276,15 +278,19 @@ final class NotificationCoordinator {
         if (!canPost(context) || alerts == null || alerts.isEmpty()) return;
         createChannels(context);
 
+        List<ExperienceAlert> experiences = consolidateAlerts(alerts);
+        if (experiences.isEmpty()) return;
+
         NotificationManagerCompat manager = NotificationManagerCompat.from(context);
         manager.cancel(ID_GROUP);
+        cancelLegacySourceNotifications(manager);
 
-        boolean grouped = alerts.size() > 1;
+        boolean grouped = experiences.size() > 1;
         int total = 0;
-        for (SourceAlert alert : alerts) total += alert.items.size();
+        for (ExperienceAlert alert : experiences) total += alert.items.size();
 
-        for (SourceAlert alert : alerts) {
-            NotificationCompat.Builder builder = videoBuilder(context, alert);
+        for (ExperienceAlert alert : experiences) {
+            NotificationCompat.Builder builder = experienceBuilder(context, alert);
             if (grouped) {
                 builder.setGroup(GROUP_NEW_CONTENT)
                         .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY);
@@ -295,9 +301,9 @@ final class NotificationCoordinator {
         if (grouped) {
             PendingIntent open = appPendingIntent(context, 9302);
             String text = total + (total == 1 ? " new item" : " new items") +
-                    " across " + alerts.size() + " ZEROCHILL sources";
+                    " across " + experienceLabels(experiences);
             Notification summary = baseBuilder(context, CHANNEL_VIDEOS, "ZC")
-                    .setContentTitle("Fresh content is ready")
+                    .setContentTitle("Fresh ZEROCHILL content")
                     .setContentText(text)
                     .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
                     .setContentIntent(open)
@@ -308,6 +314,60 @@ final class NotificationCoordinator {
                     .setAutoCancel(true)
                     .build();
             manager.notify(ID_GROUP, summary);
+        }
+    }
+
+    static List<ExperienceAlert> consolidateAlerts(List<SourceAlert> alerts) {
+        LinkedHashMap<String, ExperienceAlert> grouped = new LinkedHashMap<>();
+        if (alerts == null) return new ArrayList<>();
+
+        for (SourceAlert sourceAlert : alerts) {
+            if (sourceAlert == null || sourceAlert.items == null || sourceAlert.items.isEmpty()) continue;
+            String experienceKey = experienceKey(sourceAlert.key);
+            ExperienceAlert experience = grouped.get(experienceKey);
+            if (experience == null) {
+                experience = new ExperienceAlert(experienceKey, experienceLabel(experienceKey));
+                grouped.put(experienceKey, experience);
+            }
+            for (NativeContentItem item : sourceAlert.items) {
+                if (item != null) experience.items.add(new ExperienceItem(sourceAlert.key, item));
+            }
+        }
+        return new ArrayList<>(grouped.values());
+    }
+
+    private static String experienceKey(String sourceKey) {
+        String key = sourceKey == null ? "" : sourceKey.trim().toLowerCase(Locale.US);
+        if ("fapello".equals(key) || "bunkr".equals(key) || "onlyhaven".equals(key)) {
+            return "onlyfap";
+        }
+        if ("crazyshit".equals(key) || "efukt".equals(key) || "kaotic".equals(key)) {
+            return "shittok";
+        }
+        return "zerochill";
+    }
+
+    private static String experienceLabel(String key) {
+        if ("onlyfap".equals(key)) return "OnlyFap";
+        if ("shittok".equals(key)) return "ShitTok";
+        return "ZEROCHILL";
+    }
+
+    private static String experienceLabels(List<ExperienceAlert> alerts) {
+        StringBuilder result = new StringBuilder();
+        for (ExperienceAlert alert : alerts) {
+            if (alert == null || alert.label == null || alert.label.trim().isEmpty()) continue;
+            if (result.length() > 0) result.append(result.indexOf(" and ") >= 0 ? ", " : " and ");
+            result.append(alert.label);
+        }
+        return result.length() == 0 ? "ZEROCHILL" : result.toString();
+    }
+
+    private static void cancelLegacySourceNotifications(NotificationManagerCompat manager) {
+        for (String key : new String[] {
+                "crazyshit", "efukt", "kaotic", "bunkr", "fapello", "onlyhaven"
+        }) {
+            manager.cancel(sourceNotificationId(key));
         }
     }
 
@@ -366,33 +426,42 @@ final class NotificationCoordinator {
                 .apply();
     }
 
-    private static NotificationCompat.Builder videoBuilder(Context context, SourceAlert alert) {
+    private static NotificationCompat.Builder experienceBuilder(
+            Context context,
+            ExperienceAlert alert
+    ) {
         boolean showTitles = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(PREF_SHOW_TITLES, true);
         int count = alert.items.size();
-        String source = alert.source;
-        String title = count + (count == 1 ? " new item on " : " new items on ") + source;
-        String body = showTitles && count == 1
-                ? alert.items.get(0).title
-                : "Tap to see what was added.";
-        PendingIntent open = feedPendingIntent(context, alert);
+        boolean onlyFap = "onlyfap".equals(alert.key);
+        String title = onlyFap ? onlyFapTitle(alert) : generalExperienceTitle(alert);
+        List<String> lines = notificationLines(alert);
+
+        String body;
+        if (showTitles && !lines.isEmpty()) {
+            body = lines.get(0);
+        } else if (onlyFap) {
+            body = "Fresh creator content is ready.";
+        } else {
+            body = "Tap to see what was added.";
+        }
 
         NotificationCompat.Style style;
         if (showTitles) {
             NotificationCompat.InboxStyle inbox = new NotificationCompat.InboxStyle()
                     .setBigContentTitle(title)
-                    .setSummaryText(source + " • New uploads");
-            for (int i = 0; i < Math.min(5, count); i++) {
-                String itemTitle = alert.items.get(i).title;
-                if (itemTitle != null && !itemTitle.trim().isEmpty()) inbox.addLine(itemTitle.trim());
+                    .setSummaryText(alert.label + " • New content");
+            for (int i = 0; i < Math.min(5, lines.size()); i++) {
+                inbox.addLine(lines.get(i));
             }
-            if (count > 5) inbox.addLine("+" + (count - 5) + " more");
+            if (lines.size() > 5) inbox.addLine("+" + (lines.size() - 5) + " more");
+            if (lines.isEmpty()) inbox.addLine(body);
             style = inbox;
         } else {
             style = new NotificationCompat.BigTextStyle().bigText(
                     count == 1
-                            ? "Fresh content from " + source + " is ready. Tap to open ZEROCHILL."
-                            : count + " fresh items from " + source + " are ready. Tap to open ZEROCHILL."
+                            ? "Fresh " + alert.label + " content is ready. Tap to open ZEROCHILL."
+                            : count + " fresh " + alert.label + " items are ready. Tap to open ZEROCHILL."
             );
         }
 
@@ -402,10 +471,14 @@ final class NotificationCoordinator {
                 .setContentText("Open ZEROCHILL to view it.")
                 .build();
 
+        PendingIntent open = appPendingIntent(
+                context,
+                sourceNotificationId(alert.key) + 5000
+        );
         return baseBuilder(context, CHANNEL_VIDEOS, "ZC")
                 .setContentTitle(title)
                 .setContentText(body)
-                .setSubText(source)
+                .setSubText(alert.label)
                 .setStyle(style)
                 .setContentIntent(open)
                 .addAction(R.drawable.ic_nav_home, "Open ZEROCHILL", open)
@@ -413,6 +486,193 @@ final class NotificationCoordinator {
                 .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
                 .setNumber(count)
                 .setAutoCancel(true);
+    }
+
+    private static String onlyFapTitle(ExperienceAlert alert) {
+        int count = alert.items.size();
+        boolean allVideos = count > 0;
+        for (ExperienceItem wrapped : alert.items) {
+            if (wrapped.item == null || !wrapped.item.isVideo()) {
+                allVideos = false;
+                break;
+            }
+        }
+        if (allVideos) {
+            return count + (count == 1 ? " new video on OnlyFap" : " new videos on OnlyFap");
+        }
+        return count + (count == 1 ? " new item on OnlyFap" : " new items on OnlyFap");
+    }
+
+    private static String generalExperienceTitle(ExperienceAlert alert) {
+        int count = alert.items.size();
+        boolean allVideos = count > 0;
+        for (ExperienceItem wrapped : alert.items) {
+            if (wrapped.item == null || !wrapped.item.isVideo()) {
+                allVideos = false;
+                break;
+            }
+        }
+        String noun = allVideos ? (count == 1 ? " video" : " videos")
+                : (count == 1 ? " item" : " items");
+        return count + " new" + noun + " on " + alert.label;
+    }
+
+    static List<String> notificationLines(ExperienceAlert alert) {
+        if (alert == null) return new ArrayList<>();
+        if ("onlyfap".equals(alert.key)) return onlyFapCreatorLines(alert.items);
+
+        ArrayList<String> lines = new ArrayList<>();
+        for (ExperienceItem wrapped : alert.items) {
+            String title = cleanText(wrapped.item == null ? "" : wrapped.item.title);
+            if (title.isEmpty()) continue;
+            lines.add(title);
+        }
+        return lines;
+    }
+
+    private static List<String> onlyFapCreatorLines(List<ExperienceItem> items) {
+        LinkedHashMap<String, CreatorUpdate> creators = new LinkedHashMap<>();
+        if (items == null) return new ArrayList<>();
+
+        for (ExperienceItem wrapped : items) {
+            String creator = onlyFapCreatorName(wrapped);
+            if (creator.isEmpty()) continue;
+            String key = creator.toLowerCase(Locale.US);
+            CreatorUpdate update = creators.get(key);
+            if (update == null) {
+                update = new CreatorUpdate(creator);
+                creators.put(key, update);
+            }
+            update.count++;
+            if ("fapello".equals(wrapped.sourceKey) &&
+                    wrapped.item != null &&
+                    wrapped.item.isVideo()) {
+                update.videoCount++;
+            }
+        }
+
+        ArrayList<String> lines = new ArrayList<>();
+        for (CreatorUpdate update : creators.values()) {
+            if (update.videoCount == update.count) {
+                lines.add(update.name + " · " + update.count +
+                        (update.count == 1 ? " new video" : " new videos"));
+            } else if (update.count > 1) {
+                lines.add(update.name + " · " + update.count + " new items");
+            } else {
+                lines.add(update.name + " · new content");
+            }
+        }
+        return lines;
+    }
+
+    static String onlyFapCreatorName(ExperienceItem wrapped) {
+        if (wrapped == null || wrapped.item == null) return "";
+        String sourceKey = wrapped.sourceKey == null
+                ? ""
+                : wrapped.sourceKey.trim().toLowerCase(Locale.US);
+        NativeContentItem item = wrapped.item;
+
+        if ("onlyhaven".equals(sourceKey)) {
+            return normalizeCreatorLabel(item.title);
+        }
+        if ("bunkr".equals(sourceKey)) {
+            return creatorFromBunkrTitle(item.title);
+        }
+        if (!"fapello".equals(sourceKey)) {
+            return normalizeCreatorLabel(item.title);
+        }
+
+        String uploader = normalizeCreatorLabel(item.uploader);
+        if (!uploader.isEmpty()) return uploader;
+
+        String title = cleanText(item.title)
+                .replaceFirst("(?i)\\s*#\\d+\\s*$", "")
+                .trim();
+        if (!title.isEmpty() &&
+                !title.matches("(?i)onlyfap\\s+video") &&
+                !title.matches("(?i)fapello\\s+video")) {
+            return normalizeCreatorLabel(title);
+        }
+
+        String slug = fapelloCreatorSlug(item.url);
+        return humanizeSlug(slug);
+    }
+
+    private static String creatorFromBunkrTitle(String value) {
+        String title = cleanText(value);
+        if (title.isEmpty()) return "";
+
+        int pipe = title.indexOf('|');
+        if (pipe > 0) title = title.substring(0, pipe).trim();
+
+        int dash = title.lastIndexOf(" - ");
+        if (dash > 0 && dash + 3 < title.length()) {
+            String left = title.substring(0, dash).trim();
+            String right = title.substring(dash + 3).trim();
+            String lower = left.toLowerCase(Locale.US);
+            title = (lower.contains("leak") || lower.contains("vietcos") || left.length() > 48)
+                    ? right
+                    : left;
+        }
+
+        title = title.replace('_', ' ');
+        return normalizeCreatorLabel(title);
+    }
+
+    private static String normalizeCreatorLabel(String value) {
+        String clean = cleanText(value)
+                .replaceFirst("(?i)^onlyfap\\s*[-:•]\\s*", "")
+                .replaceFirst("(?i)\\s+(?:leaks?|content|collection)$", "")
+                .trim();
+        if (clean.isEmpty() || clean.matches("\\d+")) return "";
+        if (clean.length() > 52) clean = clean.substring(0, 52).trim();
+        return clean;
+    }
+
+    private static String fapelloCreatorSlug(String value) {
+        String url = cleanText(value);
+        if (url.isEmpty()) return "";
+        try {
+            String path = new java.net.URI(url).getPath();
+            if (path == null || path.trim().isEmpty()) return "";
+            String[] raw = path.split("/");
+            ArrayList<String> parts = new ArrayList<>();
+            for (String part : raw) {
+                if (part != null && !part.trim().isEmpty()) parts.add(part.trim());
+            }
+            if (parts.size() < 2) return "";
+
+            int last = parts.size() - 1;
+            if (!parts.get(last).matches("\\d+")) return "";
+            if (last >= 2 && "video".equalsIgnoreCase(parts.get(last - 2))) {
+                return parts.get(last - 1);
+            }
+            String candidate = parts.get(last - 1);
+            return "video".equalsIgnoreCase(candidate) ? "" : candidate;
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private static String humanizeSlug(String value) {
+        String clean = cleanText(value).replace('-', ' ').replace('_', ' ').trim();
+        if (clean.isEmpty()) return "";
+        StringBuilder result = new StringBuilder();
+        for (String part : clean.split("\\s+")) {
+            if (part.isEmpty()) continue;
+            if (result.length() > 0) result.append(' ');
+            if (part.length() == 1) {
+                result.append(part.toUpperCase(Locale.US));
+            } else {
+                result.append(part.substring(0, 1).toUpperCase(Locale.US))
+                        .append(part.substring(1));
+            }
+        }
+        return normalizeCreatorLabel(result.toString());
+    }
+
+    private static String cleanText(String value) {
+        return value == null ? "" : value.replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
     }
 
     private static NotificationCompat.Builder baseBuilder(Context context, String channel, String mark) {
@@ -609,6 +869,39 @@ final class NotificationCoordinator {
         if (value >= 6) return 6;
         if (value >= 3) return 3;
         return 1;
+    }
+
+    static final class ExperienceItem {
+        final String sourceKey;
+        final NativeContentItem item;
+
+        ExperienceItem(String sourceKey, NativeContentItem item) {
+            this.sourceKey = sourceKey == null
+                    ? ""
+                    : sourceKey.trim().toLowerCase(Locale.US);
+            this.item = item;
+        }
+    }
+
+    static final class ExperienceAlert {
+        final String key;
+        final String label;
+        final List<ExperienceItem> items = new ArrayList<>();
+
+        ExperienceAlert(String key, String label) {
+            this.key = key;
+            this.label = label;
+        }
+    }
+
+    private static final class CreatorUpdate {
+        final String name;
+        int count;
+        int videoCount;
+
+        CreatorUpdate(String name) {
+            this.name = name;
+        }
     }
 
     static final class SourceAlert {

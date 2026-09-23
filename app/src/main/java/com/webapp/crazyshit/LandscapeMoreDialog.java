@@ -86,7 +86,7 @@ final class LandscapeMoreDialog {
         int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
         int panelHeight = sidePanel
                 ? (int) (screenHeight * 0.90f)
-                : Math.min((int) (screenHeight * 0.86f), dp(activity, 680));
+                : Math.min((int) (screenHeight * 0.86f), dp(activity, 540));
 
         LinearLayout panel = new LinearLayout(activity);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -132,63 +132,18 @@ final class LandscapeMoreDialog {
         );
 
         addSection(
-                activity,
-                dialog,
-                content,
-                "BROWSE",
-                actions(
-                        new Action(R.drawable.ic_nav_trending, "Trending", "The classic Trending feed",
-                                () -> activity.startActivity(NativeFeedBrowserActivity.create(
-                                        activity,
-                                        "Trending",
-                                        CrazyShitRepository.TRENDING,
-                                        false
-                                ))),
-                        new Action(R.drawable.ic_more_memes, "Memes", "The classic Memes feed",
-                                () -> activity.startActivity(NativeFeedBrowserActivity.create(
-                                        activity,
-                                        "Memes",
-                                        MemeRepository.MEMES,
-                                        true
-                                )))
-                )
+                activity, dialog, content, "BROWSE",
+                actions(new Action(R.drawable.ic_nav_trending, "Trending",
+                        "Browse trending videos.",
+                        () -> activity.startActivity(NativeFeedBrowserActivity.create(
+                                activity, "Trending", CrazyShitRepository.TRENDING, false))))
         );
 
         addSection(
-                activity,
-                dialog,
-                content,
-                "DISPLAY",
-                actions(
-                        new Action(R.drawable.ic_more_view_style, "View style",
-                                "Cards, List, Grid or Posters",
-                                () -> FeedViewStyleController.showMain(activity))
-                )
-        );
-
-        addSection(
-                activity,
-                dialog,
-                content,
-                "APP",
-                actions(
-                        new Action(R.drawable.ic_action_feedback, "Send feedback",
-                                "Suggest a feature, report a problem or rate the app",
-                                () -> activity.startActivity(new Intent(activity, FeedbackActivity.class))),
-                        new Action(R.drawable.ic_more_website, "Open full website",
-                                "Use the compatibility browser",
-                                () -> {
-                                    Intent intent = new Intent(activity, WebFallbackActivity.class);
-                                    intent.putExtra(WebFallbackActivity.EXTRA_URL, CrazyShitRepository.HOME);
-                                    activity.startActivity(intent);
-                                }),
-                        new Action(R.drawable.ic_more_update, "Check for updates",
-                                "Download and install app updates",
-                                () -> invokeBoolean(activity, "checkForUpdates", true)),
-                        new Action(R.drawable.ic_more_help, "Gesture guide",
-                                "Player and ShitTok controls",
-                                () -> GestureGuideDialog.show(activity))
-                )
+                activity, dialog, content, "APP",
+                actions(new Action(R.drawable.ic_action_feedback, "Send feedback",
+                        "Suggest a feature or report a problem",
+                        () -> activity.startActivity(new Intent(activity, FeedbackActivity.class))))
         );
 
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
@@ -299,8 +254,8 @@ final class LandscapeMoreDialog {
         addQuickTile(activity, dialog, row, new Action(
                 R.drawable.ic_more_account,
                 "Account",
-                "Profile and sign in",
-                () -> activity.startActivity(new Intent(activity, ProfileActivity.class))
+                "Coming Soon",
+                () -> AccountComingSoonDialog.show(activity)
         ), 1);
         addQuickTile(activity, dialog, row, new Action(
                 R.drawable.ic_more_settings,
@@ -339,6 +294,12 @@ final class LandscapeMoreDialog {
         title.setGravity(Gravity.CENTER);
         title.setPadding(0, dp(activity, 5), 0, 0);
         tile.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        if ("Account".equals(action.title)) {
+            TextView status = text(activity, "Coming Soon", 10,
+                    ZeroChillUi.color(activity, R.color.zc_text_secondary), false);
+            status.setGravity(Gravity.CENTER);
+            tile.addView(status, new LinearLayout.LayoutParams(-1, -2));
+        }
         installPressFeedback(tile);
         tile.setOnClickListener(v -> runAction(v, dialog, action));
 
@@ -492,20 +453,11 @@ final class LandscapeMoreDialog {
     }
 
     private static Drawable panelBackground(NativeMainActivity activity) {
-        return ZeroChillUi.panelGlass(activity);
+        return ZeroChillUi.sheetGlass(activity);
     }
 
-    private static GradientDrawable groupBackground(NativeMainActivity activity) {
-        GradientDrawable background = roundedBackground(
-                activity,
-                ZeroChillUi.color(activity, R.color.zc_surface_glass),
-                16
-        );
-        background.setStroke(
-                ZeroChillUi.dimension(activity, R.dimen.zc_stroke),
-                ZeroChillUi.color(activity, R.color.zc_divider)
-        );
-        return background;
+    private static Drawable groupBackground(NativeMainActivity activity) {
+        return ZeroChillUi.glass(activity);
     }
 
     private static GradientDrawable roundedBackground(

@@ -39,47 +39,56 @@
 
         <activity
             android:name=".LoginActivity"
+            android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
             android:name=".ProfileActivity"
+            android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
             android:name=".CommentsActivity"
+            android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
             android:name=".SettingsActivity"
+            android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
             android:name=".FeedbackActivity"
+            android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".FavoritesActivity"
+            android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
             android:name=".LibraryHubActivity"
+            android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
             android:name=".DownloadedActivity"
+            android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
         <activity
             android:name=".CreatorsActivity"
+            android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
@@ -88,10 +97,11 @@
             android:name=".SearchActivity"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
-            android:screenOrientation="unspecified" />
+            android:screenOrientation="portrait" />
 
         <activity
             android:name=".MemeViewerActivity"
+            android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
             android:exported="false" />
 
@@ -99,28 +109,28 @@
             android:name=".NativeFeedBrowserActivity"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
-            android:screenOrientation="unspecified" />
+            android:screenOrientation="portrait" />
 
         <activity
             android:name=".BunkrGalleryActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
-            android:screenOrientation="unspecified" />
+            android:screenOrientation="portrait" />
 
         <activity
             android:name=".VideoDetailActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
-            android:screenOrientation="unspecified" />
+            android:screenOrientation="portrait" />
 
         <activity
             android:name=".PlayerActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
-            android:screenOrientation="unspecified"
+            android:screenOrientation="portrait"
             android:supportsPictureInPicture="true" />
 
         <activity
@@ -128,7 +138,7 @@
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
-            android:screenOrientation="unspecified"
+            android:screenOrientation="portrait"
             android:supportsPictureInPicture="true" />
 
         <activity
@@ -136,19 +146,19 @@
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="false"
             android:exported="false"
-            android:screenOrientation="unspecified" />
+            android:screenOrientation="portrait" />
 
         <activity
             android:name=".NativeMainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"
             android:exported="false"
-            android:screenOrientation="unspecified" />
+            android:screenOrientation="portrait" />
 
         <activity
             android:name=".SplashActivity"
             android:exported="true"
-            android:screenOrientation="unspecified">
+            android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

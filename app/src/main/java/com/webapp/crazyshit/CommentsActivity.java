@@ -678,9 +678,7 @@ public class CommentsActivity extends Activity {
     }
 
     private void openLogin() {
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.putExtra(LoginActivity.EXTRA_RETURN_URL, pageUrl);
-        startActivityForResult(intent, LOGIN_REQUEST);
+        AccountComingSoonDialog.show(this);
     }
 
     private void openWebsite() {

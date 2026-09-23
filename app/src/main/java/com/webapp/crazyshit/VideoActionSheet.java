@@ -11,7 +11,6 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -55,7 +54,8 @@ final class VideoActionSheet {
         int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
         int panelHeight = sidePanel
                 ? (int) (screenHeight * 0.90f)
-                : Math.min((int) (screenHeight * 0.84f), dp(activity, 700));
+                : Math.min((int) (screenHeight * 0.84f),
+                        dp(activity, 100 + sections.length * 29 + countActions(sections) * 60));
 
         LinearLayout panel = new LinearLayout(activity);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -106,9 +106,7 @@ final class VideoActionSheet {
             View bottom = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
             if (bottom != null) bottom.setBackgroundColor(Color.TRANSPARENT);
         } else {
-            panel.setAlpha(0f);
-            panel.setTranslationX(dp(activity, 22));
-            panel.animate().alpha(1f).translationX(0f).setDuration(160L).start();
+            ZeroChillMotion.enterFromEnd(panel, dp(activity, 22));
         }
     }
 
@@ -173,9 +171,7 @@ final class VideoActionSheet {
         LinearLayout group = new LinearLayout(activity);
         group.setOrientation(LinearLayout.VERTICAL);
         group.setPadding(dp(activity, 4), dp(activity, 2), dp(activity, 4), dp(activity, 2));
-        GradientDrawable background = rounded(Color.rgb(24, 24, 28), dp(activity, 16));
-        background.setStroke(dp(activity, 1), Color.rgb(43, 43, 50));
-        group.setBackground(background);
+        group.setBackground(ZeroChillUi.glass(activity));
 
         for (int i = 0; i < section.actions.size(); i++) {
             addRow(activity, dialog, group, section.actions.get(i));
@@ -227,14 +223,7 @@ final class VideoActionSheet {
         ImageView chevron = icon(activity, R.drawable.ic_more_chevron, 28, 6);
         chevron.setImageTintList(ColorStateList.valueOf(Color.rgb(116, 116, 128)));
         row.addView(chevron, new LinearLayout.LayoutParams(dp(activity, 28), dp(activity, 40)));
-        row.setOnTouchListener((v, event) -> {
-            int actionType = event.getActionMasked();
-            if (actionType == MotionEvent.ACTION_DOWN) v.setAlpha(0.78f);
-            else if (actionType == MotionEvent.ACTION_UP || actionType == MotionEvent.ACTION_CANCEL) {
-                v.setAlpha(1f);
-            }
-            return false;
-        });
+        ZeroChillMotion.installPressFeedback(row);
         row.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             dialog.dismiss();
@@ -279,10 +268,14 @@ final class VideoActionSheet {
         }
     }
 
-    private static GradientDrawable panelBackground(Activity activity) {
-        GradientDrawable background = rounded(Color.rgb(15, 15, 18), dp(activity, 26));
-        background.setStroke(dp(activity, 1), Color.rgb(47, 47, 54));
-        return background;
+    private static android.graphics.drawable.Drawable panelBackground(Activity activity) {
+        return ZeroChillUi.sheetGlass(activity);
+    }
+
+    private static int countActions(Section[] sections) {
+        int count = 0;
+        for (Section section : sections) if (section != null) count += section.actions.size();
+        return count;
     }
 
     private static GradientDrawable rounded(int color, float radius) {

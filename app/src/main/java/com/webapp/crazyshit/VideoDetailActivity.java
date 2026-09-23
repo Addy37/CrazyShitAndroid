@@ -1508,7 +1508,7 @@ public class VideoDetailActivity extends Activity {
     private void showPlayerMenu() {
         String saveTitle = FavoriteStore.contains(this, pageUrl)
                 ? "Remove from Watch Later"
-                : "Save to Watch Later";
+                : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
         if (supportsComments()) {
             actions.add(VideoActionSheet.action(
@@ -1521,12 +1521,12 @@ public class VideoDetailActivity extends Activity {
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_action_share,
                 "Share",
-                "Send the CrazyShit page",
+                "Send the video page",
                 this::sharePage
         ));
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
-                "Open webpage",
+                "Video details",
                 "View this video on the site",
                 () -> openWebsite(pageUrl)
         ));
