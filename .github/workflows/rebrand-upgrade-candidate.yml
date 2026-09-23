@@ -152,6 +152,12 @@ jobs:
           test "$CANDIDATE_CERT" = "$STABLE_CERT"
           echo "Package ID, higher version code, and signing certificate match upgrade requirements from stable $LATEST_STABLE_VERSION."
 
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Install over previous stable on Android 15
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
