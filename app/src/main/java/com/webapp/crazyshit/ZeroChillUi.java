@@ -62,6 +62,10 @@ final class ZeroChillUi {
         return ContextCompat.getDrawable(context, R.drawable.zc_glass_source_rail);
     }
 
+    static Drawable sheetGlass(Context context) {
+        return ContextCompat.getDrawable(context, R.drawable.zc_glass_sheet);
+    }
+
     static Drawable panelGlass(Context context) {
         return ContextCompat.getDrawable(context, R.drawable.zc_glass_panel);
     }

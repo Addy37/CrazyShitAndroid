@@ -200,7 +200,7 @@ public final class WebFallbackActivity extends Activity {
                 fullscreenFrame.addView(view, new FrameLayout.LayoutParams(-1, -1));
                 fullscreenFrame.setVisibility(View.VISIBLE);
                 browserFrame.setVisibility(View.GONE);
-                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
+                PhoneOrientationPolicy.enterFullscreenVideo(WebFallbackActivity.this);
                 setFullscreen(true);
             }
 
@@ -295,7 +295,7 @@ public final class WebFallbackActivity extends Activity {
         if (customViewCallback != null) customViewCallback.onCustomViewHidden();
         customView = null;
         customViewCallback = null;
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        PhoneOrientationPolicy.exitFullscreenVideo(this);
         setFullscreen(false);
     }
 

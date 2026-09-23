@@ -818,7 +818,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         }
         PopupMenu menu = new PopupMenu(this, anchor);
         menu.getMenu().add(Menu.NONE, 2, 1, "Share");
-        menu.getMenu().add(Menu.NONE, 3, 2, "Open website page");
+        menu.getMenu().add(Menu.NONE, 3, 2, "Video details");
         menu.setOnMenuItemClickListener(clicked -> {
             if (clicked.getItemId() == 2) {
                 shareItem(item);
@@ -836,7 +836,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private void showVideoItemMenu(NativeContentItem item) {
         String saveTitle = FavoriteStore.contains(this, item.url)
                 ? "Remove from Watch Later"
-                : "Save to Watch Later";
+                : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
         if (item.comments != null && !item.comments.isEmpty()) {
             actions.add(VideoActionSheet.action(
@@ -855,12 +855,12 @@ public final class NativeFeedBrowserActivity extends Activity {
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_action_share,
                 "Share",
-                "Send the CrazyShit page",
+                "Send the video page",
                 () -> shareItem(item)
         ));
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
-                "Open website page",
+                "Video details",
                 "Use the compatibility browser",
                 () -> openWebsite(item.url)
         ));

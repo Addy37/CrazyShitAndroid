@@ -845,7 +845,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void showItemMenu(NativeContentItem item, View anchor) {
         String saveTitle = FavoriteStore.contains(this, item.url)
                 ? "Remove from Watch Later"
-                : "Save to Watch Later";
+                : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
         if (item.comments != null && !item.comments.isEmpty()) {
             actions.add(VideoActionSheet.action(
@@ -863,8 +863,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         ));
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
-                "Open website page",
-                "Use the compatibility browser",
+                "Video details",
+                "View the source page",
                 () -> openFallback(item.url)
         ));
 

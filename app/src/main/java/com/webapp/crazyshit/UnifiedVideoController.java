@@ -963,7 +963,7 @@ final class UnifiedVideoController {
     private void showPlayerMenu() {
         String saveTitle = FavoriteStore.contains(activity, pageUrl)
                 ? "Remove from Watch Later"
-                : "Save to Watch Later";
+                : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_action_comments,
@@ -974,12 +974,12 @@ final class UnifiedVideoController {
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_action_share,
                 "Share",
-                "Send the CrazyShit page",
+                "Send the video page",
                 this::sharePage
         ));
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
-                "Open webpage",
+                "Video details",
                 "View this video on the site",
                 () -> openWebsite(pageUrl)
         ));
@@ -994,9 +994,7 @@ final class UnifiedVideoController {
                     R.drawable.ic_action_fullscreen,
                     "Fullscreen",
                     "Rotate the player to landscape",
-                    () -> activity.setRequestedOrientation(
-                            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                    )
+                    () -> PhoneOrientationPolicy.enterSensorFullscreen(activity)
             ));
         }
 
@@ -1082,7 +1080,7 @@ final class UnifiedVideoController {
     private void handleBack() {
         if (state != State.FULL) return;
         if (isLandscape()) {
-            activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            PhoneOrientationPolicy.exitFullscreenVideo(activity);
             return;
         }
         boolean minimize = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
@@ -1106,7 +1104,7 @@ final class UnifiedVideoController {
         miniCard.setVisibility(View.INVISIBLE);
         miniCard.setAlpha(0f);
         setSystemBars(false);
-        activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        PhoneOrientationPolicy.exitFullscreenVideo(activity);
         releasePlayer();
         activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }

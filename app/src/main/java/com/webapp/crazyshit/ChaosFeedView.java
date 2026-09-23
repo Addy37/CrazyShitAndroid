@@ -1680,19 +1680,10 @@ public final class ChaosFeedView extends FrameLayout {
             if (item == null) return;
             String savedLabel = FavoriteStore.contains(activity, item.url)
                     ? "Remove from Watch Later"
-                    : "Save to Watch Later";
+                    : "Watch Later";
             VideoActionSheet.show(
                     activity,
                     item.title,
-                    VideoActionSheet.section(
-                            "PLAYBACK",
-                            VideoActionSheet.action(
-                                    R.drawable.ic_action_replay,
-                                    "Replay",
-                                    "Play this ShitTok clip from the beginning",
-                                    this::replayCurrentVideo
-                            )
-                    ),
                     VideoActionSheet.section(
                             "SAVE",
                             VideoActionSheet.action(
@@ -1706,7 +1697,10 @@ public final class ChaosFeedView extends FrameLayout {
                                     savedLabel,
                                     "Keep this video in your library",
                                     () -> toggleSaved(item, save)
-                            ),
+                            )
+                    ),
+                    VideoActionSheet.section(
+                            "ACTIONS",
                             VideoActionSheet.action(
                                     R.drawable.ic_action_comments,
                                     "Comments",
@@ -1718,10 +1712,16 @@ public final class ChaosFeedView extends FrameLayout {
                                     "Share",
                                     "Send the video page",
                                     () -> share(item)
+                            ),
+                            VideoActionSheet.action(
+                                    R.drawable.ic_more_website,
+                                    "Video details",
+                                    "View the full video page",
+                                    this::openCurrentDetails
                             )
                     ),
                     VideoActionSheet.section(
-                            "OTHER",
+                            "FEED",
                             VideoActionSheet.action(
                                     R.drawable.ic_action_hide,
                                     "Not interested",
@@ -1730,26 +1730,12 @@ public final class ChaosFeedView extends FrameLayout {
                             ),
                             VideoActionSheet.action(
                                     R.drawable.ic_action_report,
-                                    "Report playback problem",
-                                    "Copy diagnostics or open an issue",
+                                    "Report problem",
+                                    "Tell us what went wrong",
                                     () -> showPlaybackReport(this)
-                            ),
-                            VideoActionSheet.action(
-                                    R.drawable.ic_more_website,
-                                    "Open details",
-                                    "View the full video page",
-                                    this::openCurrentDetails
                             )
                     )
             );
-        }
-
-        private void replayCurrentVideo() {
-            if (player == null) return;
-            player.seekTo(0L);
-            everStarted = true;
-            player.play();
-            showControlsTemporarily();
         }
 
         private void downloadCurrentVideo() {
