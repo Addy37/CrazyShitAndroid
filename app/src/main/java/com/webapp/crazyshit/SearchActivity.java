@@ -62,7 +62,7 @@ public final class SearchActivity extends Activity {
     private final ExecutorService io = Executors.newFixedThreadPool(8);
 
     private EditText input;
-    private ProgressBar progress;
+    private View progress;
     private TextView status;
     private RecyclerView recycler;
     private GlobalSearchAdapter adapter;
@@ -209,11 +209,9 @@ public final class SearchActivity extends Activity {
                 : "Search CrazyShit, EFukt, OnlyFap, Collections, Categories and your Library");
         content.addView(status, new FrameLayout.LayoutParams(-1, -1));
 
-        progress = new ProgressBar(this);
-        progress.setIndeterminate(true);
-        ZeroChillUi.styleProgress(progress);
+        progress = new ZeroChillLoadingView(this, null);
         progress.setVisibility(View.GONE);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(72), dp(72));
         progressParams.gravity = Gravity.CENTER;
         content.addView(progress, progressParams);
 

@@ -17,6 +17,22 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class GallerySnapshotTest {
+    @Test public void earlyMediaOpensInViewerAndRepeatVisitReusesCursor() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        String id = BunkrGallerySessionStore.createCreator("GalleryPreview123", "", "GalleryPreview123");
+        NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Photo",
+                "https://fapello.com/anna/2/", "", "", "", "", "");
+        BunkrGallerySessionStore.appendPreview(id, Collections.singletonList(item));
+        assertEquals(item.url, BunkrGallerySessionStore.snapshot(id).items.get(0).url);
+        assertNull(BunkrGallerySessionStore.recentCreator("GalleryPreview123"));
+
+        BunkrGallerySessionStore.recordCreatorBatch(context, id,
+                Collections.singletonList(item), false,
+                new JSONObject().put("query", "GalleryPreview123"));
+        assertEquals(1, BunkrGallerySessionStore.snapshot(id).items.size());
+        assertEquals(id, BunkrGallerySessionStore.recentCreator("gallerypreview123"));
+    }
+
     @Test public void mediaAndCursorRecoverTogetherWithoutAnActivityCallback() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         String id = BunkrGallerySessionStore.createCreator("Anna", "https://fapello.com/anna/", "Anna");

@@ -79,7 +79,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     private CreatorProfileHeader creatorProfile;
     private TabLayoutMediator creatorTabsMediator;
     private SwipeRefreshLayout refresh;
-    private ProgressBar progress;
+    private View progress;
+    private CreatorGallerySkeleton gallerySkeleton;
     private TextView empty;
     private String title;
     private String baseUrl;
@@ -158,7 +159,17 @@ public final class NativeFeedBrowserActivity extends Activity {
             bunkrGallerySessionId = state.getString("gallery_session");
         }
         buildUi();
-        if (state == null) load(false);
+        if (state == null) {
+            BunkrGallerySessionStore.Snapshot warm = isCreatorGallery()
+                    ? BunkrGallerySessionStore.snapshot(bunkrGallerySessionId) : null;
+            if (warm != null && !warm.items.isEmpty()) {
+                replaceBunkrItems(warm.items);
+                currentPage = warm.currentPage;
+                endReached = warm.endReached;
+                progress.setVisibility(View.GONE);
+                if (!endReached) load(true);
+            } else load(false);
+        }
         else restoreBrowser();
     }
 
@@ -214,10 +225,12 @@ public final class NativeFeedBrowserActivity extends Activity {
 
         if (isBunkr()) {
             if (bunkrGallerySessionId == null || bunkrGallerySessionId.isEmpty()) {
-                bunkrGallerySessionId = isCreatorGallery()
+                String warmId = isCreatorGallery()
+                        ? BunkrGallerySessionStore.recentCreator(creatorQuery) : null;
+                bunkrGallerySessionId = warmId != null ? warmId : isCreatorGallery()
                         ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
                         : BunkrGallerySessionStore.create(title, baseUrl);
-                if (isCreatorGallery()) creatorGalleryRepository.reset(
+                if (isCreatorGallery() && warmId == null) creatorGalleryRepository.reset(
                         bunkrGallerySessionId, creatorQuery, fapelloProfileUrl, title);
             }
             if (isCreatorGallery()) buildCreatorTabs();
@@ -262,11 +275,16 @@ public final class NativeFeedBrowserActivity extends Activity {
         }
         applyLayout();
 
-        progress = new ProgressBar(this);
-        progress.setIndeterminate(true);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
+        if (isCreatorGallery()) {
+            gallerySkeleton = new CreatorGallerySkeleton(this);
+            body.addView(gallerySkeleton, new FrameLayout.LayoutParams(-1, -1));
+        }
+        progress = isCreatorGallery() ? new ZeroChillLoadingView(this, "Loading gallery...")
+                : new ZeroChillLoadingView(this, null);
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(120), dp(110));
         progressParams.gravity = Gravity.CENTER;
         body.addView(progress, progressParams);
+        progress.setVisibility(View.GONE);
 
         empty = text("", 15, Color.rgb(190, 190, 198));
         empty.setGravity(Gravity.CENTER);
@@ -455,7 +473,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         int requestPage = append ? currentPage + 1 : 1;
         int requestGeneration = generation;
         String requestSession = bunkrGallerySessionId;
-        if (!append && itemCount() == 0) progress.setVisibility(View.VISIBLE);
+        if (!append && itemCount() == 0) {
+            progress.setVisibility(View.VISIBLE);
+            if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.VISIBLE);
+        }
 
         io.execute(() -> {
             try {
@@ -469,7 +490,19 @@ public final class NativeFeedBrowserActivity extends Activity {
                             requestSession,
                             creatorQuery,
                             fapelloProfileUrl,
-                            title
+                            title,
+                            items -> {
+                                BunkrGallerySessionStore.appendPreview(requestSession, items);
+                                runOnUiThread(() -> {
+                                if (requestGeneration != generation || isFinishing() || isDestroyed()) return;
+                                appendBunkrItems(items);
+                                if (itemCount() > 0) {
+                                    progress.setVisibility(View.GONE);
+                                    if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
+                                    empty.setVisibility(View.GONE);
+                                }
+                                });
+                            }
                     );
                     result = creatorBatch.items;
                 } else if (isBunkr()) {
@@ -484,12 +517,15 @@ public final class NativeFeedBrowserActivity extends Activity {
                     if (requestGeneration != generation || isFinishing() || isDestroyed()) return;
                     loading = false;
                     progress.setVisibility(View.GONE);
+                    if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
                     refresh.setRefreshing(false);
                     int before = itemCount();
                     BunkrGallerySessionStore.Snapshot currentCreator = isCreatorGallery()
                             ? BunkrGallerySessionStore.snapshot(requestSession) : null;
                     if (currentCreator != null) {
-                        replaceBunkrItems(currentCreator.items);
+                        if (itemCount() != currentCreator.items.size()) {
+                            replaceBunkrItems(currentCreator.items);
+                        }
                         currentPage = currentCreator.currentPage;
                     } else if (isBunkr()) {
                         if (append) appendBunkrItems(result);
@@ -546,6 +582,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     if (requestGeneration != generation || isFinishing() || isDestroyed()) return;
                     loading = false;
                     progress.setVisibility(View.GONE);
+                    if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
                     refresh.setRefreshing(false);
                     if (isCreatorGallery()) {
                         updateCreatorEmptyState();
@@ -1111,31 +1148,57 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void attachCreatorGalleryPinch(RecyclerView list) {
         final float[] accumulatedScale = {1f};
+        final int[] startColumns = {creatorGalleryColumnCount()};
+        final int[] focusPosition = {RecyclerView.NO_POSITION};
+        final int[] focusOffset = {0};
         ScaleGestureDetector detector = new ScaleGestureDetector(
                 this,
                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
                     @Override
                     public boolean onScaleBegin(ScaleGestureDetector scaleDetector) {
                         accumulatedScale[0] = 1f;
+                        startColumns[0] = creatorGalleryColumnCount();
+                        list.animate().cancel();
+                        View focus = list.findChildViewUnder(
+                                scaleDetector.getFocusX(), scaleDetector.getFocusY());
+                        focusPosition[0] = focus == null ? RecyclerView.NO_POSITION
+                                : list.getChildAdapterPosition(focus);
+                        focusOffset[0] = focus == null ? 0 : focus.getTop() - list.getPaddingTop();
+                        list.setPivotX(scaleDetector.getFocusX());
+                        list.setPivotY(scaleDetector.getFocusY());
                         list.requestDisallowInterceptTouchEvent(true);
                         return true;
                     }
 
                     @Override
                     public boolean onScale(ScaleGestureDetector scaleDetector) {
-                        accumulatedScale[0] *= scaleDetector.getScaleFactor();
-                        if (accumulatedScale[0] >= 1.16f) {
-                            changeCreatorGalleryColumns(-1);
-                            accumulatedScale[0] = 1f;
-                        } else if (accumulatedScale[0] <= 0.86f) {
-                            changeCreatorGalleryColumns(1);
-                            accumulatedScale[0] = 1f;
-                        }
+                        accumulatedScale[0] = Math.max(0.6f, Math.min(1.65f,
+                                accumulatedScale[0] * scaleDetector.getScaleFactor()));
+                        // GPU transform follows the fingers without rebuilding the layout.
+                        list.setScaleX(accumulatedScale[0]);
+                        list.setScaleY(accumulatedScale[0]);
                         return true;
                     }
 
                     @Override
                     public void onScaleEnd(ScaleGestureDetector scaleDetector) {
+                        int next = clamp(Math.round(startColumns[0] / accumulatedScale[0]),
+                                creatorGalleryMinimumColumns(), creatorGalleryMaximumColumns());
+                        if (next != creatorGalleryColumns) {
+                            changeCreatorGalleryColumns(next - creatorGalleryColumns);
+                            RecyclerView.LayoutManager layout = list.getLayoutManager();
+                            if (focusPosition[0] != RecyclerView.NO_POSITION &&
+                                    layout instanceof StaggeredGridLayoutManager) {
+                                ((StaggeredGridLayoutManager) layout).scrollToPositionWithOffset(
+                                        focusPosition[0], focusOffset[0]);
+                            }
+                        }
+                        if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                            list.animate().scaleX(1f).scaleY(1f).setDuration(160L).start();
+                        } else {
+                            list.setScaleX(1f);
+                            list.setScaleY(1f);
+                        }
                         accumulatedScale[0] = 1f;
                         list.requestDisallowInterceptTouchEvent(false);
                     }

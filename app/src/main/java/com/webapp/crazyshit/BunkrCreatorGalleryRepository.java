@@ -18,6 +18,10 @@ import java.util.concurrent.Future;
 
 /** Incrementally combines Bunkr, Fapello, OnlyHaven, WikiFeet and WikiFeet X media for OnlyFap. */
 final class BunkrCreatorGalleryRepository {
+    interface ProgressListener {
+        /** Called on the fetching thread with newly accepted media. */
+        void onItems(List<NativeContentItem> items);
+    }
     private static final int MAX_SESSIONS = 4;
     private static final int MAX_SEARCH_PAGES = 5;
     private static final int ALBUMS_PER_BATCH = 4;
@@ -77,19 +81,40 @@ final class BunkrCreatorGalleryRepository {
 
     Batch fetchNext(Context context, String sessionId, String query,
             String fapelloProfileUrl, String creatorName) throws IOException {
+        return fetchNext(context, sessionId, query, fapelloProfileUrl, creatorName, null);
+    }
+
+    Batch fetchNext(Context context, String sessionId, String query,
+            String fapelloProfileUrl, String creatorName, ProgressListener listener) throws IOException {
         State state = state(context, sessionId, query, fapelloProfileUrl, creatorName);
         synchronized (state) {
-            Batch batch = fetchNextLocked(context, state);
+            Batch batch = fetchNextLocked(context, state, listener);
             saveCursor(context, sessionId, state, batch);
             return batch;
         }
     }
 
-    private Batch fetchNextLocked(Context context, State state) throws IOException {
+    private Batch fetchNextLocked(Context context, State state, ProgressListener listener) throws IOException {
         if (state.finished()) return new Batch(new ArrayList<>(), true, state.lastFapelloFailure);
 
         Context appContext = context.getApplicationContext();
 
+        // These independent catalogs must not serialize the first visible gallery row.
+        Future<IOException> wikiCatalog = ALBUM_IO.submit(() -> loadWikiFeetCatalog(appContext, state));
+        Future<IOException> havenCatalog = ALBUM_IO.submit(() -> loadOnlyHavenCatalog(appContext, state));
+        Future<IOException> fapelloCatalog = ALBUM_IO.submit(() -> {
+            try {
+                loadFapelloModelsIfNeeded(appContext, state);
+                state.fapelloSearchFailures = 0;
+                return null;
+            } catch (IOException error) {
+                state.lastFapelloFailure = fapelloFailure(error);
+                state.fapelloSearchFailures++;
+                if (!retryableFapello(state.lastFapelloFailure) ||
+                        state.fapelloSearchFailures >= 2) state.fapelloCatalogLoaded = true;
+                return error;
+            }
+        });
         IOException bunkrCatalogError = null;
         try {
             loadAlbumsIfNeeded(appContext, state);
@@ -100,20 +125,9 @@ final class BunkrCreatorGalleryRepository {
             if (state.bunkrSearchFailures >= 2) state.searchFinished = true;
         }
 
-        IOException fapelloCatalogError = null;
-        try {
-            loadFapelloModelsIfNeeded(context, state);
-            state.fapelloSearchFailures = 0;
-        } catch (IOException error) {
-            fapelloCatalogError = error;
-            state.lastFapelloFailure = fapelloFailure(error);
-            state.fapelloSearchFailures++;
-            if (!retryableFapello(state.lastFapelloFailure) ||
-                    state.fapelloSearchFailures >= 2) state.fapelloCatalogLoaded = true;
-        }
-
-        IOException wikiFeetCatalogError = loadWikiFeetCatalog(appContext, state);
-        IOException onlyHavenCatalogError = loadOnlyHavenCatalog(appContext, state);
+        IOException fapelloCatalogError = catalogResult(fapelloCatalog);
+        IOException wikiFeetCatalogError = catalogResult(wikiCatalog);
+        IOException onlyHavenCatalogError = catalogResult(havenCatalog);
 
         ArrayList<AlbumCursor> selected = new ArrayList<>();
         while (!state.pending.isEmpty() && selected.size() < ALBUMS_PER_BATCH) {
@@ -219,26 +233,46 @@ final class BunkrCreatorGalleryRepository {
         }
 
         ArrayList<NativeContentItem> bunkrResult = new ArrayList<>();
+        ArrayList<NativeContentItem> progressiveResult = new ArrayList<>();
+        int bunkrPublished = 0;
+        ArrayList<NativeContentItem> fapelloResult = new ArrayList<>();
+        int fapelloPublished = 0;
+        Set<Future<FapelloPage>> finishedFapello = new HashSet<>();
         Set<Future<AlbumPage>> finishedRequests = new HashSet<>();
         long deadline = SystemClock.elapsedRealtime() + ALBUM_BATCH_BUDGET_MS;
-        for (int i = 0; i < requests.size(); i++) {
+        while (finishedRequests.size() < requests.size()) {
             long remaining = deadline - SystemClock.elapsedRealtime();
             if (remaining <= 0L) break;
             Future<AlbumPage> future;
             try {
-                future = completed.poll(remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
+                future = completed.poll(Math.min(remaining, 250L),
+                        java.util.concurrent.TimeUnit.MILLISECONDS);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 break;
             }
-            if (future == null) break;
-            finishedRequests.add(future);
-            try {
-                applyPage(state, bunkrResult, future.get());
-                if (bunkrResult.size() >= BATCH_TARGET) break;
-            } catch (Exception ignored) {
-                retry(state, requests.get(future));
+            if (future != null) {
+                finishedRequests.add(future);
+                try {
+                    applyPage(state, bunkrResult, future.get());
+                    bunkrPublished = publishNew(bunkrResult, bunkrPublished, listener, progressiveResult);
+                } catch (Exception ignored) {
+                    retry(state, requests.get(future));
+                }
             }
+            // A fast Fapello profile should display even while a Bunkr album is slow.
+            for (Map.Entry<Future<FapelloPage>, FapelloCursor> request : fapelloRequests.entrySet()) {
+                if (!request.getKey().isDone() || !finishedFapello.add(request.getKey())) continue;
+                try {
+                    applyFapelloPage(state, fapelloResult, request.getKey().get());
+                    fapelloPublished = publishNew(fapelloResult, fapelloPublished,
+                            listener, progressiveResult);
+                } catch (Exception error) {
+                    state.lastFapelloFailure = fapelloFailure(error);
+                    retryFapello(state, request.getValue());
+                }
+            }
+            if (bunkrResult.size() >= BATCH_TARGET) break;
         }
 
         for (Map.Entry<Future<AlbumPage>, AlbumCursor> request : requests.entrySet()) {
@@ -247,10 +281,10 @@ final class BunkrCreatorGalleryRepository {
             retry(state, request.getValue());
         }
 
-        ArrayList<NativeContentItem> fapelloResult = new ArrayList<>();
         for (Map.Entry<Future<FapelloPage>, FapelloCursor> request :
                 fapelloRequests.entrySet()) {
             Future<FapelloPage> future = request.getKey();
+            if (finishedFapello.contains(future)) continue;
             try {
                 long remaining = deadline - SystemClock.elapsedRealtime();
                 FapelloPage page;
@@ -267,6 +301,7 @@ final class BunkrCreatorGalleryRepository {
                     continue;
                 }
                 applyFapelloPage(state, fapelloResult, page);
+                fapelloPublished = publishNew(fapelloResult, fapelloPublished, listener, progressiveResult);
             } catch (Exception error) {
                 future.cancel(true);
                 state.lastFapelloFailure = fapelloFailure(error);
@@ -275,6 +310,7 @@ final class BunkrCreatorGalleryRepository {
         }
 
         ArrayList<NativeContentItem> onlyHavenResult = new ArrayList<>();
+        int onlyHavenPublished = 0;
         for (Map.Entry<Future<OnlyHavenPage>, OnlyHavenCursor> request :
                 onlyHavenRequests.entrySet()) {
             Future<OnlyHavenPage> future = request.getKey();
@@ -290,6 +326,7 @@ final class BunkrCreatorGalleryRepository {
                     continue;
                 }
                 applyOnlyHavenPage(state, onlyHavenResult, page);
+                onlyHavenPublished = publishNew(onlyHavenResult, onlyHavenPublished, listener, progressiveResult);
             } catch (Exception ignored) {
                 future.cancel(true);
                 retryOnlyHaven(state, request.getValue());
@@ -297,6 +334,7 @@ final class BunkrCreatorGalleryRepository {
         }
 
         ArrayList<NativeContentItem> wikiFeetResult = new ArrayList<>();
+        int wikiFeetPublished = 0;
         for (Map.Entry<Future<WikiFeetPage>, WikiFeetCursor> request :
                 wikiFeetRequests.entrySet()) {
             Future<WikiFeetPage> future = request.getKey();
@@ -312,14 +350,16 @@ final class BunkrCreatorGalleryRepository {
                     continue;
                 }
                 applyWikiFeetPage(state, wikiFeetResult, page);
+                wikiFeetPublished = publishNew(wikiFeetResult, wikiFeetPublished, listener, progressiveResult);
             } catch (Exception ignored) {
                 future.cancel(true);
                 retryWikiFeet(state, request.getValue());
             }
         }
 
-        ArrayList<NativeContentItem> result = interleave(
-                bunkrResult, fapelloResult, onlyHavenResult, wikiFeetResult);
+        ArrayList<NativeContentItem> result = listener == null
+                ? interleave(bunkrResult, fapelloResult, onlyHavenResult, wikiFeetResult)
+                : progressiveResult;
 
         if (state.loadedMediaUrls.size() >= MAX_MEDIA_ITEMS) {
             state.pending.clear();
@@ -338,6 +378,26 @@ final class BunkrCreatorGalleryRepository {
             throw new IOException("OnlyFap sources could not be reached", fapelloCatalogError);
         }
         return new Batch(result, state.finished(), state.lastFapelloFailure);
+    }
+
+    private IOException catalogResult(Future<IOException> request) {
+        try {
+            return request.get();
+        } catch (Exception error) {
+            request.cancel(true);
+            return new IOException("Creator catalog request failed", error);
+        }
+    }
+
+    private int publishNew(ArrayList<NativeContentItem> source, int published,
+            ProgressListener listener, ArrayList<NativeContentItem> progressiveResult) {
+        if (source.size() > published) {
+            ArrayList<NativeContentItem> newItems =
+                    new ArrayList<>(source.subList(published, source.size()));
+            progressiveResult.addAll(newItems);
+            if (listener != null) listener.onItems(newItems);
+        }
+        return source.size();
     }
 
     private void loadAlbumsIfNeeded(Context context, State state) throws IOException {

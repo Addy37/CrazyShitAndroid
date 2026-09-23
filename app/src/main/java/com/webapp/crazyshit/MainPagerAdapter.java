@@ -701,10 +701,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.recycler.setItemAnimator(null);
         page.refresh.addView(page.recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
 
-        page.progress = new ProgressBar(activity);
-        page.progress.setIndeterminate(true);
-        ZeroChillUi.styleProgress(page.progress);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
+        page.progress = new ZeroChillLoadingView(activity, null);
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(72), dp(72));
         progressParams.gravity = Gravity.CENTER;
         page.root.addView(page.progress, progressParams);
 
@@ -924,7 +922,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         FrameLayout root;
         SwipeRefreshLayout refresh;
         RecyclerView recycler;
-        ProgressBar progress;
+        View progress;
         TextView empty;
         NativeFeedAdapter feedAdapter;
         NativeCategoryAdapter browseAdapter;
