@@ -14,6 +14,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -94,6 +95,11 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout root = vertical(24);
         root.setGravity(Gravity.CENTER_VERTICAL);
 
+        ImageView mascot = new ImageView(this);
+        mascot.setImageResource(R.drawable.ic_admin);
+        mascot.setContentDescription(null);
+        root.addView(mascot, new LinearLayout.LayoutParams(dp(88), dp(88)));
+
         TextView eyebrow = label("PRIVATE CONTROL CENTER");
         TextView title = text("ZeroChill Admin", 32, Color.WHITE);
         title.setTypeface(null, Typeface.BOLD);
@@ -153,10 +159,10 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout titles = column(0);
-        TextView eyebrow = label("CONTROL CENTER");
+        TextView eyebrow = label("ZEROCHILL ADMIN");
         TextView title = text("Dashboard", 30, Color.WHITE);
         title.setTypeface(null, Typeface.BOLD);
-        TextView subtitle = text("Live overview of ZeroChill", 14, color(R.color.app_on_surface_variant));
+        TextView subtitle = text("Analytics, feedback, and sources", 14, color(R.color.app_on_surface_variant));
         titles.addView(eyebrow);
         titles.addView(title);
         titles.addView(subtitle);

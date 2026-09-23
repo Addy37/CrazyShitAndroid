@@ -27,7 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Friendly editor for the data-only source configuration used by CrazyShit. */
+/** Friendly editor for the data-only source configuration used by ZeroChill. */
 final class SourceConfigEditor extends LinearLayout {
     interface OnChangedListener { void onChanged(); }
 

@@ -117,6 +117,32 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK_PRIMARY"
           sha256sum "$APK_PRIMARY" CrazyShit.apk ZeroFilter.apk > SHA256SUMS.txt
 
+      - name: Verify upgrade from previous stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/previous-stable"
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern 'ZeroChill.apk' --dir "$RUNNER_TEMP/previous-stable" \
+            || gh release download --repo "$GITHUB_REPOSITORY" --pattern 'ZeroFilter.apk' --dir "$RUNNER_TEMP/previous-stable" \
+            || gh release download --repo "$GITHUB_REPOSITORY" --pattern 'CrazyShit.apk' --dir "$RUNNER_TEMP/previous-stable"
+          PREVIOUS="$(find "$RUNNER_TEMP/previous-stable" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          test -n "$PREVIOUS"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt2"
+          SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          CURRENT_INFO="$("$AAPT" dump badging "$APK_PRIMARY")"
+          PREVIOUS_INFO="$("$AAPT" dump badging "$PREVIOUS")"
+          printf '%s\n' "$CURRENT_INFO" | grep "package: name='com.addy37.crazyshitunofficial'"
+          printf '%s\n' "$PREVIOUS_INFO" | grep "package: name='com.addy37.crazyshitunofficial'"
+          CURRENT_CODE="$(printf '%s\n' "$CURRENT_INFO" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
+          PREVIOUS_CODE="$(printf '%s\n' "$PREVIOUS_INFO" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
+          test -n "$CURRENT_CODE" && test -n "$PREVIOUS_CODE"
+          test "$CURRENT_CODE" -gt "$PREVIOUS_CODE"
+          CURRENT_CERT="$("$SIGNER" verify --print-certs "$APK_PRIMARY" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+          PREVIOUS_CERT="$("$SIGNER" verify --print-certs "$PREVIOUS" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+          test -n "$CURRENT_CERT" && test "$CURRENT_CERT" = "$PREVIOUS_CERT"
+          echo "Same package and certificate; versionCode $CURRENT_CODE > $PREVIOUS_CODE."
+
       - name: Upload signed APK artifact
         continue-on-error: true
         uses: actions/upload-artifact@v4

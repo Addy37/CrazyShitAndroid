@@ -54,8 +54,8 @@ public final class FeedbackNotificationWorker extends Worker {
         String title = item.type.replace('_', ' ');
         NotificationCompat.Builder builder = new NotificationCompat.Builder(
                 getApplicationContext(), AdminApplication.CHANNEL_ID)
-                .setSmallIcon(com.addy37.crazyshitadmin.R.drawable.ic_admin)
-                .setContentTitle("New " + title)
+                .setSmallIcon(com.addy37.crazyshitadmin.R.drawable.ic_admin_notification)
+                .setContentTitle("ZeroChill feedback: " + title)
                 .setContentText(item.message)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(item.message))
                 .setContentIntent(pending)

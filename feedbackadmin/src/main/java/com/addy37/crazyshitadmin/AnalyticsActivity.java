@@ -125,7 +125,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
         content.addView(card("ACTIVE USERS", "Anonymous active installs", users));
 
         addRankingCard("TRENDING CREATORS", "Who users are opening most", dashboard.creators, true,
-                "Creator interest will appear after users open Fapzone creator galleries.");
+                "Creator interest will appear after users open OnlyFap creator galleries.");
         addRankingCard("MOST USED SECTIONS", "Where users spend their time", dashboard.sections, false,
                 "Section usage will appear after analytics-enabled app sessions begin.");
         addRankingCard("SOURCE INTEREST", "Which content sources attract attention", dashboard.sources, false,
@@ -312,7 +312,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
         switch (raw.toLowerCase(Locale.US)) {
             case "home": return "Home";
             case "collections": return "Collections";
-            case "chaos": return "Chaos";
+            case "chaos": return "ShitTok";
             case "categories": return "Categories";
             case "search": return "Search";
             case "favorites": return "Favorites";
@@ -320,9 +320,9 @@ public final class AnalyticsActivity extends AppCompatActivity {
             case "settings": return "Settings";
             case "profile": return "Profile";
             case "creator_gallery": return "Creator galleries";
-            case "crazyshit": return "CrazyShit";
+            case "crazyshit": return "CrazyShit source";
             case "efukt": return "EFukt";
-            case "fapzone": return "Fapzone";
+            case "fapzone": return "OnlyFap";
             case "fapello": return "Fapello";
             case "bunkr": return "Bunkr";
             case "wikifeet": return "WikiFeet";

@@ -45,7 +45,7 @@ jobs:
           gradle-version: '8.7'
           cache-provider: basic
 
-      - name: Resolve preview version above latest stable
+      - name: Resolve candidate version above latest stable
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -53,7 +53,7 @@ jobs:
           LATEST_TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
           LATEST_VERSION="${LATEST_TAG#v}"
           python3 - "$LATEST_VERSION" <<'PY'
-          import os, re, sys
+          import os, pathlib, re, sys
           match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
           if not match:
               raise SystemExit(f"Latest stable tag is not major.minor.patch: {sys.argv[1]}")
@@ -69,6 +69,15 @@ jobs:
           if not 0 < code <= 2_100_000_000:
               raise SystemExit("Preview version code is outside Android limits")
           name = f"{major}.{minor}.{patch}-zerochill-preview"
+          release_version = pathlib.Path("RELEASE_VERSION").read_text().strip()
+          release_match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", release_version)
+          if not release_match:
+              raise SystemExit(f"Invalid RELEASE_VERSION: {release_version}")
+          release_major, release_minor, release_patch = map(int, release_match.groups())
+          release_code = release_major * 1_000_000 + release_minor * 1000 + release_patch
+          if release_code >= code:
+              code = release_code
+              name = release_version
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write(f"APP_VERSION_CODE={code}\n")
               output.write(f"APP_VERSION_NAME={name}\n")
@@ -142,6 +151,27 @@ jobs:
           test -n "$CANDIDATE_CERT"
           test "$CANDIDATE_CERT" = "$STABLE_CERT"
           echo "Package ID, higher version code, and signing certificate match upgrade requirements from stable $LATEST_STABLE_VERSION."
+
+      - name: Install over previous stable on Android 15
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            STABLE_APK="$(find "$RUNNER_TEMP/latest-stable" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+            adb install "$STABLE_APK"
+            adb shell dumpsys package com.addy37.crazyshitunofficial > /tmp/zc-before.txt
+            BEFORE="$(sed -n 's/.*firstInstallTime=//p' /tmp/zc-before.txt | head -n 1)"
+            test -n "$BEFORE"
+            adb install -r ZeroChill-upgrade-candidate.apk
+            adb shell dumpsys package com.addy37.crazyshitunofficial > /tmp/zc-after.txt
+            AFTER="$(sed -n 's/.*firstInstallTime=//p' /tmp/zc-after.txt | head -n 1)"
+            test "$BEFORE" = "$AFTER"
+            grep -m1 "versionCode=$APP_VERSION_CODE" /tmp/zc-after.txt
+            echo "In-place upgrade installed; Android preserved the package's first-install record."
 
       - name: Upload signed upgrade candidate
         uses: actions/upload-artifact@v4
