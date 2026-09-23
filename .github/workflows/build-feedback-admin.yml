@@ -50,10 +50,7 @@ jobs:
         env:
           SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
         run: |
-          if [ -z "$SIGNING_BUNDLE" ]; then
-            echo "No signing bundle is available. Release will use the fallback debug key."
-            exit 0
-          fi
+          test -n "$SIGNING_BUNDLE" || { echo "Missing production signing bundle."; exit 1; }
           python - <<'PY'
           import base64, json, os, pathlib
           raw = os.environ["SIGNING_BUNDLE"].replace("\r", "").replace("\n", "")
@@ -81,10 +78,18 @@ jobs:
         run: |
           cp feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk ZeroChill-Admin.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroChill-Admin.apk
+          SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          SOURCE_REF="${{ github.head_ref || github.ref_name }}"
+          SAFE_REF="$(printf '%s' "$SOURCE_REF" | tr '/ ' '--')"
+          cp ZeroChill-Admin.apk "ZeroChill-Admin-${SAFE_REF}-${SOURCE_SHA:0:7}-signed.apk"
+          sha256sum ZeroChill-Admin.apk > ZeroChill-Admin-SHA256.txt
 
       - uses: actions/upload-artifact@v4
         with:
           name: ZeroChill-Admin
-          path: ZeroChill-Admin.apk
+          path: |
+            ZeroChill-Admin.apk
+            ZeroChill-Admin-*-signed.apk
+            ZeroChill-Admin-SHA256.txt
           if-no-files-found: error
           retention-days: 14

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="235" viewBox="0 0 720 235" role="img" aria-label="ZEROCHILL devil mascot, NO LIMITS. ALL CONTENT.">
+  <rect width="720" height="235" fill="#000000" />
+  <g transform="translate(42 17) scale(1.84)">
+    <path d="M30,42 L27,20 Q38,25 43,37 L40,43 Z M78,42 L81,20 Q70,25 65,37 L68,43 Z" fill="#05090C" stroke="#0892D0" stroke-width="2.8" stroke-linejoin="round" />
+    <path d="M32,38 Q43,32 54,34 Q65,32 76,38 Q83,51 77,68 Q69,83 54,85 Q39,83 31,68 Q25,51 32,38 Z" fill="#05090C" stroke="none" />
+    <path d="M39,47 L48,57 M48,47 L39,57" fill="none" stroke="#45DDF5" stroke-width="3.4" stroke-linecap="round" />
+    <path d="M61,53 Q67,48 73,52 M60,48 L73,45" fill="none" stroke="#45DDF5" stroke-width="3" stroke-linecap="round" />
+    <path d="M37,65 Q54,75 71,65 L67,73 L63,69 L59,77 L55,71 L50,78 L46,70 L42,74 Z" fill="#F7FAFC" stroke="none" />
+    <path d="M53,74 Q58,71 63,74 L60,82 Q55,85 53,79 Z" fill="#0892D0" stroke="none" />
+    <path d="M32,38 Q43,32 54,34 Q65,32 76,38 Q83,51 77,68 Q69,83 54,85 Q39,83 31,68 Q25,51 32,38 Z" fill="none" stroke="#0892D0" stroke-width="3" stroke-linejoin="round" />
+  </g>
+  <text x="242" y="112" fill="#F3F4F6" font-family="Arial, sans-serif" font-size="55" font-weight="800">ZERO</text>
+  <text x="424" y="112" fill="#0892D0" font-family="Arial, sans-serif" font-size="55" font-weight="600">CHILL</text>
+  <text x="246" y="148" fill="#B8C0CC" font-family="Arial, sans-serif" font-size="16" letter-spacing="3">NO LIMITS. ALL CONTENT.</text>
+</svg>

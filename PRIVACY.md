@@ -2,7 +2,13 @@
 
 ## Summary
 
-ZeroChill for Android is a lightweight Android client with an optional native Media3 / ExoPlayer video player. The app does not operate analytics, advertising, telemetry, or required user accounts. Its optional feedback feature uses a project-operated backend as described below.
+ZeroChill for Android is a native Android client with Media3 / ExoPlayer playback. It sends aggregate usage events and optional feedback to a project-operated service. It does not require a project account or include an advertising network.
+
+## Aggregate usage analytics
+
+The app reports app opens, app version, the section and content source you open, and the names of creator galleries you view. These events go to the project's analytics endpoint and contribute to aggregate counts in the private admin dashboard.
+
+To count usage by day, week, and month, the app derives separate one-way keys from a local installation ID, the metric and value, and the time period. The installation ID itself is not included in analytics requests. The keys change across metrics, values, and time periods. The analytics dashboard does not expose a per-install viewing history. The app does not send video playback history, downloaded files, or favorite lists to this analytics endpoint.
 
 ## Optional feedback
 
@@ -34,7 +40,7 @@ To request that same stream successfully, the player may reuse:
 - The page origin
 - Relevant cookies already present in the website session
 
-These values are passed directly to the media server as part of playback requests. They are not sent to a separate analytics, telemetry, advertising, or project-operated backend.
+These values are passed directly to the media server as part of playback requests. They are not sent to the project analytics or feedback services.
 
 The native player does not bypass DRM, encryption, paywalls, authentication, or access controls. If a usable stream is not available to the current session, the app falls back to the normal webpage.
 
@@ -51,12 +57,15 @@ The wrapper may interact with:
 - Files you explicitly download from the website
 - Links you choose to open in external apps or your browser
 
-Except for information you intentionally submit through the optional feedback feature, the app does not send this data to a separate server operated by this project.
+The project service also receives the aggregate usage events described above. Other website and playback data listed here stays on the device or goes to the connected source as required for browsing and playback.
 
 ## Permissions
 
 - `INTERNET`: required to load CrazyShit.com, optional EFukt.com Series pages, and network media
 - `ACCESS_NETWORK_STATE`: used for normal network-aware behavior
+- `POST_NOTIFICATIONS`: optional update, content, and download alerts on supported Android versions
+- `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_DATA_SYNC`: keep active downloads running
+- `REQUEST_INSTALL_PACKAGES`: hand an APK update to Android's installer when you choose to update
 - Legacy storage permission is declared only for Android versions where it is needed for downloads
 
 ## Third-party policy
