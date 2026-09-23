@@ -697,15 +697,11 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     }
 
     private void openLogin() {
-        NativeCommentsLoader.invalidate(pageUrl);
         posting = false;
         setComposerEnabled(true);
         if (composerInput != null) composerInput.clearFocus();
         hideKeyboard();
-        loginLaunched = true;
-        Intent intent = new Intent(activity, LoginActivity.class);
-        intent.putExtra(LoginActivity.EXTRA_RETURN_URL, pageUrl);
-        activity.startActivity(intent);
+        AccountComingSoonDialog.show(activity);
     }
 
     private void startReply(NativeCommentsLoader.Comment item) {

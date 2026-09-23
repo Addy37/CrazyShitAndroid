@@ -182,39 +182,6 @@ final class LandscapeMoreDialog {
         if (sidePanel) ZeroChillMotion.enterFromEnd(panel, dp(activity, 36));
     }
 
-    private static void showAccountComingSoon(NativeMainActivity activity) {
-        if (activity.isFinishing() || activity.isDestroyed()) return;
-        Dialog dialog = new Dialog(activity);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout panel = new LinearLayout(activity);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(activity, 24), dp(activity, 24), dp(activity, 24), dp(activity, 20));
-        panel.setBackground(ZeroChillUi.sheetGlass(activity));
-        TextView title = text(activity, "Account · Coming Soon", 20, Color.WHITE, true);
-        panel.addView(title);
-        TextView message = text(activity,
-                "Accounts and sync are coming in a future update.", 14,
-                ZeroChillUi.color(activity, R.color.zc_text_secondary), false);
-        message.setPadding(0, dp(activity, 12), 0, dp(activity, 20));
-        panel.addView(message);
-        TextView close = text(activity, "Got it", 15, UiPalette.PRIMARY, true);
-        close.setGravity(Gravity.CENTER);
-        close.setBackground(ZeroChillUi.glass(activity));
-        close.setClickable(true);
-        close.setFocusable(true);
-        installPressFeedback(close);
-        close.setOnClickListener(v -> dialog.dismiss());
-        panel.addView(close, new LinearLayout.LayoutParams(-1, dp(activity, 48)));
-        dialog.setContentView(panel);
-        dialog.show();
-        Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.setLayout(Math.min(activity.getResources().getDisplayMetrics().widthPixels
-                    - dp(activity, 40), dp(activity, 360)), WindowManager.LayoutParams.WRAP_CONTENT);
-        }
-    }
-
     private static void addDragHandle(NativeMainActivity activity, LinearLayout panel) {
         View handle = new View(activity);
         handle.setBackground(roundedBackground(
@@ -288,7 +255,7 @@ final class LandscapeMoreDialog {
                 R.drawable.ic_more_account,
                 "Account",
                 "Coming Soon",
-                () -> showAccountComingSoon(activity)
+                () -> AccountComingSoonDialog.show(activity)
         ), 1);
         addQuickTile(activity, dialog, row, new Action(
                 R.drawable.ic_more_settings,
