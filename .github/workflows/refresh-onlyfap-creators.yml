@@ -53,7 +53,8 @@ jobs:
             --max-requests 1000 \
             --common-crawl-crawls 6 \
             --common-crawl-max-pages 20 \
-            --common-crawl-pause 1.0
+            --common-crawl-pause 1.0 \
+            --onlyhaven-max-requests 100
 
       - name: Upload generated catalog
         if: always()
