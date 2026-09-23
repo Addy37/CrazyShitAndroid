@@ -327,6 +327,12 @@ final class LandscapeMoreDialog {
         title.setGravity(Gravity.CENTER);
         title.setPadding(0, dp(activity, 5), 0, 0);
         tile.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        if ("Account".equals(action.title)) {
+            TextView status = text(activity, "Coming Soon", 10,
+                    ZeroChillUi.color(activity, R.color.zc_text_secondary), false);
+            status.setGravity(Gravity.CENTER);
+            tile.addView(status, new LinearLayout.LayoutParams(-1, -2));
+        }
         installPressFeedback(tile);
         tile.setOnClickListener(v -> runAction(v, dialog, action));
 
