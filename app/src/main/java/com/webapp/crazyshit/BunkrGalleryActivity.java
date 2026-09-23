@@ -22,6 +22,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.OptIn;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
@@ -43,7 +44,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Google Photos-style full-screen viewer for a mixed Bunkr album. */
-@UnstableApi
+@OptIn(markerClass = UnstableApi.class)
 public final class BunkrGalleryActivity extends Activity {
     public static final String EXTRA_SESSION_ID = "bunkr_gallery_session";
     public static final String EXTRA_TITLE = "bunkr_gallery_title";
