@@ -166,7 +166,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             STABLE_APK="$(find "$RUNNER_TEMP/latest-stable" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
             adb install "$STABLE_APK"
             adb shell dumpsys package com.addy37.crazyshitunofficial > /tmp/zc-before.txt
