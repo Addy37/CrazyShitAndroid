@@ -52,6 +52,7 @@ final class BunkrGalleryPagerAdapter
     private final Listener listener;
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
     private final Map<String, String> resolvedUrls = new HashMap<>();
+    private final Set<String> preloadedImages = new HashSet<>();
     private final Set<String> loading = new HashSet<>();
     private final Set<String> failed = new HashSet<>();
     private int activeVideoPosition = RecyclerView.NO_POSITION;
@@ -67,6 +68,7 @@ final class BunkrGalleryPagerAdapter
         items.clear();
         if (incoming != null) items.addAll(incoming);
         resolvedUrls.clear();
+        preloadedImages.clear();
         if (resolved != null) resolvedUrls.putAll(resolved);
         loading.clear();
         failed.clear();
@@ -145,6 +147,22 @@ final class BunkrGalleryPagerAdapter
     String resolvedUrl(int position) {
         NativeContentItem item = itemAt(position);
         return item == null ? "" : value(resolvedUrls.get(item.url));
+    }
+
+    /** Warm one full-screen image with the same Glide model and size used by the pager. */
+    void preloadImage(int position) {
+        NativeContentItem item = itemAt(position);
+        if (item == null || !item.isImage()) return;
+        String url = value(resolvedUrls.get(item.url));
+        if (url.isEmpty()) url = value(item.imageUrl);
+        if (url.isEmpty() || !preloadedImages.add(url)) return;
+        Glide.with(context)
+                .load(withHeaders(url, imageReferer(item)))
+                .fitCenter()
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .override(context.getResources().getDisplayMetrics().widthPixels,
+                        context.getResources().getDisplayMetrics().heightPixels)
+                .preload();
     }
 
     void activateVideo(int position, Player player) {
@@ -229,7 +247,7 @@ final class BunkrGalleryPagerAdapter
         holder.image.resetZoom();
         holder.image.setZoomEnabled(item.isImage());
         String resolved = value(resolvedUrls.get(item.url));
-        String preview = resolved.isEmpty() ? value(item.imageUrl) : resolved;
+        String preview = item.isVideo() || resolved.isEmpty() ? value(item.imageUrl) : resolved;
         boolean activeVideo = item.isVideo() && position == activeVideoPosition &&
                 activePlayer != null;
 

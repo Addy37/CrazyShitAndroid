@@ -2,12 +2,10 @@ package com.webapp.crazyshit;
 
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ProgressBar;
 
-import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
 
@@ -32,7 +30,6 @@ final class UiPolishController {
 
     private static final Map<NativeMainActivity, State> STATES = new WeakHashMap<>();
     private static final Map<View, Boolean> POLISHED = new WeakHashMap<>();
-    private static final Map<ViewPager2, Boolean> PAGERS = new WeakHashMap<>();
 
     private UiPolishController() {
     }
@@ -103,29 +100,12 @@ final class UiPolishController {
     ) {
         boolean chaos = insideChaos || view instanceof ChaosFeedView;
 
-        if (view instanceof ViewPager2) {
-            ViewPager2 pager = (ViewPager2) view;
-            if (!chaos && pager.getOrientation() == ViewPager2.ORIENTATION_HORIZONTAL &&
-                    !PAGERS.containsKey(pager)) {
-                PAGERS.put(pager, Boolean.TRUE);
-                pager.setPageTransformer((page, position) -> {
-                    float distance = Math.min(1f, Math.abs(position));
-                    float focus = 1f - distance;
-                    page.setAlpha(0.88f + (0.12f * focus));
-                    float scale = 0.985f + (0.015f * focus);
-                    page.setScaleX(scale);
-                    page.setScaleY(scale);
-                });
-            }
-        }
-
         if (view instanceof BottomNavigationView) {
             polishNavigation((BottomNavigationView) view);
         }
 
         if (view instanceof RecyclerView && !chaos && !(view.getParent() instanceof ViewPager2)) {
             RecyclerView recycler = (RecyclerView) view;
-            polishRecycler(recycler);
             state.watchRecycler(activity, recycler);
         }
 
@@ -155,17 +135,6 @@ final class UiPolishController {
         }
     }
 
-    private static void polishRecycler(RecyclerView recycler) {
-        if (recycler.getItemAnimator() != null) return;
-        DefaultItemAnimator animator = new DefaultItemAnimator();
-        animator.setAddDuration(180L);
-        animator.setRemoveDuration(150L);
-        animator.setMoveDuration(180L);
-        animator.setChangeDuration(140L);
-        animator.setSupportsChangeAnimations(false);
-        recycler.setItemAnimator(animator);
-    }
-
     private static void polishNavigation(BottomNavigationView nav) {
         StableBottomNavigationController.styleBar(nav);
     }
@@ -176,24 +145,13 @@ final class UiPolishController {
 
         float maxRadius = dp(activity, 16);
         if (card.getRadius() > maxRadius) card.setRadius(maxRadius);
-        card.setRippleColor(ColorStateList.valueOf(Color.argb(52, 251, 245, 6)));
+        card.setRippleColor(ColorStateList.valueOf(Color.argb(52, 8, 146, 208)));
 
         if (!card.isClickable()) return;
-        card.setOnTouchListener((v, event) -> {
-            int action = event.getActionMasked();
-            if (action == MotionEvent.ACTION_DOWN) {
-                v.animate().cancel();
-                v.animate().scaleX(0.985f).scaleY(0.985f).setDuration(85L).start();
-            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                v.animate().cancel();
-                v.animate().scaleX(1f).scaleY(1f).setDuration(145L).start();
-            }
-            return false;
-        });
+        ZeroChillMotion.installPressFeedback(card);
     }
 
     private static int dp(NativeMainActivity activity, int value) {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 }
-

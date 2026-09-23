@@ -23,19 +23,23 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Keeps Home, Collections, Chaos and Categories alive for true horizontal paging.
+ * Keeps Home, Shows, ShitTok and OnlyFap alive for true horizontal paging.
  * Chaos itself owns a nested vertical ViewPager2 for Shorts/Reels-style playback.
  */
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
     public static final int PAGE_HOME = 0;
     public static final int PAGE_SERIES = 1;
     public static final int PAGE_CHAOS = 2;
-    public static final int PAGE_CATEGORIES = 3;
+    /** Stable slot 3 is preserved for upgrades; it now hosts the public OnlyFap tab. */
+    public static final int PAGE_ONLYFAP = 3;
+    @Deprecated public static final int PAGE_LIBRARY = PAGE_ONLYFAP;
+    @Deprecated public static final int PAGE_CATEGORIES = PAGE_ONLYFAP;
     public static final int PAGE_COUNT = 4;
     private static final int PAGE_ARRAY_COUNT = 4;
     private static final int SERIES_SOURCE_CRAZYSHIT = 0;
     private static final int SERIES_SOURCE_EFUKT = 1;
     private static final int SERIES_SOURCE_BUNKR = 2;
+    private static final int SERIES_SOURCE_CATEGORIES = 3;
     private static final String PREF_SERIES_SOURCE = "native_series_source";
     private static final String PREF_FAPZONE_MODE = "native_fapzone_mode";
 
@@ -48,7 +52,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private enum PageKind {
         FEED,
         SERIES,
-        CATEGORIES
+        CATEGORIES,
+        ONLYFAP
     }
 
     private final Activity activity;
@@ -73,7 +78,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         pages[PAGE_HOME] = buildFeedPage(PAGE_HOME, "native_view_home", CrazyShitRepository.HOME);
         pages[PAGE_SERIES] = buildBrowsePage(PAGE_SERIES, PageKind.SERIES);
-        pages[PAGE_CATEGORIES] = buildBrowsePage(PAGE_CATEGORIES, PageKind.CATEGORIES);
+        pages[PAGE_ONLYFAP] = buildBrowsePage(PAGE_ONLYFAP, PageKind.ONLYFAP);
 
         chaosView = new ChaosFeedView(activity, new ChaosFeedView.Host() {
             @Override
@@ -86,9 +91,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public String titleFor(int position) {
-        if (position == PAGE_SERIES) return "Collections";
-        if (position == PAGE_CATEGORIES) return "Categories";
-        if (position == PAGE_CHAOS) return "Chaos";
+        if (position == PAGE_SERIES) return "Shows";
+        if (position == PAGE_ONLYFAP) return "OnlyFap";
+        if (position == PAGE_CHAOS) return "ShitTok";
         return "Home";
     }
 
@@ -142,16 +147,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         }
     }
 
-    public boolean isBunkrCollectionsSelected() {
-        Page page = pageAt(PAGE_SERIES);
-        return page != null && page.seriesSource == SERIES_SOURCE_BUNKR;
-    }
-
     public void onHostResume() {
         chaosView.onHostResume();
-        Page collections = pageAt(PAGE_SERIES);
-        if (collections != null && collections.seriesSource == SERIES_SOURCE_BUNKR
-                && collections.browseAdapter != null) collections.browseAdapter.notifyDataSetChanged();
+        Page onlyFap = pageAt(PAGE_ONLYFAP);
+        if (onlyFap != null && onlyFap.browseAdapter != null) onlyFap.browseAdapter.notifyDataSetChanged();
         Page home = pageAt(PAGE_HOME);
         if (home != null && home.feedAdapter != null) home.feedAdapter.refreshPlaybackState();
     }
@@ -195,7 +194,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         FrameLayout container = new FrameLayout(parent.getContext());
-        container.setBackgroundColor(Color.BLACK);
+        container.setBackgroundColor(ZeroChillUi.background(activity));
         container.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
         return new Holder(container);
     }
@@ -237,26 +236,37 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 if (item == null || item.isSection()) return;
                 host.onOpenComments(item);
             }
-        });
+        }, true);
         page.recycler.setAdapter(page.feedAdapter);
-        page.homeSource = Math.max(0, Math.min(3, activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getInt("home_source", 0)));
+        android.content.SharedPreferences homePrefs =
+                activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
+        int savedHomeSource = homePrefs.getInt("home_source", 1);
+        page.homeSource = savedHomeSource >= 1 && savedHomeSource <= 3 ? savedHomeSource : 1;
+        if (savedHomeSource != page.homeSource) {
+            homePrefs.edit().putInt("home_source", page.homeSource).apply();
+        }
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(activity);
         scroll.setHorizontalScrollBarEnabled(false);
-        scroll.setBackgroundColor(Color.BLACK);
+        scroll.setClipChildren(false);
+        scroll.setClipToPadding(false);
+        scroll.setBackground(ZeroChillUi.sourceRailGlass(activity));
+        scroll.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
         LinearLayout sources = new LinearLayout(activity);
+        sources.setClipChildren(false);
+        sources.setClipToPadding(false);
         sources.setGravity(Gravity.CENTER_VERTICAL);
-        sources.setPadding(dp(12), dp(4), dp(12), dp(4));
-        String[] names = {"All", "CrazyShit", "EFukt", "Fapzone"};
-        for (int source = 0; source < names.length; source++) {
-            final int selected = source;
-            TextView chip = BrowseUi.action(activity, names[source], names[source] + " Home feed", v -> {
+        sources.setPadding(dp(12), dp(6), dp(12), dp(6));
+        String[] names = {"CrazyShit", "EFukt", "Kaotic"};
+        int[] sourceIds = {1, 2, 3};
+        for (int chipIndex = 0; chipIndex < names.length; chipIndex++) {
+            final int selected = sourceIds[chipIndex];
+            TextView chip = BrowseUi.action(activity, names[chipIndex], names[chipIndex] + " Home feed", v -> {
                 if (page.homeSource == selected) {
                     if (!page.loading && page.itemCount() == 0) refresh(page.index);
                     return;
                 }
                 page.homeSource = selected;
-                activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE).edit().putInt("home_source", selected).apply();
+                homePrefs.edit().putInt("home_source", selected).apply();
                 styleHomeSources(page);
                 page.feedAdapter.replace(java.util.Collections.emptyList());
                 page.recycler.scrollToPosition(0);
@@ -269,12 +279,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.homeChips.add(chip);
         }
         scroll.addView(sources);
-        FrameLayout.LayoutParams feedParams = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-        feedParams.topMargin = dp(56);
-        page.refresh.setLayoutParams(feedParams);
-        page.root.addView(scroll, new FrameLayout.LayoutParams(-1, dp(56)));
+        page.recycler.setPadding(0, dp(65), 0, dp(18));
+        FrameLayout.LayoutParams sourceParams = new FrameLayout.LayoutParams(-1, dp(56));
+        sourceParams.setMargins(dp(8), dp(2), dp(8), dp(2));
+        page.root.addView(scroll, sourceParams);
+        ((FrostedOverlayLayout) page.root).setFrostedOverlay(scroll);
         FrameLayout.LayoutParams emptyParams = (FrameLayout.LayoutParams) page.empty.getLayoutParams();
-        emptyParams.topMargin = dp(56);
+        emptyParams.topMargin = dp(60);
         page.empty.setLayoutParams(emptyParams);
         page.empty.setOnClickListener(v -> refresh(page.index));
         page.empty.setContentDescription("Retry Home feed");
@@ -339,69 +350,88 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (kind == PageKind.SERIES) {
             addSeriesSourceSelector(page);
             page.empty.setOnClickListener(v -> {
-                if (page.seriesSource == SERIES_SOURCE_BUNKR) {
-                    refresh(PAGE_SERIES);
-                    return;
-                }
-                String url = page.seriesSource == SERIES_SOURCE_BUNKR
-                        ? BunkrRepository.mostFilesAlbumsUrl()
-                        : page.seriesSource == SERIES_SOURCE_EFUKT
+                String url = page.seriesSource == SERIES_SOURCE_EFUKT
                         ? EfuktRepository.SERIES
+                        : page.seriesSource == SERIES_SOURCE_CATEGORIES
+                        ? BrowseRepository.CATEGORIES
                         : BrowseRepository.SERIES;
                 android.content.Intent intent = new android.content.Intent(activity, WebFallbackActivity.class);
                 intent.putExtra(WebFallbackActivity.EXTRA_URL, url);
                 activity.startActivity(intent);
             });
+        } else if (kind == PageKind.ONLYFAP) {
+            addOnlyFapControls(page);
+            page.empty.setOnClickListener(v -> refresh(PAGE_ONLYFAP));
         }
         return page;
     }
 
     private void addSeriesSourceSelector(Page page) {
-        page.seriesSource = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT);
-        page.fapzoneMode = activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
-                .getInt(PREF_FAPZONE_MODE, FapzoneCreatorRepository.MODE_TOP_50);
-        if (page.seriesSource != SERIES_SOURCE_EFUKT && page.seriesSource != SERIES_SOURCE_BUNKR) {
+        android.content.SharedPreferences prefs =
+                activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
+        int storedSource = prefs.getInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT);
+        if (storedSource == SERIES_SOURCE_CRAZYSHIT ||
+                storedSource == SERIES_SOURCE_EFUKT ||
+                storedSource == SERIES_SOURCE_CATEGORIES) {
+            page.seriesSource = storedSource;
+        } else {
             page.seriesSource = SERIES_SOURCE_CRAZYSHIT;
-        }
-        if (page.fapzoneMode < FapzoneCreatorRepository.MODE_TOP_50 ||
-                page.fapzoneMode > FapzoneCreatorRepository.MODE_POPULAR) {
-            page.fapzoneMode = FapzoneCreatorRepository.MODE_TOP_50;
+            prefs.edit().putInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT).apply();
         }
 
         LinearLayout selector = new LinearLayout(activity);
         selector.setOrientation(LinearLayout.HORIZONTAL);
+        selector.setClipChildren(false);
+        selector.setClipToPadding(false);
         selector.setGravity(Gravity.CENTER);
         selector.setPadding(dp(12), dp(8), dp(12), dp(8));
-        selector.setBackgroundColor(Color.BLACK);
+        selector.setBackground(ZeroChillUi.sourceRailGlass(activity));
+        selector.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
 
         page.crazyShitSource = seriesSourceButton("CrazyShit");
         page.efuktSource = seriesSourceButton("EFukt");
-        page.bunkrSource = seriesSourceButton("Fapzone");
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(0, dp(40), 1f);
-        buttonParams.setMarginEnd(dp(4));
-        selector.addView(page.crazyShitSource, buttonParams);
-        LinearLayout.LayoutParams secondParams = new LinearLayout.LayoutParams(0, dp(40), 1f);
-        secondParams.setMarginStart(dp(4));
-        secondParams.setMarginEnd(dp(4));
-        selector.addView(page.efuktSource, secondParams);
-        LinearLayout.LayoutParams thirdParams = new LinearLayout.LayoutParams(0, dp(40), 1f);
-        thirdParams.setMarginStart(dp(4));
-        selector.addView(page.bunkrSource, thirdParams);
+        page.categoriesSource = seriesSourceButton("Categories");
+        TextView[] sourceButtons = {
+                page.crazyShitSource,
+                page.efuktSource,
+                page.categoriesSource
+        };
+        for (int index = 0; index < sourceButtons.length; index++) {
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(40), 1f);
+            if (index > 0) params.setMarginStart(dp(4));
+            if (index + 1 < sourceButtons.length) params.setMarginEnd(dp(4));
+            selector.addView(sourceButtons[index], params);
+        }
 
         page.crazyShitSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CRAZYSHIT));
         page.efuktSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_EFUKT));
-        page.bunkrSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_BUNKR));
+        page.categoriesSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CATEGORIES));
+
         FrameLayout.LayoutParams selectorParams = new FrameLayout.LayoutParams(-1, dp(56));
         selectorParams.gravity = Gravity.TOP;
+        selectorParams.setMargins(dp(8), 0, dp(8), 0);
         page.root.addView(selector, selectorParams);
+        ((FrostedOverlayLayout) page.root).setFrostedOverlay(selector);
+        updateSeriesSourceButtons(page);
+    }
 
-        LinearLayout fapzoneModes = new LinearLayout(activity);
-        fapzoneModes.setOrientation(LinearLayout.HORIZONTAL);
-        fapzoneModes.setGravity(Gravity.CENTER);
-        fapzoneModes.setPadding(dp(12), dp(6), dp(12), dp(6));
-        fapzoneModes.setBackgroundColor(Color.BLACK);
-        page.fapzoneTop = fapzoneModeButton("Top 50");
+    private void addOnlyFapControls(Page page) {
+        android.content.SharedPreferences prefs =
+                activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
+        page.fapzoneMode = prefs.getInt(PREF_FAPZONE_MODE, FapzoneCreatorRepository.MODE_TOP_50);
+        if (page.fapzoneMode < FapzoneCreatorRepository.MODE_TOP_50 ||
+                page.fapzoneMode > FapzoneCreatorRepository.MODE_POPULAR) {
+            page.fapzoneMode = FapzoneCreatorRepository.MODE_TOP_50;
+            prefs.edit().putInt(PREF_FAPZONE_MODE, page.fapzoneMode).apply();
+        }
+
+        LinearLayout modes = new LinearLayout(activity);
+        modes.setOrientation(LinearLayout.HORIZONTAL);
+        modes.setGravity(Gravity.CENTER);
+        modes.setPadding(dp(12), dp(6), dp(12), dp(6));
+        modes.setBackground(ZeroChillUi.sourceRailGlass(activity));
+
+        page.fapzoneTop = fapzoneModeButton("Trending");
         page.fapzoneNew = fapzoneModeButton("New");
         page.fapzoneHot = fapzoneModeButton("Hot");
         page.fapzonePopular = fapzoneModeButton("Popular");
@@ -415,35 +445,30 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(36), 1f);
             if (index > 0) params.setMarginStart(dp(3));
             if (index + 1 < modeButtons.length) params.setMarginEnd(dp(3));
-            fapzoneModes.addView(modeButtons[index], params);
+            modes.addView(modeButtons[index], params);
         }
+
         page.fapzoneTop.setOnClickListener(v -> switchFapzoneMode(
-                page,
-                FapzoneCreatorRepository.MODE_TOP_50
-        ));
+                page, FapzoneCreatorRepository.MODE_TOP_50));
         page.fapzoneNew.setOnClickListener(v -> switchFapzoneMode(
-                page,
-                FapzoneCreatorRepository.MODE_NEW
-        ));
+                page, FapzoneCreatorRepository.MODE_NEW));
         page.fapzoneHot.setOnClickListener(v -> switchFapzoneMode(
-                page,
-                FapzoneCreatorRepository.MODE_HOT
-        ));
+                page, FapzoneCreatorRepository.MODE_HOT));
         page.fapzonePopular.setOnClickListener(v -> switchFapzoneMode(
-                page,
-                FapzoneCreatorRepository.MODE_POPULAR
-        ));
-        page.fapzoneModes = fapzoneModes;
-        FrameLayout.LayoutParams modesParams = new FrameLayout.LayoutParams(-1, dp(52));
-        modesParams.gravity = Gravity.TOP;
-        modesParams.topMargin = dp(56);
-        page.root.addView(fapzoneModes, modesParams);
+                page, FapzoneCreatorRepository.MODE_POPULAR));
+        page.fapzoneModes = modes;
+
+        FrameLayout.LayoutParams modeParams = new FrameLayout.LayoutParams(-1, dp(52));
+        modeParams.gravity = Gravity.TOP;
+        modeParams.setMargins(dp(8), 0, dp(8), 0);
+        page.root.addView(modes, modeParams);
+        ((FrostedOverlayLayout) page.root).setFrostedOverlay(modes);
 
         LinearLayout caption = new LinearLayout(activity);
         caption.setOrientation(LinearLayout.HORIZONTAL);
         caption.setGravity(Gravity.CENTER_VERTICAL);
         caption.setPadding(dp(17), dp(7), dp(17), dp(9));
-        caption.setBackgroundColor(Color.BLACK);
+        caption.setBackground(ZeroChillUi.panelGlass(activity));
 
         LinearLayout captionCopy = new LinearLayout(activity);
         captionCopy.setOrientation(LinearLayout.VERTICAL);
@@ -460,7 +485,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         TextView captionHint = new TextView(activity);
         captionHint.setText(FapzoneCreatorRepository.hintFor(page.fapzoneMode));
-        captionHint.setTextColor(Color.rgb(164, 164, 174));
+        ZeroChillUi.styleSecondary(captionHint);
         captionHint.setTextSize(11.5f);
         captionHint.setMaxLines(1);
         captionHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -488,11 +513,21 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.seriesCaptionHint = captionHint;
         page.seriesCaptionBadge = countBadge;
         page.seriesCaption = caption;
+
         FrameLayout.LayoutParams captionParams = new FrameLayout.LayoutParams(-1, dp(64));
         captionParams.gravity = Gravity.TOP;
-        captionParams.topMargin = dp(108);
+        captionParams.setMargins(dp(8), dp(56), dp(8), 0);
         page.root.addView(caption, captionParams);
-        updateSeriesSourceButtons(page);
+
+        FrameLayout.LayoutParams refreshParams =
+                (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
+        refreshParams.topMargin = 0;
+        page.refresh.setLayoutParams(refreshParams);
+        page.recycler.setPadding(dp(4), dp(127), dp(4), dp(26));
+        page.browseAdapter.setWideCreatorCards(true);
+        applyBrowseLayout(page, true);
+        updateFapzoneModeButtons(page);
+        updateFapzoneCaption(page);
     }
 
     private TextView fapzoneModeButton(String label) {
@@ -503,7 +538,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         button.setGravity(Gravity.CENTER);
         button.setClickable(true);
         button.setFocusable(true);
-        button.setContentDescription("Show " + label + " Fapzone creators");
+        button.setContentDescription("Show " + label + " OnlyFap creators");
         return button;
     }
 
@@ -538,8 +573,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void switchFapzoneMode(Page page, int mode) {
-        if (page == null || page.kind != PageKind.SERIES ||
-                page.seriesSource != SERIES_SOURCE_BUNKR || page.fapzoneMode == mode) return;
+        if (page == null || page.kind != PageKind.ONLYFAP || page.fapzoneMode == mode) return;
         page.fapzoneMode = mode;
         activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
                 .edit()
@@ -560,33 +594,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void updateSeriesSourceButtons(Page page) {
         styleSeriesSourceButton(page.crazyShitSource, page.seriesSource == SERIES_SOURCE_CRAZYSHIT);
         styleSeriesSourceButton(page.efuktSource, page.seriesSource == SERIES_SOURCE_EFUKT);
-        styleSeriesSourceButton(page.bunkrSource, page.seriesSource == SERIES_SOURCE_BUNKR);
-        boolean showFapzoneChrome = page.seriesSource == SERIES_SOURCE_BUNKR;
-        if (page.fapzoneModes != null) {
-            page.fapzoneModes.setVisibility(showFapzoneChrome ? View.VISIBLE : View.GONE);
-        }
-        if (page.seriesCaption != null) {
-            page.seriesCaption.setVisibility(showFapzoneChrome ? View.VISIBLE : View.GONE);
-        }
-        updateFapzoneModeButtons(page);
-        updateFapzoneCaption(page);
+        styleSeriesSourceButton(page.categoriesSource, page.seriesSource == SERIES_SOURCE_CATEGORIES);
         if (page.refresh != null) {
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-            params.topMargin = dp(showFapzoneChrome ? 172 : 56);
+            params.topMargin = 0;
             page.refresh.setLayoutParams(params);
         }
         if (page.recycler != null) {
-            page.recycler.setPadding(
-                    showFapzoneChrome ? dp(4) : 0,
-                    showFapzoneChrome ? dp(3) : dp(5),
-                    showFapzoneChrome ? dp(4) : 0,
-                    showFapzoneChrome ? dp(26) : dp(18)
-            );
+            page.recycler.setPadding(0, dp(61), 0, dp(18));
         }
         if (page.browseAdapter != null) {
-            page.browseAdapter.setWideCreatorCards(showFapzoneChrome);
+            page.browseAdapter.setWideCreatorCards(false);
         }
-        applyBrowseLayout(page, showFapzoneChrome);
+        applyBrowseLayout(page, false);
     }
 
     private void updateFapzoneModeButtons(Page page) {
@@ -655,57 +675,39 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void styleSeriesSourceButton(TextView button, boolean selected) {
-        if (button == null) return;
-        GradientDrawable background = new GradientDrawable();
-        background.setCornerRadius(dp(20));
-        background.setColor(selected ? UiPalette.PRIMARY : Color.rgb(27, 27, 31));
-        background.setStroke(dp(1), selected ? UiPalette.PRIMARY : Color.rgb(57, 57, 64));
-        button.setBackground(background);
-        button.setTextColor(selected ? Color.BLACK : Color.rgb(220, 220, 226));
-        button.setSelected(selected);
+        ZeroChillUi.styleSourceRailChip(button, selected);
     }
 
     private void styleFapzoneModeButton(TextView button, boolean selected) {
-        if (button == null) return;
-        GradientDrawable background = new GradientDrawable();
-        background.setCornerRadius(dp(11));
-        background.setColor(selected ? Color.rgb(46, 46, 18) : Color.rgb(24, 24, 28));
-        background.setStroke(
-                dp(1),
-                selected ? UiPalette.PRIMARY : Color.rgb(52, 52, 59)
-        );
-        button.setBackground(background);
-        button.setTextColor(selected ? UiPalette.PRIMARY : Color.rgb(188, 188, 198));
-        button.setSelected(selected);
+        ZeroChillUi.styleSourceRailChip(button, selected);
     }
 
     private Page createPageShell(int index, PageKind kind, String prefKey, String baseUrl) {
         Page page = new Page(index, kind, prefKey, baseUrl);
-        page.root = new FrameLayout(activity);
-        page.root.setBackgroundColor(Color.BLACK);
+        page.root = kind == PageKind.FEED || kind == PageKind.SERIES ||
+                kind == PageKind.ONLYFAP
+                ? new FrostedOverlayLayout(activity)
+                : new FrameLayout(activity);
+        page.root.setBackgroundColor(ZeroChillUi.background(activity));
 
         page.refresh = new SwipeRefreshLayout(activity);
         page.refresh.setColorSchemeColors(UiPalette.PRIMARY);
         page.root.addView(page.refresh, new FrameLayout.LayoutParams(-1, -1));
 
         page.recycler = new RecyclerView(activity);
-        page.recycler.setBackgroundColor(Color.BLACK);
+        page.recycler.setBackgroundColor(ZeroChillUi.background(activity));
         page.recycler.setClipToPadding(false);
         page.recycler.setPadding(0, dp(5), 0, dp(18));
         page.recycler.setItemAnimator(null);
         page.refresh.addView(page.recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
 
-        page.progress = new ProgressBar(activity);
-        page.progress.setIndeterminate(true);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
+        page.progress = new ZeroChillLoadingView(activity, null);
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(72), dp(72));
         progressParams.gravity = Gravity.CENTER;
         page.root.addView(page.progress, progressParams);
 
         page.empty = new TextView(activity);
-        page.empty.setTextColor(Color.rgb(190, 190, 198));
-        page.empty.setTextSize(15);
-        page.empty.setGravity(Gravity.CENTER);
-        page.empty.setPadding(dp(28), dp(28), dp(28), dp(28));
+        ZeroChillUi.styleEmpty(page.empty);
         page.empty.setVisibility(View.GONE);
         page.root.addView(page.empty, new FrameLayout.LayoutParams(-1, -1));
 
@@ -751,10 +753,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void styleHomeSources(Page page) {
         for (int i = 0; i < page.homeChips.size(); i++) {
             TextView chip = page.homeChips.get(i);
-            boolean selected = i == page.homeSource;
-            chip.setSelected(selected);
-            chip.setTextColor(selected ? UiPalette.ON_PRIMARY : BrowseUi.MUTED);
-            chip.setBackground(BrowseUi.rounded(activity, selected ? UiPalette.PRIMARY : BrowseUi.SURFACE, 12));
+            boolean selected = (i + 1) == page.homeSource;
+            ZeroChillUi.styleSourceRailChip(chip, selected);
         }
     }
 
@@ -771,15 +771,17 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.loadTask = io.submit(() -> {
             try {
                 List<NativeContentItem> result;
-                if (page.kind == PageKind.SERIES) {
-                    result = page.seriesSource == SERIES_SOURCE_BUNKR
-                            ? fapzoneCreatorRepository.fetch(
-                                    activity,
-                                    page.fapzoneMode,
-                                    items -> showPopularCreatorProgress(page, generation, items)
-                            )
-                            : page.seriesSource == SERIES_SOURCE_EFUKT
+                if (page.kind == PageKind.ONLYFAP) {
+                    result = fapzoneCreatorRepository.fetch(
+                            activity,
+                            page.fapzoneMode,
+                            items -> showPopularCreatorProgress(page, generation, items)
+                    );
+                } else if (page.kind == PageKind.SERIES) {
+                    result = page.seriesSource == SERIES_SOURCE_EFUKT
                             ? efuktRepository.fetchSeries(activity)
+                            : page.seriesSource == SERIES_SOURCE_CATEGORIES
+                            ? browseRepository.fetchCategories(activity)
                             : browseRepository.fetchSeries(activity);
                 } else if (page.kind == PageKind.CATEGORIES) {
                     result = browseRepository.fetchCategories(activity);
@@ -816,14 +818,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     }
 
                     if (page.itemCount() == 0) {
-                        page.empty.setText(page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_BUNKR
-                                ? "Couldn't load this Fapzone list right now.\nPull down to try again."
+                        page.empty.setText(page.kind == PageKind.ONLYFAP
+                                ? "Couldn't load this OnlyFap list right now.\nPull down to try again."
                                 : page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_EFUKT
                                 ? "Couldn't load EFukt Series here.\nIt may be unavailable in your region.\nTap to open the website."
-                                : page.kind == PageKind.SERIES
-                                ? "Couldn't load CrazyShit Series right now."
-                                : page.kind == PageKind.CATEGORIES
+                                : page.seriesSource == SERIES_SOURCE_CATEGORIES
                                 ? "Couldn't load Categories right now."
+                                : page.kind == PageKind.SERIES
+                                ? "Couldn't load CrazyShit right now."
                                 : "No videos returned for this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
@@ -835,14 +837,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     page.progress.setVisibility(View.GONE);
                     page.refresh.setRefreshing(false);
                     if (page.itemCount() == 0) {
-                        page.empty.setText(page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_BUNKR
-                                ? "Couldn't load this Fapzone list right now.\nPull down to try again."
+                        page.empty.setText(page.kind == PageKind.ONLYFAP
+                                ? "Couldn't load this OnlyFap list right now.\nPull down to try again."
                                 : page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_EFUKT
                                 ? "Couldn't load EFukt Series here.\nIt may be unavailable in your region.\nTap to open the website."
-                                : page.kind == PageKind.SERIES
-                                ? "Couldn't load CrazyShit Series right now."
-                                : page.kind == PageKind.CATEGORIES
+                                : page.seriesSource == SERIES_SOURCE_CATEGORIES
                                 ? "Couldn't load Categories right now."
+                                : page.kind == PageKind.SERIES
+                                ? "Couldn't load CrazyShit right now."
                                 : "Couldn't load this source.\nTap to retry or choose another source.");
                         page.empty.setVisibility(View.VISIBLE);
                     }
@@ -859,7 +861,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (items == null || items.isEmpty()) return;
         activity.runOnUiThread(() -> {
             if (generation != page.generation ||
-                    page.seriesSource != SERIES_SOURCE_BUNKR ||
+                    page.kind != PageKind.ONLYFAP ||
                     page.browseAdapter == null) return;
             page.progress.setVisibility(View.GONE);
             page.refresh.setRefreshing(false);
@@ -871,7 +873,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void requestBrowseArtwork(Page page, int generation) {
         if (page == null || page.browseAdapter == null || !page.browseAdapter.hasMissingArtwork()) return;
 
-        if (page.kind == PageKind.CATEGORIES) {
+        if (page.kind == PageKind.CATEGORIES ||
+                (page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_CATEGORIES)) {
             browseArtworkResolver.request(BrowseRepository.CATEGORIES, "/category/", (source, artwork) -> {
                 if (generation != page.generation) return;
                 page.browseAdapter.applyArtwork(artwork);
@@ -919,13 +922,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         FrameLayout root;
         SwipeRefreshLayout refresh;
         RecyclerView recycler;
-        ProgressBar progress;
+        View progress;
         TextView empty;
         NativeFeedAdapter feedAdapter;
         NativeCategoryAdapter browseAdapter;
         TextView crazyShitSource;
         TextView efuktSource;
         TextView bunkrSource;
+        TextView categoriesSource;
         View fapzoneModes;
         TextView fapzoneTop;
         TextView fapzoneNew;

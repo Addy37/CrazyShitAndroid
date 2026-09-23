@@ -6,8 +6,9 @@
     <application
         android:name=".AdminApplication"
         android:allowBackup="false"
-        android:icon="@drawable/ic_admin"
-        android:label="CrazyShit Admin"
+        android:icon="@mipmap/ic_admin_launcher"
+        android:label="ZeroChill Admin"
+        android:roundIcon="@mipmap/ic_admin_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.CrazyShitAdmin">
         <activity

@@ -16,8 +16,8 @@ android {
         applicationId = "com.addy37.crazyshitunofficial"
         minSdk = 26
         targetSdk = 35
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_000_005
-        versionName = System.getenv("APP_VERSION_NAME") ?: "3.0.5"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 3_001_000
+        versionName = System.getenv("APP_VERSION_NAME") ?: "3.1.0"
         buildConfigField(
             "String",
             "FEEDBACK_ENDPOINT",
@@ -71,7 +71,7 @@ android {
             // Betas remain side-by-side with stable while using the same persistent signing key.
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-            resValue("string", "app_name", "CrazyShit Beta")
+            resValue("string", "app_name", "ZeroChill Beta")
             signingConfigs.findByName("release")?.let {
                 signingConfig = it
             }

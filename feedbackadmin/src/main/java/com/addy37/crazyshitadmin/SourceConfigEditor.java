@@ -27,7 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Friendly editor for the data-only source configuration used by CrazyShit. */
+/** Friendly editor for the data-only source configuration used by ZeroChill. */
 final class SourceConfigEditor extends LinearLayout {
     interface OnChangedListener { void onChanged(); }
 
@@ -84,6 +84,10 @@ final class SourceConfigEditor extends LinearLayout {
         addView(sourceCard(sources, "bunkr", "Bunkr"));
         addView(sourceCard(sources, "wikifeet", "WikiFeet"));
         addView(sourceCard(sources, "wikifeetx", "WikiFeet X"));
+        addView(sourceCard(sources, "kaotic", "Kaotic"));
+        addView(sourceCard(sources, "theync", "TheYNC"));
+        addView(sourceCard(sources, "itemfix", "ItemFix"));
+        addView(sourceCard(sources, "onlyhaven", "OnlyHaven"));
 
         MaterialButton raw = button("Advanced: full JSON");
         raw.setOnClickListener(v -> showRawConfigDialog());
@@ -175,7 +179,7 @@ final class SourceConfigEditor extends LinearLayout {
             addField(fields, bindings, source, "Signing timeout (ms)", "signTimeoutMs", FIELD_NUMBER);
             addField(fields, bindings, source, "Referer override", "refererOverride", FIELD_TEXT);
             addField(fields, bindings, source, "User-Agent", "userAgent", FIELD_TEXT);
-        } else {
+        } else if ("wikifeet".equals(id) || "wikifeetx".equals(id)) {
             addField(fields, bindings, source, "Base URL", "baseUrl", FIELD_TEXT);
             addField(fields, bindings, source, "Fallback domains", "fallbackDomains", FIELD_LIST);
             addField(fields, bindings, source, "Picture host", "pictureHost", FIELD_TEXT);
@@ -184,6 +188,13 @@ final class SourceConfigEditor extends LinearLayout {
             addField(fields, bindings, source, "Retry count", "retryCount", FIELD_NUMBER);
             addField(fields, bindings, source, "Request timeout (ms)", "requestTimeoutMs", FIELD_NUMBER);
             addField(fields, bindings, source, "AJAX timeout (ms)", "ajaxTimeoutMs", FIELD_NUMBER);
+            addField(fields, bindings, source, "Referer override", "refererOverride", FIELD_TEXT);
+            addField(fields, bindings, source, "User-Agent", "userAgent", FIELD_TEXT);
+        } else {
+            addField(fields, bindings, source, "Base URL", "baseUrl", FIELD_TEXT);
+            addField(fields, bindings, source, "Fallback domains", "fallbackDomains", FIELD_LIST);
+            addField(fields, bindings, source, "Retry count", "retryCount", FIELD_NUMBER);
+            addField(fields, bindings, source, "Request timeout (ms)", "requestTimeoutMs", FIELD_NUMBER);
             addField(fields, bindings, source, "Referer override", "refererOverride", FIELD_TEXT);
             addField(fields, bindings, source, "User-Agent", "userAgent", FIELD_TEXT);
         }

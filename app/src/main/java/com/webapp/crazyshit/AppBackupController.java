@@ -20,7 +20,7 @@ final class AppBackupController {
 
     void exportFile() {
         Intent picker = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-                .setType("application/json").putExtra(Intent.EXTRA_TITLE, "CrazyShit-backup-"
+                .setType("application/json").putExtra(Intent.EXTRA_TITLE, "ZeroChill-backup-"
                         + new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(new java.util.Date()) + ".json");
         try { activity.startActivityForResult(picker, EXPORT); }
         catch (Exception unavailable) { toast("No file picker is available."); }

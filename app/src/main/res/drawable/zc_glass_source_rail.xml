@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Source rails use a quieter glass recipe than the main navigation. -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#5C1B222A"
+                android:centerColor="#4411171E"
+                android:endColor="#66070A0E" />
+            <stroke android:width="1dp" android:color="#385BBBE2" />
+            <corners android:radius="@dimen/zc_radius_pill" />
+        </shape>
+    </item>
+
+    <item android:left="2dp" android:top="2dp" android:right="2dp" android:bottom="2dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#120892D0"
+                android:centerColor="#0A5BBBE2"
+                android:endColor="#1C000000" />
+            <stroke android:width="1dp" android:color="#10FFFFFF" />
+            <corners android:radius="28dp" />
+        </shape>
+    </item>
+
+    <!-- Centered source-rail sheen stays subtle and aligned with the outer curve. -->
+    <item
+        android:left="24dp"
+        android:top="3dp"
+        android:right="24dp"
+        android:height="7dp"
+        android:gravity="top">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#10B7E0F2"
+                android:centerColor="#065BBBE2"
+                android:endColor="#00FFFFFF" />
+            <corners android:radius="@dimen/zc_radius_pill" />
+        </shape>
+    </item>
+</layer-list>

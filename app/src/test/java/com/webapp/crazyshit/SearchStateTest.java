@@ -4,6 +4,7 @@ import android.app.Application;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.EditText;
+import androidx.recyclerview.widget.RecyclerView;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -18,6 +19,18 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class SearchStateTest {
+    @Test public void onlyFapSearchUsesCreatorResultCards() {
+        Intent intent = new Intent(RuntimeEnvironment.getApplication(), SearchActivity.class)
+                .putExtra("scope", "bunkr");
+        ActivityController<SearchActivity> controller =
+                Robolectric.buildActivity(SearchActivity.class, intent).create().start().resume();
+
+        RecyclerView recycler = ReflectionHelpers.getField(controller.get(), "recycler");
+        assertTrue(recycler.getAdapter() instanceof OnlyFapCreatorSearchAdapter);
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void restoringFapzoneSearchKeepsTextWithoutOpeningAnAlbum() {
         Intent intent = new Intent(RuntimeEnvironment.getApplication(), SearchActivity.class).putExtra("scope", "bunkr");
         ActivityController<SearchActivity> original = Robolectric.buildActivity(SearchActivity.class, intent).create().start().resume();

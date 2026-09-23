@@ -22,8 +22,8 @@ final class ChaosPlaybackDiagnostics {
     ) {
         String pageUrl = item == null ? "" : clean(item.url);
         String source = pageUrl.toLowerCase(Locale.US).contains("/shitshow/")
-                ? "Shit Show via Chaos"
-                : "CrazyShit site feed via Chaos";
+                ? "Shit Show via ShitTok"
+                : "CrazyShit site feed via ShitTok";
 
         StringBuilder report = new StringBuilder();
         report.append("CrazyShit playback report\n");

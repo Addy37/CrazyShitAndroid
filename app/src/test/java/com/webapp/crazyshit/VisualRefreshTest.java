@@ -7,6 +7,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.os.Looper;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.*;
 import androidx.recyclerview.widget.RecyclerView;
 import java.io.File;
@@ -42,13 +43,13 @@ public class VisualRefreshTest {
         try (FileOutputStream out = new FileOutputStream(new File(dir, name + ".png"))) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); }
         bitmap.recycle();
     }
-    @Test public void fullHomeKeepsRefreshStyleAcrossLateControllersAndTabChanges() throws Exception {
+    @Test public void fullHomeKeepsZeroChillGlassAcrossLateControllersAndTabChanges() throws Exception {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         android.content.SharedPreferences prefs = context.getSharedPreferences("app_prefs", 0);
         prefs.edit().putBoolean("access_notice_2_8_3_accepted", true)
                 .putBoolean("visual_refresh_2_11_1", true)
                 .putBoolean("legacy_home_v2_10_restored", false)
-                .putInt("home_source", 0)
+                .putInt("home_source", 3)
                 .putInt("native_view_home", NativeFeedAdapter.VIEW_CARDS).apply();
         android.os.Bundle state = new android.os.Bundle(); state.putInt("primary_page", 0);
         ActivityController<NativeMainActivity> screen = Robolectric.buildActivity(NativeMainActivity.class)
@@ -74,21 +75,45 @@ public class VisualRefreshTest {
         NativeFeedAdapter feed = ReflectionHelpers.getField(home, "feedAdapter");
         assertEquals(2, feed.getItemCount());
         assertTrue(feed.isSectionAt(0));
-        assertEquals(NativeFeedAdapter.VIEW_LIST, pager.viewMode(MainPagerAdapter.PAGE_HOME));
-        assertEquals(1, prefs.getInt("home_source", -1));
-        assertTrue(prefs.getBoolean("legacy_home_v2_10_restored", false));
+        assertEquals(NativeFeedAdapter.VIEW_CARDS, pager.viewMode(MainPagerAdapter.PAGE_HOME));
+        assertEquals(3, prefs.getInt("home_source", -1));
         java.util.List<TextView> homeChips = ReflectionHelpers.getField(home, "homeChips");
+        assertEquals(3, homeChips.size());
         View chipRow = (View) homeChips.get(0).getParent();
         View sourceBar = (View) chipRow.getParent();
-        assertEquals(View.GONE, sourceBar.getVisibility());
+        assertEquals(View.VISIBLE, sourceBar.getVisibility());
+        assertFalse(((android.view.ViewGroup) sourceBar).getClipChildren());
+        assertFalse(((android.view.ViewGroup) sourceBar).getClipToPadding());
+        assertFalse(((android.view.ViewGroup) chipRow).getClipChildren());
+        assertFalse(((android.view.ViewGroup) chipRow).getClipToPadding());
+        View homeRoot = (View) sourceBar.getParent();
+        assertTrue(homeRoot instanceof FrostedOverlayLayout);
+        assertSame(sourceBar, ((FrostedOverlayLayout) homeRoot).frostedOverlayForTest());
+        androidx.swiperefreshlayout.widget.SwipeRefreshLayout homeRefresh =
+                ReflectionHelpers.getField(home, "refresh");
+        assertEquals(0, ((FrameLayout.LayoutParams) homeRefresh.getLayoutParams()).topMargin);
+        RecyclerView homeRecycler = ReflectionHelpers.getField(home, "recycler");
+        assertEquals(BrowseUi.dp(main, 65), homeRecycler.getPaddingTop());
+        assertFalse(homeRecycler.getClipToPadding());
+        assertEquals("CrazyShit", homeChips.get(0).getText().toString());
+        assertEquals("EFukt", homeChips.get(1).getText().toString());
+        assertEquals("Kaotic", homeChips.get(2).getText().toString());
+        homeChips.get(1).performClick();
+        deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while ((boolean) ReflectionHelpers.getField(home, "loading") && System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(10);
+        }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
+        assertEquals(2, feed.getItemCount());
+        assertTrue(feed.isSectionAt(0));
+        assertEquals(2, prefs.getInt("home_source", -1));
 
         com.google.android.material.bottomnavigation.BottomNavigationView nav = ReflectionHelpers.getField(main, "bottomNavigation");
         nav.setSelectedItemId(3);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         androidx.viewpager2.widget.ViewPager2 viewPager = ReflectionHelpers.getField(main, "primaryPager");
-        assertEquals(MainPagerAdapter.PAGE_CATEGORIES, viewPager.getCurrentItem());
+        assertEquals(MainPagerAdapter.PAGE_ONLYFAP, viewPager.getCurrentItem());
         nav.setSelectedItemId(1);
-        OledImmersiveUiController.attachMain(main);
         UiPolishController.attach(main);
         ResponsiveFitmentController.applySoon(main);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
@@ -97,44 +122,111 @@ public class VisualRefreshTest {
 
         TextView headerTitle = ReflectionHelpers.getField(main, "headerTitle");
         TextView headerSubtitle = ReflectionHelpers.getField(main, "headerSubtitle");
-        assertEquals("Home", headerTitle.getText().toString());
-        assertEquals(Color.WHITE, headerTitle.getCurrentTextColor());
-        assertEquals(View.VISIBLE, headerSubtitle.getVisibility());
-        assertTrue(headerSubtitle.getText().toString().contains("CrazyShit"));
-        assertTrue(headerSubtitle.getText().toString().contains("List"));
+        assertEquals("ZEROCHILL", headerTitle.getText().toString());
+        assertEquals(View.GONE, headerSubtitle.getVisibility());
         LinearLayout shell = ReflectionHelpers.getField(main, "shell");
+        assertTrue(shell instanceof FrostedNavigationLayout);
         View topBar = shell.getChildAt(0);
         assertTrue(topBar instanceof LinearLayout);
-        ImageView appIcon = (ImageView) ((LinearLayout) topBar).getChildAt(0);
-        assertEquals(View.VISIBLE, appIcon.getVisibility());
-        assertEquals(View.GONE, ((LinearLayout) topBar).getChildAt(3).getVisibility());
+        assertEquals(2, ((LinearLayout) topBar).getChildCount());
+        View search = ((LinearLayout) topBar).getChildAt(1);
+        assertEquals("Global Search", String.valueOf(search.getContentDescription()));
 
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
+        assertNull(homeList.getItemAnimator());
         NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(1);
         assertNotNull(visibleCard);
+        NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
+        assertNotNull(visibleSection);
+        assertEquals("TODAY'S CRAZY SHIT", visibleSection.sectionTitle.getText().toString());
+        com.google.android.material.card.MaterialCardView sectionCard =
+                (com.google.android.material.card.MaterialCardView) visibleSection.itemView;
+        assertEquals(Color.TRANSPARENT, sectionCard.getCardBackgroundColor().getDefaultColor());
+        assertEquals(0, sectionCard.getStrokeWidth());
+        assertEquals(0f, sectionCard.getCardElevation(), 0f);
+        assertTrue(visibleCard.info.getText().toString().startsWith("CrazyShit"));
         visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
         visibleCard.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) visibleCard.itemView;
         assertEquals(BrowseUi.dp(main, 1), card.getStrokeWidth());
-        assertEquals(Color.rgb(25, 25, 28), card.getCardBackgroundColor().getDefaultColor());
+        assertEquals(main.getColor(R.color.zc_surface_glass), card.getCardBackgroundColor().getDefaultColor());
+        assertEquals(main.getColor(R.color.zc_edge), card.getStrokeColor());
         capture(root, "home-lifecycle", 360, 800);
         assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
-        assertEquals(BrowseUi.dp(main, 60), nav.getLayoutParams().height);
-        assertEquals(BrowseUi.dp(main, 28), nav.getItemActiveIndicatorHeight());
-        assertEquals(Color.argb(50, 251, 245, 6), nav.getItemActiveIndicatorColor().getDefaultColor());
-        assertEquals(UiPalette.PRIMARY, nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
+        assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
+                nav.getLayoutParams().height);
+        assertSame(nav, ((FrostedNavigationLayout) shell).frostedNavigationViewForTest());
+        assertEquals(BrowseUi.dp(main, 20),
+                main.getResources().getDimensionPixelSize(R.dimen.zc_navigation_blur_radius));
+        assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_nav_indicator_height),
+                nav.getItemActiveIndicatorHeight());
+        assertEquals(Color.TRANSPARENT,
+                nav.getItemActiveIndicatorColor().getDefaultColor());
+        assertFalse(nav.getClipChildren());
+        assertFalse(nav.getClipToPadding());
+        assertTrue(nav.getChildAt(0) instanceof android.view.ViewGroup);
+        android.view.ViewGroup navMenu = (android.view.ViewGroup) nav.getChildAt(0);
+        assertFalse(navMenu.getClipChildren());
+        assertFalse(navMenu.getClipToPadding());
+        assertEquals(main.getColor(R.color.zc_text_secondary),
+                nav.getItemIconTintList().getColorForState(new int[] {android.R.attr.state_checked}, Color.WHITE));
         assertTrue(nav.isItemActiveIndicatorEnabled());
+        assertTrue(nav instanceof ZeroChillBottomNavigationView);
+        assertEquals(
+                MainPagerAdapter.PAGE_HOME,
+                Math.round(((ZeroChillBottomNavigationView) nav).pagerPositionForTest())
+        );
+        ZeroChillBottomNavigationView slidingNav = (ZeroChillBottomNavigationView) nav;
+        slidingNav.setPagerPosition(0.5f);
+        Bitmap navBitmap = Bitmap.createBitmap(nav.getWidth(), nav.getHeight(), Bitmap.Config.ARGB_8888);
+        nav.draw(new Canvas(navBitmap));
+        navBitmap.recycle();
+        android.graphics.RectF capsule = ReflectionHelpers.getField(slidingNav, "indicatorRect");
+        View homeTab = nav.findViewById(1);
+        View showsTab = nav.findViewById(2);
+        assertEquals((homeTab.getWidth() + showsTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
+                capsule.width(), 1f);
+        assertEquals(BrowseUi.dp(main, 4), capsule.top, 1f);
+        assertEquals(nav.getHeight() + BrowseUi.dp(main, 10), capsule.bottom, 1f);
+        assertEquals(0.5f, slidingNav.pagerPositionForTest(), 0.001f);
+        slidingNav.setPagerPosition(0f);
         assertEquals(5, nav.getMenu().size());
+        assertEquals("Home", nav.getMenu().findItem(1).getTitle());
+        assertEquals("Shows", nav.getMenu().findItem(2).getTitle());
+        assertEquals("ShitTok", nav.getMenu().findItem(4).getTitle());
+        assertEquals("OnlyFap", nav.getMenu().findItem(3).getTitle());
+        assertEquals("More", nav.getMenu().findItem(5).getTitle());
         for (int id : new int[] {1, 2, 4, 3, 5}) {
             View tab = nav.findViewById(id);
             assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
-            assertTrue(tab.getHeight() >= BrowseUi.dp(main, 48));
+            assertEquals(nav.getHeight(), tab.getHeight());
+            assertEquals(0, Math.round(tab.getTranslationY()));
         }
         prefs.edit().putInt("native_view_home", NativeFeedAdapter.VIEW_GRID).apply();
         FeedViewStyleController.prepareVisualRefresh(main);
         assertEquals(NativeFeedAdapter.VIEW_GRID, prefs.getInt("native_view_home", -1));
         UiFoundationCoordinator.onActivityDestroyed(main);
         screen.pause().stop().destroy();
+    }
+
+    @Test public void collectionsCardsUseGlassWithoutLiveBlur() {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        NativeCategoryAdapter adapter = new NativeCategoryAdapter(host.get(), item -> { });
+        adapter.setWideCreatorCards(true);
+        adapter.replace(Collections.singletonList(creator()));
+        RecyclerView parent = new RecyclerView(host.get());
+        int viewType = adapter.getItemViewType(0);
+        NativeCategoryAdapter.Holder holder = adapter.onCreateViewHolder(parent, viewType);
+        adapter.onBindViewHolder(holder, 0);
+
+        assertEquals(host.get().getColor(R.color.zc_surface_glass),
+                holder.card.getCardBackgroundColor().getDefaultColor());
+        assertEquals(host.get().getColor(R.color.zc_cyan), holder.card.getStrokeColor());
+        assertEquals(0.62f, holder.backdrop.getAlpha(), 0.001f);
+        assertEquals(Boolean.TRUE, holder.card.getTag(R.id.zerochill_motion_installed));
+
+        adapter.close();
+        host.pause().stop().destroy();
     }
 
     @Test public void creatorHeaderFavoriteAndCardMenuWorkAtPhoneWidth() throws Exception {
@@ -171,6 +263,101 @@ public class VisualRefreshTest {
         assertNotNull(menu); menu.performClick(); assertEquals(1, menus.get());
         adapter.close(); host.pause().stop().destroy();
     }
+    @Test public void homeListUsesWiderMediaReadableTitlesAndCompactMetadata() {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        NativeFeedAdapter.Listener listener = new NativeFeedAdapter.Listener() {
+            public void onOpen(NativeContentItem item) { }
+            public void onLongPress(NativeContentItem item, View anchor) { }
+            public void onComments(NativeContentItem item) { }
+        };
+        NativeContentItem video = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "5 REASONS TO SAY \"WHAT IN THE FUC...\"",
+                "https://crazyshit.com/video/example",
+                "",
+                "41100",
+                "",
+                "12000",
+                ""
+        );
+        RecyclerView parent = new RecyclerView(host.get());
+
+        NativeFeedAdapter homeAdapter = new NativeFeedAdapter(host.get(), listener, true);
+        homeAdapter.setViewMode(NativeFeedAdapter.VIEW_LIST);
+        homeAdapter.replace(Collections.singletonList(video));
+        NativeFeedAdapter.Holder homeHolder = homeAdapter.onCreateViewHolder(parent, NativeFeedAdapter.VIEW_LIST);
+        homeAdapter.onBindViewHolder(homeHolder, 0);
+        ViewGroup homeRow = (ViewGroup) ((ViewGroup) homeHolder.itemView).getChildAt(0);
+        View homeMedia = homeRow.getChildAt(0);
+        assertEquals(BrowseUi.dp(host.get(), 209), homeMedia.getLayoutParams().width);
+        assertEquals("5 Reasons to Say \"What in the Fuc...\"", homeHolder.title.getText().toString());
+        assertEquals(4, homeHolder.title.getMaxLines());
+        assertEquals("41.1K views", homeHolder.info.getText().toString());
+        assertEquals("💬 12K", homeHolder.comments.getText().toString());
+
+        NativeFeedAdapter regularAdapter = new NativeFeedAdapter(host.get(), listener);
+        regularAdapter.setViewMode(NativeFeedAdapter.VIEW_LIST);
+        regularAdapter.replace(Collections.singletonList(video));
+        NativeFeedAdapter.Holder regularHolder = regularAdapter.onCreateViewHolder(parent, NativeFeedAdapter.VIEW_LIST);
+        regularAdapter.onBindViewHolder(regularHolder, 0);
+        ViewGroup regularRow = (ViewGroup) ((ViewGroup) regularHolder.itemView).getChildAt(0);
+        View regularMedia = regularRow.getChildAt(0);
+        assertEquals(BrowseUi.dp(host.get(), 166), regularMedia.getLayoutParams().width);
+        assertEquals(video.title, regularHolder.title.getText().toString());
+        assertEquals(2, regularHolder.title.getMaxLines());
+
+        homeAdapter.close();
+        regularAdapter.close();
+        host.pause().stop().destroy();
+    }
+
+    @Test public void shitTokActionsUseCompactGlassRails() {
+        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
+        host.get().setTheme(R.style.Theme_CrazyShit);
+        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { });
+        try {
+            RecyclerView.Adapter<?> rawAdapter = ReflectionHelpers.getField(feed, "adapter");
+            RecyclerView parent = new RecyclerView(host.get());
+            RecyclerView.ViewHolder holder = rawAdapter.onCreateViewHolder(parent, 0);
+            View root = holder.itemView;
+
+            View actionRail = root.findViewWithTag("shittok_action_rail");
+            View playbackRail = root.findViewWithTag("shittok_playback_rail");
+            assertNotNull(actionRail);
+            assertNotNull(playbackRail);
+            assertNotNull(actionRail.getBackground());
+            assertNotNull(playbackRail.getBackground());
+
+            for (String tag : new String[] {
+                    "shittok_save",
+                    "shittok_comments",
+                    "shittok_share",
+                    "shittok_more",
+                    "shittok_mute",
+                    "shittok_fullscreen"
+            }) {
+                View control = root.findViewWithTag(tag);
+                assertNotNull(tag, control);
+                if ("shittok_fullscreen".equals(tag)) {
+                    assertTrue(tag, control instanceof ImageView);
+                } else {
+                    assertTrue(tag, control instanceof TextView);
+                }
+                assertTrue(tag, control.getLayoutParams().width >= BrowseUi.dp(host.get(), 48));
+                assertTrue(tag, control.getLayoutParams().height >= BrowseUi.dp(host.get(), 48));
+                assertNotNull(tag, control.getContentDescription());
+            }
+
+            View save = root.findViewWithTag("shittok_save");
+            assertEquals("Save to Watch Later", String.valueOf(save.getContentDescription()));
+            View fullscreen = root.findViewWithTag("shittok_fullscreen");
+            assertEquals(View.GONE, fullscreen.getVisibility());
+        } finally {
+            feed.close();
+            host.pause().stop().destroy();
+        }
+    }
+
     @Test public void creatorGalleryRendersTheSavedGridWithoutFetching() throws Exception {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         String id = BunkrGallerySessionStore.createCreator("Alex Rivera", creator().url, "Alex Rivera");

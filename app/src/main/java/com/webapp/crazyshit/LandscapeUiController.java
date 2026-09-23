@@ -41,7 +41,6 @@ final class LandscapeUiController {
     private static final int NAV_CHAOS = 4;
     private static final int NAV_MORE = 5;
 
-    private static final int RAIL_WIDTH_DP = 68;
     private static final int LANDSCAPE_TOP_BAR_DP = 50;
     private static final int PORTRAIT_TOP_BAR_DP = 56;
 
@@ -99,7 +98,7 @@ final class LandscapeUiController {
         ensureRail(activity, state);
         adaptTopBar(activity, state, landscape, chaosFullscreen);
         adaptNavigation(activity, state, landscape, chaosFullscreen, selected);
-        adaptFeedLayouts(activity, state, landscape);
+        adaptFeedLayouts(activity, state, landscape, chaosFullscreen);
         installAdaptiveInsets(activity, state);
     }
 
@@ -126,8 +125,13 @@ final class LandscapeUiController {
         LinearLayout rail = new LinearLayout(activity);
         rail.setOrientation(LinearLayout.VERTICAL);
         rail.setGravity(Gravity.CENTER_HORIZONTAL);
-        rail.setBackgroundColor(Color.rgb(17, 17, 20));
-        rail.setElevation(dp(activity, 12));
+        rail.setBackground(ZeroChillUi.rounded(
+                activity,
+                ZeroChillUi.color(activity, R.color.zc_surface_glass),
+                ZeroChillUi.color(activity, R.color.zc_edge),
+                R.dimen.zc_radius_small
+        ));
+        rail.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_navigation));
         rail.setVisibility(View.GONE);
         rail.setContentDescription("Landscape navigation");
 
@@ -146,23 +150,26 @@ final class LandscapeUiController {
 
         addRailButton(activity, state, menu, NAV_HOME, "Home", R.drawable.ic_nav_home);
         addRailButton(activity, state, menu, NAV_SERIES, "Collections", R.drawable.ic_nav_series);
-        addRailButton(activity, state, menu, NAV_CHAOS, "Chaos", R.drawable.ic_nav_chaos);
-        addRailButton(activity, state, menu, NAV_CATEGORIES, "Categories", R.drawable.ic_nav_categories);
+        addRailButton(activity, state, menu, NAV_CHAOS, "ShitTok", R.drawable.ic_nav_chaos);
+        addRailButton(activity, state, menu, NAV_CATEGORIES, "OnlyFap", R.drawable.ic_nav_onlyfap);
         addRailButton(activity, state, menu, NAV_MORE, "More", R.drawable.ic_nav_more);
 
         if (state.overlayRoot instanceof FrameLayout) {
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                    dp(activity, RAIL_WIDTH_DP),
+                    ZeroChillUi.dimension(activity, R.dimen.zc_rail_width),
                     -1
             );
             params.gravity = Gravity.START;
             state.overlayRoot.addView(rail, params);
         } else {
-            state.overlayRoot.addView(rail, new ViewGroup.LayoutParams(dp(activity, RAIL_WIDTH_DP), -1));
+            state.overlayRoot.addView(rail, new ViewGroup.LayoutParams(
+                    ZeroChillUi.dimension(activity, R.dimen.zc_rail_width),
+                    -1
+            ));
         }
 
         state.rail = rail;
-        state.railWidth = dp(activity, RAIL_WIDTH_DP);
+        state.railWidth = ZeroChillUi.dimension(activity, R.dimen.zc_rail_width);
         activity.getWindow().getDecorView().requestApplyInsets();
     }
 
@@ -229,7 +236,9 @@ final class LandscapeUiController {
         } else if (landscape) {
             setVisibility(state.bottomNavigation, View.GONE);
             setVisibility(state.rail, View.VISIBLE);
-            setShellStartMargin(state, state.railWidth > 0 ? state.railWidth : dp(activity, RAIL_WIDTH_DP));
+            setShellStartMargin(state, state.railWidth > 0
+                    ? state.railWidth
+                    : ZeroChillUi.dimension(activity, R.dimen.zc_rail_width));
         } else {
             setVisibility(state.rail, View.GONE);
             setVisibility(state.bottomNavigation, View.VISIBLE);
@@ -240,8 +249,8 @@ final class LandscapeUiController {
     }
 
     private static void updateRailSelection(NativeMainActivity activity, State state, int selected) {
-        int active = UiPalette.PRIMARY;
-        int inactive = Color.rgb(165, 165, 176);
+        int active = ZeroChillUi.color(activity, R.color.zc_cyan);
+        int inactive = ZeroChillUi.color(activity, R.color.zc_text_muted);
         for (Map.Entry<Integer, TextView> entry : state.railButtons.entrySet()) {
             boolean checked = entry.getKey() == selected;
             TextView button = entry.getValue();
@@ -251,6 +260,7 @@ final class LandscapeUiController {
             Drawable top = drawables.length > 1 ? drawables[1] : null;
             if (top != null) top.setTint(color);
             button.setBackground(railPill(activity, checked));
+            ZeroChillMotion.animateSelection(button, checked);
         }
     }
 
@@ -258,7 +268,15 @@ final class LandscapeUiController {
         GradientDrawable background = new GradientDrawable();
         background.setShape(GradientDrawable.RECTANGLE);
         background.setCornerRadius(dp(activity, 18));
-        background.setColor(selected ? Color.argb(72, 251, 245, 6) : Color.TRANSPARENT);
+        background.setColor(selected
+                ? ZeroChillUi.color(activity, R.color.zc_cyan_container)
+                : Color.TRANSPARENT);
+        if (selected) {
+            background.setStroke(
+                    ZeroChillUi.dimension(activity, R.dimen.zc_stroke),
+                    ZeroChillUi.color(activity, R.color.zc_edge)
+            );
+        }
         return background;
     }
 
@@ -270,6 +288,7 @@ final class LandscapeUiController {
     ) {
         View topBar = state.topBar;
         if (topBar == null) return;
+        ZeroChillUi.styleTopBar(topBar);
 
         setVisibility(topBar, chaosFullscreen ? View.GONE : View.VISIBLE);
         ViewGroup.LayoutParams raw = topBar.getLayoutParams();
@@ -318,7 +337,16 @@ final class LandscapeUiController {
         }
     }
 
-    private static void adaptFeedLayouts(NativeMainActivity activity, State state, boolean landscape) {
+    private static void adaptFeedLayouts(
+            NativeMainActivity activity,
+            State state,
+            boolean landscape,
+            boolean chaosFullscreen
+    ) {
+        // ShitTok fullscreen should not mutate hidden Home/Shows feed geometry.
+        // Those pages keep their approved portrait padding while Chaos owns the screen.
+        if (chaosFullscreen) return;
+
         View content = activity.findViewById(android.R.id.content);
         if (content == null) return;
 
@@ -333,6 +361,14 @@ final class LandscapeUiController {
             if (rawAdapter instanceof NativeFeedAdapter) {
                 NativeFeedAdapter adapter = (NativeFeedAdapter) rawAdapter;
                 if (landscape) {
+                    if (!state.originalFeedPadding.containsKey(recycler)) {
+                        state.originalFeedPadding.put(recycler, new int[] {
+                                recycler.getPaddingLeft(),
+                                recycler.getPaddingTop(),
+                                recycler.getPaddingRight(),
+                                recycler.getPaddingBottom()
+                        });
+                    }
                     if (adapter.getViewMode() != NativeFeedAdapter.VIEW_GRID) {
                         state.originalFeedModes.put(adapter, adapter.getViewMode());
                         adapter.setViewMode(NativeFeedAdapter.VIEW_GRID);
@@ -348,7 +384,16 @@ final class LandscapeUiController {
                     } else {
                         useLinear(activity, recycler);
                     }
-                    setRecyclerPadding(activity, recycler, 0, 5, 0, 18);
+                    int[] originalPadding = state.originalFeedPadding.remove(recycler);
+                    if (originalPadding != null) {
+                        setRecyclerPaddingPx(
+                                recycler,
+                                originalPadding[0],
+                                originalPadding[1],
+                                originalPadding[2],
+                                originalPadding[3]
+                        );
+                    }
                 }
             } else if (rawAdapter instanceof NativeCategoryAdapter) {
                 useGrid(activity, recycler, landscape ? categoryColumns : 2);
@@ -412,6 +457,18 @@ final class LandscapeUiController {
         return 0;
     }
 
+    private static void setRecyclerPaddingPx(
+            RecyclerView recycler,
+            int left,
+            int top,
+            int right,
+            int bottom
+    ) {
+        if (recycler.getPaddingLeft() == left && recycler.getPaddingTop() == top &&
+                recycler.getPaddingRight() == right && recycler.getPaddingBottom() == bottom) return;
+        recycler.setPadding(left, top, right, bottom);
+    }
+
     private static void setRecyclerPadding(
             NativeMainActivity activity,
             RecyclerView recycler,
@@ -455,11 +512,16 @@ final class LandscapeUiController {
             boolean landscape = isLandscape(activity);
             boolean chaosFullscreen = landscape && state.bottomNavigation != null &&
                     state.bottomNavigation.getSelectedItemId() == NAV_CHAOS;
+            top = resolveShellTopInset(
+                    landscape,
+                    top,
+                    activity.cachedPortraitInsetTop()
+            );
             view.setPadding(landscape && !chaosFullscreen ? 0 : left, top, right, bottom);
 
             if (state.rail != null) {
                 state.rail.setPadding(left, top, 0, bottom);
-                int width = dp(activity, RAIL_WIDTH_DP) + left;
+                int width = ZeroChillUi.dimension(activity, R.dimen.zc_rail_width) + left;
                 state.railWidth = width;
                 ViewGroup.LayoutParams railRaw = state.rail.getLayoutParams();
                 if (railRaw != null && railRaw.width != width) {
@@ -471,6 +533,13 @@ final class LandscapeUiController {
             return insets;
         });
         activity.getWindow().getDecorView().requestApplyInsets();
+    }
+
+    static int resolveShellTopInset(boolean landscape, int visibleTop, int cachedPortraitTop) {
+        if (!landscape && visibleTop <= 0 && cachedPortraitTop > 0) {
+            return cachedPortraitTop;
+        }
+        return visibleTop;
     }
 
     private static void setShellStartMargin(State state, int margin) {
@@ -551,5 +620,6 @@ final class LandscapeUiController {
         ViewTreeObserver.OnGlobalLayoutListener globalLayoutListener;
         final Map<Integer, TextView> railButtons = new HashMap<>();
         final Map<NativeFeedAdapter, Integer> originalFeedModes = new WeakHashMap<>();
+        final Map<RecyclerView, int[]> originalFeedPadding = new WeakHashMap<>();
     }
 }

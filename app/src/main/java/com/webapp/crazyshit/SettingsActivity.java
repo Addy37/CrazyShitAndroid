@@ -98,25 +98,15 @@ public class SettingsActivity extends Activity {
 
         addSection(root, "Notifications");
         addSwitch(root,
-                "New video alerts",
-                "Notify you when followed sites add fresh uploads.",
+                "New content alerts",
+                "Notify you when supported ZEROCHILL sources add fresh content.",
                 NotificationCoordinator.PREF_NEW_VIDEO_ALERTS,
                 true);
         addSwitch(root,
-                "CrazyShit alerts",
-                "Include new uploads from CrazyShit.",
-                NotificationCoordinator.PREF_CRAZYSHIT_ALERTS,
-                true);
-        addSwitch(root,
-                "EFukt alerts",
-                "Include new uploads from EFukt when the site is available in your region.",
-                NotificationCoordinator.PREF_EFUKT_ALERTS,
-                true);
-        addSwitch(root,
-                "Show video titles",
-                "List titles inside expanded alerts. Leave this off for discreet notifications.",
+                "Show content titles",
+                "Show titles inside expanded content alerts.",
                 NotificationCoordinator.PREF_SHOW_TITLES,
-                false);
+                true);
         addAction(root,
                 "Check frequency",
                 NotificationCoordinator.frequencySummary(this),
@@ -152,7 +142,7 @@ public class SettingsActivity extends Activity {
                 "remember_video_position",
                 true);
         addAction(root,
-                "Chaos preloading",
+                "ShitTok preloading",
                 ChaosPreloadPolicy.summary(this),
                 this::showChaosPreloadChoices);
 
@@ -163,13 +153,13 @@ public class SettingsActivity extends Activity {
                 "oled_black_enabled",
                 true);
         addSwitch(root,
-                "Ambient feed glow",
-                "Add a very faint artwork glow without tinting the whole screen.",
+                "Cyan edge glow",
+                "Show a faint cyan highlight on glass surfaces without tinting the screen.",
                 "ambient_feed_glow",
                 true);
         addSwitch(root,
                 "Motion effects",
-                "Use light focus and thumbnail movement while scrolling.",
+                "Use light press, selection and page transition effects.",
                 "immersive_motion_enabled",
                 true);
 
@@ -225,7 +215,7 @@ public class SettingsActivity extends Activity {
         });
 
         TextView footer = new TextView(this);
-        footer.setText("CrazyShit\nCommunity Android client\nNot affiliated with or endorsed by CrazyShit.com");
+        footer.setText("ZeroChill\nCommunity Android client\nNot affiliated with or endorsed by CrazyShit.com");
         footer.setTextColor(Color.rgb(145, 145, 153));
         footer.setTextSize(12);
         footer.setGravity(Gravity.CENTER);
@@ -331,10 +321,10 @@ public class SettingsActivity extends Activity {
 
     private void checkNotificationsNow() {
         if (notificationStatusView != null) {
-            notificationStatusView.setText("Checking CrazyShit and EFukt now…");
+            notificationStatusView.setText("Checking ZEROCHILL sources now…");
         }
         NotificationCoordinator.checkNow(this);
-        Toast.makeText(this, "Checking both sites in the background.", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Checking all supported sources in the background.", Toast.LENGTH_SHORT).show();
     }
 
     private String sourceConfigSummary() {
@@ -401,7 +391,7 @@ public class SettingsActivity extends Activity {
                 "Minimal"
         };
         new AlertDialog.Builder(this)
-                .setTitle("Chaos preloading")
+                .setTitle("ShitTok preloading")
                 .setSingleChoiceItems(choices, ChaosPreloadPolicy.selectedIndex(this), (dialog, which) -> {
                     ChaosPreloadPolicy.setMode(this, ChaosPreloadPolicy.modeForIndex(which));
                     dialog.dismiss();

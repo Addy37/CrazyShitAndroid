@@ -253,13 +253,8 @@ final class FeedViewStyleController {
     private static void updateMainLabel(NativeMainActivity activity) {
         ViewPager2 pager = fieldValue(activity, "primaryPager", ViewPager2.class);
         if (pager == null || pager.getCurrentItem() != MainPagerAdapter.PAGE_HOME) return;
-        TextView title = fieldValue(activity, "headerTitle", TextView.class);
         TextView subtitle = fieldValue(activity, "headerSubtitle", TextView.class);
-        if (title != null && !"Home".contentEquals(title.getText())) return;
-        if (subtitle == null) return;
-        int mode = safeMode(activity.getSharedPreferences("app_prefs", 0)
-                .getInt(HOME_PREF, NativeFeedAdapter.VIEW_CARDS));
-        subtitle.setText("CrazyShit  •  " + label(mode));
+        if (subtitle != null) subtitle.setVisibility(View.GONE);
     }
 
     static String label(int mode) {
@@ -331,4 +326,3 @@ final class FeedViewStyleController {
         return null;
     }
 }
-

@@ -49,6 +49,7 @@ public class FavoritesActivity extends Activity {
     public static final String EXTRA_SELECTED_URL = "selected_url";
     public static final String EXTRA_START_TAB = "start_tab";
     public static final int START_CONTINUE = 0;
+    public static final int START_HISTORY = 1;
     public static final int START_WATCH_LATER = 2;
 
     private static final int TAB_CONTINUE = 0;

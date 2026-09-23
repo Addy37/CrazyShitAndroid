@@ -255,7 +255,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (source == SOURCE_LIBRARY) {
             meta = new StringBuilder("Library");
         } else if (item.isSeries()) {
-            meta = new StringBuilder(BunkrRepository.isAlbumUrl(item.url) ? "Fapzone album" : "Series");
+            meta = new StringBuilder(BunkrRepository.isAlbumUrl(item.url) ? "OnlyFap album" : "Series");
         } else if (item.isCategory()) {
             meta = new StringBuilder("Category");
         } else {

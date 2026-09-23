@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="zc_space_xs">4dp</dimen>
+    <dimen name="zc_space_sm">8dp</dimen>
+    <dimen name="zc_space_md">12dp</dimen>
+    <dimen name="zc_space_lg">16dp</dimen>
+    <dimen name="zc_space_xl">24dp</dimen>
+    <dimen name="zc_radius_small">12dp</dimen>
+    <dimen name="zc_radius_medium">16dp</dimen>
+    <dimen name="zc_radius_large">24dp</dimen>
+    <dimen name="zc_radius_pill">30dp</dimen>
+    <dimen name="zc_stroke">1dp</dimen>
+    <dimen name="zc_touch_target">48dp</dimen>
+    <dimen name="zc_top_bar_height">56dp</dimen>
+    <dimen name="zc_bottom_nav_height">64dp</dimen>
+    <dimen name="zc_nav_icon">24dp</dimen>
+    <dimen name="zc_nav_indicator_width">50dp</dimen>
+    <dimen name="zc_nav_indicator_height">30dp</dimen>
+    <dimen name="zc_navigation_blur_radius">20dp</dimen>
+    <dimen name="zc_rail_width">68dp</dimen>
+    <dimen name="zc_elevation_low">2dp</dimen>
+    <dimen name="zc_elevation_navigation">8dp</dimen>
+</resources>

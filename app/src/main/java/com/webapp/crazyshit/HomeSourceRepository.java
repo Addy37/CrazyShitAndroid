@@ -18,7 +18,9 @@ final class HomeSourceRepository {
         this((context, source, page) -> {
             if (source == 1) return new CrazyShitRepository().fetchFeed(context, CrazyShitRepository.HOME, page);
             if (source == 2) return page == 1 ? new EfuktRepository().fetchLatest(context) : Collections.emptyList();
-            return new FapelloRepository().fetchPopularVideos(context, page);
+            WebVideoSourceRepository web = new WebVideoSourceRepository();
+            if (source == 3) return web.fetchFeed(context, WebVideoSourceRepository.Source.KAOTIC, page);
+            throw new IOException("Unknown Home source");
         }, 25_000L);
     }
     HomeSourceRepository(SourceLoader loader, long timeoutMillis) {

@@ -188,7 +188,7 @@ final class AppUpdater {
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
             connection.setRequestProperty("Accept", "application/vnd.github+json");
-            connection.setRequestProperty("User-Agent", "CrazyShit-Android");
+            connection.setRequestProperty("User-Agent", "ZeroChill-Android");
             connection.setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0");
             connection.setRequestProperty("Pragma", "no-cache");
             int code = connection.getResponseCode();
@@ -260,14 +260,14 @@ final class AppUpdater {
             try {
                 File dir = new File(activity.getCacheDir(), "updates");
                 if (!dir.exists() && !dir.mkdirs()) throw new Exception("Couldn't create update folder");
-                File target = new File(dir, "CrazyShit-update.apk");
+                File target = new File(dir, "ZeroChill-update.apk");
                 if (target.exists()) target.delete();
 
                 connection = (HttpURLConnection) new URL(release.apkUrl).openConnection();
                 connection.setInstanceFollowRedirects(true);
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(30000);
-                connection.setRequestProperty("User-Agent", "CrazyShit-Android");
+                connection.setRequestProperty("User-Agent", "ZeroChill-Android");
                 int code = connection.getResponseCode();
                 if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
 

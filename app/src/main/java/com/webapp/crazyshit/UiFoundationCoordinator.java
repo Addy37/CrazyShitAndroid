@@ -134,7 +134,7 @@ final class UiFoundationCoordinator {
             Menu menu = nav.getMenu();
             for (int i = 0; i < menu.size(); i++) {
                 if (menu.getItem(i).getTitle() != null
-                        && "Chaos".contentEquals(menu.getItem(i).getTitle())) {
+                        && "ShitTok".contentEquals(menu.getItem(i).getTitle())) {
                     nav.setSelectedItemId(menu.getItem(i).getItemId());
                     break;
                 }
@@ -178,8 +178,8 @@ final class UiFoundationCoordinator {
         FlashUiController.detach(main);
         WatchStatePolish.attach(main);
         PredictiveBackPolish.attach(main);
-        OledImmersiveUiController.attachMain(main);
-        FeedMotionController.attach(main);
+        // NativeMainActivity owns its ZeroChill shell and motion. The legacy controllers remain
+        // attached to browser activities, where their feed-specific behavior is still required.
 
         boolean landscape = main.getResources().getConfiguration().orientation ==
                 Configuration.ORIENTATION_LANDSCAPE;

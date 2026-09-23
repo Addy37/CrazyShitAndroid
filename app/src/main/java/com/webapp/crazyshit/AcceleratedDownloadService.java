@@ -143,8 +143,8 @@ public final class AcceleratedDownloadService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) return START_NOT_STICKY;
         long id = intent.getLongExtra(EXTRA_ID, 0L);
-        String title = clean(intent.getStringExtra(EXTRA_TITLE), "CrazyShit video");
-        String fileName = clean(intent.getStringExtra(EXTRA_FILE_NAME), "CrazyShit video.mp4");
+        String title = clean(intent.getStringExtra(EXTRA_TITLE), "ZeroChill video");
+        String fileName = clean(intent.getStringExtra(EXTRA_FILE_NAME), "ZeroChill video.mp4");
         String url = clean(intent.getStringExtra(EXTRA_URL), "");
         String mime = clean(intent.getStringExtra(EXTRA_MIME), "video/mp4");
         Map<String, String> headers = parseHeaders(intent.getStringExtra(EXTRA_HEADERS));
@@ -628,7 +628,7 @@ public final class AcceleratedDownloadService extends Service {
                 "Video downloads",
                 NotificationManager.IMPORTANCE_LOW
         );
-        channel.setDescription("CrazyShit video download progress");
+        channel.setDescription("ZeroChill video download progress");
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) manager.createNotificationChannel(channel);
     }

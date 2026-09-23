@@ -3,10 +3,28 @@
     <color name="app_background">#0D0D0F</color>
     <color name="app_surface">#17171A</color>
     <color name="app_surface_variant">#242428</color>
-    <color name="app_primary">#FBF506</color>
-    <color name="app_primary_container">#2B2A04</color>
-    <color name="app_on_primary">#0A0A00</color>
+    <color name="app_primary">#0892D0</color>
+    <color name="app_primary_dim">#067AB0</color>
+    <color name="app_primary_container">#052A3D</color>
+    <color name="app_on_primary">#020F17</color>
     <color name="app_on_surface">#F4F4F5</color>
     <color name="app_on_surface_variant">#C7C7CC</color>
-    <color name="icon_background">#0D0D0F</color>
+    <color name="app_on_surface_muted">#B4B4BE</color>
+    <color name="icon_background">#000000</color>
+
+    <!-- ZeroChill liquid-glass foundation. Keep large areas OLED black and layer glass above it. -->
+    <color name="zc_background">#000000</color>
+    <color name="zc_surface_glass">#E612151A</color>
+    <color name="zc_surface_glass_strong">#F21A1D22</color>
+    <color name="zc_surface_pressed">#FF222831</color>
+    <color name="zc_cyan">#0892D0</color>
+    <color name="zc_cyan_dim">#990892D0</color>
+    <color name="zc_cyan_container">#330892D0</color>
+    <color name="zc_nav_selection">#D912171D</color>
+    <color name="zc_edge">#660892D0</color>
+    <color name="zc_divider">#2E9AA5B1</color>
+    <color name="zc_text_primary">#FFF7FA</color>
+    <color name="zc_text_secondary">#B8C0CC</color>
+    <color name="zc_text_muted">#8993A1</color>
+    <color name="zc_scrim">#99000000</color>
 </resources>

@@ -62,10 +62,11 @@ public final class SearchActivity extends Activity {
     private final ExecutorService io = Executors.newFixedThreadPool(8);
 
     private EditText input;
-    private ProgressBar progress;
+    private View progress;
     private TextView status;
     private RecyclerView recycler;
     private GlobalSearchAdapter adapter;
+    private OnlyFapCreatorSearchAdapter onlyFapAdapter;
     private final List<TextView> filterViews = new ArrayList<>();
 
     private List<NativeContentItem> videos = new ArrayList<>();
@@ -93,6 +94,7 @@ public final class SearchActivity extends Activity {
     private Parcelable restoredScroll;
     private long searchStarted;
     private boolean firstResultsRecorded;
+    private List<NativeContentItem> onlyFapLocal = new ArrayList<>();
 
 
     static Intent createBunkrSearch(Activity activity) {
@@ -105,9 +107,9 @@ public final class SearchActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         bunkrOnly = SCOPE_BUNKR.equals(getIntent().getStringExtra(EXTRA_SCOPE));
-        getWindow().setStatusBarColor(Color.BLACK);
-        getWindow().setNavigationBarColor(Color.BLACK);
+        ZeroChillUi.applySystemBars(this);
         buildUi();
+        if (bunkrOnly) io.execute(() -> BundledCreatorIndex.get(getApplicationContext()));
 
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         if (state != null) {
@@ -120,16 +122,20 @@ public final class SearchActivity extends Activity {
             activeQuery = state.getString("active", "");
             boolean showingSuggestions = state.getBoolean("suggestions", true);
             if (!showingSuggestions) { suggestions.hide(); input.clearFocus(); }
-            if (!bunkrOnly && !activeQuery.isEmpty()) {
+            if (!activeQuery.isEmpty()) {
                 final String savedQuery = activeQuery;
-                final int token = ++generation;
-                io.execute(() -> {
-                    JSONObject snapshot = ScreenSnapshotStore.read(this, snapshotId);
-                    runOnUiThread(() -> {
-                        if (destroyed || token != generation) return;
-                        if (!restoreSnapshot(snapshot)) startGlobalSearch(savedQuery, false);
+                if (bunkrOnly) {
+                    startOnlyFapSearch(savedQuery);
+                } else {
+                    final int token = ++generation;
+                    io.execute(() -> {
+                        JSONObject snapshot = ScreenSnapshotStore.read(this, snapshotId);
+                        runOnUiThread(() -> {
+                            if (destroyed || token != generation) return;
+                            if (!restoreSnapshot(snapshot)) startGlobalSearch(savedQuery, false);
+                        });
                     });
-                });
+                }
             }
         } else {
             String supplied = getIntent().getStringExtra(EXTRA_QUERY);
@@ -147,11 +153,11 @@ public final class SearchActivity extends Activity {
 
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(ZeroChillUi.background(this));
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.BLACK);
+        shell.setBackgroundColor(ZeroChillUi.background(this));
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(shell, (view, insets) -> {
             androidx.core.graphics.Insets safe = insets.getInsets(
                     androidx.core.view.WindowInsetsCompat.Type.systemBars()
@@ -172,35 +178,40 @@ public final class SearchActivity extends Activity {
         searchState = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         searchState.setPadding(dp(16), dp(4), dp(16), dp(4));
         searchState.setVisibility(View.GONE);
-        searchState.setOnClickListener(v -> { if (!activeQuery.isEmpty()) startGlobalSearch(activeQuery, false); });
+        searchState.setOnClickListener(v -> {
+            if (activeQuery.isEmpty()) return;
+            if (bunkrOnly) startOnlyFapSearch(activeQuery);
+            else startGlobalSearch(activeQuery, false);
+        });
         shell.addView(searchState);
         FrameLayout content = new FrameLayout(this);
         shell.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         recycler = new RecyclerView(this);
         recycler.setLayoutManager(new LinearLayoutManager(this));
-        recycler.setBackgroundColor(Color.BLACK);
+        recycler.setBackgroundColor(ZeroChillUi.background(this));
         recycler.setClipToPadding(false);
         recycler.setPadding(0, dp(4), 0, dp(22));
         recycler.setItemAnimator(null);
-        adapter = new GlobalSearchAdapter(this::openResult);
-        recycler.setAdapter(adapter);
+        if (bunkrOnly) {
+            onlyFapAdapter = new OnlyFapCreatorSearchAdapter(this::openCreator);
+            recycler.setAdapter(onlyFapAdapter);
+        } else {
+            adapter = new GlobalSearchAdapter(this::openResult);
+            recycler.setAdapter(adapter);
+        }
         content.addView(recycler, new FrameLayout.LayoutParams(-1, -1));
 
         status = new TextView(this);
-        status.setTextColor(Color.rgb(180, 180, 190));
-        status.setTextSize(15f);
-        status.setGravity(Gravity.CENTER);
-        status.setPadding(dp(26), dp(26), dp(26), dp(26));
+        ZeroChillUi.styleEmpty(status);
         status.setText(bunkrOnly
-                ? "Search Fapzone\nBunkr, Fapello, WikiFeet and WikiFeet X open in one gallery"
-                : "Search CrazyShit, EFukt, Fapzone, Collections, Categories and your Library");
+                ? "Search OnlyFap creators\nOnlyHaven, Bunkr, Fapello, WikiFeet and WikiFeet X open in one gallery"
+                : "Search CrazyShit, EFukt, OnlyFap, Collections, Categories and your Library");
         content.addView(status, new FrameLayout.LayoutParams(-1, -1));
 
-        progress = new ProgressBar(this);
-        progress.setIndeterminate(true);
+        progress = new ZeroChillLoadingView(this, null);
         progress.setVisibility(View.GONE);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(72), dp(72));
         progressParams.gravity = Gravity.CENTER;
         content.addView(progress, progressParams);
 
@@ -219,7 +230,6 @@ public final class SearchActivity extends Activity {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(7), 0, dp(14), 0);
-        bar.setBackgroundColor(Color.BLACK);
 
         TextView back = new TextView(this);
         back.setText("‹");
@@ -235,15 +245,14 @@ public final class SearchActivity extends Activity {
         labels.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView title = new TextView(this);
-        title.setText(bunkrOnly ? "Search Fapzone" : "Search");
-        title.setTextColor(Color.WHITE);
+        title.setText(bunkrOnly ? "Search OnlyFap" : "Search");
+        ZeroChillUi.styleTitle(title);
         title.setTextSize(20f);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
         labels.addView(title);
 
         TextView subtitle = new TextView(this);
         subtitle.setText(bunkrOnly ? "One combined media gallery" : "Everything in one place");
-        subtitle.setTextColor(Color.rgb(165, 165, 176));
+        ZeroChillUi.styleSecondary(subtitle);
         subtitle.setTextSize(12f);
         subtitle.setVisibility(View.GONE);
         labels.addView(subtitle);
@@ -261,16 +270,18 @@ public final class SearchActivity extends Activity {
         row.setPadding(dp(12), dp(8), dp(12), dp(6));
 
         input = new EditText(this);
-        input.setHint("Search creators or videos");
-        input.setHintTextColor(Color.rgb(145, 145, 155));
-        input.setTextColor(Color.WHITE);
+        input.setHint(bunkrOnly ? "Search creators" : "Search creators or videos");
+        input.setHintTextColor(ZeroChillUi.color(this, R.color.zc_text_muted));
+        input.setTextColor(ZeroChillUi.color(this, R.color.zc_text_primary));
         input.setTextSize(16f);
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        input.setContentDescription("Search creators, albums and videos");
+        input.setContentDescription(bunkrOnly
+                ? "Search OnlyFap creators"
+                : "Search creators, albums and videos");
         input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackground(rounded(Color.rgb(30, 30, 35), dp(14)));
+        input.setBackgroundResource(R.drawable.zc_search_field);
         input.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 runSearch();
@@ -279,9 +290,19 @@ public final class SearchActivity extends Activity {
             return false;
         });
         row.addView(input, new LinearLayout.LayoutParams(0, -1, 1f));
-        row.addView(BrowseUi.action(this, "×", "Clear search", v -> {
+        TextView clear = BrowseUi.action(this, "×", "Clear search", v -> {
             input.setText(""); input.requestFocus();
-        }), new LinearLayout.LayoutParams(dp(48), dp(48)));
+        });
+        if (bunkrOnly) {
+            clear.setBackgroundResource(R.drawable.zc_glass_surface);
+            clear.setTextColor(ZeroChillUi.color(this, R.color.zc_text_secondary));
+        }
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(dp(48), dp(48));
+        clearParams.leftMargin = dp(6);
+        row.addView(clear, clearParams);
+        if (bunkrOnly) {
+            input.setBackgroundResource(R.drawable.zc_onlyfap_search_field);
+        }
 
         return row;
     }
@@ -298,7 +319,7 @@ public final class SearchActivity extends Activity {
         addFilter(row, "All", Filter.ALL);
         addFilter(row, "Videos", Filter.VIDEOS);
         addFilter(row, "EFukt", Filter.EFUKT);
-        addFilter(row, "Fapzone", Filter.BUNKR);
+        addFilter(row, "OnlyFap", Filter.BUNKR);
         addFilter(row, "Collections", Filter.COLLECTIONS);
         addFilter(row, "Categories", Filter.CATEGORIES);
         addFilter(row, "Library", Filter.LIBRARY);
@@ -329,11 +350,7 @@ public final class SearchActivity extends Activity {
     private void refreshFilterStyles() {
         for (TextView chip : filterViews) {
             boolean selected = chip.getTag() == filter;
-            chip.setTextColor(selected ? UiPalette.ON_PRIMARY : Color.rgb(188, 188, 198));
-            chip.setBackground(rounded(
-                    selected ? UiPalette.PRIMARY : Color.rgb(31, 31, 36),
-                    dp(18)
-            ));
+            ZeroChillUi.styleChip(chip, selected);
         }
     }
 
@@ -345,11 +362,11 @@ public final class SearchActivity extends Activity {
         }
         BrowseUi.hideKeyboard(this, input);
         input.clearFocus();
+        suggestions.hide();
         if (bunkrOnly) {
-            startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, query, query));
+            startOnlyFapSearch(query);
             return;
         }
-        suggestions.hide();
         startGlobalSearch(query, true);
     }
 
@@ -358,6 +375,105 @@ public final class SearchActivity extends Activity {
         startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, item.title,
                 item.searchQuery.isEmpty() ? item.title : item.searchQuery,
                 FapelloRepository.isModelUrl(item.url) ? item.url : ""));
+    }
+
+    private void startOnlyFapSearch(String query) {
+        for (Future<?> request : requests) request.cancel(true);
+        requests.clear();
+        if (io instanceof java.util.concurrent.ThreadPoolExecutor) {
+            ((java.util.concurrent.ThreadPoolExecutor) io).purge();
+        }
+
+        activeQuery = query == null ? "" : query.trim();
+        final String requestedQuery = activeQuery;
+        final int token = ++generation;
+        pendingSources = 1;
+        errors.clear();
+        onlyFapLocal = new ArrayList<>();
+        if (onlyFapAdapter != null) onlyFapAdapter.replace(onlyFapLocal);
+        recycler.scrollToPosition(0);
+        progress.setVisibility(View.GONE);
+        status.setVisibility(View.GONE);
+        searchState.setVisibility(View.VISIBLE);
+        searchState.setText("Finding saved creators · Checking sources…");
+        searchState.setContentDescription(searchState.getText());
+
+        requests.add(io.submit(() -> {
+            BundledCreatorIndex index = BundledCreatorIndex.get(getApplicationContext());
+            List<NativeContentItem> bundled = index.matching(requestedQuery, 60);
+            List<NativeContentItem> learned = CreatorCatalog.matching(
+                    getApplicationContext(), requestedQuery, false, 60);
+            List<NativeContentItem> local = OnlyFapCreatorResults.merge(bundled, learned, 60);
+            local.sort(java.util.Comparator.comparingInt(
+                    (NativeContentItem item) -> index.rank(item, requestedQuery))
+                    .thenComparing(item -> CreatorNameMatcher.normalized(item.title)));
+            runOnUiThread(() -> {
+                if (destroyed || isFinishing() || token != generation) return;
+                onlyFapLocal = local;
+                if (onlyFapAdapter != null) onlyFapAdapter.replace(local);
+                status.setVisibility(View.GONE);
+                searchState.setText(local.size() + " saved creators · Checking sources…");
+            });
+            List<NativeContentItem> result = null;
+            try {
+                result = new FapzoneCreatorSearchRepository().search(
+                        this,
+                        requestedQuery,
+                        40,
+                        (partial, complete) -> {
+                            if (complete || partial == null || partial.isEmpty()) return;
+                            List<NativeContentItem> visible = new ArrayList<>(partial);
+                            runOnUiThread(() -> {
+                                if (destroyed || isFinishing() || token != generation) return;
+                                status.setVisibility(View.GONE);
+                                List<NativeContentItem> combined = OnlyFapCreatorResults.merge(
+                                        onlyFapLocal, visible, 80);
+                                if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
+                                searchState.setText(combined.size() + " creators · Checking sources…");
+                                searchState.setContentDescription(searchState.getText());
+                            });
+                        }
+                );
+            } catch (Exception ignored) {
+            }
+
+            List<NativeContentItem> creators = result;
+            if (creators != null) CreatorCatalog.remember(getApplicationContext(), creators);
+            runOnUiThread(() -> {
+                if (destroyed || isFinishing() || token != generation) return;
+                pendingSources = 0;
+                progress.setVisibility(View.GONE);
+
+                if (creators == null) {
+                    searchState.setText("Live sources unavailable · Saved creators shown · Tap to retry");
+                    searchState.setContentDescription(searchState.getText());
+                    if (onlyFapLocal.isEmpty()) {
+                        status.setText("Couldn't reach the creator sources right now.\nTap the message above to retry.");
+                        status.setVisibility(View.VISIBLE);
+                    }
+                    return;
+                }
+
+                List<NativeContentItem> combined = OnlyFapCreatorResults.merge(
+                        onlyFapLocal, creators, 80);
+                if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
+                searchState.setText(combined.size() == 1
+                        ? "1 creator"
+                        : combined.size() + " creators");
+                searchState.setContentDescription(searchState.getText());
+
+                if (combined.isEmpty()) {
+                    status.setText("No creator matches for “" + requestedQuery + "”\n\nTry a shorter or more general search.");
+                    status.setVisibility(View.VISIBLE);
+                } else {
+                    status.setVisibility(View.GONE);
+                    if (restoredScroll != null && recycler.getLayoutManager() != null) {
+                        recycler.getLayoutManager().onRestoreInstanceState(restoredScroll);
+                        restoredScroll = null;
+                    }
+                }
+            });
+        }));
     }
 
     private void startGlobalSearch(String query, boolean clear) {
@@ -383,10 +499,10 @@ public final class SearchActivity extends Activity {
         source(token, 1, "EFukt videos", () -> efuktRepository.search(this, query));
         source(token, 2, "CrazyShit series", () -> matchCatalog(browseRepository.fetchSeries(this), query));
         source(token, 3, "EFukt series", () -> matchCatalog(efuktRepository.fetchSeries(this), query));
-        source(token, 4, "Fapzone albums", () -> bunkrRepository.searchAlbums(this, query, 1));
+        source(token, 4, "OnlyFap albums", () -> bunkrRepository.searchAlbums(this, query, 1));
         source(token, 5, "Categories", () -> matchCatalog(browseRepository.fetchCategories(this), query));
         source(token, 6, "Your Library", () -> searchLibrary(query));
-        source(token, 7, "Fapzone creators", () ->
+        source(token, 7, "OnlyFap creators", () ->
                 new FapzoneCreatorSearchRepository().search(this, query, 20));
     }
 
@@ -533,9 +649,9 @@ public final class SearchActivity extends Activity {
         if (filter == Filter.ALL || filter == Filter.VIDEOS) appendSection(output, "Videos  •  CrazyShit + EFukt", videos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Videos", efuktVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
         if (filter == Filter.ALL || filter == Filter.BUNKR || filter == Filter.COLLECTIONS) {
-            appendSection(output, "Fapzone Creators", fapzoneCreators,
+            appendSection(output, "OnlyFap Creators", fapzoneCreators,
                     GlobalSearchAdapter.SOURCE_REMOTE, 20);
-            appendSection(output, "Fapzone Albums", bunkrAlbums, GlobalSearchAdapter.SOURCE_REMOTE, 30);
+            appendSection(output, "OnlyFap Albums", bunkrAlbums, GlobalSearchAdapter.SOURCE_REMOTE, 30);
         }
         if (filter == Filter.ALL || filter == Filter.COLLECTIONS) appendSection(output, "Series", series, GlobalSearchAdapter.SOURCE_REMOTE, 20);
         if (filter == Filter.EFUKT) appendSection(output, "EFukt Series", efuktSeries, GlobalSearchAdapter.SOURCE_REMOTE, 20);
@@ -691,7 +807,7 @@ public final class SearchActivity extends Activity {
         state.putString("snapshot", snapshotId);
         state.putBoolean("suggestions", suggestions.isShowing());
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
-        saveSnapshot();
+        if (!bunkrOnly) saveSnapshot();
         super.onSaveInstanceState(state);
     }
 

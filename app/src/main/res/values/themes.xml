@@ -4,19 +4,23 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">@color/app_background</item>
-        <item name="android:statusBarColor">@color/app_background</item>
-        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowBackground">@color/zc_background</item>
+        <item name="android:colorBackground">@color/zc_background</item>
+        <item name="android:statusBarColor">@color/zc_background</item>
+        <item name="android:navigationBarColor">@color/zc_background</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="colorPrimary">@color/app_primary</item>
+        <item name="colorPrimary">@color/zc_cyan</item>
         <item name="colorOnPrimary">@color/app_on_primary</item>
-        <item name="colorSecondary">@color/app_primary</item>
+        <item name="colorSecondary">@color/zc_cyan</item>
         <item name="colorOnSecondary">@color/app_on_primary</item>
-        <item name="colorSurface">@color/app_surface</item>
-        <item name="colorOnSurface">@color/app_on_surface</item>
-        <item name="colorSurfaceVariant">@color/app_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/app_on_surface_variant</item>
-        <item name="bottomNavigationStyle">@style/Widget.CrazyShit.BottomNavigation</item>
+        <item name="colorSurface">@color/zc_surface_glass_strong</item>
+        <item name="colorOnSurface">@color/zc_text_primary</item>
+        <item name="colorSurfaceVariant">@color/zc_surface_glass</item>
+        <item name="colorOnSurfaceVariant">@color/zc_text_secondary</item>
+        <item name="bottomNavigationStyle">@style/Widget.ZeroChill.BottomNavigation</item>
+    </style>
+    <style name="Theme.ZeroChill.Splash" parent="Theme.CrazyShit">
+        <item name="android:windowBackground">@color/zc_background</item>
     </style>
 </resources>

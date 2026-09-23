@@ -1,0 +1,197 @@
+name: ZeroChill Signed Upgrade Candidate
+
+on:
+  pull_request:
+    branches: [ main, rebrand/zerochill ]
+    paths:
+      - 'app/**'
+      - '.github/workflows/rebrand-upgrade-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    env:
+      FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
+      FEEDBACK_ANON_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+      SOURCE_CONFIG_ENDPOINT: https://fketutffusxgjxjlckci.supabase.co/functions/v1/app-config
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.FEEDBACK_ANON_KEY }}
+
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v6
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Install Android API 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.7
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.7'
+          cache-provider: basic
+
+      - name: Resolve candidate version above latest stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LATEST_TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          LATEST_VERSION="${LATEST_TAG#v}"
+          python3 - "$LATEST_VERSION" <<'PY'
+          import os, pathlib, re, sys
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
+          if not match:
+              raise SystemExit(f"Latest stable tag is not major.minor.patch: {sys.argv[1]}")
+          major, minor, patch = map(int, match.groups())
+          patch += 1
+          if patch >= 1000:
+              patch = 0
+              minor += 1
+          if minor >= 1000:
+              minor = 0
+              major += 1
+          code = major * 1_000_000 + minor * 1000 + patch
+          if not 0 < code <= 2_100_000_000:
+              raise SystemExit("Preview version code is outside Android limits")
+          name = f"{major}.{minor}.{patch}-zerochill-preview"
+          release_version = pathlib.Path("RELEASE_VERSION").read_text().strip()
+          release_match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", release_version)
+          if not release_match:
+              raise SystemExit(f"Invalid RELEASE_VERSION: {release_version}")
+          release_major, release_minor, release_patch = map(int, release_match.groups())
+          release_code = release_major * 1_000_000 + release_minor * 1000 + release_patch
+          if release_code >= code:
+              code = release_code
+              name = release_version
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"APP_VERSION_CODE={code}\n")
+              output.write(f"APP_VERSION_NAME={name}\n")
+              output.write(f"LATEST_STABLE_VERSION={sys.argv[1]}\n")
+          print(f"Upgrade candidate version: {name} ({code})")
+          PY
+
+      - name: Restore production signing key
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python - <<'PY'
+          import base64, json, os, pathlib, sys
+          raw = os.environ.get("SIGNING_BUNDLE", "")
+          if not raw:
+              sys.exit("Missing repository secret: ANDROID_SIGNING_BUNDLE")
+          data = json.loads(raw.replace("\r", "").replace("\n", ""))
+          required = ["keystore_base64", "store_password", "key_alias", "key_password"]
+          missing = [key for key in required if not data.get(key)]
+          if missing:
+              sys.exit("Signing bundle is missing: " + ", ".join(missing))
+          for key in ("store_password", "key_alias", "key_password"):
+              print(f"::add-mask::{data[key]}")
+          keystore = pathlib.Path(os.environ["RUNNER_TEMP"]) / "zerochill-upgrade-candidate.jks"
+          keystore.write_bytes(base64.b64decode(data["keystore_base64"]))
+          keystore.chmod(0o600)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write(f"ANDROID_KEYSTORE_PATH={keystore}\n")
+              output.write(f"ANDROID_KEYSTORE_PASSWORD={data['store_password']}\n")
+              output.write(f"ANDROID_KEY_ALIAS={data['key_alias']}\n")
+              output.write(f"ANDROID_KEY_PASSWORD={data['key_password']}\n")
+          PY
+
+      - name: Build signed upgrade candidate
+        run: gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease
+
+      - name: Prepare candidate
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk ZeroChill-upgrade-candidate.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroChill-upgrade-candidate.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroChill-upgrade-candidate.apk | grep "package: name='com.addy37.crazyshitunofficial'"
+          sha256sum ZeroChill-upgrade-candidate.apk > SHA256SUMS-upgrade-candidate.txt
+
+      - name: Verify upgrade compatibility against latest stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/latest-stable"
+          if ! gh release download --repo "$GITHUB_REPOSITORY" --pattern 'ZeroChill.apk' --dir "$RUNNER_TEMP/latest-stable"; then
+            if ! gh release download --repo "$GITHUB_REPOSITORY" --pattern 'ZeroFilter.apk' --dir "$RUNNER_TEMP/latest-stable"; then
+              gh release download --repo "$GITHUB_REPOSITORY" --pattern 'CrazyShit.apk' --dir "$RUNNER_TEMP/latest-stable"
+            fi
+          fi
+          STABLE_APK="$(find "$RUNNER_TEMP/latest-stable" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          test -n "$STABLE_APK"
+
+          CANDIDATE_BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroChill-upgrade-candidate.apk)"
+          STABLE_BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$STABLE_APK")"
+          printf '%s\n' "$CANDIDATE_BADGING" | grep "package: name='com.addy37.crazyshitunofficial'"
+          printf '%s\n' "$STABLE_BADGING" | grep "package: name='com.addy37.crazyshitunofficial'"
+
+          CANDIDATE_CODE="$(printf '%s\n' "$CANDIDATE_BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
+          STABLE_CODE="$(printf '%s\n' "$STABLE_BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
+          test -n "$CANDIDATE_CODE"
+          test -n "$STABLE_CODE"
+          test "$CANDIDATE_CODE" -gt "$STABLE_CODE"
+
+          CANDIDATE_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs ZeroChill-upgrade-candidate.apk | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+          STABLE_CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$STABLE_APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
+          test -n "$CANDIDATE_CERT"
+          test "$CANDIDATE_CERT" = "$STABLE_CERT"
+          echo "Package ID, higher version code, and signing certificate match upgrade requirements from stable $LATEST_STABLE_VERSION."
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Prepare in-place upgrade script
+        run: |
+          cat > "$RUNNER_TEMP/verify-upgrade.sh" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          STABLE_APK="$(find "$RUNNER_TEMP/latest-stable" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          test -n "$STABLE_APK"
+          adb install "$STABLE_APK"
+          adb shell dumpsys package com.addy37.crazyshitunofficial > /tmp/zc-before.txt
+          BEFORE="$(sed -n 's/.*firstInstallTime=//p' /tmp/zc-before.txt | head -n 1)"
+          test -n "$BEFORE"
+          adb install -r ZeroChill-upgrade-candidate.apk
+          adb shell dumpsys package com.addy37.crazyshitunofficial > /tmp/zc-after.txt
+          AFTER="$(sed -n 's/.*firstInstallTime=//p' /tmp/zc-after.txt | head -n 1)"
+          test "$BEFORE" = "$AFTER"
+          grep -m1 "versionCode=$APP_VERSION_CODE" /tmp/zc-after.txt
+          echo "In-place upgrade installed; Android preserved the package's first-install record."
+          SH
+
+      - name: Install over previous stable on Android 15
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash "$RUNNER_TEMP/verify-upgrade.sh"
+
+      - name: Upload signed upgrade candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-upgrade-candidate
+          path: |
+            ZeroChill-upgrade-candidate.apk
+            SHA256SUMS-upgrade-candidate.txt
+          if-no-files-found: error
+          retention-days: 14

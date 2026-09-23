@@ -1323,7 +1323,7 @@ public class MainActivity extends Activity {
                 connection.setRequestProperty("Accept", "application/vnd.github+json");
                 connection.setRequestProperty(
                         "User-Agent",
-                        "CrazyShit-Android"
+                        "ZeroChill-Android"
                 );
 
                 int status = connection.getResponseCode();

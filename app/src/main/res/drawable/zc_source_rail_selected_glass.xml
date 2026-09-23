@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Selected source chips are intentionally quieter than selected bottom-nav tabs. -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#8C0B2634"
+                android:centerColor="#AA091822"
+                android:endColor="#C8070C11" />
+            <stroke android:width="1dp" android:color="#7A0892D0" />
+            <corners android:radius="@dimen/zc_radius_pill" />
+        </shape>
+    </item>
+
+    <item android:left="1dp" android:top="1dp" android:right="1dp" android:bottom="1dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#280892D0"
+                android:centerColor="#850B2634"
+                android:endColor="#AA0A1016" />
+            <stroke android:width="1dp" android:color="#520892D0" />
+            <corners android:radius="29dp" />
+        </shape>
+    </item>
+
+    <!-- Small selected pills get a centered, shortened sheen with softer falloff. -->
+    <item
+        android:left="10dp"
+        android:top="3dp"
+        android:right="10dp"
+        android:height="7dp"
+        android:gravity="top">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#12B7E0F2"
+                android:centerColor="#080892D0"
+                android:endColor="#000892D0" />
+            <corners android:radius="28dp" />
+        </shape>
+    </item>
+</layer-list>

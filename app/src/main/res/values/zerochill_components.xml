@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="TextAppearance.ZeroChill.Title" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textColor">@color/zc_text_primary</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="TextAppearance.ZeroChill.Body" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/zc_text_secondary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+    <style name="TextAppearance.ZeroChill.Label" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textColor">@color/zc_text_secondary</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+    <style name="Widget.ZeroChill.BottomNavigation" parent="Widget.Material3.BottomNavigationView">
+        <item name="android:minHeight">@dimen/zc_bottom_nav_height</item>
+        <item name="elevation">@dimen/zc_elevation_navigation</item>
+        <item name="itemIconSize">@dimen/zc_nav_icon</item>
+        <item name="itemIconTint">@color/nav_icon_tint</item>
+        <item name="itemTextColor">@color/nav_text_tint</item>
+        <item name="itemRippleColor">@color/nav_ripple</item>
+        <item name="itemPaddingTop">4dp</item>
+        <item name="itemPaddingBottom">4dp</item>
+        <item name="itemTextAppearanceActive">@style/TextAppearance.ZeroChill.Label</item>
+        <item name="itemTextAppearanceInactive">@style/TextAppearance.ZeroChill.Label</item>
+    </style>
+</resources>

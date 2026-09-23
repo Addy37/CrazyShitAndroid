@@ -421,18 +421,12 @@ public class PlayerActivity extends Activity {
     private void showPlayerMenu() {
         String saveTitle = FavoriteStore.contains(this, pageUrl)
                 ? "Remove from Watch Later"
-                : "Save to Watch Later";
+                : "Watch Later";
         VideoActionSheet.show(
                 this,
                 title,
                 VideoActionSheet.section(
                         "PLAYBACK",
-                        VideoActionSheet.action(
-                                R.drawable.ic_action_replay,
-                                "Restart video",
-                                "Play again from the beginning",
-                                this::restartVideo
-                        ),
                         VideoActionSheet.action(
                                 R.drawable.ic_action_speed,
                                 "Playback speed",
@@ -472,12 +466,12 @@ public class PlayerActivity extends Activity {
                         VideoActionSheet.action(
                                 R.drawable.ic_action_share,
                                 "Share",
-                                "Send the CrazyShit page",
+                                "Send the video page",
                                 this::sharePage
                         ),
                         VideoActionSheet.action(
                                 R.drawable.ic_more_website,
-                                "Open normal page",
+                                "Video details",
                                 "Return to the website view",
                                 this::returnToWebPage
                         )

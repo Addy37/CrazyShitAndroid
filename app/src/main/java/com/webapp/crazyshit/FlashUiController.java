@@ -142,7 +142,7 @@ final class FlashUiController {
             nav.setClipToPadding(false);
             nav.setPadding(dp(activity, 4), 0, dp(activity, 4), 0);
             nav.setItemIconSize(dp(activity, 21));
-            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(32, 251, 245, 6)));
+            nav.setItemRippleColor(ColorStateList.valueOf(Color.argb(32, 8, 146, 208)));
 
             if (nav.getParent() instanceof ViewGroup) {
                 ((ViewGroup) nav.getParent()).setClipChildren(false);
@@ -234,7 +234,7 @@ final class FlashUiController {
             fab.setElevation(dp(activity, 22));
             fab.setClickable(true);
             fab.setFocusable(true);
-            fab.setContentDescription("Chaos");
+            fab.setContentDescription("ShitTok");
             fab.setOnClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 if (nav != null) nav.setSelectedItemId(NAV_CHAOS);

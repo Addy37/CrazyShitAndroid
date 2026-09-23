@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -16,6 +17,7 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
+import android.view.MotionEvent;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,6 +33,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.window.OnBackInvokedCallback;
@@ -74,11 +77,14 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_RELATED_FEED_URL = "related_feed_url";
     public static final String EXTRA_SOURCE = "content_source";
     public static final String EXTRA_MEDIA_REFERER = "media_referer";
+    public static final String EXTRA_POSTER_URL = "poster_url";
 
     private static final String SITE = "https://crazyshit.com/";
     private static final int CONTROL_TIMEOUT_MS = 2600;
     private static final int RELATED_HISTORY_LIMIT = 24;
     private static final int RELATED_THUMBNAIL_WORKERS = 4;
+    private static final long RELATED_SLIDE_OUT_MS = 105L;
+    private static final long RELATED_SLIDE_IN_MS = 175L;
     private static final String THUMB_UA =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -87,6 +93,7 @@ public class VideoDetailActivity extends Activity {
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final WebVideoSourceRepository webVideoSourceRepository = new WebVideoSourceRepository();
     private final Map<String, ImageView> relatedImages = new LinkedHashMap<>();
     private final Map<String, String> resolvedRelatedThumbnails = new LinkedHashMap<>();
     private final Set<String> requestedRelatedThumbnails = new HashSet<>();
@@ -104,6 +111,9 @@ public class VideoDetailActivity extends Activity {
     private TextView playerTitleView;
     private ImageButton portraitFullscreenButton;
     private ProgressBar loading;
+    private ImageView startupPoster;
+    private ProgressBar startupPosterLoading;
+    private SeekBar portraitSeekBar;
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
     private OnBackInvokedCallback backCallback;
@@ -123,6 +133,7 @@ public class VideoDetailActivity extends Activity {
     private String relatedFeedUrl;
     private String source;
     private String mediaReferer;
+    private String posterUrl;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
     private long requestedStartPosition;
@@ -130,6 +141,8 @@ public class VideoDetailActivity extends Activity {
     private boolean failureShown;
     private boolean minimizing;
     private boolean entrancePlayed;
+    private boolean startupPosterDismissed;
+    private boolean relatedTransitionRunning;
     private boolean portraitVideo;
     private boolean portraitFullscreen;
     private boolean rotatableFullscreen;
@@ -138,6 +151,29 @@ public class VideoDetailActivity extends Activity {
     private int thumbnailResolverCursor;
     private int relatedLoadGeneration;
     private int relatedPlayGeneration;
+    private boolean portraitSeekScrubbing;
+
+    private final Runnable portraitProgressTicker = new Runnable() {
+        @Override
+        public void run() {
+            updatePortraitProgress();
+            if (portraitSeekBar != null) {
+                portraitSeekBar.postDelayed(this, 350L);
+            }
+        }
+    };
+    private final Runnable hidePortraitSeekBar = () -> {
+        if (portraitSeekBar == null || portraitSeekScrubbing || !canShowPortraitSeekBar()) return;
+        portraitSeekBar.animate()
+                .alpha(0f)
+                .setDuration(180L)
+                .withEndAction(() -> {
+                    if (portraitSeekBar != null && portraitSeekBar.getAlpha() == 0f) {
+                        portraitSeekBar.setVisibility(View.INVISIBLE);
+                    }
+                })
+                .start();
+    };
 
     private static final class VideoHistoryEntry {
         final String mediaUrl;
@@ -149,6 +185,7 @@ public class VideoDetailActivity extends Activity {
         final String userAgent;
         final String cookies;
         final String mediaReferer;
+        final String posterUrl;
         final long positionMs;
         final Bitmap previewBitmap;
 
@@ -162,6 +199,7 @@ public class VideoDetailActivity extends Activity {
                 String userAgent,
                 String cookies,
                 String mediaReferer,
+                String posterUrl,
                 long positionMs,
                 Bitmap previewBitmap
         ) {
@@ -174,6 +212,7 @@ public class VideoDetailActivity extends Activity {
             this.userAgent = userAgent;
             this.cookies = cookies;
             this.mediaReferer = mediaReferer;
+            this.posterUrl = posterUrl;
             this.positionMs = positionMs;
             this.previewBitmap = previewBitmap;
         }
@@ -182,9 +221,6 @@ public class VideoDetailActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        if (Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0);
-        }
 
         mediaUrl = getIntent().getStringExtra(PlayerActivity.EXTRA_MEDIA_URL);
         pageUrl = getIntent().getStringExtra(PlayerActivity.EXTRA_PAGE_URL);
@@ -197,6 +233,7 @@ public class VideoDetailActivity extends Activity {
         relatedFeedUrl = clean(getIntent().getStringExtra(EXTRA_RELATED_FEED_URL));
         source = clean(getIntent().getStringExtra(EXTRA_SOURCE));
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
+        posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -307,6 +344,68 @@ public class VideoDetailActivity extends Activity {
         playerView.setResizeMode(resizeMode);
         playerContainer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
+        portraitSeekBar = new SeekBar(this);
+        portraitSeekBar.setMax(1000);
+        portraitSeekBar.setProgress(0);
+        portraitSeekBar.setSplitTrack(false);
+        portraitSeekBar.setPadding(dp(8), 0, dp(8), 0);
+        portraitSeekBar.setProgressTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+        portraitSeekBar.setProgressBackgroundTintList(
+                ColorStateList.valueOf(Color.argb(100, 255, 255, 255))
+        );
+        portraitSeekBar.setThumbTintList(ColorStateList.valueOf(UiPalette.PRIMARY));
+        portraitSeekBar.setContentDescription("Video progress. Drag to seek.");
+        FrameLayout.LayoutParams portraitSeekParams =
+                new FrameLayout.LayoutParams(-1, dp(28));
+        portraitSeekParams.gravity = Gravity.BOTTOM;
+        playerContainer.addView(portraitSeekBar, portraitSeekParams);
+        portraitSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (!fromUser || player == null) return;
+                long duration = Math.max(0L, player.getDuration());
+                if (duration <= 0L) return;
+                player.seekTo(portraitSeekPosition(progress, seekBar.getMax(), duration));
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                portraitSeekScrubbing = true;
+                showPortraitSeekBar();
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                portraitSeekScrubbing = false;
+                updatePortraitProgress();
+                schedulePortraitSeekBarHide();
+            }
+        });
+        portraitSeekBar.setVisibility(View.INVISIBLE);
+        portraitSeekBar.setAlpha(0f);
+
+        startupPoster = new ImageView(this);
+        startupPoster.setBackgroundColor(Color.BLACK);
+        startupPoster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        startupPoster.setClickable(false);
+        playerContainer.addView(startupPoster, new FrameLayout.LayoutParams(-1, -1));
+
+        startupPosterLoading = new ProgressBar(this);
+        startupPosterLoading.setClickable(false);
+        if (startupPosterLoading.getIndeterminateDrawable() != null) {
+            startupPosterLoading.getIndeterminateDrawable().setTint(UiPalette.PRIMARY);
+        }
+        FrameLayout.LayoutParams startupLoadingParams =
+                new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER);
+        playerContainer.addView(startupPosterLoading, startupLoadingParams);
+
+        playerView.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+                showPortraitSeekBar();
+            }
+            return false;
+        });
+
         View playerBack = playerView.findViewById(R.id.player_back);
         playerTitleView = playerView.findViewById(R.id.player_title);
         portraitFullscreenButton = playerView.findViewById(R.id.player_portrait_fullscreen);
@@ -413,6 +512,122 @@ public class VideoDetailActivity extends Activity {
     private boolean oledEnabled() {
         return getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean("oled_black_enabled", true);
+    }
+
+    private void showStartupPoster() {
+        if (startupPoster == null) return;
+
+        startupPosterDismissed = false;
+        startupPoster.animate().cancel();
+        startupPoster.setAlpha(1f);
+        startupPoster.setVisibility(View.VISIBLE);
+        try {
+            Glide.with(startupPoster).clear(startupPoster);
+        } catch (Exception ignored) {
+        }
+        startupPoster.setImageDrawable(null);
+
+        if (startupPosterLoading != null) {
+            startupPosterLoading.animate().cancel();
+            startupPosterLoading.setAlpha(1f);
+            startupPosterLoading.setVisibility(View.VISIBLE);
+        }
+
+        if (posterUrl != null && !posterUrl.isEmpty()) {
+            loadImage(startupPoster, posterUrl, pageUrl);
+        }
+    }
+
+    private void dismissStartupPoster() {
+        if (startupPosterDismissed || startupPoster == null) return;
+        startupPosterDismissed = true;
+
+        if (!ZeroChillMotion.animationsEnabled(this)) {
+            hideStartupPosterNow();
+            return;
+        }
+
+        if (startupPosterLoading != null) {
+            startupPosterLoading.animate().cancel();
+            startupPosterLoading.animate()
+                    .alpha(0f)
+                    .setDuration(100L)
+                    .start();
+        }
+
+        startupPoster.animate().cancel();
+        startupPoster.animate()
+                .alpha(0f)
+                .setDuration(140L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(this::hideStartupPosterNow)
+                .start();
+    }
+
+    private void hideStartupPosterNow() {
+        if (startupPoster != null) {
+            startupPoster.animate().cancel();
+            startupPoster.setAlpha(1f);
+            startupPoster.setVisibility(View.GONE);
+            try {
+                Glide.with(startupPoster).clear(startupPoster);
+            } catch (Exception ignored) {
+            }
+            startupPoster.setImageDrawable(null);
+        }
+        if (startupPosterLoading != null) {
+            startupPosterLoading.animate().cancel();
+            startupPosterLoading.setAlpha(1f);
+            startupPosterLoading.setVisibility(View.GONE);
+        }
+    }
+
+    private boolean canAnimateRelatedTransition() {
+        return ZeroChillMotion.animationsEnabled(this)
+                && !isFinishing()
+                && shell != null
+                && root != null
+                && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE
+                && !portraitFullscreen
+                && !rotatableFullscreen;
+    }
+
+    private void animateRelatedTransition(boolean forward, Runnable swapContent) {
+        if (swapContent == null) return;
+        if (!canAnimateRelatedTransition()) {
+            swapContent.run();
+            return;
+        }
+
+        relatedTransitionRunning = true;
+        shell.animate().cancel();
+        float travel = Math.max(dp(92), root.getWidth() * 0.28f);
+        float exitX = forward ? -travel : travel;
+        float enterX = -exitX;
+
+        shell.animate()
+                .translationX(exitX)
+                .alpha(0.94f)
+                .setDuration(RELATED_SLIDE_OUT_MS)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> {
+                    swapContent.run();
+                    if (shell == null || isFinishing()) {
+                        relatedTransitionRunning = false;
+                        return;
+                    }
+                    shell.animate().cancel();
+                    shell.setTranslationX(enterX);
+                    shell.setAlpha(0.94f);
+                    shell.animate()
+                            .translationX(0f)
+                            .alpha(1f)
+                            .setDuration(RELATED_SLIDE_IN_MS)
+                            .setInterpolator(new DecelerateInterpolator())
+                            .withEndAction(() -> relatedTransitionRunning = false)
+                            .start();
+                })
+                .start();
     }
 
     private void playEntranceOnce() {
@@ -528,6 +743,7 @@ public class VideoDetailActivity extends Activity {
         else updatePortraitFullscreenButton();
         releasePlayer();
         failureShown = false;
+        showStartupPoster();
 
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory();
         if (!userAgent.isEmpty()) httpFactory.setUserAgent(userAgent);
@@ -582,7 +798,13 @@ public class VideoDetailActivity extends Activity {
             }
 
             @Override
+            public void onRenderedFirstFrame() {
+                dismissStartupPoster();
+            }
+
+            @Override
             public void onPlayerError(PlaybackException error) {
+                dismissStartupPoster();
                 if (!recoverPlayback(error)) showPlaybackFailure();
             }
 
@@ -601,6 +823,76 @@ public class VideoDetailActivity extends Activity {
             }
         });
         player.prepare();
+        startPortraitProgressTicker();
+        showPortraitSeekBar();
+    }
+
+    static float portraitProgressFraction(long positionMs, long durationMs) {
+        if (durationMs <= 0L || positionMs <= 0L) return 0f;
+        return Math.max(0f, Math.min(1f, positionMs / (float) durationMs));
+    }
+
+    static long portraitSeekPosition(int progress, int max, long durationMs) {
+        if (max <= 0 || durationMs <= 0L) return 0L;
+        int clamped = Math.max(0, Math.min(max, progress));
+        return Math.round(durationMs * (clamped / (double) max));
+    }
+
+    private boolean canShowPortraitSeekBar() {
+        return getResources().getConfiguration().orientation
+                != Configuration.ORIENTATION_LANDSCAPE
+                && !portraitFullscreen
+                && !rotatableFullscreen;
+    }
+
+    private void showPortraitSeekBar() {
+        if (portraitSeekBar == null || !canShowPortraitSeekBar()) return;
+        portraitSeekBar.removeCallbacks(hidePortraitSeekBar);
+        portraitSeekBar.animate().cancel();
+        portraitSeekBar.setVisibility(View.VISIBLE);
+        portraitSeekBar.animate().alpha(1f).setDuration(120L).start();
+        schedulePortraitSeekBarHide();
+    }
+
+    private void schedulePortraitSeekBarHide() {
+        if (portraitSeekBar == null || portraitSeekScrubbing || !canShowPortraitSeekBar()) return;
+        portraitSeekBar.removeCallbacks(hidePortraitSeekBar);
+        portraitSeekBar.postDelayed(hidePortraitSeekBar, CONTROL_TIMEOUT_MS);
+    }
+
+    private void startPortraitProgressTicker() {
+        if (portraitSeekBar == null) return;
+        portraitSeekBar.removeCallbacks(portraitProgressTicker);
+        updatePortraitProgress();
+        portraitSeekBar.postDelayed(portraitProgressTicker, 350L);
+    }
+
+    private void stopPortraitProgressTicker() {
+        if (portraitSeekBar != null) {
+            portraitSeekBar.removeCallbacks(portraitProgressTicker);
+            portraitSeekBar.removeCallbacks(hidePortraitSeekBar);
+        }
+    }
+
+    private void updatePortraitProgress() {
+        if (portraitSeekBar == null) return;
+        if (!canShowPortraitSeekBar()) {
+            portraitSeekBar.animate().cancel();
+            portraitSeekBar.setVisibility(View.GONE);
+            return;
+        }
+        if (portraitSeekBar.getVisibility() == View.GONE) {
+            portraitSeekBar.setVisibility(View.INVISIBLE);
+            portraitSeekBar.setAlpha(0f);
+        }
+        if (portraitSeekScrubbing) return;
+
+        long position = player == null ? 0L : Math.max(0L, player.getCurrentPosition());
+        long duration = player == null ? 0L : Math.max(0L, player.getDuration());
+        int progress = Math.round(
+                portraitProgressFraction(position, duration) * portraitSeekBar.getMax()
+        );
+        portraitSeekBar.setProgress(progress);
     }
 
     private void updateMetadataUi() {
@@ -646,6 +938,20 @@ public class VideoDetailActivity extends Activity {
                     List<NativeContentItem> series = efuktRepository.fetchSeriesFeed(this, feed, 1);
                     for (NativeContentItem item : series) {
                         if (!item.url.equals(excludeUrl)) merged.put(item.url, item);
+                    }
+                } catch (Exception ignored) {
+                }
+            } else if (isKaotic()) {
+                try {
+                    List<NativeContentItem> kaotic = webVideoSourceRepository.fetchFeed(
+                            this,
+                            WebVideoSourceRepository.Source.KAOTIC,
+                            1
+                    );
+                    for (NativeContentItem item : kaotic) {
+                        if (item != null && !item.isSection() && !item.url.equals(excludeUrl)) {
+                            merged.put(item.url, item);
+                        }
                     }
                 } catch (Exception ignored) {
                 }
@@ -847,7 +1153,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void playRelated(NativeContentItem item) {
-        if (item == null || item.url == null || item.url.isEmpty()) return;
+        if (item == null || item.url == null || item.url.isEmpty() || relatedTransitionRunning) return;
         loading.setVisibility(View.VISIBLE);
         final int requestGeneration = ++relatedPlayGeneration;
         io.execute(() -> {
@@ -866,20 +1172,25 @@ public class VideoDetailActivity extends Activity {
                 }
                 pushCurrentVideo();
                 savePlaybackState(false);
-                mediaUrl = resolved.mediaUrl;
-                pageUrl = item.url;
-                mediaReferer = resolved.requestReferer;
-                title = clean(item.title).isEmpty() ? resolved.title : item.title;
-                views = clean(item.views);
-                uploader = clean(item.uploader);
-                comments = clean(item.comments);
-                userAgent = defaultUserAgent();
-                cookies = cookiesFor(mediaUrl, pageUrl);
-                requestedStartPosition = -1L;
-                updateMetadataUi();
-                buildPlayer(-1L);
-                if (detailsScroll != null) detailsScroll.smoothScrollTo(0, 0);
-                loadRelated();
+                Runnable swap = () -> {
+                    mediaUrl = resolved.mediaUrl;
+                    pageUrl = item.url;
+                    mediaReferer = resolved.requestReferer;
+                    String resolvedPoster = resolvedRelatedThumbnails.get(item.url);
+                    posterUrl = clean(resolvedPoster).isEmpty() ? clean(item.imageUrl) : clean(resolvedPoster);
+                    title = clean(item.title).isEmpty() ? resolved.title : item.title;
+                    views = clean(item.views);
+                    uploader = clean(item.uploader);
+                    comments = clean(item.comments);
+                    userAgent = defaultUserAgent();
+                    cookies = cookiesFor(mediaUrl, pageUrl);
+                    requestedStartPosition = -1L;
+                    updateMetadataUi();
+                    buildPlayer(-1L);
+                    if (detailsScroll != null) detailsScroll.smoothScrollTo(0, 0);
+                    loadRelated();
+                };
+                animateRelatedTransition(true, swap);
             });
         });
     }
@@ -897,6 +1208,7 @@ public class VideoDetailActivity extends Activity {
                 userAgent,
                 cookies,
                 mediaReferer,
+                posterUrl,
                 position,
                 captureRelatedBackPreview()
         ));
@@ -905,7 +1217,16 @@ public class VideoDetailActivity extends Activity {
         }
     }
 
-    private boolean restorePreviousRelatedVideo() {
+    private boolean restorePreviousRelatedVideo(boolean animate) {
+        if (relatedTransitionRunning || relatedHistory.isEmpty()) return false;
+        if (animate && canAnimateRelatedTransition()) {
+            animateRelatedTransition(false, this::restorePreviousRelatedVideoNow);
+            return true;
+        }
+        return restorePreviousRelatedVideoNow();
+    }
+
+    private boolean restorePreviousRelatedVideoNow() {
         VideoHistoryEntry previous = relatedHistory.pollLast();
         if (previous == null) return false;
 
@@ -921,6 +1242,7 @@ public class VideoDetailActivity extends Activity {
         userAgent = previous.userAgent;
         cookies = previous.cookies;
         mediaReferer = previous.mediaReferer;
+        posterUrl = previous.posterUrl;
         requestedStartPosition = previous.positionMs;
         updateMetadataUi();
         buildPlayer(previous.positionMs);
@@ -1119,7 +1441,7 @@ public class VideoDetailActivity extends Activity {
                 .setInterpolator(new DecelerateInterpolator())
                 .withEndAction(() -> {
                     clearRelatedBackPreviewLayer();
-                    boolean restored = restorePreviousRelatedVideo();
+                    boolean restored = restorePreviousRelatedVideo(false);
                     resetRelatedBackForeground();
                     if (!restored) handleBack();
                 })
@@ -1186,7 +1508,7 @@ public class VideoDetailActivity extends Activity {
     private void showPlayerMenu() {
         String saveTitle = FavoriteStore.contains(this, pageUrl)
                 ? "Remove from Watch Later"
-                : "Save to Watch Later";
+                : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
         if (supportsComments()) {
             actions.add(VideoActionSheet.action(
@@ -1199,12 +1521,12 @@ public class VideoDetailActivity extends Activity {
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_action_share,
                 "Share",
-                "Send the CrazyShit page",
+                "Send the video page",
                 this::sharePage
         ));
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
-                "Open webpage",
+                "Video details",
                 "View this video on the site",
                 () -> openWebsite(pageUrl)
         ));
@@ -1294,6 +1616,10 @@ public class VideoDetailActivity extends Activity {
 
     private boolean isBunkr() {
         return NativeFeedBrowserActivity.SOURCE_BUNKR.equals(source) || BunkrRepository.isBunkrUrl(pageUrl);
+    }
+
+    private boolean isKaotic() {
+        return "kaotic".equals(source) || WebVideoSourceRepository.isKaoticUrl(pageUrl);
     }
 
     private boolean supportsComments() {
@@ -1386,6 +1712,8 @@ public class VideoDetailActivity extends Activity {
         playerContainer.setAlpha(1f);
         updatePortraitFullscreenButton();
         updateSwipeEnabled();
+        updatePortraitProgress();
+        if (canShowPortraitSeekBar()) showPortraitSeekBar();
         shell.requestApplyInsets();
     }
 
@@ -1499,14 +1827,13 @@ public class VideoDetailActivity extends Activity {
             PhoneOrientationPolicy.exitFullscreenVideo(this);
             return;
         }
-        if (restorePreviousRelatedVideo()) return;
+        if (restorePreviousRelatedVideo(true)) return;
         if (getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("minimize_on_back", true)) {
             minimizing = true;
             minimizeToFeed();
         } else {
             savePlaybackState(false);
             finish();
-            suppressCloseTransition();
         }
     }
 
@@ -1530,16 +1857,6 @@ public class VideoDetailActivity extends Activity {
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
         setResult(RESULT_OK, result);
         finish();
-        suppressCloseTransition();
-    }
-
-    @SuppressWarnings("deprecation")
-    private void suppressCloseTransition() {
-        if (Build.VERSION.SDK_INT >= 34) {
-            overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0);
-        } else {
-            overridePendingTransition(0, 0);
-        }
     }
 
     @Override
@@ -1588,6 +1905,9 @@ public class VideoDetailActivity extends Activity {
 
     private void releasePlayer() {
         playbackRecovery.cancel();
+        stopPortraitProgressTicker();
+        portraitSeekScrubbing = false;
+        if (portraitSeekBar != null) portraitSeekBar.setProgress(0);
         if (playerView != null) playerView.setPlayer(null);
         if (player != null) {
             try {
@@ -1657,12 +1977,14 @@ public class VideoDetailActivity extends Activity {
         recoveryResumed = true;
         if (orientationListener != null) orientationListener.enable();
         updateSwipeEnabled();
+        startPortraitProgressTicker();
         if (detailsScroll != null) applyDetailsBackground();
     }
 
     @Override
     protected void onPause() {
         if (orientationListener != null) orientationListener.disable();
+        stopPortraitProgressTicker();
         super.onPause();
     }
 

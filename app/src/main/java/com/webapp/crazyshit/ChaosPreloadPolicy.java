@@ -53,9 +53,9 @@ final class ChaosPreloadPolicy {
             return "Wi-Fi / unmetered only. Uses Minimal behavior on metered connections.";
         }
         if (MODE_MINIMAL.equals(mode)) {
-            return "Minimal. Prepares only the current Chaos video and loads comments on demand.";
+            return "Minimal. Prepares only the current ShitTok video and loads comments on demand.";
         }
-        return "Full. Preloads nearby Chaos videos and comments for faster swipes.";
+        return "Full. Preloads nearby ShitTok videos and comments for faster swipes.";
     }
 
     static boolean allowsLookAhead(Context context) {

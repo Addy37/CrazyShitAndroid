@@ -9,6 +9,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.Menu;
@@ -44,16 +47,17 @@ import java.util.concurrent.Executors;
 public class NativeMainActivity extends Activity implements NativeMiniPlayer.Host {
     private static final int NAV_HOME = 1;
     private static final int NAV_SERIES = 2;
-    private static final int NAV_CATEGORIES = 3;
+    @Deprecated private static final int NAV_CATEGORIES = 3;
+    private static final int NAV_ONLYFAP = NAV_CATEGORIES;
     private static final int NAV_CHAOS = 4;
     private static final int NAV_MORE = 5;
     private static final int PLAYER_REQUEST = 3001;
-    private static final int FAVORITES_REQUEST = 3002;
+    static final int FAVORITES_REQUEST = 3002;
 
     private enum Screen {
         HOME,
         SERIES,
-        CATEGORIES,
+        ONLYFAP,
         CHAOS,
         SEARCH
     }
@@ -67,7 +71,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private TextView headerSubtitle;
     private RecyclerView recycler;
     private SwipeRefreshLayout swipeRefresh;
-    private ProgressBar progress;
+    private View progress;
     private TextView emptyView;
     private BottomNavigationView bottomNavigation;
     private NativeFeedAdapter feedAdapter;
@@ -91,13 +95,17 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private boolean endReached;
     private int generation;
     private int restoredPrimaryPage = -1;
+    private int portraitInsetLeft = -1;
+    private int portraitInsetTop = -1;
+    private int portraitInsetRight = -1;
+    private int portraitInsetBottom = -1;
+    private boolean restoringPortraitFromFullscreen;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         if (state != null) restoredPrimaryPage = state.getInt("primary_page", -1);
-        getWindow().setStatusBarColor(Color.BLACK);
-        getWindow().setNavigationBarColor(Color.BLACK);
+        ZeroChillUi.applySystemBars(this);
         FeedViewStyleController.prepareVisualRefresh(this);
         buildUi();
         appUpdater = new AppUpdater(this);
@@ -132,36 +140,25 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void buildUi() {
         overlayRoot = new FrameLayout(this);
-        overlayRoot.setBackgroundColor(Color.BLACK);
+        overlayRoot.setBackgroundColor(ZeroChillUi.background(this));
 
-        shell = new LinearLayout(this);
+        shell = new FrostedNavigationLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.BLACK);
+        shell.setBackgroundColor(ZeroChillUi.background(this));
         shell.setOnApplyWindowInsetsListener((view, insets) -> {
-            int left;
-            int top;
-            int right;
-            int bottom;
-            if (Build.VERSION.SDK_INT >= 30) {
-                android.graphics.Insets safe = insets.getInsets(
-                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
-                );
-                left = safe.left;
-                top = safe.top;
-                right = safe.right;
-                bottom = safe.bottom;
-            } else {
-                left = insets.getSystemWindowInsetLeft();
-                top = insets.getSystemWindowInsetTop();
-                right = insets.getSystemWindowInsetRight();
-                bottom = insets.getSystemWindowInsetBottom();
+            boolean landscape = getResources().getConfiguration().orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+            if (!(restoringPortraitFromFullscreen && landscape)) {
+                applyShellInsets(view, insets, false);
             }
-            view.setPadding(left, top, right, bottom);
             return insets;
         });
         overlayRoot.addView(shell, new FrameLayout.LayoutParams(-1, -1));
 
-        shell.addView(buildTopBar(), new LinearLayout.LayoutParams(-1, dp(56)));
+        shell.addView(buildTopBar(), new LinearLayout.LayoutParams(
+                -1,
+                ZeroChillUi.dimension(this, R.dimen.zc_top_bar_height)
+        ));
 
         FrameLayout content = new FrameLayout(this);
         legacyContent = content;
@@ -191,6 +188,19 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         primaryPager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
         primaryPager.setOffscreenPageLimit(MainPagerAdapter.PAGE_COUNT - 1);
         primaryPager.setAdapter(primaryPagerAdapter);
+        primaryPager.setPageTransformer((page, position) -> {
+            if (ZeroChillMotion.animationsEnabled(page.getContext())) {
+                float distance = Math.min(1f, Math.abs(position));
+                page.setAlpha(1f - (distance * 0.10f));
+                float scale = 1f - (distance * 0.012f);
+                page.setScaleX(scale);
+                page.setScaleY(scale);
+            } else {
+                page.setAlpha(1f);
+                page.setScaleX(1f);
+                page.setScaleY(1f);
+            }
+        });
         primaryPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
@@ -205,24 +215,20 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         content.addView(swipeRefresh, new FrameLayout.LayoutParams(-1, -1));
 
         recycler = new RecyclerView(this);
-        recycler.setBackgroundColor(Color.BLACK);
+        recycler.setBackgroundColor(ZeroChillUi.background(this));
         recycler.setClipToPadding(false);
         recycler.setPadding(0, dp(5), 0, dp(18));
         recycler.setItemAnimator(null);
         swipeRefresh.addView(recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
 
-        progress = new ProgressBar(this);
-        progress.setIndeterminate(true);
+        progress = new ZeroChillLoadingView(this, null);
         progress.setVisibility(View.GONE);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(72), dp(72));
         progressParams.gravity = Gravity.CENTER;
         content.addView(progress, progressParams);
 
         emptyView = new TextView(this);
-        emptyView.setTextColor(Color.rgb(190, 190, 198));
-        emptyView.setTextSize(15);
-        emptyView.setGravity(Gravity.CENTER);
-        emptyView.setPadding(dp(28), dp(28), dp(28), dp(28));
+        ZeroChillUi.styleEmpty(emptyView);
         emptyView.setVisibility(View.GONE);
         emptyView.setOnClickListener(v -> openFallback(feedBaseUrl));
         content.addView(emptyView, new FrameLayout.LayoutParams(-1, -1));
@@ -263,15 +269,15 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
         });
 
-        bottomNavigation = new BottomNavigationView(this);
-        bottomNavigation.setBackgroundColor(Color.rgb(21, 21, 24));
-        bottomNavigation.setElevation(dp(12));
+        bottomNavigation = new ZeroChillBottomNavigationView(this);
+        bottomNavigation.setBackground(ZeroChillUi.navigationGlass(this));
+        bottomNavigation.setElevation(ZeroChillUi.dimension(this, R.dimen.zc_elevation_navigation));
         bottomNavigation.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
         Menu menu = bottomNavigation.getMenu();
         menu.add(Menu.NONE, NAV_HOME, 0, "Home").setIcon(R.drawable.ic_nav_home);
-        menu.add(Menu.NONE, NAV_SERIES, 1, "Collections").setIcon(R.drawable.ic_nav_series);
-        menu.add(Menu.NONE, NAV_CHAOS, 2, "Chaos").setIcon(R.drawable.ic_nav_chaos);
-        menu.add(Menu.NONE, NAV_CATEGORIES, 3, "Categories").setIcon(R.drawable.ic_nav_categories);
+        menu.add(Menu.NONE, NAV_SERIES, 1, "Shows").setIcon(R.drawable.ic_nav_series);
+        menu.add(Menu.NONE, NAV_CHAOS, 2, "ShitTok").setIcon(R.drawable.ic_nav_chaos);
+        menu.add(Menu.NONE, NAV_ONLYFAP, 3, "OnlyFap").setIcon(R.drawable.ic_nav_onlyfap);
         menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
         bottomNavigation.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
@@ -283,8 +289,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 showSeries();
                 return true;
             }
-            if (id == NAV_CATEGORIES) {
-                showCategoriesPage();
+            if (id == NAV_ONLYFAP) {
+                showOnlyFapPage();
                 return true;
             }
             if (id == NAV_CHAOS) {
@@ -297,11 +303,14 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
             return false;
         });
-        shell.addView(bottomNavigation, new LinearLayout.LayoutParams(-1, dp(76)));
+        shell.addView(bottomNavigation, new LinearLayout.LayoutParams(
+                -1,
+                ZeroChillUi.dimension(this, R.dimen.zc_bottom_nav_height)
+        ));
         bottomNavigation.post(() -> {
             View chaosItem = bottomNavigation.findViewById(NAV_CHAOS);
             if (chaosItem != null) {
-                chaosItem.setContentDescription("Chaos featured tab");
+                chaosItem.setContentDescription("ShitTok featured tab");
             }
         });
 
@@ -313,29 +322,23 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(10), 0, dp(4), 0);
-        bar.setBackgroundColor(Color.BLACK);
-
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(R.mipmap.ic_launcher);
-        icon.setVisibility(View.GONE);
-        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        bar.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        bar.setPadding(dp(18), 0, dp(12), 0);
+        bar.setBackgroundColor(ZeroChillUi.background(this));
+        bar.setElevation(0f);
 
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.setPadding(dp(9), 0, dp(8), 0);
+        labels.setPadding(0, 0, dp(8), 0);
 
         headerTitle = new TextView(this);
-        headerTitle.setTextColor(UiPalette.PRIMARY);
-        headerTitle.setTextSize(23);
-        headerTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        ZeroChillUi.styleTitle(headerTitle);
+        headerTitle.setTextSize(28f);
         headerTitle.setSingleLine(true);
         labels.addView(headerTitle);
 
         headerSubtitle = new TextView(this);
-        headerSubtitle.setText("CrazyShit");
-        headerSubtitle.setTextColor(Color.rgb(168, 168, 178));
+        headerSubtitle.setText(R.string.zerochill_tagline);
+        ZeroChillUi.styleSecondary(headerSubtitle);
         headerSubtitle.setTextSize(11);
         labels.addView(headerSubtitle);
         headerSubtitle.setVisibility(View.GONE);
@@ -345,21 +348,21 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         search.setImageResource(R.drawable.ic_nav_search);
         search.setPadding(dp(12), dp(12), dp(12), dp(12));
         search.setContentDescription("Search");
+        search.setColorFilter(ZeroChillUi.color(this, R.color.zc_cyan));
+        search.setBackground(ZeroChillUi.rounded(
+                this,
+                ZeroChillUi.color(this, R.color.zc_cyan_container),
+                Color.TRANSPARENT,
+                R.dimen.zc_radius_pill
+        ));
         search.setClickable(true);
         search.setFocusable(true);
+        ZeroChillMotion.installPressFeedback(search);
         search.setOnClickListener(v -> {
             haptic(v);
             openContextualSearch();
         });
         bar.addView(search, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        ImageView profile = new ImageView(this);
-        profile.setImageResource(R.drawable.ic_more_account);
-        profile.setColorFilter(Color.WHITE);
-        profile.setPadding(dp(12), dp(12), dp(12), dp(12));
-        profile.setContentDescription("My profile");
-        profile.setFocusable(true);
-        profile.setOnClickListener(v -> startActivity(new Intent(this, ProfileActivity.class)));
-        bar.addView(profile, new LinearLayout.LayoutParams(dp(48), dp(48)));
         return bar;
     }
 
@@ -371,20 +374,18 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         showPrimaryPage(MainPagerAdapter.PAGE_SERIES, true);
     }
 
-    private void showCategoriesPage() {
-        showPrimaryPage(MainPagerAdapter.PAGE_CATEGORIES, true);
+    private void showOnlyFapPage() {
+        showPrimaryPage(MainPagerAdapter.PAGE_ONLYFAP, true);
     }
 
-    boolean isBunkrCollectionSearchContext() {
+    boolean isOnlyFapSearchContext() {
         return primaryPager != null &&
                 primaryPager.getVisibility() == View.VISIBLE &&
-                primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_SERIES &&
-                primaryPagerAdapter != null &&
-                primaryPagerAdapter.isBunkrCollectionsSelected();
+                primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_ONLYFAP;
     }
 
     void openContextualSearch() {
-        Intent intent = isBunkrCollectionSearchContext()
+        Intent intent = isOnlyFapSearchContext()
                 ? SearchActivity.createBunkrSearch(this)
                 : new Intent(this, SearchActivity.class);
         startActivity(intent);
@@ -393,7 +394,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void showPrimaryPage(int position, boolean smooth) {
         if (primaryPager == null) return;
         showPagerChrome(position);
-        primaryPager.setCurrentItem(position, smooth);
+        primaryPager.setCurrentItem(position, smooth && ZeroChillMotion.animationsEnabled(this));
     }
 
     private void showPagerChrome(int position) {
@@ -415,17 +416,17 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (position == MainPagerAdapter.PAGE_SERIES) {
             screen = Screen.SERIES;
             feedBaseUrl = CrazyShitRepository.HOME;
-            feedTitle = "Collections";
+            feedTitle = "Shows";
             selectNavSilently(NAV_SERIES);
-        } else if (position == MainPagerAdapter.PAGE_CATEGORIES) {
-            screen = Screen.CATEGORIES;
+        } else if (position == MainPagerAdapter.PAGE_ONLYFAP) {
+            screen = Screen.ONLYFAP;
             feedBaseUrl = CrazyShitRepository.HOME;
-            feedTitle = "Categories";
-            selectNavSilently(NAV_CATEGORIES);
+            feedTitle = "OnlyFap";
+            selectNavSilently(NAV_ONLYFAP);
         } else if (position == MainPagerAdapter.PAGE_CHAOS) {
             screen = Screen.CHAOS;
             feedBaseUrl = CrazyShitRepository.HOME;
-            feedTitle = "Chaos";
+            feedTitle = "ShitTok";
             selectNavSilently(NAV_CHAOS);
         } else {
             screen = Screen.HOME;
@@ -435,21 +436,34 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         }
 
         if (primaryPagerAdapter != null) primaryPagerAdapter.setPrimaryActive(position);
-        if (headerTitle != null) headerTitle.setText(position == MainPagerAdapter.PAGE_HOME ? "CrazyShit" : feedTitle);
-        if (headerSubtitle != null && primaryPagerAdapter != null) {
-            if (position == MainPagerAdapter.PAGE_CHAOS) {
-                headerSubtitle.setText("Random video feed  •  Swipe up/down");
-            } else if (position == MainPagerAdapter.PAGE_SERIES) {
-                headerSubtitle.setText("CrazyShit  •  EFukt  •  Fapzone");
-            } else if (position == MainPagerAdapter.PAGE_CATEGORIES) {
-                headerSubtitle.setText("CrazyShit  •  Browse categories");
+        if (headerTitle != null) {
+            if (position == MainPagerAdapter.PAGE_HOME) {
+                setZeroChillWordmark();
             } else {
-                headerSubtitle.setText("CrazyShit  •  " +
-                        viewModeLabel(primaryPagerAdapter.viewMode(position)));
+                headerTitle.setText(feedTitle);
+                headerTitle.setTextColor(ZeroChillUi.color(this, R.color.zc_text_primary));
             }
         }
+        if (headerSubtitle != null) headerSubtitle.setVisibility(View.GONE);
         applyChaosFullscreenChrome();
         if (position == MainPagerAdapter.PAGE_HOME) scheduleRatingPromptCheck();
+    }
+
+    private void setZeroChillWordmark() {
+        SpannableString wordmark = new SpannableString("ZEROCHILL");
+        wordmark.setSpan(
+                new ForegroundColorSpan(ZeroChillUi.color(this, R.color.zc_text_primary)),
+                0,
+                4,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        wordmark.setSpan(
+                new ForegroundColorSpan(ZeroChillUi.color(this, R.color.zc_cyan)),
+                4,
+                wordmark.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        headerTitle.setText(wordmark);
     }
 
     private void scheduleRatingPromptCheck() {
@@ -487,6 +501,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     );
                 } else {
                     controller.show(types);
+                    restoreShellInsetsAfterFullscreen();
                 }
             }
         } else {
@@ -501,8 +516,77 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 );
             } else {
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+                restoreShellInsetsAfterFullscreen();
             }
         }
+    }
+
+    private void applyShellInsets(View view, WindowInsets insets, boolean includeHiddenSystemBars) {
+        if (view == null || insets == null) return;
+        int left;
+        int top;
+        int right;
+        int bottom;
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.graphics.Insets safe = safeShellInsets(insets, includeHiddenSystemBars);
+            left = safe.left;
+            top = safe.top;
+            right = safe.right;
+            bottom = safe.bottom;
+        } else {
+            left = insets.getSystemWindowInsetLeft();
+            top = insets.getSystemWindowInsetTop();
+            right = insets.getSystemWindowInsetRight();
+            bottom = insets.getSystemWindowInsetBottom();
+        }
+        view.setPadding(left, top, right, bottom);
+        cachePortraitShellInsets(left, top, right, bottom);
+    }
+
+    private void cachePortraitShellInsets(int left, int top, int right, int bottom) {
+        boolean portrait = getResources().getConfiguration().orientation !=
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        if (!portrait || top <= 0) return;
+        portraitInsetLeft = left;
+        portraitInsetTop = top;
+        portraitInsetRight = right;
+        portraitInsetBottom = bottom;
+    }
+
+    int cachedPortraitInsetTop() {
+        return portraitInsetTop;
+    }
+
+    private boolean restoreCachedPortraitInsets() {
+        if (shell == null || portraitInsetTop < 0) return false;
+        shell.setPadding(
+                portraitInsetLeft,
+                portraitInsetTop,
+                portraitInsetRight,
+                portraitInsetBottom
+        );
+        return true;
+    }
+
+    static android.graphics.Insets safeShellInsets(
+            WindowInsets insets,
+            boolean includeHiddenSystemBars
+    ) {
+        int types = WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout();
+        return includeHiddenSystemBars
+                ? insets.getInsetsIgnoringVisibility(types)
+                : insets.getInsets(types);
+    }
+
+    private void restoreShellInsetsAfterFullscreen() {
+        if (shell == null) return;
+        restoringPortraitFromFullscreen = true;
+        boolean restored = restoreCachedPortraitInsets();
+        if (!restored && Build.VERSION.SDK_INT >= 30) {
+            WindowInsets current = shell.getRootWindowInsets();
+            if (current != null) applyShellInsets(shell, current, true);
+        }
+        shell.requestApplyInsets();
     }
 
     private void exitChaosFullscreenChrome() {
@@ -542,7 +626,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         endReached = false;
         loading = false;
         headerTitle.setText(feedTitle);
-        headerSubtitle.setText("CrazyShit  •  " + viewModeLabel(currentViewMode()));
+        headerSubtitle.setText("Search results  •  " + viewModeLabel(currentViewMode()));
         applyFeedLayout();
         recycler.setAdapter(feedAdapter);
         feedAdapter.replace(new ArrayList<>());
@@ -618,7 +702,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = PlayableSourceRouter.resolve(this, item.url);
+                stream = PlayableSourceRouter.resolve(this, item);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
@@ -648,6 +732,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
             intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
             intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
+            if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
+                intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
+            }
         }
         try {
             intent.putExtra(PlayerActivity.EXTRA_USER_AGENT, WebSettings.getDefaultUserAgent(this));
@@ -747,7 +834,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 feedAdapter.setViewMode(checked);
                 applyFeedLayout();
             }
-            headerSubtitle.setText("CrazyShit  •  " + viewModeLabel(checked));
+            headerSubtitle.setText("Home  •  " + viewModeLabel(checked));
             dialog.dismiss();
         }));
         dialog.show();
@@ -756,7 +843,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void showItemMenu(NativeContentItem item, View anchor) {
         String saveTitle = FavoriteStore.contains(this, item.url)
                 ? "Remove from Watch Later"
-                : "Save to Watch Later";
+                : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
         if (item.comments != null && !item.comments.isEmpty()) {
             actions.add(VideoActionSheet.action(
@@ -769,13 +856,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_action_share,
                 "Share",
-                "Send the CrazyShit page",
+                "Send the source page",
                 () -> shareItem(item)
         ));
         actions.add(VideoActionSheet.action(
                 R.drawable.ic_more_website,
-                "Open website page",
-                "Use the compatibility browser",
+                "Video details",
+                "View the source page",
                 () -> openFallback(item.url)
         ));
 
@@ -824,7 +911,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void showSearchDialog() {
         EditText input = new EditText(this);
-        input.setHint("Search CrazyShit");
+        input.setHint("Search ZeroChill");
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT);
         int pad = dp(18);
@@ -925,6 +1012,15 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     public void onConfigurationChanged(android.content.res.Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         if (primaryPagerAdapter != null) primaryPagerAdapter.onConfigurationChanged();
+        if (newConfig.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                && restoringPortraitFromFullscreen) {
+            restoreCachedPortraitInsets();
+            restoringPortraitFromFullscreen = false;
+            if (shell != null) {
+                shell.requestApplyInsets();
+                shell.post(shell::requestApplyInsets);
+            }
+        }
         applyChaosFullscreenChrome();
     }
 

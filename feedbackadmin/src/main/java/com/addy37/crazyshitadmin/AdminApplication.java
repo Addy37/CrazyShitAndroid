@@ -18,8 +18,8 @@ public final class AdminApplication extends Application {
         super.onCreate();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID, "New feedback", NotificationManager.IMPORTANCE_DEFAULT);
-            channel.setDescription("Alerts when CrazyShit receives new feedback");
+                    CHANNEL_ID, "ZeroChill feedback", NotificationManager.IMPORTANCE_DEFAULT);
+            channel.setDescription("Alerts when ZeroChill receives new feedback");
             getSystemService(NotificationManager.class).createNotificationChannel(channel);
         }
         scheduleNotifications();
