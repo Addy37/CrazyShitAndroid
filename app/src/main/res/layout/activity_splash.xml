@@ -3,63 +3,83 @@
     android:id="@+id/splashRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#05070B"
-    android:clipChildren="false"
-    android:clipToPadding="false">
-
-    <View
-        android:layout_width="360dp"
-        android:layout_height="180dp"
-        android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="-112dp"
-        android:alpha="0.88"
-        android:background="@drawable/splash_cyan_arc" />
-
-    <View
-        android:layout_width="420dp"
-        android:layout_height="210dp"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="-138dp"
-        android:alpha="0.72"
-        android:background="@drawable/splash_cyan_arc" />
-
-    <View
-        android:id="@+id/splashGlow"
-        android:layout_width="440dp"
-        android:layout_height="300dp"
-        android:layout_gravity="center"
-        android:alpha="0"
-        android:background="@drawable/splash_cyan_glow" />
-
-    <View
-        android:id="@+id/splashSweep"
-        android:layout_width="190dp"
-        android:layout_height="2dp"
-        android:layout_gravity="center"
-        android:alpha="0"
-        android:background="@drawable/splash_light_streak" />
+    android:background="@color/zc_background">
 
     <LinearLayout
-        android:id="@+id/splashWordmark"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:paddingStart="24dp"
-        android:paddingEnd="24dp">
+        android:gravity="center"
+        android:orientation="vertical">
 
-        <ImageView
+        <FrameLayout
+            android:id="@+id/splashMascot"
             android:layout_width="188dp"
-            android:layout_height="188dp"
-            android:contentDescription="@null"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_zerochill_mark" />
+            android:layout_height="188dp">
+
+            <ImageView
+                android:id="@+id/splashHorns"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0"
+                android:contentDescription="@null"
+                android:src="@drawable/zc_devil_horns" />
+
+            <ImageView
+                android:id="@+id/splashFace"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0"
+                android:contentDescription="@null"
+                android:src="@drawable/zc_devil_face" />
+
+            <ImageView
+                android:id="@+id/splashXEye"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0"
+                android:contentDescription="@null"
+                android:src="@drawable/zc_devil_x_eye" />
+
+            <ImageView
+                android:id="@+id/splashAngryEye"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0"
+                android:contentDescription="@null"
+                android:src="@drawable/zc_devil_angry_eye" />
+
+            <ImageView
+                android:id="@+id/splashTeeth"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0"
+                android:contentDescription="@null"
+                android:src="@drawable/zc_devil_teeth" />
+
+            <ImageView
+                android:id="@+id/splashTongue"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0"
+                android:contentDescription="@null"
+                android:src="@drawable/zc_devil_tongue" />
+
+            <ImageView
+                android:id="@+id/splashOutline"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0"
+                android:contentDescription="@null"
+                android:src="@drawable/zc_devil_outline" />
+        </FrameLayout>
 
         <LinearLayout
+            android:id="@+id/splashWordmark"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="-6dp"
+            android:alpha="0"
             android:gravity="center"
             android:orientation="horizontal">
 
@@ -82,16 +102,16 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/splashTagline"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
+            android:alpha="0"
             android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.20"
             android:text="@string/zerochill_tagline"
             android:textAllCaps="true"
-            android:textColor="#B8C4D1"
+            android:textColor="@color/zc_text_secondary"
             android:textSize="10sp" />
-
     </LinearLayout>
-
 </FrameLayout>

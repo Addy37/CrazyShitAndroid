@@ -20,4 +20,7 @@
         <item name="colorOnSurfaceVariant">@color/zc_text_secondary</item>
         <item name="bottomNavigationStyle">@style/Widget.ZeroChill.BottomNavigation</item>
     </style>
+    <style name="Theme.ZeroChill.Splash" parent="Theme.CrazyShit">
+        <item name="android:windowBackground">@color/zc_background</item>
+    </style>
 </resources>

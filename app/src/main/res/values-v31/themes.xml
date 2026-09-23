@@ -20,8 +20,14 @@
         <item name="colorOnSurfaceVariant">@color/zc_text_secondary</item>
         <item name="bottomNavigationStyle">@style/Widget.ZeroChill.BottomNavigation</item>
         <item name="android:windowSplashScreenBackground">@color/zc_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_zerochill_mark</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_zerochill_devil</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+    </style>
+    <style name="Theme.ZeroChill.Splash" parent="Theme.CrazyShit">
+        <item name="android:windowBackground">@color/zc_background</item>
+        <item name="android:windowSplashScreenBackground">@color/zc_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_system_icon_transparent</item>
         <item name="android:windowSplashScreenAnimationDuration">0</item>
     </style>
 </resources>

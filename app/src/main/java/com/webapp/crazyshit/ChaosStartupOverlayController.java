@@ -51,28 +51,20 @@ final class ChaosStartupOverlayController {
         }
 
         FrameLayout overlay = (FrameLayout) inflated;
-        overlay.setBackgroundColor(Color.rgb(5, 7, 11));
+        overlay.setBackgroundColor(Color.BLACK);
         overlay.setClickable(true);
         overlay.setFocusable(true);
         overlay.setAlpha(1f);
 
-        View glow = overlay.findViewById(R.id.splashGlow);
-        if (glow != null) {
-            glow.animate().cancel();
-            glow.setAlpha(0.52f);
-            glow.setScaleX(1f);
-            glow.setScaleY(1f);
+        int[] finalFrameIds = {
+                R.id.splashHorns, R.id.splashFace, R.id.splashXEye, R.id.splashAngryEye,
+                R.id.splashTeeth, R.id.splashTongue, R.id.splashOutline,
+                R.id.splashWordmark, R.id.splashTagline
+        };
+        for (int id : finalFrameIds) {
+            View layer = overlay.findViewById(id);
+            if (layer != null) layer.setAlpha(1f);
         }
-        View wordmark = overlay.findViewById(R.id.splashWordmark);
-        if (wordmark != null) {
-            wordmark.animate().cancel();
-            wordmark.setAlpha(1f);
-            wordmark.setScaleX(1f);
-            wordmark.setScaleY(1f);
-            wordmark.setTranslationX(0f);
-        }
-        View sweep = overlay.findViewById(R.id.splashSweep);
-        if (sweep != null) sweep.setAlpha(0f);
 
         content.addView(overlay, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -90,7 +82,7 @@ final class ChaosStartupOverlayController {
             leaving[0] = true;
             overlay.animate()
                     .alpha(0f)
-                    .setDuration(240L)
+                    .setDuration(160L)
                     .withEndAction(() -> {
                         if (overlay.getParent() == content) content.removeView(overlay);
                         handler.removeCallbacksAndMessages(null);
