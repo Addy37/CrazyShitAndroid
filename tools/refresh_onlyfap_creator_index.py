@@ -668,6 +668,7 @@ def main() -> None:
     parser.add_argument("--common-crawl-crawls", type=int, default=6)
     parser.add_argument("--common-crawl-max-pages", type=int, default=20)
     parser.add_argument("--common-crawl-pause", type=float, default=1.0)
+    parser.add_argument("--onlyhaven-max-requests", type=int, default=100)
     args = parser.parse_args()
 
     if min(
@@ -677,6 +678,7 @@ def main() -> None:
         args.max_requests,
         args.common_crawl_crawls,
         args.common_crawl_max_pages,
+        args.onlyhaven_max_requests,
     ) < 1:
         parser.error("target, min-count, page-size and request limits must be positive")
     if args.min_count > args.target:
@@ -731,7 +733,7 @@ def main() -> None:
                 args.target,
                 min(args.page_size, 250),
                 max(0.0, args.pause),
-                request_budget,
+                min(request_budget, args.onlyhaven_max_requests),
             )
         except RuntimeError as error:
             print(f"OnlyHaven catalog source unavailable: {error}")
