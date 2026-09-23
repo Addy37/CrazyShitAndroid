@@ -4,19 +4,21 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `ed07f23c1245a24826012191b64898807e981295`
-- Device-tested APK source commit: `b1a61075306ed3ea69903a9d91676c6ff464f03d`
-- Integration PR: #119
-- Approved checkpoint branch: `checkpoint/zerochill-approved-ed07f23`
+- Approved product baseline commit: `95d8fa4d6427b99a253c0f0c163a0a8b8ce12caa`
+- Device-tested APK source commit: `02d7a5a0ea95c30f2bb8b05fad5586ee20ceba40`
+- Integration PR: #122
+- Previous approved checkpoint branch: `checkpoint/zerochill-approved-ed07f23`
 - Approval date: 2026-09-23
 
 The approved baseline contains the complete current ZEROCHILL stack, including Home/Collections glass UI, OnlyFap and OnlyHaven work, ShitTok all-source/fullscreen and preload work, creator search and bundled catalog, release orientation and action-sheet cleanup, Account Coming Soon, Memes removal from the release UI, product-level notification consolidation, and the approved OnlyFap creator-gallery optimizations from PR #115.
 
 The approved gallery behavior includes progressive creator results, ZEROCHILL loading treatment and skeletons, fluid pinch density changes, refresh suppression during pinch, full-screen media resolution five items ahead and one behind, image warm-up, and bounded video preloading.
 
-The device-tested APK was built from `b1a6107`. PR #119 merged that candidate into `rebrand/zerochill` as `ed07f23`. The merge commit has the same product tree as the tested candidate, so `ed07f23` is the promoted approved product baseline.
+The previous gallery and release baseline was built from `b1a6107` and merged through PR #119 as `ed07f23`.
 
-The checkpoint branch preserves the exact promoted product commit before this documentation update.
+The approved portrait navigation icons are Home, Shows, a phone and downward feed arrow for ShitTok, a seated devil woman silhouette for OnlyFap, and the ZEROCHILL mascot for More. The device-tested signed APK was built from `02d7a5a`. PR #122 merged those icons into `rebrand/zerochill` as `95d8fa4`. The merge commit has the same product tree as the tested candidate, so `95d8fa4` is the current approved baseline.
+
+The checkpoint branch preserves the previous approved baseline `ed07f23` for rollback.
 
 ## APK rule
 
