@@ -36,7 +36,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -582,6 +581,9 @@ final class NotificationCoordinator {
         if (!"fapello".equals(sourceKey)) {
             return normalizeCreatorLabel(item.title);
         }
+
+        String uploader = normalizeCreatorLabel(item.uploader);
+        if (!uploader.isEmpty()) return uploader;
 
         String title = cleanText(item.title)
                 .replaceFirst("(?i)\\s*#\\d+\\s*$", "")
