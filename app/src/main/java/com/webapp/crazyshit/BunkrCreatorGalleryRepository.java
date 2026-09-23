@@ -238,9 +238,18 @@ final class BunkrCreatorGalleryRepository {
         ArrayList<NativeContentItem> fapelloResult = new ArrayList<>();
         int fapelloPublished = 0;
         Set<Future<FapelloPage>> finishedFapello = new HashSet<>();
+        ArrayList<NativeContentItem> onlyHavenResult = new ArrayList<>();
+        int onlyHavenPublished = 0;
+        Set<Future<OnlyHavenPage>> finishedOnlyHaven = new HashSet<>();
+        ArrayList<NativeContentItem> wikiFeetResult = new ArrayList<>();
+        int wikiFeetPublished = 0;
+        Set<Future<WikiFeetPage>> finishedWikiFeet = new HashSet<>();
         Set<Future<AlbumPage>> finishedRequests = new HashSet<>();
         long deadline = SystemClock.elapsedRealtime() + ALBUM_BATCH_BUDGET_MS;
-        while (finishedRequests.size() < requests.size()) {
+        while (finishedRequests.size() < requests.size() ||
+                finishedFapello.size() < fapelloRequests.size() ||
+                finishedOnlyHaven.size() < onlyHavenRequests.size() ||
+                finishedWikiFeet.size() < wikiFeetRequests.size()) {
             long remaining = deadline - SystemClock.elapsedRealtime();
             if (remaining <= 0L) break;
             Future<AlbumPage> future;
@@ -270,6 +279,26 @@ final class BunkrCreatorGalleryRepository {
                 } catch (Exception error) {
                     state.lastFapelloFailure = fapelloFailure(error);
                     retryFapello(state, request.getValue());
+                }
+            }
+            for (Map.Entry<Future<OnlyHavenPage>, OnlyHavenCursor> request : onlyHavenRequests.entrySet()) {
+                if (!request.getKey().isDone() || !finishedOnlyHaven.add(request.getKey())) continue;
+                try {
+                    applyOnlyHavenPage(state, onlyHavenResult, request.getKey().get());
+                    onlyHavenPublished = publishNew(onlyHavenResult, onlyHavenPublished,
+                            listener, progressiveResult);
+                } catch (Exception ignored) {
+                    retryOnlyHaven(state, request.getValue());
+                }
+            }
+            for (Map.Entry<Future<WikiFeetPage>, WikiFeetCursor> request : wikiFeetRequests.entrySet()) {
+                if (!request.getKey().isDone() || !finishedWikiFeet.add(request.getKey())) continue;
+                try {
+                    applyWikiFeetPage(state, wikiFeetResult, request.getKey().get());
+                    wikiFeetPublished = publishNew(wikiFeetResult, wikiFeetPublished,
+                            listener, progressiveResult);
+                } catch (Exception ignored) {
+                    retryWikiFeet(state, request.getValue());
                 }
             }
             if (bunkrResult.size() >= BATCH_TARGET) break;
@@ -309,11 +338,10 @@ final class BunkrCreatorGalleryRepository {
             }
         }
 
-        ArrayList<NativeContentItem> onlyHavenResult = new ArrayList<>();
-        int onlyHavenPublished = 0;
         for (Map.Entry<Future<OnlyHavenPage>, OnlyHavenCursor> request :
                 onlyHavenRequests.entrySet()) {
             Future<OnlyHavenPage> future = request.getKey();
+            if (finishedOnlyHaven.contains(future)) continue;
             try {
                 long remaining = deadline - SystemClock.elapsedRealtime();
                 OnlyHavenPage page;
@@ -333,11 +361,10 @@ final class BunkrCreatorGalleryRepository {
             }
         }
 
-        ArrayList<NativeContentItem> wikiFeetResult = new ArrayList<>();
-        int wikiFeetPublished = 0;
         for (Map.Entry<Future<WikiFeetPage>, WikiFeetCursor> request :
                 wikiFeetRequests.entrySet()) {
             Future<WikiFeetPage> future = request.getKey();
+            if (finishedWikiFeet.contains(future)) continue;
             try {
                 long remaining = deadline - SystemClock.elapsedRealtime();
                 WikiFeetPage page;
