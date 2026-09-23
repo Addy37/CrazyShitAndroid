@@ -49,6 +49,9 @@ BLOCKED_MARKERS = (
     "just a moment",
 )
 FAPELLO_CURSOR = re.compile(r"^# Fapello new listing next page:\s*([0-9]+)\s*$")
+ONLYFAPELLO_CURSOR = re.compile(r"^# OnlyFapello directory next page:\\s*([0-9]+)\\s*$")
+ONLYFAPELLO_CREATOR_PATH = re.compile(r"(?i)^/u/([a-z0-9_-]+)/[0-9]+/([^/?#]+)$")
+DEFAULT_DIRECTORY_BASE = "https://onlyfapello.com/"
 
 
 def normalized(value: str) -> str:
@@ -63,15 +66,20 @@ def clean(value: object, max_length: int = 160) -> str:
     return text[:max_length].strip()
 
 
-def load_seed(path: pathlib.Path) -> tuple[dict[str, tuple[str, set[str]]], int]:
+def load_seed(path: pathlib.Path) -> tuple[dict[str, tuple[str, set[str]]], int, int]:
     records: dict[str, tuple[str, set[str]]] = {}
     fapello_next_page = 1
+    directory_next_page = 1
     if not path.exists():
-        return records, fapello_next_page
+        return records, fapello_next_page, directory_next_page
     for raw in path.read_text(encoding="utf-8").splitlines():
         cursor = FAPELLO_CURSOR.fullmatch(raw)
         if cursor:
             fapello_next_page = max(1, int(cursor.group(1)))
+            continue
+        cursor = ONLYFAPELLO_CURSOR.fullmatch(raw)
+        if cursor:
+            directory_next_page = max(1, int(cursor.group(1)))
             continue
         if not raw or raw.startswith("#"):
             continue
@@ -84,7 +92,7 @@ def load_seed(path: pathlib.Path) -> tuple[dict[str, tuple[str, set[str]]], int]
         if len(columns) > 1:
             aliases.update(clean(alias) for alias in columns[1].split("|") if clean(alias))
         records[key] = (name, aliases)
-    return records, fapello_next_page
+    return records, fapello_next_page, directory_next_page
 
 
 def add_record(
@@ -225,6 +233,130 @@ class FapelloCreatorParser(HTMLParser):
                 self.creators.append((name, slug))
         self.active_href = None
         self.active_text = []
+
+
+class OnlyFapelloDirectoryParser(HTMLParser):
+    """Parse creator handles from the development-time OnlyFapello directory."""
+
+    def __init__(self, base_url: str):
+        super().__init__(convert_charrefs=True)
+        self.base_url = base_url
+        self.base_host = urllib.parse.urlparse(base_url).hostname
+        self.active_slug: str | None = None
+        self.active_text: list[str] = []
+        self.creators: list[tuple[str, str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "a" or self.active_slug is not None:
+            return
+        values = {key.lower(): value or "" for key, value in attrs}
+        href = values.get("href", "").strip()
+        if not href:
+            return
+        try:
+            absolute = urllib.parse.urljoin(self.base_url, href)
+            parsed = urllib.parse.urlparse(absolute)
+        except ValueError:
+            return
+        if parsed.scheme not in ("http", "https") or parsed.hostname != self.base_host:
+            return
+        match = ONLYFAPELLO_CREATOR_PATH.fullmatch(parsed.path)
+        if not match:
+            return
+        self.active_slug = clean(urllib.parse.unquote(match.group(2)))
+        self.active_text = []
+
+    def handle_data(self, data: str) -> None:
+        if self.active_slug is not None:
+            self.active_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "a" or self.active_slug is None:
+            return
+        label = clean(" ".join(self.active_text))
+        name = label or self.active_slug
+        if name:
+            self.creators.append((name, self.active_slug))
+        self.active_slug = None
+        self.active_text = []
+
+
+def development_directory_headers(config_path: pathlib.Path) -> dict[str, str]:
+    try:
+        user_agent = clean(source_config(config_path, "fapello").get("userAgent"))
+    except Exception:
+        user_agent = ""
+    headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    if user_agent:
+        headers["User-Agent"] = user_agent
+    return headers
+
+
+def fetch_onlyfapello_directory(
+    config_path: pathlib.Path,
+    base_url: str,
+    records: dict[str, tuple[str, set[str]]],
+    target: int,
+    max_requests: int,
+    pause: float,
+    start_page: int,
+) -> tuple[int, int, int]:
+    """Harvest creator handles from a compact public directory, never media."""
+
+    base = clean(base_url, 500).rstrip("/") + "/"
+    parsed_base = urllib.parse.urlparse(base)
+    if parsed_base.scheme != "https" or not parsed_base.hostname:
+        raise RuntimeError("OnlyFapello directory URL must be HTTPS")
+    headers = development_directory_headers(config_path)
+    added = 0
+    requests = 0
+    page = max(1, start_page)
+    next_page = page
+    stale_pages = 0
+    consecutive_failures = 0
+
+    while len(records) < target and requests < max_requests and stale_pages < 3:
+        url = base if page == 1 else base + "?page=" + str(page)
+        requests += 1
+        try:
+            body = request_text(url, headers)
+            if looks_blocked(body):
+                raise RuntimeError("directory returned a browser challenge")
+        except RuntimeError as error:
+            consecutive_failures += 1
+            print(f"OnlyFapello directory page {page} failed: {error}")
+            if consecutive_failures >= 3:
+                print("Stopping directory harvest after 3 consecutive failures")
+                break
+            time.sleep(max(1.0, pause * 10))
+            continue
+
+        consecutive_failures = 0
+        parser = OnlyFapelloDirectoryParser(base)
+        parser.feed(body)
+        new_this_page = 0
+        for name, slug in parser.creators:
+            aliases = {slug} if normalized(slug) != normalized(name) else set()
+            if add_record(records, name, aliases):
+                added += 1
+                new_this_page += 1
+                if len(records) >= target:
+                    break
+
+        print(
+            f"OnlyFapello directory page {page}: "
+            f"{len(parser.creators)} creators, {new_this_page} new, {len(records)} total"
+        )
+        stale_pages = stale_pages + 1 if not parser.creators or new_this_page == 0 else 0
+        page += 1
+        next_page = page
+        if pause > 0:
+            time.sleep(pause)
+
+    return added, requests, next_page
 
 
 def fapello_listing_url(source: dict, listing: str, page: int) -> str:
@@ -397,6 +529,7 @@ def fetch_onlyhaven(
     harvested = 0
     requests = 0
     failed_requests = 0
+    consecutive_failures = 0
 
     for query in query_terms():
         if len(records) >= target or requests >= max_requests:
@@ -415,10 +548,17 @@ def fetch_onlyhaven(
                 rows = creator_rows(request_json(url, headers))
             except RuntimeError as error:
                 failed_requests += 1
+                consecutive_failures += 1
                 requests += 1
                 print(f"Skipping OnlyHaven query {query!r} at offset {offset}: {error}")
+                if consecutive_failures >= 6:
+                    print("Stopping OnlyHaven harvest after 6 consecutive source failures")
+                    if failed_requests:
+                        print(f"OnlyHaven transient failures skipped: {failed_requests}")
+                    return harvested, requests
                 time.sleep(max(0.75, pause * 5))
                 break
+            consecutive_failures = 0
             requests += 1
             if not rows:
                 break
@@ -439,11 +579,13 @@ def write_index(
     path: pathlib.Path,
     records: dict[str, tuple[str, set[str]]],
     fapello_next_page: int,
+    directory_next_page: int,
 ) -> None:
     lines = [
         "# Source-confirmed OnlyFap creator names; name<TAB>aliases.",
-        "# Generated at development time from reviewed seed and configured creator sources.",
+        "# Generated at development time from reviewed seed, public creator directories, and configured sources.",
         f"# Fapello new listing next page: {max(1, fapello_next_page)}",
+        f"# OnlyFapello directory next page: {max(1, directory_next_page)}",
     ]
     for key in sorted(records):
         name, aliases = records[key]
@@ -467,17 +609,43 @@ def main() -> None:
     parser.add_argument("--min-count", type=int, default=15_000)
     parser.add_argument("--page-size", type=int, default=50)
     parser.add_argument("--pause", type=float, default=0.10)
-    parser.add_argument("--max-requests", type=int, default=3_000)
+    parser.add_argument("--max-requests", type=int, default=1_000)
+    parser.add_argument("--directory-base-url", default=DEFAULT_DIRECTORY_BASE)
+    parser.add_argument("--directory-max-requests", type=int, default=400)
     args = parser.parse_args()
 
-    if min(args.target, args.min_count, args.page_size, args.max_requests) < 1:
-        parser.error("target, min-count, page-size and max-requests must be positive")
+    if min(
+        args.target,
+        args.min_count,
+        args.page_size,
+        args.max_requests,
+        args.directory_max_requests,
+    ) < 1:
+        parser.error("target, min-count, page-size and request limits must be positive")
     if args.min_count > args.target:
         parser.error("min-count cannot exceed target")
 
-    records, fapello_start_page = load_seed(args.output)
+    records, fapello_start_page, directory_start_page = load_seed(args.output)
     seed_count = len(records)
     request_budget = args.max_requests
+
+    directory_added = 0
+    directory_requests = 0
+    directory_next_page = directory_start_page
+    if len(records) < args.target and request_budget > 0:
+        try:
+            directory_added, directory_requests, directory_next_page = fetch_onlyfapello_directory(
+                args.config,
+                args.directory_base_url,
+                records,
+                args.target,
+                min(request_budget, args.directory_max_requests),
+                max(0.0, args.pause),
+                directory_start_page,
+            )
+        except RuntimeError as error:
+            print(f"OnlyFapello directory unavailable: {error}")
+    request_budget = max(0, request_budget - directory_requests)
 
     fapello_added = 0
     fapello_requests = 0
@@ -510,19 +678,22 @@ def main() -> None:
         except RuntimeError as error:
             print(f"OnlyHaven catalog source unavailable: {error}")
 
-    total_requests = fapello_requests + onlyhaven_requests
+    total_requests = directory_requests + fapello_requests + onlyhaven_requests
+    write_index(args.output, records, fapello_next_page, directory_next_page)
+
     if len(records) < args.min_count:
         raise SystemExit(
-            f"Refusing to replace creator index: got {len(records):,}, "
+            f"Catalog below promotion floor: got {len(records):,}, "
             f"minimum is {args.min_count:,} after {total_requests:,} source requests "
-            f"(Fapello +{fapello_added:,}, OnlyHaven +{onlyhaven_added:,})"
+            f"(OnlyFapello +{directory_added:,}, Fapello +{fapello_added:,}, "
+            f"OnlyHaven +{onlyhaven_added:,}). Partial progress was written."
         )
 
-    write_index(args.output, records, fapello_next_page)
     print(
         f"Wrote {len(records):,} creators to {args.output} "
-        f"(seed {seed_count:,}, Fapello +{fapello_added:,}, "
-        f"OnlyHaven +{onlyhaven_added:,}, requests {total_requests:,}, "
+        f"(seed {seed_count:,}, OnlyFapello +{directory_added:,}, "
+        f"Fapello +{fapello_added:,}, OnlyHaven +{onlyhaven_added:,}, "
+        f"requests {total_requests:,}, next directory page {directory_next_page:,}, "
         f"next Fapello page {fapello_next_page:,})"
     )
 
