@@ -158,6 +158,25 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Prepare in-place upgrade script
+        run: |
+          cat > "$RUNNER_TEMP/verify-upgrade.sh" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          STABLE_APK="$(find "$RUNNER_TEMP/latest-stable" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          test -n "$STABLE_APK"
+          adb install "$STABLE_APK"
+          adb shell dumpsys package com.addy37.crazyshitunofficial > /tmp/zc-before.txt
+          BEFORE="$(sed -n 's/.*firstInstallTime=//p' /tmp/zc-before.txt | head -n 1)"
+          test -n "$BEFORE"
+          adb install -r ZeroChill-upgrade-candidate.apk
+          adb shell dumpsys package com.addy37.crazyshitunofficial > /tmp/zc-after.txt
+          AFTER="$(sed -n 's/.*firstInstallTime=//p' /tmp/zc-after.txt | head -n 1)"
+          test "$BEFORE" = "$AFTER"
+          grep -m1 "versionCode=$APP_VERSION_CODE" /tmp/zc-after.txt
+          echo "In-place upgrade installed; Android preserved the package's first-install record."
+          SH
+
       - name: Install over previous stable on Android 15
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
@@ -165,19 +184,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: |
-            set -eu
-            STABLE_APK="$(find "$RUNNER_TEMP/latest-stable" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
-            adb install "$STABLE_APK"
-            adb shell dumpsys package com.addy37.crazyshitunofficial > /tmp/zc-before.txt
-            BEFORE="$(sed -n 's/.*firstInstallTime=//p' /tmp/zc-before.txt | head -n 1)"
-            test -n "$BEFORE"
-            adb install -r ZeroChill-upgrade-candidate.apk
-            adb shell dumpsys package com.addy37.crazyshitunofficial > /tmp/zc-after.txt
-            AFTER="$(sed -n 's/.*firstInstallTime=//p' /tmp/zc-after.txt | head -n 1)"
-            test "$BEFORE" = "$AFTER"
-            grep -m1 "versionCode=$APP_VERSION_CODE" /tmp/zc-after.txt
-            echo "In-place upgrade installed; Android preserved the package's first-install record."
+          script: bash "$RUNNER_TEMP/verify-upgrade.sh"
 
       - name: Upload signed upgrade candidate
         uses: actions/upload-artifact@v4
