@@ -132,6 +132,12 @@ public final class AnalyticsActivity extends AppCompatActivity {
                 "Source usage will appear after users open source-specific content.");
         addRankingCard("APP VERSIONS", "How quickly users adopt releases", dashboard.versions, false,
                 "Version adoption will appear after analytics-enabled users open the app.");
+        addDeviceCard("TOP DEVICES", "Phone models active this week", dashboard.deviceModels,
+                "Device models will appear as users open the updated ZEROCHILL app.");
+        addDeviceCard("DEVICE BRANDS", "Active users by manufacturer", dashboard.deviceManufacturers,
+                "Device brands will appear as users open the updated ZEROCHILL app.");
+        addDeviceCard("ANDROID VERSIONS", "Android versions active this week", dashboard.androidVersions,
+                "Android versions will appear as users open the updated ZEROCHILL app.");
 
         if (dashboard.dailyUsers == 0 && dashboard.weeklyUsers == 0 && dashboard.monthlyUsers == 0) {
             TextView waiting = text(
@@ -184,6 +190,38 @@ public final class AnalyticsActivity extends AppCompatActivity {
                         ViewGroup.LayoutParams.MATCH_PARENT, dp(5));
                 barParams.setMargins(0, dp(5), 0, 0);
                 block.addView(bar, barParams);
+                body.addView(block);
+            }
+        }
+        content.addView(card(title, subtitle, body));
+    }
+
+    private void addDeviceCard(String title, String subtitle,
+            List<AdminRepository.AnalyticsRow> rows, String emptyText) {
+        LinearLayout body = vertical(0);
+        if (rows.isEmpty()) {
+            body.addView(text(emptyText, 13, color(R.color.app_on_surface_variant)));
+        } else {
+            long max = Math.max(1L, rows.get(0).uniqueUsers);
+            for (AdminRepository.AnalyticsRow row : rows) {
+                LinearLayout block = vertical(0);
+                block.setPadding(0, dp(7), 0, dp(7));
+                TextView name = text(row.value, 15, color(R.color.app_on_surface));
+                name.setTypeface(null, Typeface.BOLD);
+                block.addView(name);
+                block.addView(text(String.format(Locale.US,
+                        "%,d today · %,d this week · %,d events",
+                        row.usersToday, row.uniqueUsers, row.eventCount),
+                        12, color(R.color.app_on_surface_variant)));
+                ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+                bar.setMax(1000);
+                bar.setProgress((int) Math.min(1000L, (row.uniqueUsers * 1000L) / max));
+                bar.setProgressTintList(ColorStateList.valueOf(color(R.color.app_primary)));
+                bar.setProgressBackgroundTintList(ColorStateList.valueOf(color(R.color.app_surface_variant)));
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(5));
+                params.setMargins(0, dp(5), 0, 0);
+                block.addView(bar, params);
                 body.addView(block);
             }
         }
