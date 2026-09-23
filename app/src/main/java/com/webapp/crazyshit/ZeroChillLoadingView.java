@@ -20,17 +20,18 @@ final class ZeroChillLoadingView extends LinearLayout {
         setGravity(Gravity.CENTER);
         mascot = new ImageView(context);
         mascot.setImageResource(R.drawable.ic_zerochill_loader_devil);
-        mascot.setContentDescription(label == null ? "Loading" : label);
-        int size = dp(64);
+        // The visible TextView already announces a labeled loader to TalkBack.
+        mascot.setContentDescription(label == null ? "Loading" : null);
+        int size = dp(label == null ? 56 : 76);
         addView(mascot, new LayoutParams(size, size));
         if (label != null && !label.isEmpty()) {
             TextView text = new TextView(context);
             text.setText(label);
-            text.setTextSize(12);
-            text.setTextColor(Color.rgb(184, 205, 213));
+            text.setTextSize(13);
+            text.setTextColor(Color.rgb(211, 228, 235));
             text.setGravity(Gravity.CENTER);
             LayoutParams params = new LayoutParams(-2, -2);
-            params.topMargin = dp(4);
+            params.topMargin = dp(10);
             addView(text, params);
         }
     }
@@ -79,8 +80,8 @@ final class ZeroChillLoadingView extends LinearLayout {
             return;
         }
         if (breath != null) return;
-        mascot.setAlpha(0.72f);
-        breath = ValueAnimator.ofFloat(0.72f, 1f);
+        mascot.setAlpha(0.86f);
+        breath = ValueAnimator.ofFloat(0.86f, 1f);
         breath.setDuration(950L);
         breath.setRepeatMode(ValueAnimator.REVERSE);
         breath.setRepeatCount(ValueAnimator.INFINITE);

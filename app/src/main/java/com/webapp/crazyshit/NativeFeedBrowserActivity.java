@@ -281,7 +281,8 @@ public final class NativeFeedBrowserActivity extends Activity {
         }
         progress = isCreatorGallery() ? new ZeroChillLoadingView(this, "Loading gallery...")
                 : new ZeroChillLoadingView(this, null);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(120), dp(110));
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
+                dp(isCreatorGallery() ? 160 : 72), dp(isCreatorGallery() ? 132 : 72));
         progressParams.gravity = Gravity.CENTER;
         body.addView(progress, progressParams);
         progress.setVisibility(View.GONE);
@@ -722,10 +723,12 @@ public final class NativeFeedBrowserActivity extends Activity {
 
         int tab = activeCreatorTab();
         if (loading) {
-            empty.setText(tab == CREATOR_TAB_PICTURES
-                    ? "Loading pictures..."
-                    : tab == CREATOR_TAB_VIDEOS ? "Loading videos..." : "Loading gallery...");
-        } else if (itemCount() == 0) {
+            // The branded loader owns the loading label. This full-screen empty view
+            // would place a second label directly over the mascot.
+            empty.setVisibility(View.GONE);
+            return;
+        }
+        if (itemCount() == 0) {
             empty.setText(endReached
                     ? "No matching pictures or videos were found.\nTap to try again."
                     : "No matching pictures or videos loaded.\nTap to try again.");
