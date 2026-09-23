@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/zc_devil_horns" />
+    <item android:drawable="@drawable/zc_devil_face" />
+    <item android:drawable="@drawable/zc_devil_x_eye" />
+    <item android:drawable="@drawable/zc_devil_angry_eye" />
+    <item android:drawable="@drawable/zc_devil_teeth" />
+    <item android:drawable="@drawable/zc_devil_tongue" />
+    <item android:drawable="@drawable/zc_devil_outline" />
+</layer-list>

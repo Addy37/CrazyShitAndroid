@@ -58,7 +58,8 @@ jobs:
           grep -q 'applicationId = "com.addy37.crazyshitadmin"' feedbackadmin/build.gradle.kts
           grep -q 'android:label="ZeroChill Admin"' feedbackadmin/src/main/AndroidManifest.xml
           grep -q 'LayoutInflater.from(activity).inflate(R.layout.activity_splash' app/src/main/java/com/webapp/crazyshit/ChaosStartupOverlayController.java
-          grep -q 'android:windowSplashScreenAnimatedIcon">@drawable/ic_zerochill_mark' app/src/main/res/values-v31/themes.xml
+          grep -q 'android:windowSplashScreenAnimatedIcon">@drawable/ic_zerochill_devil' app/src/main/res/values-v31/themes.xml
+          grep -q 'android:windowSplashScreenAnimatedIcon">@drawable/splash_system_icon_transparent' app/src/main/res/values-v31/themes.xml
           grep -A5 'android:text="ZERO"' app/src/main/res/layout/activity_splash.xml | grep -q 'android:textColor="#F3F4F6"'
           grep -A5 'android:text="CHILL"' app/src/main/res/layout/activity_splash.xml | grep -q 'android:textColor="@color/zc_cyan"'
           if grep -q -E 'CrazyShit Admin|ZeroFilter Admin|Live overview of CrazyShit|Live overview of ZeroFilter' feedbackadmin/src/main/java/com/addy37/crazyshitadmin/MainActivity.java; then
