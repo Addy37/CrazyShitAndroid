@@ -26,19 +26,24 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.viewpager2.widget.ViewPager2;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Google Photos-style full-screen viewer for a mixed Bunkr album. */
+@UnstableApi
 public final class BunkrGalleryActivity extends Activity {
     public static final String EXTRA_SESSION_ID = "bunkr_gallery_session";
     public static final String EXTRA_TITLE = "bunkr_gallery_title";
@@ -95,6 +100,10 @@ public final class BunkrGalleryActivity extends Activity {
     private boolean recoveryResumed;
     private int activeVideoPosition = -1;
     private volatile int requestedPhotoPosition = -1;
+    private final Set<String> resolvingMedia = new HashSet<>();
+    private final Set<String> warmedVideos = new HashSet<>();
+    private final Map<String, String> videoReferers = new HashMap<>();
+    private int pendingVideoPosition = -1;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -269,9 +278,11 @@ public final class BunkrGalleryActivity extends Activity {
             @Override
             public void onPageSelected(int position) {
                 requestedPhotoPosition = position;
+                pendingVideoPosition = -1;
                 releasePlayer();
                 updateChrome(position);
                 resolvePhoto(position);
+                preloadNeighbors(position);
                 if (position >= Math.max(0, adapter.getItemCount() - 5)) loadMore();
             }
         });
@@ -293,8 +304,10 @@ public final class BunkrGalleryActivity extends Activity {
         int start = adapter.indexOfUrl(initialUrl);
         if (start < 0) start = Math.min(initialPosition, Math.max(0, adapter.getItemCount() - 1));
         pager.setCurrentItem(start, false);
+        requestedPhotoPosition = start;
         updateChrome(start);
         resolvePhoto(start);
+        preloadNeighbors(start);
         if (start >= Math.max(0, adapter.getItemCount() - 5)) loadMore();
     }
 
@@ -405,6 +418,7 @@ public final class BunkrGalleryActivity extends Activity {
                     );
                     BunkrGallerySessionStore.persist(this, sessionId);
                     updateChrome(pager.getCurrentItem());
+                    preloadNeighbors(pager.getCurrentItem());
                     if (fapelloFailure != null) showFapelloFailure(fapelloFailure);
                     if (isCreatorGallery() && added == 0 && !endReached) {
                         initialLoading.setVisibility(View.VISIBLE);
@@ -457,20 +471,46 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void resolvePhoto(int position) {
+        resolvePhoto(position, false);
+    }
+
+    private void preloadNeighbors(int position) {
+        if (!isCreatorGallery()) return;
+        // One item in each direction keeps rapid reverse swipes ready without
+        // fetching the rest of a creator's gallery on mobile data.
+        for (int neighbor : new int[]{position + 1, position - 1}) {
+            NativeContentItem item = adapter.itemAt(neighbor);
+            if (item == null) continue;
+            if (item.isImage()) resolvePhoto(neighbor, true);
+            else if (item.isVideo()) preloadVideo(neighbor, item);
+        }
+    }
+
+    private void resolvePhoto(int position, boolean prefetch) {
         NativeContentItem item = adapter.itemAt(position);
-        if (item == null || !item.isImage() || adapter.isLoading(position) ||
-                !adapter.resolvedUrl(position).isEmpty()) return;
+        if (item == null || !item.isImage()) return;
+        if (!adapter.resolvedUrl(position).isEmpty()) {
+            if (prefetch) adapter.preloadImage(position);
+            return;
+        }
+        if (resolvingMedia.contains(item.url)) {
+            if (!prefetch) adapter.setLoading(position, true);
+            return;
+        }
         if (isOnlyHavenDirectImage(item)) {
             adapter.setResolvedUrl(position, item.url);
             BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, item.url);
+            if (prefetch) adapter.preloadImage(position);
             return;
         }
-        adapter.setLoading(position, true);
+        resolvingMedia.add(item.url);
+        if (!prefetch) adapter.setLoading(position, true);
         int requestGeneration = generation;
         mediaIo.execute(() -> {
-            if (requestedPhotoPosition != position) {
+            if (Math.abs(requestedPhotoPosition - position) > 1) {
                 runOnUiThread(() -> {
                     if (requestGeneration == generation && !isFinishing()) {
+                        resolvingMedia.remove(item.url);
                         adapter.setLoading(position, false);
                     }
                 });
@@ -483,18 +523,73 @@ public final class BunkrGalleryActivity extends Activity {
                 );
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
+                    resolvingMedia.remove(item.url);
                     adapter.setResolvedUrl(position, resolved.mediaUrl);
                     BunkrGallerySessionStore.setResolvedUrl(
                             sessionId,
                             item.url,
                             resolved.mediaUrl
                     );
+                    if (Math.abs(pager.getCurrentItem() - position) == 1) {
+                        adapter.preloadImage(position);
+                    }
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
+                    resolvingMedia.remove(item.url);
                     adapter.setLoading(position, false);
-                    adapter.setFailed(position, true);
+                    if (pager.getCurrentItem() == position) adapter.setFailed(position, true);
+                });
+            }
+        });
+    }
+
+    private void preloadVideo(int position, NativeContentItem item) {
+        if (resolvingMedia.contains(item.url)) return;
+        String cached = adapter.resolvedUrl(position);
+        if (!cached.isEmpty() || isOnlyHavenDirectVideo(item)) {
+            String url = cached.isEmpty() ? item.url : cached;
+            String referer = isOnlyHavenDirectVideo(item) ? value(item.uploader)
+                    : videoReferers.getOrDefault(item.url, item.url);
+            if (warmedVideos.add(url)) mediaIo.execute(() -> GalleryVideoCache.warm(this,
+                    videoHttpFactory(url, referer), url));
+            return;
+        }
+        resolvingMedia.add(item.url);
+        int requestGeneration = generation;
+        mediaIo.execute(() -> {
+            if (Math.abs(requestedPhotoPosition - position) > 1) {
+                runOnUiThread(() -> resolvingMedia.remove(item.url));
+                return;
+            }
+            try {
+                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(this, item.url);
+                runOnUiThread(() -> {
+                    if (requestGeneration != generation || isFinishing()) return;
+                    resolvingMedia.remove(item.url);
+                    videoReferers.put(item.url, value(resolved.requestReferer));
+                    adapter.setResolvedUrl(position, resolved.mediaUrl);
+                    BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, resolved.mediaUrl);
+                    if (pendingVideoPosition == position && pager.getCurrentItem() == position) {
+                        pendingVideoPosition = -1;
+                        startPlayer(position, item, resolved.mediaUrl, value(resolved.requestReferer));
+                    }
+                });
+                if (Math.abs(requestedPhotoPosition - position) <= 1) {
+                    GalleryVideoCache.warm(this,
+                            videoHttpFactory(resolved.mediaUrl, value(resolved.requestReferer).isEmpty()
+                                    ? item.url : resolved.requestReferer), resolved.mediaUrl);
+                }
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    if (requestGeneration != generation || isFinishing()) return;
+                    resolvingMedia.remove(item.url);
+                    if (pendingVideoPosition == position && pager.getCurrentItem() == position) {
+                        pendingVideoPosition = -1;
+                        adapter.setFailed(position, true);
+                        Toast.makeText(this, "Couldn't play this video.", Toast.LENGTH_SHORT).show();
+                    }
                 });
             }
         });
@@ -509,11 +604,17 @@ public final class BunkrGalleryActivity extends Activity {
         releasePlayer();
         String cached = adapter.resolvedUrl(position);
         if (!cached.isEmpty()) {
-            startPlayer(position, item, cached, item.url);
+            startPlayer(position, item, cached, videoReferers.getOrDefault(item.url, item.url));
             return;
         }
         if (isOnlyHavenDirectVideo(item)) {
             startPlayer(position, item, item.url, value(item.uploader));
+            return;
+        }
+
+        if (resolvingMedia.contains(item.url)) {
+            pendingVideoPosition = position;
+            adapter.setLoading(position, true);
             return;
         }
 
@@ -561,32 +662,11 @@ public final class BunkrGalleryActivity extends Activity {
         if (mediaUrl == null || mediaUrl.isEmpty()) return;
         releasePlayer();
 
-        DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
-                .setUserAgent(USER_AGENT);
-        Map<String, String> headers = new LinkedHashMap<>();
-        String referer = requestReferer.isEmpty() ? item.url : requestReferer;
-        if (!referer.isEmpty()) {
-            headers.put("Referer", referer);
-            try {
-                Uri parsed = Uri.parse(referer);
-                if (parsed.getScheme() != null && parsed.getHost() != null) {
-                    headers.put("Origin", parsed.getScheme() + "://" + parsed.getHost());
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        try {
-            String cookies = CookieManager.getInstance().getCookie(mediaUrl);
-            if ((cookies == null || cookies.isEmpty()) && !item.url.isEmpty()) {
-                cookies = CookieManager.getInstance().getCookie(item.url);
-            }
-            if (cookies != null && !cookies.isEmpty()) headers.put("Cookie", cookies);
-        } catch (Exception ignored) {
-        }
-        if (!headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
-
-        DefaultMediaSourceFactory mediaSourceFactory =
-                new DefaultMediaSourceFactory(this).setDataSourceFactory(httpFactory);
+        DefaultHttpDataSource.Factory httpFactory = videoHttpFactory(mediaUrl,
+                requestReferer.isEmpty() ? item.url : requestReferer);
+        DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this)
+                .setDataSourceFactory(isCreatorGallery()
+                        ? GalleryVideoCache.factory(this, httpFactory) : httpFactory);
         player = new ExoPlayer.Builder(this).setMediaSourceFactory(mediaSourceFactory).build();
         activeVideoPosition = position;
         adapter.activateVideo(position, player);
@@ -630,6 +710,33 @@ public final class BunkrGalleryActivity extends Activity {
         player.setPlayWhenReady(true);
         player.prepare();
         setChromeVisible(false);
+    }
+
+    private DefaultHttpDataSource.Factory videoHttpFactory(String mediaUrl, String requestReferer) {
+        DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
+                .setUserAgent(USER_AGENT);
+        Map<String, String> headers = new LinkedHashMap<>();
+        String referer = requestReferer;
+        if (!referer.isEmpty()) {
+            headers.put("Referer", referer);
+            try {
+                Uri parsed = Uri.parse(referer);
+                if (parsed.getScheme() != null && parsed.getHost() != null) {
+                    headers.put("Origin", parsed.getScheme() + "://" + parsed.getHost());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        try {
+            String cookies = CookieManager.getInstance().getCookie(mediaUrl);
+            if ((cookies == null || cookies.isEmpty()) && !referer.isEmpty()) {
+                cookies = CookieManager.getInstance().getCookie(referer);
+            }
+            if (cookies != null && !cookies.isEmpty()) headers.put("Cookie", cookies);
+        } catch (Exception ignored) {
+        }
+        if (!headers.isEmpty()) httpFactory.setDefaultRequestProperties(headers);
+        return httpFactory;
     }
 
     private void releasePlayer() {
