@@ -51,7 +51,9 @@ jobs:
             --page-size 50 \
             --pause 0.10 \
             --max-requests 1000 \
-            --directory-max-requests 400
+            --common-crawl-crawls 6 \
+            --common-crawl-max-pages 20 \
+            --common-crawl-pause 1.0
 
       - name: Upload generated catalog
         if: always()
