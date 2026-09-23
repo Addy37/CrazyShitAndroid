@@ -61,6 +61,18 @@ final class BunkrGallerySessionStore {
         return createInternal(title, albumUrl, creatorQuery);
     }
 
+    /** Reuse a warm, completed snapshot for a repeat visit within this process. */
+    static synchronized String recentCreator(String query) {
+        if (query == null || query.trim().isEmpty()) return null;
+        String[] ids = SESSIONS.keySet().toArray(new String[0]);
+        for (int i = ids.length - 1; i >= 0; i--) {
+            Session session = SESSIONS.get(ids[i]);
+            if (session != null && query.equalsIgnoreCase(session.creatorQuery)
+                    && !session.items.isEmpty() && !session.cursor.isEmpty()) return ids[i];
+        }
+        return null;
+    }
+
     private static String createInternal(String title, String albumUrl, String creatorQuery) {
         String id = UUID.randomUUID().toString();
         SESSIONS.put(id, new Session(title, albumUrl, creatorQuery));
@@ -102,6 +114,12 @@ final class BunkrGallerySessionStore {
         if (session == null) return;
         session.currentPage = Math.max(session.currentPage, currentPage);
         session.endReached = endReached;
+    }
+
+    /** Make early media available to the fullscreen viewer before the batch cursor is saved. */
+    static synchronized void appendPreview(String id, List<NativeContentItem> items) {
+        Session session = SESSIONS.get(id);
+        if (session != null) addUnique(session.items, items);
     }
 
     static synchronized void setResolvedUrl(String id, String pageUrl, String mediaUrl) {

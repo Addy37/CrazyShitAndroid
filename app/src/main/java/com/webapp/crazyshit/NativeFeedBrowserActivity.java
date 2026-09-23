@@ -79,7 +79,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     private CreatorProfileHeader creatorProfile;
     private TabLayoutMediator creatorTabsMediator;
     private SwipeRefreshLayout refresh;
-    private ProgressBar progress;
+    private View progress;
+    private CreatorGallerySkeleton gallerySkeleton;
     private TextView empty;
     private String title;
     private String baseUrl;
@@ -158,7 +159,17 @@ public final class NativeFeedBrowserActivity extends Activity {
             bunkrGallerySessionId = state.getString("gallery_session");
         }
         buildUi();
-        if (state == null) load(false);
+        if (state == null) {
+            BunkrGallerySessionStore.Snapshot warm = isCreatorGallery()
+                    ? BunkrGallerySessionStore.snapshot(bunkrGallerySessionId) : null;
+            if (warm != null && !warm.items.isEmpty()) {
+                replaceBunkrItems(warm.items);
+                currentPage = warm.currentPage;
+                endReached = warm.endReached;
+                progress.setVisibility(View.GONE);
+                if (!endReached) load(true);
+            } else load(false);
+        }
         else restoreBrowser();
     }
 
@@ -214,10 +225,12 @@ public final class NativeFeedBrowserActivity extends Activity {
 
         if (isBunkr()) {
             if (bunkrGallerySessionId == null || bunkrGallerySessionId.isEmpty()) {
-                bunkrGallerySessionId = isCreatorGallery()
+                String warmId = isCreatorGallery()
+                        ? BunkrGallerySessionStore.recentCreator(creatorQuery) : null;
+                bunkrGallerySessionId = warmId != null ? warmId : isCreatorGallery()
                         ? BunkrGallerySessionStore.createCreator(title, baseUrl, creatorQuery)
                         : BunkrGallerySessionStore.create(title, baseUrl);
-                if (isCreatorGallery()) creatorGalleryRepository.reset(
+                if (isCreatorGallery() && warmId == null) creatorGalleryRepository.reset(
                         bunkrGallerySessionId, creatorQuery, fapelloProfileUrl, title);
             }
             if (isCreatorGallery()) buildCreatorTabs();
@@ -262,11 +275,17 @@ public final class NativeFeedBrowserActivity extends Activity {
         }
         applyLayout();
 
-        progress = new ProgressBar(this);
-        progress.setIndeterminate(true);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
+        if (isCreatorGallery()) {
+            gallerySkeleton = new CreatorGallerySkeleton(this);
+            body.addView(gallerySkeleton, new FrameLayout.LayoutParams(-1, -1));
+        }
+        progress = isCreatorGallery() ? new ZeroChillLoadingView(this, "Loading gallery...")
+                : new ZeroChillLoadingView(this, null);
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
+                dp(isCreatorGallery() ? 160 : 72), dp(isCreatorGallery() ? 132 : 72));
         progressParams.gravity = Gravity.CENTER;
         body.addView(progress, progressParams);
+        progress.setVisibility(View.GONE);
 
         empty = text("", 15, Color.rgb(190, 190, 198));
         empty.setGravity(Gravity.CENTER);
@@ -455,7 +474,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         int requestPage = append ? currentPage + 1 : 1;
         int requestGeneration = generation;
         String requestSession = bunkrGallerySessionId;
-        if (!append && itemCount() == 0) progress.setVisibility(View.VISIBLE);
+        if (!append && itemCount() == 0) {
+            progress.setVisibility(View.VISIBLE);
+            if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.VISIBLE);
+        }
 
         io.execute(() -> {
             try {
@@ -469,7 +491,21 @@ public final class NativeFeedBrowserActivity extends Activity {
                             requestSession,
                             creatorQuery,
                             fapelloProfileUrl,
-                            title
+                            title,
+                            items -> {
+                                BunkrGallerySessionStore.appendPreview(requestSession, items);
+                                runOnUiThread(() -> {
+                                if (requestGeneration != generation || isFinishing() || isDestroyed()) return;
+                                appendBunkrItems(items);
+                                if (itemCount() > 0) {
+                                    if (progress instanceof ZeroChillLoadingView) {
+                                        ((ZeroChillLoadingView) progress).finish();
+                                    }
+                                    if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
+                                    empty.setVisibility(View.GONE);
+                                }
+                                });
+                            }
                     );
                     result = creatorBatch.items;
                 } else if (isBunkr()) {
@@ -484,12 +520,15 @@ public final class NativeFeedBrowserActivity extends Activity {
                     if (requestGeneration != generation || isFinishing() || isDestroyed()) return;
                     loading = false;
                     progress.setVisibility(View.GONE);
+                    if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
                     refresh.setRefreshing(false);
                     int before = itemCount();
                     BunkrGallerySessionStore.Snapshot currentCreator = isCreatorGallery()
                             ? BunkrGallerySessionStore.snapshot(requestSession) : null;
                     if (currentCreator != null) {
-                        replaceBunkrItems(currentCreator.items);
+                        if (itemCount() != currentCreator.items.size()) {
+                            replaceBunkrItems(currentCreator.items);
+                        }
                         currentPage = currentCreator.currentPage;
                     } else if (isBunkr()) {
                         if (append) appendBunkrItems(result);
@@ -546,6 +585,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     if (requestGeneration != generation || isFinishing() || isDestroyed()) return;
                     loading = false;
                     progress.setVisibility(View.GONE);
+                    if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
                     refresh.setRefreshing(false);
                     if (isCreatorGallery()) {
                         updateCreatorEmptyState();
@@ -683,10 +723,18 @@ public final class NativeFeedBrowserActivity extends Activity {
 
         int tab = activeCreatorTab();
         if (loading) {
-            empty.setText(tab == CREATOR_TAB_PICTURES
-                    ? "Loading pictures..."
-                    : tab == CREATOR_TAB_VIDEOS ? "Loading videos..." : "Loading gallery...");
-        } else if (itemCount() == 0) {
+            // The branded loader owns the initial label. If another tab has media
+            // and this tab is still empty, show its status after the loader exits.
+            if (progress != null && progress.getVisibility() == View.VISIBLE) {
+                empty.setVisibility(View.GONE);
+            } else {
+                empty.setText(tab == CREATOR_TAB_PICTURES ? "Loading pictures..."
+                        : tab == CREATOR_TAB_VIDEOS ? "Loading videos..." : "Loading gallery...");
+                empty.setVisibility(View.VISIBLE);
+            }
+            return;
+        }
+        if (itemCount() == 0) {
             empty.setText(endReached
                     ? "No matching pictures or videos were found.\nTap to try again."
                     : "No matching pictures or videos loaded.\nTap to try again.");
@@ -1101,8 +1149,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             RecyclerView.LayoutManager manager = creatorRecycler.getLayoutManager();
             if (manager instanceof StaggeredGridLayoutManager) {
                 StaggeredGridLayoutManager grid = (StaggeredGridLayoutManager) manager;
-                grid.setSpanCount(next);
-                grid.invalidateSpanAssignments();
+                if (grid.getSpanCount() != next) grid.setSpanCount(next);
             } else {
                 applyCreatorGalleryLayout(creatorRecycler);
             }
@@ -1111,33 +1158,68 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void attachCreatorGalleryPinch(RecyclerView list) {
         final float[] accumulatedScale = {1f};
+        final int[] startColumns = {creatorGalleryColumnCount()};
+        final int[] focusPosition = {RecyclerView.NO_POSITION};
+        final int[] focusOffset = {0};
+        final boolean[] pinching = {false};
         ScaleGestureDetector detector = new ScaleGestureDetector(
                 this,
                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
                     @Override
                     public boolean onScaleBegin(ScaleGestureDetector scaleDetector) {
                         accumulatedScale[0] = 1f;
+                        startColumns[0] = creatorGalleryColumnCount();
+                        list.animate().cancel();
+                        list.stopScroll();
+                        View focus = list.findChildViewUnder(
+                                scaleDetector.getFocusX(), scaleDetector.getFocusY());
+                        focusPosition[0] = focus == null ? RecyclerView.NO_POSITION
+                                : list.getChildAdapterPosition(focus);
+                        focusOffset[0] = focus == null ? 0 : focus.getTop() - list.getPaddingTop();
+                        list.setPivotX(scaleDetector.getFocusX());
+                        list.setPivotY(scaleDetector.getFocusY());
                         list.requestDisallowInterceptTouchEvent(true);
                         return true;
                     }
 
                     @Override
                     public boolean onScale(ScaleGestureDetector scaleDetector) {
-                        accumulatedScale[0] *= scaleDetector.getScaleFactor();
-                        if (accumulatedScale[0] >= 1.16f) {
-                            changeCreatorGalleryColumns(-1);
-                            accumulatedScale[0] = 1f;
-                        } else if (accumulatedScale[0] <= 0.86f) {
-                            changeCreatorGalleryColumns(1);
-                            accumulatedScale[0] = 1f;
+                        accumulatedScale[0] = Math.max(0.38f, Math.min(3f,
+                                accumulatedScale[0] * scaleDetector.getScaleFactor()));
+                        float density = Math.max(creatorGalleryMinimumColumns(),
+                                Math.min(creatorGalleryMaximumColumns(),
+                                        startColumns[0] / accumulatedScale[0]));
+                        int columns = Math.round(density);
+                        StaggeredGridLayoutManager grid =
+                                (StaggeredGridLayoutManager) list.getLayoutManager();
+                        if (grid != null && grid.getSpanCount() != columns) {
+                            grid.setSpanCount(columns);
+                            if (focusPosition[0] != RecyclerView.NO_POSITION) {
+                                grid.scrollToPositionWithOffset(focusPosition[0], focusOffset[0]);
+                            }
                         }
+                        // Match the width of the next grid at each threshold. The visual
+                        // thumbnail size remains continuous even when the span count changes.
+                        float remainder = columns / density;
+                        list.setScaleX(remainder);
+                        list.setScaleY(remainder);
                         return true;
                     }
 
                     @Override
                     public void onScaleEnd(ScaleGestureDetector scaleDetector) {
+                        int next = clamp(Math.round(startColumns[0] / accumulatedScale[0]),
+                                creatorGalleryMinimumColumns(), creatorGalleryMaximumColumns());
+                        if (next != creatorGalleryColumns) {
+                            changeCreatorGalleryColumns(next - creatorGalleryColumns);
+                        }
+                        if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                            list.animate().scaleX(1f).scaleY(1f).setDuration(120L).start();
+                        } else {
+                            list.setScaleX(1f);
+                            list.setScaleY(1f);
+                        }
                         accumulatedScale[0] = 1f;
-                        list.requestDisallowInterceptTouchEvent(false);
                     }
                 }
         );
@@ -1150,15 +1232,25 @@ public final class NativeFeedBrowserActivity extends Activity {
                     @NonNull RecyclerView view,
                     @NonNull MotionEvent event
             ) {
+                if (event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN) {
+                    pinching[0] = true;
+                    refresh.setEnabled(false);
+                    if (creatorTabsPager != null) creatorTabsPager.setUserInputEnabled(false);
+                    view.requestDisallowInterceptTouchEvent(true);
+                }
                 detector.onTouchEvent(event);
-                if (event.getPointerCount() > 1 || detector.isInProgress()) {
+                if (pinching[0] || detector.isInProgress()) {
                     scaling = true;
                     view.requestDisallowInterceptTouchEvent(true);
-                    return true;
+                    if (event.getActionMasked() != MotionEvent.ACTION_UP &&
+                            event.getActionMasked() != MotionEvent.ACTION_CANCEL) return true;
                 }
                 if (event.getActionMasked() == MotionEvent.ACTION_UP ||
                         event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
                     scaling = false;
+                    pinching[0] = false;
+                    refresh.setEnabled(true);
+                    if (creatorTabsPager != null) creatorTabsPager.setUserInputEnabled(true);
                     view.requestDisallowInterceptTouchEvent(false);
                 }
                 return scaling;
@@ -1173,6 +1265,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                 if (event.getActionMasked() == MotionEvent.ACTION_UP ||
                         event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
                     scaling = false;
+                    pinching[0] = false;
+                    refresh.setEnabled(true);
+                    if (creatorTabsPager != null) creatorTabsPager.setUserInputEnabled(true);
                     view.requestDisallowInterceptTouchEvent(false);
                 }
             }

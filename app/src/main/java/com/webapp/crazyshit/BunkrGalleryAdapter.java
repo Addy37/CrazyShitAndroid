@@ -25,6 +25,7 @@ import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.target.Target;
 
 import java.util.ArrayList;
@@ -70,7 +71,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         items.clear();
         addUnique(incoming);
         notifyDataSetChanged();
-        if (preloadAhead) preloadRange(0, Math.min(items.size(), 12));
+        if (preloadAhead) preloadRange(0, Math.min(items.size(), adaptiveAspectRatios ? 6 : 12));
     }
 
     void append(List<NativeContentItem> incoming) {
@@ -83,7 +84,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int added = items.size() - start;
         if (added > 0) {
             notifyItemRangeInserted(start, added);
-            if (preloadAhead) preloadRange(start, Math.min(items.size(), start + 12));
+            if (preloadAhead) preloadRange(start, Math.min(items.size(), start + (adaptiveAspectRatios ? 6 : 12)));
         }
     }
 
@@ -222,13 +223,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             RequestBuilder<Drawable> request = Glide.with(holder.image)
                     .load(withHeaders(item.imageUrl, imageReferer(item)))
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .dontAnimate()
+                    .transition(DrawableTransitionOptions.withCrossFade(130))
                     .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
                     .error(new ColorDrawable(Color.rgb(20, 20, 23)));
             if (adaptiveAspectRatios) {
                 request = request
                         .dontTransform()
-                        .override(720, 720)
+                        .override(384, 384)
                         .listener(new RequestListener<Drawable>() {
                             @Override
                             public boolean onLoadFailed(
@@ -261,7 +262,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
                         .dontAnimate();
                 fallback = adaptiveAspectRatios
-                        ? fallback.dontTransform().override(720, 720)
+                        ? fallback.dontTransform().override(384, 384)
                         : fallback.centerCrop().override(360, 360);
                 request = request.error(fallback);
             }
@@ -309,7 +310,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                     .diskCacheStrategy(DiskCacheStrategy.ALL);
             if (adaptiveAspectRatios) request = request.dontTransform();
             else request = request.centerCrop();
-            request.preload(adaptiveAspectRatios ? 720 : 360, adaptiveAspectRatios ? 720 : 360);
+            request.preload(adaptiveAspectRatios ? 384 : 360, adaptiveAspectRatios ? 384 : 360);
         }
     }
 

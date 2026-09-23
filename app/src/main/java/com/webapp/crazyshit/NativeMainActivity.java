@@ -71,7 +71,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private TextView headerSubtitle;
     private RecyclerView recycler;
     private SwipeRefreshLayout swipeRefresh;
-    private ProgressBar progress;
+    private View progress;
     private TextView emptyView;
     private BottomNavigationView bottomNavigation;
     private NativeFeedAdapter feedAdapter;
@@ -221,11 +221,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         recycler.setItemAnimator(null);
         swipeRefresh.addView(recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
 
-        progress = new ProgressBar(this);
-        progress.setIndeterminate(true);
-        ZeroChillUi.styleProgress(progress);
+        progress = new ZeroChillLoadingView(this, null);
         progress.setVisibility(View.GONE);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(48), dp(48));
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(72), dp(72));
         progressParams.gravity = Gravity.CENTER;
         content.addView(progress, progressParams);
 
