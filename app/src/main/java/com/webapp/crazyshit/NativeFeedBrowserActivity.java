@@ -1149,8 +1149,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             RecyclerView.LayoutManager manager = creatorRecycler.getLayoutManager();
             if (manager instanceof StaggeredGridLayoutManager) {
                 StaggeredGridLayoutManager grid = (StaggeredGridLayoutManager) manager;
-                grid.setSpanCount(next);
-                grid.invalidateSpanAssignments();
+                if (grid.getSpanCount() != next) grid.setSpanCount(next);
             } else {
                 applyCreatorGalleryLayout(creatorRecycler);
             }
@@ -1162,6 +1161,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         final int[] startColumns = {creatorGalleryColumnCount()};
         final int[] focusPosition = {RecyclerView.NO_POSITION};
         final int[] focusOffset = {0};
+        final boolean[] pinching = {false};
         ScaleGestureDetector detector = new ScaleGestureDetector(
                 this,
                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -1170,6 +1170,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                         accumulatedScale[0] = 1f;
                         startColumns[0] = creatorGalleryColumnCount();
                         list.animate().cancel();
+                        list.stopScroll();
                         View focus = list.findChildViewUnder(
                                 scaleDetector.getFocusX(), scaleDetector.getFocusY());
                         focusPosition[0] = focus == null ? RecyclerView.NO_POSITION
@@ -1183,11 +1184,25 @@ public final class NativeFeedBrowserActivity extends Activity {
 
                     @Override
                     public boolean onScale(ScaleGestureDetector scaleDetector) {
-                        accumulatedScale[0] = Math.max(0.6f, Math.min(1.65f,
+                        accumulatedScale[0] = Math.max(0.38f, Math.min(3f,
                                 accumulatedScale[0] * scaleDetector.getScaleFactor()));
-                        // GPU transform follows the fingers without rebuilding the layout.
-                        list.setScaleX(accumulatedScale[0]);
-                        list.setScaleY(accumulatedScale[0]);
+                        float density = Math.max(creatorGalleryMinimumColumns(),
+                                Math.min(creatorGalleryMaximumColumns(),
+                                        startColumns[0] / accumulatedScale[0]));
+                        int columns = Math.round(density);
+                        StaggeredGridLayoutManager grid =
+                                (StaggeredGridLayoutManager) list.getLayoutManager();
+                        if (grid != null && grid.getSpanCount() != columns) {
+                            grid.setSpanCount(columns);
+                            if (focusPosition[0] != RecyclerView.NO_POSITION) {
+                                grid.scrollToPositionWithOffset(focusPosition[0], focusOffset[0]);
+                            }
+                        }
+                        // Match the width of the next grid at each threshold. The visual
+                        // thumbnail size remains continuous even when the span count changes.
+                        float remainder = columns / density;
+                        list.setScaleX(remainder);
+                        list.setScaleY(remainder);
                         return true;
                     }
 
@@ -1197,21 +1212,14 @@ public final class NativeFeedBrowserActivity extends Activity {
                                 creatorGalleryMinimumColumns(), creatorGalleryMaximumColumns());
                         if (next != creatorGalleryColumns) {
                             changeCreatorGalleryColumns(next - creatorGalleryColumns);
-                            RecyclerView.LayoutManager layout = list.getLayoutManager();
-                            if (focusPosition[0] != RecyclerView.NO_POSITION &&
-                                    layout instanceof StaggeredGridLayoutManager) {
-                                ((StaggeredGridLayoutManager) layout).scrollToPositionWithOffset(
-                                        focusPosition[0], focusOffset[0]);
-                            }
                         }
                         if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
-                            list.animate().scaleX(1f).scaleY(1f).setDuration(160L).start();
+                            list.animate().scaleX(1f).scaleY(1f).setDuration(120L).start();
                         } else {
                             list.setScaleX(1f);
                             list.setScaleY(1f);
                         }
                         accumulatedScale[0] = 1f;
-                        list.requestDisallowInterceptTouchEvent(false);
                     }
                 }
         );
@@ -1224,15 +1232,25 @@ public final class NativeFeedBrowserActivity extends Activity {
                     @NonNull RecyclerView view,
                     @NonNull MotionEvent event
             ) {
+                if (event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN) {
+                    pinching[0] = true;
+                    refresh.setEnabled(false);
+                    if (creatorTabsPager != null) creatorTabsPager.setUserInputEnabled(false);
+                    view.requestDisallowInterceptTouchEvent(true);
+                }
                 detector.onTouchEvent(event);
-                if (event.getPointerCount() > 1 || detector.isInProgress()) {
+                if (pinching[0] || detector.isInProgress()) {
                     scaling = true;
                     view.requestDisallowInterceptTouchEvent(true);
-                    return true;
+                    if (event.getActionMasked() != MotionEvent.ACTION_UP &&
+                            event.getActionMasked() != MotionEvent.ACTION_CANCEL) return true;
                 }
                 if (event.getActionMasked() == MotionEvent.ACTION_UP ||
                         event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
                     scaling = false;
+                    pinching[0] = false;
+                    refresh.setEnabled(true);
+                    if (creatorTabsPager != null) creatorTabsPager.setUserInputEnabled(true);
                     view.requestDisallowInterceptTouchEvent(false);
                 }
                 return scaling;
@@ -1247,6 +1265,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                 if (event.getActionMasked() == MotionEvent.ACTION_UP ||
                         event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
                     scaling = false;
+                    pinching[0] = false;
+                    refresh.setEnabled(true);
+                    if (creatorTabsPager != null) creatorTabsPager.setUserInputEnabled(true);
                     view.requestDisallowInterceptTouchEvent(false);
                 }
             }
