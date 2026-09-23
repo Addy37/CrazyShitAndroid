@@ -723,9 +723,15 @@ public final class NativeFeedBrowserActivity extends Activity {
 
         int tab = activeCreatorTab();
         if (loading) {
-            // The branded loader owns the loading label. This full-screen empty view
-            // would place a second label directly over the mascot.
-            empty.setVisibility(View.GONE);
+            // The branded loader owns the initial label. If another tab has media
+            // and this tab is still empty, show its status after the loader exits.
+            if (progress != null && progress.getVisibility() == View.VISIBLE) {
+                empty.setVisibility(View.GONE);
+            } else {
+                empty.setText(tab == CREATOR_TAB_PICTURES ? "Loading pictures..."
+                        : tab == CREATOR_TAB_VIDEOS ? "Loading videos..." : "Loading gallery...");
+                empty.setVisibility(View.VISIBLE);
+            }
             return;
         }
         if (itemCount() == 0) {
