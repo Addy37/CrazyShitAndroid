@@ -72,6 +72,9 @@ final class AdminRepository {
         final List<AnalyticsRow> sources;
         final List<AnalyticsRow> creators;
         final List<AnalyticsRow> versions;
+        final List<AnalyticsRow> deviceModels;
+        final List<AnalyticsRow> deviceManufacturers;
+        final List<AnalyticsRow> androidVersions;
 
         AnalyticsDashboard(JSONObject value) {
             JSONObject active = value.optJSONObject("active_users");
@@ -83,6 +86,9 @@ final class AdminRepository {
             sources = analyticsRows(value.optJSONArray("sources"));
             creators = analyticsRows(value.optJSONArray("creators"));
             versions = analyticsRows(value.optJSONArray("versions"));
+            deviceModels = analyticsRows(value.optJSONArray("device_models"));
+            deviceManufacturers = analyticsRows(value.optJSONArray("device_manufacturers"));
+            androidVersions = analyticsRows(value.optJSONArray("android_versions"));
         }
     }
 

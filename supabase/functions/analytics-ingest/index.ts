@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validAndroidVersion, validDeviceModel } from "./validation.ts";
 
-const allowedMetrics = new Set(["app_open", "app_version", "section", "source", "creator"]);
+const allowedMetrics = new Set(["app_open", "app_version", "section", "source", "creator", "device_model", "device_manufacturer", "android_version"]);
 const allowedSections = new Set([
   "home", "collections", "chaos", "categories", "search", "favorites",
   "downloads", "settings", "profile", "creator_gallery"
@@ -52,6 +53,12 @@ Deno.serve(async (request) => {
     if (metric === "section" && !allowedSections.has(value)) return json({ error: "Invalid section." }, 400);
     if (metric === "source" && !allowedSources.has(value)) return json({ error: "Invalid source." }, 400);
     if (metric === "creator" && !safeLabel.test(value)) return json({ error: "Invalid creator label." }, 400);
+    if ((metric === "device_model" || metric === "device_manufacturer") && !validDeviceModel(body.value)) {
+      return json({ error: "Invalid device model." }, 400);
+    }
+    if (metric === "android_version" && !validAndroidVersion(body.value)) {
+      return json({ error: "Invalid Android version." }, 400);
+    }
 
     const url = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

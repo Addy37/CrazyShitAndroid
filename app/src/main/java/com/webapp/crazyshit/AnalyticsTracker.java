@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Build;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -49,6 +50,9 @@ final class AnalyticsTracker {
         Context app = context.getApplicationContext();
         track(app, "app_open", "all");
         track(app, "app_version", BuildConfig.VERSION_NAME);
+        track(app, "device_model", deviceModel(Build.MANUFACTURER, Build.MODEL));
+        track(app, "device_manufacturer", deviceManufacturer(Build.MANUFACTURER));
+        track(app, "android_version", androidVersion(Build.VERSION.RELEASE));
     }
 
     static void onActivityCreated(Activity activity, Bundle state) {
@@ -251,6 +255,37 @@ final class AnalyticsTracker {
             if (character < 32 || character == 127) return "";
         }
         return clean;
+    }
+
+    static String deviceModel(String manufacturer, String model) {
+        String make = cleanDevicePart(manufacturer);
+        String name = cleanDevicePart(model);
+        if (name.isEmpty()) return make.isEmpty() ? "Unknown" : make;
+        if (make.isEmpty() || name.regionMatches(true, 0, make, 0, make.length())
+                && (name.length() == make.length() || " -_".indexOf(name.charAt(make.length())) >= 0)) {
+            return name;
+        }
+        return (make + " " + name).substring(0, Math.min(80, make.length() + 1 + name.length())).trim();
+    }
+
+    static String androidVersion(String release) {
+        String value = release == null ? "" : release.trim();
+        return value.matches("[0-9]{1,2}(\\.[0-9]{1,2})?") ? value : "Unknown";
+    }
+
+    static String deviceManufacturer(String manufacturer) {
+        String value = cleanDevicePart(manufacturer);
+        return value.isEmpty() ? "Unknown" : value;
+    }
+
+    private static String cleanDevicePart(String raw) {
+        if (raw == null) return "";
+        String clean = raw.trim().replaceAll(" +", " ");
+        if (clean.isEmpty() || clean.equalsIgnoreCase("unknown") || clean.length() > 80) {
+            if (clean.length() > 80) clean = clean.substring(0, 80).trim();
+            else return "";
+        }
+        return clean.matches("[\\p{L}\\p{N} ._+()/\\-]{1,80}") ? clean : "";
     }
 
     private static String value(String value) {

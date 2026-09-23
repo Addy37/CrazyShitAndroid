@@ -1,0 +1,49 @@
+name: Device analytics SQL
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/*analytics.sql'
+      - 'supabase/tests/device_analytics.sql'
+      - '.github/workflows/device-analytics-sql.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate edge ingestion values
+        run: node supabase/tests/device_validation.mjs
+      - name: Create Supabase roles and apply existing migration
+        run: |
+          psql -v ON_ERROR_STOP=1 -c 'create role anon; create role authenticated; create role service_role;'
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/202609140001_create_analytics.sql
+          psql -v ON_ERROR_STOP=1 -c "select public.record_analytics_metric('app_open', 'all', repeat('a',64), repeat('a',64), repeat('a',64));"
+      - name: Apply device migration and validate aggregates
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/202609230001_device_analytics.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/device_analytics.sql
