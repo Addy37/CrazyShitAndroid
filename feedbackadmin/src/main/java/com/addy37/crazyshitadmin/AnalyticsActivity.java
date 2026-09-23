@@ -124,6 +124,23 @@ public final class AnalyticsActivity extends AppCompatActivity {
         users.addView(metric("Month", dashboard.monthlyUsers), weighted());
         content.addView(card("ACTIVE USERS", "Anonymous active installs", users));
 
+        AdminRepository.AnalyticsRow currentRelease =
+                versionRow(dashboard.versions, BuildConfig.ROLLOUT_VERSION);
+        AdminRepository.AnalyticsRow previousRelease =
+                versionRow(dashboard.versions, "3.0.12");
+        LinearLayout rollout = new LinearLayout(this);
+        rollout.setOrientation(LinearLayout.HORIZONTAL);
+        rollout.addView(metric("3.1.0 today",
+                currentRelease == null ? 0L : currentRelease.usersToday), weighted());
+        rollout.addView(metric("3.1.0 week",
+                currentRelease == null ? 0L : currentRelease.uniqueUsers), weighted());
+        rollout.addView(metric("3.0.12 today",
+                previousRelease == null ? 0L : previousRelease.usersToday), weighted());
+        content.addView(card(
+                "ZEROCHILL ROLLOUT",
+                "Active installs reporting production " + BuildConfig.ROLLOUT_VERSION,
+                rollout));
+
         addRankingCard("TRENDING CREATORS", "Who users are opening most", dashboard.creators, true,
                 "Creator interest will appear after users open OnlyFap creator galleries.");
         addRankingCard("MOST USED SECTIONS", "Where users spend their time", dashboard.sections, false,
@@ -188,6 +205,16 @@ public final class AnalyticsActivity extends AppCompatActivity {
             }
         }
         content.addView(card(title, subtitle, body));
+    }
+
+    private AdminRepository.AnalyticsRow versionRow(
+            List<AdminRepository.AnalyticsRow> rows,
+            String version
+    ) {
+        for (AdminRepository.AnalyticsRow row : rows) {
+            if (version.equals(row.value)) return row;
+        }
+        return null;
     }
 
     private LinearLayout metric(String label, long value) {
