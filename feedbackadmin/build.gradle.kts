@@ -12,8 +12,8 @@ android {
         applicationId = "com.addy37.crazyshitadmin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.3.0"
+        versionCode = 6
+        versionName = "1.3.1"
         buildConfigField(
             "String",
             "ADMIN_FEEDBACK_ENDPOINT",
@@ -24,6 +24,7 @@ android {
             "ADMIN_SOURCE_CONFIG_ENDPOINT",
             "\"${System.getenv("ADMIN_SOURCE_CONFIG_ENDPOINT") ?: ""}\""
         )
+        buildConfigField("String", "ROLLOUT_VERSION", "\"3.1.0\"")
     }
 
     val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")

@@ -185,6 +185,19 @@ public final class MainActivity extends AppCompatActivity {
         userMetrics.addView(metricBlock(month), weighted());
         content.addView(panel("ACTIVE USERS", "Anonymous active installs", userMetrics));
 
+        LinearLayout rolloutMetrics = new LinearLayout(this);
+        rolloutMetrics.setOrientation(LinearLayout.HORIZONTAL);
+        TextView rolloutToday = metricNumber("–", "3.1.0 today");
+        TextView rolloutWeek = metricNumber("–", "3.1.0 week");
+        TextView legacyToday = metricNumber("–", "3.0.12 today");
+        rolloutMetrics.addView(metricBlock(rolloutToday), weighted());
+        rolloutMetrics.addView(metricBlock(rolloutWeek), weighted());
+        rolloutMetrics.addView(metricBlock(legacyToday), weighted());
+        content.addView(panel(
+                "ZEROCHILL ROLLOUT",
+                "Production " + BuildConfig.ROLLOUT_VERSION + " active installs",
+                rolloutMetrics));
+
         LinearLayout trendBody = column(0);
         TextView topCreator = text("Loading…", 22, Color.WHITE);
         topCreator.setTypeface(null, Typeface.BOLD);
@@ -232,9 +245,20 @@ public final class MainActivity extends AppCompatActivity {
                 List<AdminRepository.Item> feedbackItems = AdminRepository.list(token);
                 org.json.JSONObject configItem = AdminRepository.currentConfig(token);
                 runOnUiThread(() -> {
-                    today.setText(String.format(Locale.US, "%,d", dashboard.dailyUsers));
-                    week.setText(String.format(Locale.US, "%,d", dashboard.weeklyUsers));
-                    month.setText(String.format(Locale.US, "%,d", dashboard.monthlyUsers));
+                    setMetricNumber(today, dashboard.dailyUsers, "Today");
+                    setMetricNumber(week, dashboard.weeklyUsers, "Week");
+                    setMetricNumber(month, dashboard.monthlyUsers, "Month");
+
+                    AdminRepository.AnalyticsRow currentRelease =
+                            versionRow(dashboard.versions, BuildConfig.ROLLOUT_VERSION);
+                    AdminRepository.AnalyticsRow previousRelease =
+                            versionRow(dashboard.versions, "3.0.12");
+                    setMetricNumber(rolloutToday,
+                            currentRelease == null ? 0L : currentRelease.usersToday, "3.1.0 today");
+                    setMetricNumber(rolloutWeek,
+                            currentRelease == null ? 0L : currentRelease.uniqueUsers, "3.1.0 week");
+                    setMetricNumber(legacyToday,
+                            previousRelease == null ? 0L : previousRelease.usersToday, "3.0.12 today");
 
                     if (dashboard.creators.isEmpty()) {
                         topCreator.setText("No trend yet");
@@ -250,8 +274,8 @@ public final class MainActivity extends AppCompatActivity {
                     for (AdminRepository.Item item : feedbackItems) {
                         if ("submitted".equals(item.status)) submitted++;
                     }
-                    newFeedback.setText(String.format(Locale.US, "%,d", submitted));
-                    totalFeedback.setText(String.format(Locale.US, "%,d", feedbackItems.size()));
+                    setMetricNumber(newFeedback, submitted, "New");
+                    setMetricNumber(totalFeedback, feedbackItems.size(), "Total");
                     sourceSummary.setText(dashboardSourceStatus(configItem));
                     dashboardStatus.setText("Live data updated now");
                 });
@@ -553,6 +577,16 @@ public final class MainActivity extends AppCompatActivity {
                 })).show();
     }
 
+    private AdminRepository.AnalyticsRow versionRow(
+            List<AdminRepository.AnalyticsRow> rows,
+            String version
+    ) {
+        for (AdminRepository.AnalyticsRow row : rows) {
+            if (version.equals(row.value)) return row;
+        }
+        return null;
+    }
+
     private String dashboardSourceStatus(org.json.JSONObject item) {
         if (item == null) return "No published configuration";
         org.json.JSONObject config = item.optJSONObject("config");
@@ -754,13 +788,21 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private TextView metricNumber(String value, String caption) {
-        TextView result = text(value + "\n" + caption, 14, color(R.color.app_on_surface_variant));
-        android.text.SpannableString text = new android.text.SpannableString(value + "\n" + caption);
-        text.setSpan(new android.text.style.RelativeSizeSpan(1.8f), 0, value.length(), 0);
-        text.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), 0, value.length(), 0);
-        result.setText(text);
+        TextView result = text("", 14, color(R.color.app_on_surface_variant));
+        setMetricNumber(result, value, caption);
         result.setGravity(Gravity.CENTER);
         return result;
+    }
+
+    private void setMetricNumber(TextView view, long value, String caption) {
+        setMetricNumber(view, String.format(Locale.US, "%,d", value), caption);
+    }
+
+    private void setMetricNumber(TextView view, String value, String caption) {
+        android.text.SpannableString styled = new android.text.SpannableString(value + "\n" + caption);
+        styled.setSpan(new android.text.style.RelativeSizeSpan(1.8f), 0, value.length(), 0);
+        styled.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), 0, value.length(), 0);
+        view.setText(styled);
     }
 
     private TextView label(String value) {
