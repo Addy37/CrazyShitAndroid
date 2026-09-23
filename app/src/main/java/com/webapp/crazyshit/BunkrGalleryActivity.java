@@ -60,9 +60,12 @@ public final class BunkrGalleryActivity extends Activity {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
+    private static final int PRELOAD_AHEAD = 5;
+    private static final int PRELOAD_BEHIND = 1;
 
     private final ExecutorService pageIo = Executors.newSingleThreadExecutor();
     private final ExecutorService mediaIo = Executors.newFixedThreadPool(2);
+    private final ExecutorService warmIo = Executors.newSingleThreadExecutor();
     private final BunkrRepository repository = new BunkrRepository();
     private final BunkrCreatorGalleryRepository creatorGalleryRepository =
             new BunkrCreatorGalleryRepository();
@@ -476,14 +479,24 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void preloadNeighbors(int position) {
         if (!isCreatorGallery()) return;
-        // One item in each direction keeps rapid reverse swipes ready without
-        // fetching the rest of a creator's gallery on mobile data.
-        for (int neighbor : new int[]{position + 1, position - 1}) {
+        // Resolve the next five items in swipe order; retain the previous one
+        // for a reverse swipe. Video byte warm-ups use a separate worker.
+        for (int neighbor = position + 1; neighbor <= position + PRELOAD_AHEAD; neighbor++) {
             NativeContentItem item = adapter.itemAt(neighbor);
             if (item == null) continue;
             if (item.isImage()) resolvePhoto(neighbor, true);
             else if (item.isVideo()) preloadVideo(neighbor, item);
         }
+        NativeContentItem previous = adapter.itemAt(position - PRELOAD_BEHIND);
+        if (previous != null) {
+            if (previous.isImage()) resolvePhoto(position - PRELOAD_BEHIND, true);
+            else if (previous.isVideo()) preloadVideo(position - PRELOAD_BEHIND, previous);
+        }
+    }
+
+    private boolean withinPreloadWindow(int position) {
+        int distance = position - requestedPhotoPosition;
+        return distance >= -PRELOAD_BEHIND && distance <= PRELOAD_AHEAD;
     }
 
     private void resolvePhoto(int position, boolean prefetch) {
@@ -507,7 +520,7 @@ public final class BunkrGalleryActivity extends Activity {
         if (!prefetch) adapter.setLoading(position, true);
         int requestGeneration = generation;
         mediaIo.execute(() -> {
-            if (Math.abs(requestedPhotoPosition - position) > 1) {
+            if (!withinPreloadWindow(position)) {
                 runOnUiThread(() -> {
                     if (requestGeneration == generation && !isFinishing()) {
                         resolvingMedia.remove(item.url);
@@ -530,7 +543,7 @@ public final class BunkrGalleryActivity extends Activity {
                             item.url,
                             resolved.mediaUrl
                     );
-                    if (Math.abs(pager.getCurrentItem() - position) == 1) {
+                    if (position != pager.getCurrentItem() && withinPreloadWindow(position)) {
                         adapter.preloadImage(position);
                     }
                 });
@@ -552,14 +565,19 @@ public final class BunkrGalleryActivity extends Activity {
             String url = cached.isEmpty() ? item.url : cached;
             String referer = isOnlyHavenDirectVideo(item) ? value(item.uploader)
                     : videoReferers.getOrDefault(item.url, item.url);
-            if (warmedVideos.add(url)) mediaIo.execute(() -> GalleryVideoCache.warm(this,
-                    videoHttpFactory(url, referer), url));
+            if (warmedVideos.add(url)) warmIo.execute(() -> {
+                if (withinPreloadWindow(position)) {
+                    GalleryVideoCache.warm(this, videoHttpFactory(url, referer), url);
+                } else {
+                    runOnUiThread(() -> warmedVideos.remove(url));
+                }
+            });
             return;
         }
         resolvingMedia.add(item.url);
         int requestGeneration = generation;
         mediaIo.execute(() -> {
-            if (Math.abs(requestedPhotoPosition - position) > 1) {
+            if (!withinPreloadWindow(position)) {
                 runOnUiThread(() -> resolvingMedia.remove(item.url));
                 return;
             }
@@ -571,16 +589,23 @@ public final class BunkrGalleryActivity extends Activity {
                     videoReferers.put(item.url, value(resolved.requestReferer));
                     adapter.setResolvedUrl(position, resolved.mediaUrl);
                     BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, resolved.mediaUrl);
+                    if (withinPreloadWindow(position) && warmedVideos.add(resolved.mediaUrl)) {
+                        String referer = value(resolved.requestReferer).isEmpty()
+                                ? item.url : resolved.requestReferer;
+                        warmIo.execute(() -> {
+                            if (withinPreloadWindow(position)) {
+                                GalleryVideoCache.warm(this,
+                                        videoHttpFactory(resolved.mediaUrl, referer), resolved.mediaUrl);
+                            } else {
+                                runOnUiThread(() -> warmedVideos.remove(resolved.mediaUrl));
+                            }
+                        });
+                    }
                     if (pendingVideoPosition == position && pager.getCurrentItem() == position) {
                         pendingVideoPosition = -1;
                         startPlayer(position, item, resolved.mediaUrl, value(resolved.requestReferer));
                     }
                 });
-                if (Math.abs(requestedPhotoPosition - position) <= 1) {
-                    GalleryVideoCache.warm(this,
-                            videoHttpFactory(resolved.mediaUrl, value(resolved.requestReferer).isEmpty()
-                                    ? item.url : resolved.requestReferer), resolved.mediaUrl);
-                }
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
@@ -954,6 +979,7 @@ public final class BunkrGalleryActivity extends Activity {
         releasePlayer();
         pageIo.shutdownNow();
         mediaIo.shutdownNow();
+        warmIo.shutdownNow();
         super.onDestroy();
     }
 

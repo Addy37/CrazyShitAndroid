@@ -52,6 +52,7 @@ final class BunkrGalleryPagerAdapter
     private final Listener listener;
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
     private final Map<String, String> resolvedUrls = new HashMap<>();
+    private final Set<String> preloadedImages = new HashSet<>();
     private final Set<String> loading = new HashSet<>();
     private final Set<String> failed = new HashSet<>();
     private int activeVideoPosition = RecyclerView.NO_POSITION;
@@ -67,6 +68,7 @@ final class BunkrGalleryPagerAdapter
         items.clear();
         if (incoming != null) items.addAll(incoming);
         resolvedUrls.clear();
+        preloadedImages.clear();
         if (resolved != null) resolvedUrls.putAll(resolved);
         loading.clear();
         failed.clear();
@@ -153,7 +155,7 @@ final class BunkrGalleryPagerAdapter
         if (item == null || !item.isImage()) return;
         String url = value(resolvedUrls.get(item.url));
         if (url.isEmpty()) url = value(item.imageUrl);
-        if (url.isEmpty()) return;
+        if (url.isEmpty() || !preloadedImages.add(url)) return;
         Glide.with(context)
                 .load(withHeaders(url, imageReferer(item)))
                 .fitCenter()
