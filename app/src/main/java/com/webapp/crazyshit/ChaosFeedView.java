@@ -1302,12 +1302,14 @@ public final class ChaosFeedView extends FrameLayout {
                 return true;
             });
             final float[] pinchScale = {1f};
+            final boolean[] pinchConsumed = {false};
             ScaleGestureDetector clearDisplayGesture = new ScaleGestureDetector(
                     activity,
                     new ScaleGestureDetector.SimpleOnScaleGestureListener() {
                         @Override
                         public boolean onScaleBegin(ScaleGestureDetector detector) {
                             pinchScale[0] = 1f;
+                            pinchConsumed[0] = true;
                             playerView.cancelLongPress();
                             restorePlaybackSpeed();
                             pager.setUserInputEnabled(false);
@@ -1353,10 +1355,13 @@ public final class ChaosFeedView extends FrameLayout {
                 if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                     pager.setUserInputEnabled(true);
                     ViewParentCompat.disallow(v, false);
+                    boolean consumedPinch = pinchConsumed[0];
+                    pinchConsumed[0] = false;
                     if (speedBoosting) {
                         restorePlaybackSpeed();
                         return true;
                     }
+                    if (consumedPinch) return true;
                 }
                 return multiTouch;
             });
