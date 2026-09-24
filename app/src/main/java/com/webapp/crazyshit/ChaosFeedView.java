@@ -201,6 +201,7 @@ public final class ChaosFeedView extends FrameLayout {
             pager.setUserInputEnabled(true);
             resolveAhead(selectedPosition);
             playSelected();
+            warmCreatorGalleries(selectedPosition);
             syncVisibleChrome();
         } else {
             pauseAll();
@@ -388,7 +389,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void warmCreatorGalleries(int position) {
-        if (closed || position < 0 || position >= items.size()) return;
+        if (closed || !active || !hostResumed || position < 0 || position >= items.size()) return;
         ShitTokCreatorGalleryPreloader.warm(activity, items.get(position));
 
         postDelayed(() -> {
