@@ -54,6 +54,7 @@ final class ShitTokCreatorGalleryPreloader {
             } catch (Exception ignored) {
             } finally {
                 WARMING.remove(key);
+                SESSIONS.remove(key, sessionId);
             }
         });
     }
