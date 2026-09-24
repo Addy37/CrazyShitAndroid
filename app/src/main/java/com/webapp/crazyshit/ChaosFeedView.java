@@ -1262,6 +1262,17 @@ public final class ChaosFeedView extends FrameLayout {
             };
             title.setOnLongClickListener(menuLongPress);
             meta.setOnLongClickListener(menuLongPress);
+            title.setOnClickListener(v -> {
+                String creator = ShitTokCreatorMetadata.creatorName(item);
+                if (creator.isEmpty()) return;
+                haptic(v);
+                pauseAndRecord();
+                activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+                        activity,
+                        creator,
+                        creator
+                ));
+            });
 
             mute.setOnClickListener(v -> {
                 haptic(v);
@@ -1388,14 +1399,26 @@ public final class ChaosFeedView extends FrameLayout {
             playbackRail.setVisibility(View.VISIBLE);
             speedBadge.setVisibility(View.GONE);
             applyMuteState();
-            title.setText(next.title == null || next.title.isEmpty() ? "Random video" : next.title);
+            String creator = ShitTokCreatorMetadata.creatorName(next);
+            boolean creatorClip = !creator.isEmpty();
+            String displayTitle = creatorClip
+                    ? creator
+                    : (next.title == null || next.title.isEmpty() ? "Random video" : next.title);
+            title.setText(displayTitle);
+            title.setClickable(creatorClip);
+            title.setContentDescription(
+                    creatorClip ? "Open " + creator + " gallery" : displayTitle
+            );
             StringBuilder info = new StringBuilder();
-            if (next.uploader != null && !next.uploader.isEmpty()) info.append(next.uploader);
-            if (next.views != null && !next.views.isEmpty()) {
-                if (info.length() > 0) info.append("  •  ");
-                info.append(next.views).append(" views");
+            if (!creatorClip) {
+                if (next.uploader != null && !next.uploader.isEmpty()) info.append(next.uploader);
+                if (next.views != null && !next.views.isEmpty()) {
+                    if (info.length() > 0) info.append("  •  ");
+                    info.append(next.views).append(" views");
+                }
             }
             meta.setText(info);
+            meta.setVisibility(creatorClip ? View.GONE : View.VISIBLE);
             comments.setVisibility(supportsComments(next) ? View.VISIBLE : View.GONE);
             updateSaveButton(next, save);
             loading.setVisibility(View.VISIBLE);
