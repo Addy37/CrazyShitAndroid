@@ -127,6 +127,20 @@ final class LandscapeMoreDialog {
                                 () -> activity.startActivity(
                                         new Intent(activity, DownloadedActivity.class)
                                 )
+                        ),
+                        new Action(
+                                R.drawable.ic_more_update,
+                                "Updates",
+                                UpdateInboxStore.unreadCount(activity) == 0
+                                        ? "Fresh activity from your sources"
+                                        : UpdateInboxStore.unreadCount(activity)
+                                                + (UpdateInboxStore.unreadCount(activity) == 1
+                                                        ? " unread update"
+                                                        : " unread updates"),
+                                UpdateInboxStore.unreadCount(activity),
+                                () -> activity.startActivity(
+                                        new Intent(activity, UpdateInboxActivity.class)
+                                )
                         )
                 )
         );
@@ -386,6 +400,23 @@ final class LandscapeMoreDialog {
         labels.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
+        if (action.badgeCount > 0) {
+            TextView badge = text(
+                    activity,
+                    action.badgeCount > 99 ? "99+" : String.valueOf(action.badgeCount),
+                    10,
+                    Color.WHITE,
+                    true
+            );
+            badge.setGravity(Gravity.CENTER);
+            badge.setMinWidth(dp(activity, 26));
+            badge.setPadding(dp(activity, 7), 0, dp(activity, 7), 0);
+            badge.setBackground(roundedBackground(activity, UiPalette.PRIMARY, 12));
+            LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(-2, dp(activity, 24));
+            badgeParams.setMargins(dp(activity, 4), 0, dp(activity, 4), 0);
+            row.addView(badge, badgeParams);
+        }
+
         ImageView chevron = iconView(activity, R.drawable.ic_more_chevron, 28, 6);
         chevron.setImageTintList(ColorStateList.valueOf(Color.rgb(116, 116, 128)));
         row.addView(chevron, new LinearLayout.LayoutParams(dp(activity, 28), dp(activity, 40)));
@@ -572,12 +603,18 @@ final class LandscapeMoreDialog {
         final int iconRes;
         final String title;
         final String subtitle;
+        final int badgeCount;
         final Runnable run;
 
         Action(int iconRes, String title, String subtitle, Runnable run) {
+            this(iconRes, title, subtitle, 0, run);
+        }
+
+        Action(int iconRes, String title, String subtitle, int badgeCount, Runnable run) {
             this.iconRes = iconRes;
             this.title = title;
             this.subtitle = subtitle;
+            this.badgeCount = Math.max(0, badgeCount);
             this.run = run;
         }
     }
