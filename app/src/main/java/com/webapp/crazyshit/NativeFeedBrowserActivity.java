@@ -82,6 +82,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private ViewPager2 creatorTabsPager;
     private TabLayout creatorTabs;
     private CreatorProfileHeader creatorProfile;
+    private int creatorHeroCollapseOffset;
     private TabLayoutMediator creatorTabsMediator;
     private SwipeRefreshLayout refresh;
     private View progress;
@@ -198,6 +199,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (state != null) {
             browserSnapshot = state.getString("browser_snapshot", browserSnapshot);
             bunkrGallerySessionId = state.getString("gallery_session", bunkrGallerySessionId);
+            creatorHeroCollapseOffset = state.getInt("creator_hero_collapse", 0);
         }
         buildUi();
         if (state == null) {
@@ -246,6 +248,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
         if (isCreatorGallery()) {
             creatorProfile = new CreatorProfileHeader(this, title, creatorQuery, baseUrl);
+            creatorProfile.setCollapseOffsetPx(creatorHeroCollapseOffset);
             shell.addView(creatorProfile);
             if (!notificationFreshUrls.isEmpty()) {
                 TextView notificationContext = text(
@@ -424,6 +427,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 RecyclerView active = activeCreatorRecycler();
                 if (active != null) {
                     recycler = active;
+                    updateCreatorHeroForRecycler(active);
                     BunkrGalleryAdapter activeAdapter = activeCreatorAdapter();
                     if (activeAdapter != null) {
                         int[] range = visibleRange(active.getLayoutManager());
@@ -463,6 +467,9 @@ public final class NativeFeedBrowserActivity extends Activity {
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
+                if (isCreatorGallery() && view == activeCreatorRecycler()) {
+                    updateCreatorHeroForRecycler(view);
+                }
                 int[] range = visibleRange(view.getLayoutManager());
                 galleryAdapter.preloadVisible(range[0], range[1]);
                 if (dy > 0 && !loading && !endReached &&
@@ -471,6 +478,17 @@ public final class NativeFeedBrowserActivity extends Activity {
                 }
             }
         });
+    }
+
+    private void updateCreatorHeroForRecycler(RecyclerView view) {
+        if (!isCreatorGallery() || creatorProfile == null || view == null) return;
+        int offset = Math.max(
+                0,
+                Math.min(creatorProfile.expandedHeightPx(), view.computeVerticalScrollOffset())
+        );
+        if (offset == creatorHeroCollapseOffset) return;
+        creatorHeroCollapseOffset = offset;
+        creatorProfile.setCollapseOffsetPx(offset);
     }
 
     private int[] visibleRange(RecyclerView.LayoutManager manager) {
@@ -1485,6 +1503,13 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (scroll != null) {
             view.getLayoutManager().onRestoreInstanceState(scroll);
             restoredBrowserState.remove(key);
+            if (isCreatorGallery()) {
+                view.post(() -> {
+                    if (!isFinishing() && !isDestroyed() && view == activeCreatorRecycler()) {
+                        updateCreatorHeroForRecycler(view);
+                    }
+                });
+            }
         }
     }
 
@@ -1492,6 +1517,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         state.putString("browser_snapshot", browserSnapshot);
         state.putString("gallery_session", bunkrGallerySessionId);
         state.putBoolean("notification_fresh_pending_focus", notificationFreshPendingFocus);
+        state.putInt("creator_hero_collapse", creatorHeroCollapseOffset);
         state.putInt("tab", activeCreatorTab());
         if (isCreatorGallery()) {
             for (int i = 0; i < CREATOR_TAB_COUNT; i++) {
