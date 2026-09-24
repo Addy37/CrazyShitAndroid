@@ -411,7 +411,7 @@ public final class SearchActivity extends Activity {
                 if (destroyed || isFinishing() || token != generation) return;
                 onlyFapLocal = local;
                 if (onlyFapAdapter != null) onlyFapAdapter.replace(local);
-                if (!local.isEmpty()) progress.setVisibility(View.GONE);
+                if (!local.isEmpty()) progress.finish();
                 status.setVisibility(View.GONE);
                 searchState.setText(local.size() + " saved creators · Checking sources…");
             });
@@ -430,7 +430,7 @@ public final class SearchActivity extends Activity {
                                 List<NativeContentItem> combined = OnlyFapCreatorResults.merge(
                                         onlyFapLocal, visible, 80);
                                 if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
-                                if (!combined.isEmpty()) progress.setVisibility(View.GONE);
+                                if (!combined.isEmpty()) progress.finish();
                                 searchState.setText(combined.size() + " creators · Checking sources…");
                                 searchState.setContentDescription(searchState.getText());
                             });
@@ -665,7 +665,14 @@ public final class SearchActivity extends Activity {
         }
         adapter.replace(output);
 
-        progress.setVisibility(output.isEmpty() && pendingSources > 0 ? View.VISIBLE : View.GONE);
+        boolean waitingForFirstResult = output.isEmpty() && pendingSources > 0;
+        if (waitingForFirstResult) {
+            progress.setVisibility(View.VISIBLE);
+        } else if (!output.isEmpty() && progress.getVisibility() == View.VISIBLE) {
+            progress.finish();
+        } else {
+            progress.setVisibility(View.GONE);
+        }
         String unavailable = String.join(", ", errors.values());
         searchState.setVisibility(View.VISIBLE);
         searchState.setText(pendingSources > 0
