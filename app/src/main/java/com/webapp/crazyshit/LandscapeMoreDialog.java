@@ -132,7 +132,7 @@ final class LandscapeMoreDialog {
                                 R.drawable.ic_more_update,
                                 "Updates",
                                 UpdateInboxStore.unreadCount(activity) == 0
-                                        ? "Fresh activity from your sources"
+                                        ? "Favorite creator activity"
                                         : UpdateInboxStore.unreadCount(activity)
                                                 + (UpdateInboxStore.unreadCount(activity) == 1
                                                         ? " unread update"
