@@ -34,7 +34,7 @@ public class UpdateInboxStoreTest {
     @Test
     public void creatorUpdatesGroupIntoOneOnlyFapInboxEntry() {
         NativeContentItem fapello = new NativeContentItem(
-                NativeContentItem.KIND_VIDEO,
+                NativeContentItem.KIND_MEDIA,
                 "OnlyFap video #123",
                 "https://fapello.com/video/emily-rinaudo/123/",
                 "https://img.example/fapello.jpg",
@@ -54,7 +54,7 @@ public class UpdateInboxStoreTest {
                 "OnlyHaven"
         );
         NativeContentItem crazy = new NativeContentItem(
-                NativeContentItem.KIND_VIDEO,
+                NativeContentItem.KIND_MEDIA,
                 "Fresh clip",
                 "https://crazyshit.com/video/fresh",
                 "https://img.example/video.jpg",
