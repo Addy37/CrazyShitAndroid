@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
@@ -15,10 +16,18 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 /** Creator identity and favorite action shared by the gallery header. */
 final class CreatorProfileHeader extends LinearLayout {
     private final NativeContentItem creator;
     private final TextView favorite;
+    private final ImageView banner;
+    private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
+    private boolean detached;
 
     CreatorProfileHeader(Context context, String title, String query, String url) {
         super(context);
@@ -47,9 +56,9 @@ final class CreatorProfileHeader extends LinearLayout {
         FrameLayout hero = new FrameLayout(context);
         hero.setBackgroundColor(Color.rgb(13, 15, 18));
 
-        ImageView banner = new ImageView(context);
+        banner = new ImageView(context);
         banner.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        banner.setImageResource(R.drawable.ic_more_account);
+        banner.setImageDrawable(new ColorDrawable(Color.rgb(13, 15, 18)));
         banner.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         hero.addView(banner, new FrameLayout.LayoutParams(-1, -1));
 
@@ -58,9 +67,9 @@ final class CreatorProfileHeader extends LinearLayout {
         GradientDrawable heroShade = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[] {
-                        Color.argb(38, 0, 0, 0),
-                        Color.argb(78, 0, 0, 0),
-                        Color.argb(238, 0, 0, 0)
+                        Color.argb(20, 0, 0, 0),
+                        Color.argb(72, 0, 0, 0),
+                        Color.argb(242, 0, 0, 0)
                 }
         );
         shade.setBackground(heroShade);
@@ -111,27 +120,55 @@ final class CreatorProfileHeader extends LinearLayout {
         addView(hero, new LayoutParams(-1, dp(184)));
 
         if (!creator.imageUrl.isEmpty()) {
-            GlideUrl image = new GlideUrl(
-                    creator.imageUrl,
-                    new LazyHeaders.Builder()
-                            .addHeader("Referer", creator.url)
-                            .build()
-            );
-            Glide.with(banner)
-                    .load(image)
-                    .centerCrop()
-                    .placeholder(R.drawable.ic_more_account)
-                    .error(R.drawable.ic_more_account)
-                    .into(banner);
             Glide.with(avatar)
-                    .load(image)
+                    .load(withReferer(creator.imageUrl, creator.url))
                     .circleCrop()
                     .placeholder(R.drawable.ic_more_account)
                     .error(R.drawable.ic_more_account)
                     .into(avatar);
         }
 
+        loadOnlyHavenHero(query);
         refresh();
+    }
+
+    private void loadOnlyHavenHero(String query) {
+        String cleanQuery = query == null ? "" : query.trim();
+        if (cleanQuery.length() < 2) return;
+        Context appContext = getContext().getApplicationContext();
+        heroIo.execute(() -> {
+            try {
+                OnlyHavenRepository repository = new OnlyHavenRepository();
+                List<OnlyHavenRepository.Creator> matches =
+                        repository.searchCreators(appContext, cleanQuery, 6);
+                if (matches == null) return;
+                for (OnlyHavenRepository.Creator match : matches) {
+                    String heroUrl = repository.creatorHeaderUrl(match);
+                    if (heroUrl.isEmpty()) continue;
+                    post(() -> showHero(heroUrl, match.url));
+                    return;
+                }
+            } catch (IOException ignored) {
+            }
+        });
+    }
+
+    private void showHero(String heroUrl, String referer) {
+        if (detached || heroUrl == null || heroUrl.isEmpty()) return;
+        Glide.with(banner)
+                .load(withReferer(heroUrl, referer))
+                .centerCrop()
+                .placeholder(new ColorDrawable(Color.rgb(13, 15, 18)))
+                .error(new ColorDrawable(Color.rgb(13, 15, 18)))
+                .into(banner);
+    }
+
+    private GlideUrl withReferer(String imageUrl, String referer) {
+        LazyHeaders.Builder headers = new LazyHeaders.Builder();
+        if (referer != null && !referer.trim().isEmpty()) {
+            headers.addHeader("Referer", referer);
+        }
+        return new GlideUrl(imageUrl, headers.build());
     }
 
     void refresh() {
@@ -146,6 +183,14 @@ final class CreatorProfileHeader extends LinearLayout {
         favorite.setContentDescription(
                 (saved ? "Unfavorite " : "Favorite ") + creator.title
         );
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        detached = true;
+        heroIo.shutdownNow();
+        Glide.with(banner).clear(banner);
+        super.onDetachedFromWindow();
     }
 
     private int dp(int value) {
