@@ -26,7 +26,6 @@ final class CreatorProfileHeader extends LinearLayout {
     private final NativeContentItem creator;
     private final TextView favorite;
     private final ImageView banner;
-    private final FrameLayout hero;
     private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
     private boolean detached;
 
@@ -54,7 +53,7 @@ final class CreatorProfileHeader extends LinearLayout {
         }
         creator = found;
 
-        hero = new FrameLayout(context);
+        FrameLayout hero = new FrameLayout(context);
         hero.setBackgroundColor(Color.rgb(13, 15, 18));
 
         banner = new ImageView(context);
@@ -170,26 +169,6 @@ final class CreatorProfileHeader extends LinearLayout {
             headers.addHeader("Referer", referer);
         }
         return new GlideUrl(imageUrl, headers.build());
-    }
-
-    int expandedHeightPx() {
-        return dp(184);
-    }
-
-    void setCollapseOffsetPx(int offsetPx) {
-        int expanded = expandedHeightPx();
-        int safeOffset = Math.max(0, Math.min(expanded, offsetPx));
-        int nextHeight = expanded - safeOffset;
-
-        android.view.ViewGroup.LayoutParams params = hero.getLayoutParams();
-        if (params != null && params.height != nextHeight) {
-            params.height = nextHeight;
-            hero.setLayoutParams(params);
-        }
-
-        float progress = expanded == 0 ? 1f : (float) safeOffset / expanded;
-        hero.setAlpha(1f - Math.min(1f, progress * 1.08f));
-        hero.setTranslationY(-dp(10) * progress);
     }
 
     void refresh() {
