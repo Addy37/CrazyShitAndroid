@@ -50,6 +50,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_SOURCE = "browser_source";
     public static final String EXTRA_BUNKR_CREATOR_QUERY = "browser_bunkr_creator_query";
     public static final String EXTRA_FAPELLO_PROFILE_URL = "browser_fapello_profile_url";
+    public static final String EXTRA_CREATOR_GALLERY_SESSION = "browser_creator_gallery_session";
     public static final String SOURCE_CRAZYSHIT = "crazyshit";
     public static final String SOURCE_EFUKT = "efukt";
     public static final String SOURCE_BUNKR = "bunkr";
@@ -124,6 +125,16 @@ public final class NativeFeedBrowserActivity extends Activity {
             String query,
             String fapelloProfileUrl
     ) {
+        return createCreatorGallery(activity, title, query, fapelloProfileUrl, "");
+    }
+
+    public static Intent createCreatorGallery(
+            Activity activity,
+            String title,
+            String query,
+            String fapelloProfileUrl,
+            String gallerySessionId
+    ) {
         String cleanQuery = query == null ? "" : query.trim();
         Intent intent = create(
                 activity,
@@ -135,6 +146,9 @@ public final class NativeFeedBrowserActivity extends Activity {
         intent.putExtra(EXTRA_BUNKR_CREATOR_QUERY, cleanQuery);
         if (FapelloRepository.isModelUrl(fapelloProfileUrl)) {
             intent.putExtra(EXTRA_FAPELLO_PROFILE_URL, fapelloProfileUrl);
+        }
+        if (gallerySessionId != null && !gallerySessionId.trim().isEmpty()) {
+            intent.putExtra(EXTRA_CREATOR_GALLERY_SESSION, gallerySessionId.trim());
         }
         return intent;
     }
@@ -148,6 +162,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         source = value(getIntent().getStringExtra(EXTRA_SOURCE), SOURCE_CRAZYSHIT);
         creatorQuery = value(getIntent().getStringExtra(EXTRA_BUNKR_CREATOR_QUERY), "");
         fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL), "");
+        bunkrGallerySessionId = value(
+                getIntent().getStringExtra(EXTRA_CREATOR_GALLERY_SESSION),
+                ""
+        );
         if (!creatorQuery.isEmpty()) {
             source = SOURCE_BUNKR;
             baseUrl = BunkrRepository.searchUrl(creatorQuery);
@@ -156,7 +174,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         restoredBrowserState = state;
         if (state != null) {
             browserSnapshot = state.getString("browser_snapshot", browserSnapshot);
-            bunkrGallerySessionId = state.getString("gallery_session");
+            bunkrGallerySessionId = state.getString("gallery_session", bunkrGallerySessionId);
         }
         buildUi();
         if (state == null) {

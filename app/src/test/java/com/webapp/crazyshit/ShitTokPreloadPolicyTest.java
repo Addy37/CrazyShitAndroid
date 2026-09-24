@@ -8,14 +8,22 @@ import org.junit.Test;
 
 public final class ShitTokPreloadPolicyTest {
     @Test
-    public void playerWindow_preparesOnlyCurrentAndImmediateNext() {
+    public void playerWindow_preparesCurrentAndNextTwo() {
         int selected = 10;
 
         assertTrue(ChaosFeedView.shouldPreparePlayer(10, selected));
         assertTrue(ChaosFeedView.shouldPreparePlayer(11, selected));
+        assertTrue(ChaosFeedView.shouldPreparePlayer(12, selected));
         assertFalse(ChaosFeedView.shouldPreparePlayer(9, selected));
-        assertFalse(ChaosFeedView.shouldPreparePlayer(12, selected));
         assertFalse(ChaosFeedView.shouldPreparePlayer(13, selected));
+    }
+
+    @Test
+    public void clearDisplayGesture_usesIntentionalPinchThresholds() {
+        assertTrue(ChaosFeedView.shouldEnterClearDisplay(0.78f));
+        assertFalse(ChaosFeedView.shouldEnterClearDisplay(0.90f));
+        assertTrue(ChaosFeedView.shouldExitClearDisplay(1.22f));
+        assertFalse(ChaosFeedView.shouldExitClearDisplay(1.10f));
     }
 
     @Test

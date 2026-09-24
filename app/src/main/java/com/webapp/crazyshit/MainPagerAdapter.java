@@ -47,6 +47,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         void onOpenItem(NativeContentItem item);
         void onLongPressItem(NativeContentItem item, View anchor);
         void onOpenComments(NativeContentItem item);
+
+        default void onChaosClearDisplayChanged(boolean clear) {
+        }
     }
 
     private enum PageKind {
@@ -84,6 +87,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             @Override
             public void openDetails(NativeContentItem item) {
                 host.onOpenItem(item);
+            }
+
+            @Override
+            public void onClearDisplayChanged(boolean clear) {
+                host.onChaosClearDisplayChanged(clear);
             }
         });
         chaosView.setActive(false);
