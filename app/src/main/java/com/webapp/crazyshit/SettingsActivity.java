@@ -98,8 +98,8 @@ public class SettingsActivity extends Activity {
 
         addSection(root, "Notifications");
         addSwitch(root,
-                "Track content updates",
-                "Check supported ZEROCHILL sources and add fresh activity to More → Updates.",
+                "Track favorite creator updates",
+                "Check supported OnlyFap sources and add fresh activity from your favorite creators to More → Updates.",
                 NotificationCoordinator.PREF_NEW_VIDEO_ALERTS,
                 true);
         addAction(root,
