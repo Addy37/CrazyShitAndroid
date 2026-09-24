@@ -268,11 +268,11 @@ final class NotificationCoordinator {
 
         PendingIntent open = appPendingIntent(activity, 9301);
         Notification notification = baseBuilder(activity, CHANNEL_VIDEOS, "ZC")
-                .setContentTitle("ZEROCHILL alerts are ready")
-                .setContentText("Fresh content and app updates will appear here.")
+                .setContentTitle("ZEROCHILL notifications are ready")
+                .setContentText("App update alerts can appear here.")
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(
-                        "Fresh content from supported ZEROCHILL sources and app update alerts "
-                                + "will appear here."
+                        "App update alerts can appear as Android notifications. "
+                                + "Fresh content is collected inside More → Updates."
                 ))
                 .setContentIntent(open)
                 .addAction(R.drawable.ic_nav_home, "Open app", open)
@@ -282,93 +282,27 @@ final class NotificationCoordinator {
     }
 
     static void showNewVideoNotifications(Context context, List<SourceAlert> alerts) {
-        if (!canPost(context) || alerts == null || alerts.isEmpty()) return;
-        createChannels(context);
+        if (context == null || alerts == null || alerts.isEmpty()) return;
+        UpdateInboxStore.record(context, alerts);
+        clearContentNotifications(context);
+    }
 
-        List<ExperienceAlert> experiences = consolidateAlerts(alerts);
-        if (experiences.isEmpty()) return;
-
+    static void clearContentNotifications(Context context) {
+        if (context == null) return;
         NotificationManagerCompat manager = NotificationManagerCompat.from(context);
         manager.cancel(ID_GROUP);
         cancelLegacySourceNotifications(manager);
-
-        boolean showTitles = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getBoolean(PREF_SHOW_TITLES, true);
-        ExperienceAlert onlyFap = null;
-        int ordinaryNotifications = 0;
-        int total = 0;
-        for (ExperienceAlert alert : experiences) {
-            total += alert.items.size();
-            if ("onlyfap".equals(alert.key)) onlyFap = alert;
-            else ordinaryNotifications++;
-        }
-
-        CreatorAlertBatch creatorBatch = showTitles && onlyFap != null
-                ? groupOnlyFapCreators(onlyFap)
-                : new CreatorAlertBatch();
-        int notificationCount = ordinaryNotifications;
-        if (onlyFap != null) {
-            if (!creatorBatch.creators.isEmpty()) notificationCount += creatorBatch.creators.size();
-            if (!showTitles || !creatorBatch.fallback.items.isEmpty()) notificationCount++;
-        }
-        boolean grouped = notificationCount > 1;
-
-        ArrayList<Integer> activeCreatorIds = new ArrayList<>();
-        for (ExperienceAlert alert : experiences) {
-            if ("onlyfap".equals(alert.key)) continue;
-            NotificationCompat.Builder builder = experienceBuilder(context, alert);
-            if (grouped) {
-                builder.setGroup(GROUP_NEW_CONTENT)
-                        .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY);
-            }
-            manager.notify(sourceNotificationId(alert.key), builder.build());
-        }
-
-        if (onlyFap != null) {
-            manager.cancel(sourceNotificationId("onlyfap"));
-            if (showTitles && !creatorBatch.creators.isEmpty()) {
-                for (CreatorAlert creator : creatorBatch.creators) {
-                    enrichCreatorAlert(context, creator);
-                    int notificationId = creatorNotificationId(creator.name);
-                    activeCreatorIds.add(notificationId);
-                    NotificationCompat.Builder builder = creatorNotificationBuilder(context, creator);
-                    if (grouped) {
-                        builder.setGroup(GROUP_NEW_CONTENT)
-                                .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY);
-                    }
-                    manager.notify(notificationId, builder.build());
+        SharedPreferences state = context.getSharedPreferences(STATE, Context.MODE_PRIVATE);
+        String previous = state.getString(KEY_ACTIVE_ONLYFAP_CREATOR_IDS, "");
+        if (previous != null && !previous.trim().isEmpty()) {
+            for (String raw : previous.split(",")) {
+                try {
+                    manager.cancel(Integer.parseInt(raw.trim()));
+                } catch (Exception ignored) {
                 }
             }
-
-            ExperienceAlert fallback = showTitles ? creatorBatch.fallback : onlyFap;
-            if (!fallback.items.isEmpty()) {
-                NotificationCompat.Builder builder = experienceBuilder(context, fallback);
-                if (grouped) {
-                    builder.setGroup(GROUP_NEW_CONTENT)
-                            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY);
-                }
-                manager.notify(sourceNotificationId(fallback.key), builder.build());
-            }
-            replaceActiveCreatorNotifications(context, manager, activeCreatorIds);
         }
-
-        if (grouped) {
-            PendingIntent open = appPendingIntent(context, 9302);
-            String text = total + (total == 1 ? " new item" : " new items") +
-                    " across " + experienceLabels(experiences);
-            Notification summary = baseBuilder(context, CHANNEL_VIDEOS, "ZC")
-                    .setContentTitle("Fresh ZEROCHILL content")
-                    .setContentText(text)
-                    .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
-                    .setContentIntent(open)
-                    .setGroup(GROUP_NEW_CONTENT)
-                    .setGroupSummary(true)
-                    .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
-                    .setNumber(total)
-                    .setAutoCancel(true)
-                    .build();
-            manager.notify(ID_GROUP, summary);
-        }
+        state.edit().remove(KEY_ACTIVE_ONLYFAP_CREATOR_IDS).apply();
     }
 
     static List<ExperienceAlert> consolidateAlerts(List<SourceAlert> alerts) {
@@ -1123,8 +1057,7 @@ final class NotificationCoordinator {
     }
 
     private static boolean alertsEnabled(SharedPreferences prefs) {
-        boolean content = prefs.getBoolean(PREF_NEW_VIDEO_ALERTS, true);
-        return content || prefs.getBoolean(PREF_UPDATE_ALERTS, true);
+        return prefs.getBoolean(PREF_UPDATE_ALERTS, true);
     }
 
     private static int normalizedHours(int value) {
