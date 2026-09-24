@@ -112,12 +112,8 @@ jobs:
       - name: Prepare and verify release files
         run: |
           cp app/build/outputs/apk/release/app-release.apk "$APK_PRIMARY"
-          SOURCE_REF="${GITHUB_REF_NAME//\//-}"
-          cp "$APK_PRIMARY" "ZeroChill-${SOURCE_REF}-${GITHUB_SHA:0:7}-signed.apk"
-          cp "$APK_PRIMARY" CrazyShit.apk
-          cp "$APK_PRIMARY" ZeroFilter.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK_PRIMARY"
-          sha256sum "$APK_PRIMARY" CrazyShit.apk ZeroFilter.apk ZeroChill-*-signed.apk > SHA256SUMS.txt
+          sha256sum "$APK_PRIMARY" > SHA256SUMS.txt
 
       - name: Verify upgrade from previous stable release
         env:
@@ -152,9 +148,6 @@ jobs:
           name: ZeroChill-signed
           path: |
             ZeroChill.apk
-            ZeroChill-*-signed.apk
-            CrazyShit.apk
-            ZeroFilter.apk
             SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
@@ -165,9 +158,6 @@ jobs:
         run: |
           gh release create "v${VERSION}" \
             "$APK_PRIMARY" \
-            ZeroChill-*-signed.apk \
-            CrazyShit.apk \
-            ZeroFilter.apk \
             SHA256SUMS.txt \
             --target "$GITHUB_SHA" \
             --title "$RELEASE_TITLE" \
