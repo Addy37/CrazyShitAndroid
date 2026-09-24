@@ -47,7 +47,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         void onOpenItem(NativeContentItem item);
         void onLongPressItem(NativeContentItem item, View anchor);
         void onOpenComments(NativeContentItem item);
-        void onChaosClearDisplayChanged(boolean clear);
+
+        default void onChaosClearDisplayChanged(boolean clear) {
+        }
     }
 
     private enum PageKind {
