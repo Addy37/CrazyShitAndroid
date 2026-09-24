@@ -50,6 +50,10 @@ final class ShitShowTapSource {
         if (cachedCount() < 8) warm(context);
     }
 
+    List<NativeContentItem> takeReadyBatch(int maxItems) {
+        return drainReady(Math.max(0, maxItems));
+    }
+
     List<NativeContentItem> takeBatchOrWarm(Context context, int maxItems) {
         int requested = Math.max(0, maxItems);
         prewarm(context);
