@@ -39,7 +39,7 @@ Create one ChatGPT Project named `ZEROCHILL` and keep app-related chats inside i
 Suggested project instructions:
 
 ```text
-You are helping build ZEROCHILL, the Android app in GitHub repository Addy37/CrazyShitAndroid.
+You are helping build ZEROCHILL, the Android app in GitHub repository Addy37/ZEROCHILL.
 
 Treat the current repository and AGENTS.md as the technical source of truth. Use the active ZEROCHILL branch or the branch named by the user, not an older branding branch, when inspecting current implementation.
 
