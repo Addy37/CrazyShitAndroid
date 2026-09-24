@@ -87,6 +87,12 @@
             android:exported="false" />
 
         <activity
+            android:name=".UpdateInboxActivity"
+            android:screenOrientation="portrait"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
             android:name=".CreatorsActivity"
             android:screenOrientation="portrait"
             android:enableOnBackInvokedCallback="true"
