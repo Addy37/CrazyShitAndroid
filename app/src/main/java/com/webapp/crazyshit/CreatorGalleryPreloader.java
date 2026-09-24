@@ -71,10 +71,13 @@ final class CreatorGalleryPreloader {
         String key = key(cleanQuery);
         String recent = BunkrGallerySessionStore.recentCreator(cleanQuery);
         if (recent != null) {
-            SESSIONS.put(key, recent);
             BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(recent);
             if (snapshot != null) warmImages(context, snapshot.items);
             return;
+        }
+        String active = SESSIONS.get(key);
+        if (active != null && BunkrGallerySessionStore.snapshot(active) == null) {
+            SESSIONS.remove(key, active);
         }
         if (SESSIONS.containsKey(key) || WARMING.contains(key)) return;
         if (!reserve()) return;
@@ -132,11 +135,7 @@ final class CreatorGalleryPreloader {
                 WARMING.remove(key);
                 RESERVED.decrementAndGet();
                 if (!sessionId.isEmpty()) {
-                    BunkrGallerySessionStore.Snapshot snapshot =
-                            BunkrGallerySessionStore.snapshot(sessionId);
-                    if (snapshot == null || snapshot.items.isEmpty()) {
-                        SESSIONS.remove(key, sessionId);
-                    }
+                    SESSIONS.remove(key, sessionId);
                 }
             }
         });
@@ -155,8 +154,14 @@ final class CreatorGalleryPreloader {
         if (cleanQuery.isEmpty()) return "";
         String recent = BunkrGallerySessionStore.recentCreator(cleanQuery);
         if (recent != null) return recent;
-        String session = SESSIONS.get(key(cleanQuery));
-        return session == null ? "" : session;
+        String key = key(cleanQuery);
+        String session = SESSIONS.get(key);
+        if (session == null) return "";
+        if (BunkrGallerySessionStore.snapshot(session) == null) {
+            SESSIONS.remove(key, session);
+            return "";
+        }
+        return session;
     }
 
     private static boolean reserve() {
