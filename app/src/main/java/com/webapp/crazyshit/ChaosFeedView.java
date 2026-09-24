@@ -97,7 +97,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Activity activity;
     private final Host host;
     private final CrazyShitRepository repository = new CrazyShitRepository();
-    private final ExecutorService io = Executors.newFixedThreadPool(4);
+    private final ExecutorService io = Executors.newFixedThreadPool(6);
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
     private final Set<String> sessionUrls = new HashSet<>();
     private final Deque<String> recentUrls = new ArrayDeque<>();
@@ -151,13 +151,13 @@ public final class ChaosFeedView extends FrameLayout {
     private void buildUi() {
         pager = new ViewPager2(activity);
         pager.setOrientation(ViewPager2.ORIENTATION_VERTICAL);
-        pager.setOffscreenPageLimit(2);
+        pager.setOffscreenPageLimit(3);
         adapter = new ChaosAdapter();
         pager.setAdapter(adapter);
         addView(pager, new FrameLayout.LayoutParams(-1, -1));
 
         RecyclerView rv = pagerRecycler();
-        if (rv != null) rv.setItemViewCacheSize(2);
+        if (rv != null) rv.setItemViewCacheSize(3);
 
         initialProgress = new ProgressBar(activity);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48));
@@ -187,6 +187,7 @@ public final class ChaosFeedView extends FrameLayout {
                 releaseDistantPlayers(position);
                 resolveAhead(position);
                 playSelected();
+                warmCreatorGalleries(position);
                 ChaosHolder holder = holderAt(position);
                 if (holder != null) holder.showControlsTemporarily();
                 if (items.size() - position <= LOAD_AHEAD_AT) loadMorePool();
@@ -312,6 +313,7 @@ public final class ChaosFeedView extends FrameLayout {
                 empty.setVisibility(View.GONE);
                 resolveAhead(selectedPosition);
                 if (active && hostResumed) playSelected();
+                warmCreatorGalleries(selectedPosition);
                 tryPendingAutoAdvance();
             }
 
@@ -332,7 +334,7 @@ public final class ChaosFeedView extends FrameLayout {
 }
 
     static boolean shouldPreparePlayer(int position, int selectedPosition) {
-        return position == selectedPosition || position == selectedPosition + 1;
+        return position >= selectedPosition && position <= selectedPosition + 2;
     }
 
     private static boolean isMedia(NativeContentItem item) {
@@ -383,6 +385,21 @@ public final class ChaosFeedView extends FrameLayout {
             return;
         }
         if (fromPosition + 1 < items.size()) requestAutoAdvance(fromPosition);
+    }
+
+    private void warmCreatorGalleries(int position) {
+        if (closed || position < 0 || position >= items.size()) return;
+        ShitTokCreatorGalleryPreloader.warm(activity, items.get(position));
+
+        postDelayed(() -> {
+            if (closed || selectedPosition != position) return;
+            for (int next = position + 1; next < Math.min(items.size(), position + 8); next++) {
+                NativeContentItem candidate = items.get(next);
+                if (!ShitTokCreatorMetadata.hasCreator(candidate)) continue;
+                ShitTokCreatorGalleryPreloader.warm(activity, candidate);
+                break;
+            }
+        }, 700L);
     }
 
     private void resolveAhead(int position) {
@@ -1270,7 +1287,9 @@ public final class ChaosFeedView extends FrameLayout {
                 activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
                         activity,
                         creator,
-                        creator
+                        creator,
+                        "",
+                        ShitTokCreatorGalleryPreloader.sessionId(creator)
                 ));
             });
 
