@@ -234,6 +234,7 @@ final class ChaosSourceMixer {
         int attempts = Math.max(4, efuktSeries.size() * 2);
 
         while (usedSeries.size() < seriesTarget && attempts-- > 0) {
+            if (Thread.currentThread().isInterrupted()) break;
             if (efuktSeriesDeck.isEmpty()) refillEfuktDeck();
             NativeContentItem series = efuktSeriesDeck.pollFirst();
             if (series == null || series.url == null || series.url.isEmpty()) continue;
@@ -285,6 +286,7 @@ final class ChaosSourceMixer {
         int albumTarget = Math.min(BUNKR_ALBUMS_PER_BATCH, bunkrAlbums.size());
         int attempts = Math.max(4, bunkrAlbums.size() * 2);
         while (usedAlbums.size() < albumTarget && attempts-- > 0) {
+            if (Thread.currentThread().isInterrupted()) break;
             if (bunkrAlbumDeck.isEmpty()) refillBunkrDeck();
             NativeContentItem album = bunkrAlbumDeck.pollFirst();
             if (album == null || album.url == null || album.url.isEmpty()) continue;
@@ -351,6 +353,7 @@ final class ChaosSourceMixer {
         int attempts = Math.min(4, onlyHavenCreators.size());
 
         while (combined.size() < ONLY_HAVEN_ITEMS_PER_BATCH && attempts-- > 0) {
+            if (Thread.currentThread().isInterrupted()) break;
             if (onlyHavenCreatorDeck.isEmpty()) refillOnlyHavenDeck();
             OnlyHavenRepository.Creator creator = onlyHavenCreatorDeck.pollFirst();
             if (creator == null || creator.url == null || creator.url.isEmpty()) continue;
@@ -519,6 +522,8 @@ final class ChaosSourceMixer {
                 urls.add(category.url.trim());
             }
             loaded = true;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
         } catch (Exception ignored) {
             // Retry the category catalog on another batch when the host recovers.
         } finally {
