@@ -15,6 +15,7 @@ import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -74,6 +75,7 @@ import java.util.concurrent.Executors;
 public final class ChaosFeedView extends FrameLayout {
     public interface Host {
         void openDetails(NativeContentItem item);
+        void onClearDisplayChanged(boolean clear);
     }
 
     private static final String PREFS = "chaos_feed";
@@ -130,6 +132,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean autoAdvancePending;
     private boolean chaosMuted;
     private boolean manualFullscreen;
+    private boolean clearDisplay;
     private int autoAdvanceFrom = -1;
     private int consecutiveDryLoads;
     private int selectedPosition;
@@ -207,7 +210,10 @@ public final class ChaosFeedView extends FrameLayout {
             pauseAll();
             releaseVisiblePlayers();
         }
-        if (!active) exitManualFullscreen();
+        if (!active) {
+            if (clearDisplay) setClearDisplay(false);
+            exitManualFullscreen();
+        }
     }
 
     public void onHostResume() {
@@ -582,7 +588,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private int portraitViewportBottomInset() {
-        if (activity.getResources().getConfiguration().orientation ==
+        if (clearDisplay || activity.getResources().getConfiguration().orientation ==
                 Configuration.ORIENTATION_LANDSCAPE) {
             return 0;
         }
@@ -727,9 +733,36 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     boolean exitSensorFullscreenForBack() {
+        if (clearDisplay) {
+            setClearDisplay(false);
+            return true;
+        }
         if (!manualFullscreen) return false;
         exitManualFullscreen();
         return true;
+    }
+
+    static boolean shouldEnterClearDisplay(float scale) {
+        return scale <= 0.78f;
+    }
+
+    static boolean shouldExitClearDisplay(float scale) {
+        return scale >= 1.22f;
+    }
+
+    private void setClearDisplay(boolean clear) {
+        if (clearDisplay == clear) return;
+        clearDisplay = clear;
+        host.onClearDisplayChanged(clear);
+
+        RecyclerView rv = pagerRecycler();
+        if (rv == null) return;
+        for (int i = 0; i < rv.getChildCount(); i++) {
+            RecyclerView.ViewHolder raw = rv.getChildViewHolder(rv.getChildAt(i));
+            if (raw instanceof ChaosHolder) {
+                ((ChaosHolder) raw).applyClearDisplay(clear);
+            }
+        }
     }
 
     private void setChaosMuted(boolean muted) {
@@ -1235,6 +1268,10 @@ public final class ChaosFeedView extends FrameLayout {
 
             playerView.setOnClickListener(v -> {
                 haptic(v);
+                if (clearDisplay) {
+                    setClearDisplay(false);
+                    return;
+                }
                 if (!controlsVisible) {
                     showControlsTemporarily();
                     return;
@@ -1264,13 +1301,64 @@ public final class ChaosFeedView extends FrameLayout {
                 speedBadge.setVisibility(View.VISIBLE);
                 return true;
             });
+            final float[] pinchScale = {1f};
+            ScaleGestureDetector clearDisplayGesture = new ScaleGestureDetector(
+                    activity,
+                    new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                        @Override
+                        public boolean onScaleBegin(ScaleGestureDetector detector) {
+                            pinchScale[0] = 1f;
+                            playerView.cancelLongPress();
+                            restorePlaybackSpeed();
+                            pager.setUserInputEnabled(false);
+                            ViewParentCompat.disallow(playerView, true);
+                            return true;
+                        }
+
+                        @Override
+                        public boolean onScale(ScaleGestureDetector detector) {
+                            pinchScale[0] *= detector.getScaleFactor();
+                            pinchScale[0] = Math.max(0.5f, Math.min(2f, pinchScale[0]));
+                            if (!clearDisplay && shouldEnterClearDisplay(pinchScale[0])) {
+                                haptic(playerView);
+                                setClearDisplay(true);
+                                pinchScale[0] = 1f;
+                            } else if (clearDisplay && shouldExitClearDisplay(pinchScale[0])) {
+                                haptic(playerView);
+                                setClearDisplay(false);
+                                pinchScale[0] = 1f;
+                            }
+                            return true;
+                        }
+
+                        @Override
+                        public void onScaleEnd(ScaleGestureDetector detector) {
+                            pager.setUserInputEnabled(true);
+                            ViewParentCompat.disallow(playerView, false);
+                        }
+                    }
+            );
             playerView.setOnTouchListener((v, event) -> {
+                clearDisplayGesture.onTouchEvent(event);
                 int action = event.getActionMasked();
-                if ((action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) && speedBoosting) {
+                boolean multiTouch = event.getPointerCount() > 1 || clearDisplayGesture.isInProgress();
+
+                if (action == MotionEvent.ACTION_POINTER_DOWN) {
+                    v.cancelLongPress();
                     restorePlaybackSpeed();
+                    pager.setUserInputEnabled(false);
+                    ViewParentCompat.disallow(v, true);
                     return true;
                 }
-                return false;
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    pager.setUserInputEnabled(true);
+                    ViewParentCompat.disallow(v, false);
+                    if (speedBoosting) {
+                        restorePlaybackSpeed();
+                        return true;
+                    }
+                }
+                return multiTouch;
             });
 
             View.OnLongClickListener menuLongPress = v -> {
@@ -1861,6 +1949,10 @@ public final class ChaosFeedView extends FrameLayout {
 
         void syncOrientationChrome() {
             applyViewportInset();
+            if (clearDisplay) {
+                applyClearDisplay(true);
+                return;
+            }
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(hideSeekBarRunnable);
             lower.animate().cancel();
@@ -1893,6 +1985,10 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void showControls(boolean autoHide) {
+            if (clearDisplay) {
+                applyClearDisplay(true);
+                return;
+            }
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(hideSeekBarRunnable);
             lower.animate().cancel();
@@ -1908,6 +2004,40 @@ public final class ChaosFeedView extends FrameLayout {
             seekBar.setAlpha(1f);
             if (!scrubbing) root.postDelayed(hideSeekBarRunnable, 2200L);
             if (autoHide && !scrubbing && !portrait()) {
+                root.postDelayed(hideControlsRunnable, 2200L);
+            }
+        }
+
+        void applyClearDisplay(boolean clear) {
+            applyViewportInset();
+            root.removeCallbacks(hideControlsRunnable);
+            root.removeCallbacks(hideSeekBarRunnable);
+            lower.animate().cancel();
+            playbackRail.animate().cancel();
+            seekBar.animate().cancel();
+
+            if (clear) {
+                controlsVisible = false;
+                lower.setAlpha(0f);
+                playbackRail.setAlpha(0f);
+                seekBar.setAlpha(0f);
+                lower.setVisibility(View.INVISIBLE);
+                playbackRail.setVisibility(View.INVISIBLE);
+                seekBar.setVisibility(View.INVISIBLE);
+                speedBadge.setVisibility(View.GONE);
+                return;
+            }
+
+            controlsVisible = true;
+            lower.setAlpha(1f);
+            playbackRail.setAlpha(1f);
+            seekBar.setAlpha(1f);
+            lower.setVisibility(View.VISIBLE);
+            playbackRail.setVisibility(View.VISIBLE);
+            seekBar.setVisibility(View.VISIBLE);
+            fullscreen.setVisibility(horizontalVideo ? View.VISIBLE : View.GONE);
+            if (!scrubbing) root.postDelayed(hideSeekBarRunnable, 2200L);
+            if (!portrait() && player != null && player.isPlaying() && !scrubbing) {
                 root.postDelayed(hideControlsRunnable, 2200L);
             }
         }
