@@ -360,6 +360,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
         holder.favoriteStar.setVisibility(creatorFavorite ? View.VISIBLE : View.GONE);
 
         if (creatorCard) {
+            CreatorGalleryPreloader.warm(holder.card.getContext(), item);
             int rank = creatorRank(item, position);
             holder.rank.setText("#" + rank);
             holder.description.setText("Pictures + videos");
