@@ -14,6 +14,15 @@ final class HomeSourceRepository {
     private static final ExecutorService IO = Executors.newFixedThreadPool(6);
     private final SourceLoader loader;
     private final long timeoutMillis;
+    private static final long INITIAL_SOURCE_MILLIS = 2500;
+    static final class FeedResult {
+        final int source;
+        final List<NativeContentItem> items;
+        FeedResult(int source, List<NativeContentItem> items) {
+            this.source = source;
+            this.items = items;
+        }
+    }
     HomeSourceRepository() {
         this((context, source, page) -> {
             if (source == 1) return new CrazyShitRepository().fetchFeed(context, CrazyShitRepository.HOME, page);
@@ -26,6 +35,40 @@ final class HomeSourceRepository {
     HomeSourceRepository(SourceLoader loader, long timeoutMillis) {
         this.loader = loader;
         this.timeoutMillis = timeoutMillis;
+    }
+    FeedResult fetchWithFallback(Context context, int selected, int page) throws Exception {
+        if (selected != 1 || page != 1) {
+            return new FeedResult(selected, fetch(context, selected, page));
+        }
+        for (int source : new int[]{1, 3, 2}) {
+            try {
+                List<NativeContentItem> items = fetchOne(context, source, 1,
+                        Math.min(timeoutMillis, INITIAL_SOURCE_MILLIS));
+                if (hasMedia(items)) return new FeedResult(source, items);
+            } catch (IOException ignored) {
+                // Try the next source for this request only; do not change the saved selection.
+            }
+        }
+        throw new IOException("No Home source returned usable media.");
+    }
+    private List<NativeContentItem> fetchOne(Context context, int source, int page,
+                                               long timeout) throws Exception {
+        Future<List<NativeContentItem>> request = IO.submit(() -> loader.fetch(context, source, page));
+        try {
+            return request.get(timeout, TimeUnit.MILLISECONDS);
+        } catch (ExecutionException | TimeoutException failed) {
+            throw new IOException("Home source unavailable", failed);
+        } finally {
+            request.cancel(true);
+        }
+    }
+    private static boolean hasMedia(List<NativeContentItem> items) {
+        if (items == null) return false;
+        for (NativeContentItem item : items) {
+            if (item != null && NativeContentItem.KIND_MEDIA.equals(item.kind)
+                    && item.url != null && !item.url.isEmpty()) return true;
+        }
+        return false;
     }
     List<NativeContentItem> fetch(Context context, int source, int page) throws Exception {
         return fetch(context, source, page, null);

@@ -3,8 +3,6 @@ package com.webapp.crazyshit;
 import android.content.Context;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -72,36 +70,15 @@ final class ChaosStartupPreloader {
         NativeContentItem first = null;
         try {
             Random random = new Random();
-            ArrayList<String> sources = new ArrayList<>(Arrays.asList(
-                    CrazyShitRepository.HOME,
-                    CrazyShitRepository.TRENDING,
-                    CrazyShitRepository.BASE + "videos/",
-                    CrazyShitRepository.BASE + "submissions/"
-            ));
-            Collections.shuffle(sources, random);
-
-            for (String url : sources) {
-                ArrayList<NativeContentItem> candidates = new ArrayList<>();
-                try {
-                    for (NativeContentItem item : repository.fetchFeed(context, url, 1)) {
-                        if (item == null || item.url == null || item.url.isEmpty()) continue;
-                        if (!NativeContentItem.KIND_MEDIA.equals(item.kind)) continue;
-                        candidates.add(item);
-                    }
-                } catch (Exception ignored) {
-                }
-                if (candidates.isEmpty()) continue;
-
-                Collections.shuffle(candidates, random);
-                int take = Math.min(STARTER_ITEMS, candidates.size());
-                List<NativeContentItem> starterItems =
-                        new ArrayList<>(candidates.subList(0, take));
+            List<NativeContentItem> starterItems = ChaosStarterSources.first(
+                    ChaosStarterSources.live(context, repository, random),
+                    random, ChaosStarterSources.STARTUP_MILLIS);
+            if (!starterItems.isEmpty()) {
                 first = starterItems.get(0);
                 synchronized (LOCK) {
                     READY.clear();
                     READY.addAll(starterItems);
                 }
-                break;
             }
 
             // Warm the exact first clip while the branded intro is still on screen. The native
@@ -110,7 +87,7 @@ final class ChaosStartupPreloader {
             if (first != null) {
                 try {
                     CrazyShitRepository.StreamInfo stream =
-                            repository.resolvePlayable(context, first.url);
+                            PlayableSourceRouter.resolve(context, first);
                     if (stream != null) {
                         synchronized (LOCK) {
                             RESOLVED.put(first.url, stream);
@@ -119,6 +96,8 @@ final class ChaosStartupPreloader {
                 } catch (Exception ignored) {
                 }
             }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
         } finally {
             synchronized (LOCK) {
                 finished = true;
