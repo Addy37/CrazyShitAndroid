@@ -482,10 +482,19 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void updateCreatorHeroForRecycler(RecyclerView view) {
         if (!isCreatorGallery() || creatorProfile == null || view == null) return;
-        int offset = Math.max(
-                0,
-                Math.min(creatorProfile.expandedHeightPx(), view.computeVerticalScrollOffset())
-        );
+        RecyclerView.LayoutManager manager = view.getLayoutManager();
+        if (manager == null) return;
+
+        int expanded = creatorProfile.expandedHeightPx();
+        int offset;
+        View firstItem = manager.findViewByPosition(0);
+        if (firstItem != null) {
+            offset = Math.max(0, view.getPaddingTop() - firstItem.getTop());
+        } else {
+            offset = view.canScrollVertically(-1) ? expanded : 0;
+        }
+        offset = Math.min(expanded, offset);
+
         if (offset == creatorHeroCollapseOffset) return;
         creatorHeroCollapseOffset = offset;
         creatorProfile.setCollapseOffsetPx(offset);
