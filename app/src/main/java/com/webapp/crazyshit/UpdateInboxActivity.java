@@ -294,7 +294,7 @@ public final class UpdateInboxActivity extends Activity {
                     ? R.drawable.ic_launcher_legacy
                     : UpdateInboxStore.CATEGORY_APP.equals(entry.category)
                             ? R.drawable.ic_more_update
-                            : R.drawable.ic_nav_shittok;
+                            : R.drawable.ic_nav_chaos;
             holder.avatar.setImageResource(fallback);
 
             String imageUrl = entry.avatarUrl;
