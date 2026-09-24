@@ -69,8 +69,9 @@ public final class ContentUpdateWorker extends Worker {
         }
 
         if (!alerts.isEmpty()) {
-            NotificationCoordinator.showNewVideoNotifications(context, alerts);
+            UpdateInboxStore.record(context, alerts);
         }
+        NotificationCoordinator.clearContentNotifications(context);
 
         String updateStatus = prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)
                 ? "Waiting to check"
