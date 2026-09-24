@@ -13,24 +13,24 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Addy37/CrazyShitAndroid/releases/latest">
-    <img alt="Latest release" src="https://img.shields.io/github/v/release/Addy37/CrazyShitAndroid?display_name=tag&style=flat-square&color=0892D0&label=release">
+  <a href="https://github.com/Addy37/ZEROCHILL/releases/latest">
+    <img alt="Latest release" src="https://img.shields.io/github/v/release/Addy37/ZEROCHILL?display_name=tag&style=flat-square&color=0892D0&label=release">
   </a>
   <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white">
   <img alt="Signed APK" src="https://img.shields.io/badge/APK-signed-0892D0?style=flat-square">
   <a href="LICENSE">
-    <img alt="MIT License" src="https://img.shields.io/github/license/Addy37/CrazyShitAndroid?style=flat-square&color=0892D0">
+    <img alt="MIT License" src="https://img.shields.io/github/license/Addy37/ZEROCHILL?style=flat-square&color=0892D0">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/ZeroChill.apk">
+  <a href="https://github.com/Addy37/ZEROCHILL/releases/latest/download/ZeroChill.apk">
     <img alt="Download ZEROCHILL" src="https://img.shields.io/badge/DOWNLOAD-ZEROCHILL-0892D0?style=for-the-badge&logo=android&logoColor=white">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Addy37/CrazyShitAndroid/releases/latest">Latest release</a>
+  <a href="https://github.com/Addy37/ZEROCHILL/releases/latest">Latest release</a>
   ·
   <a href="PRIVACY.md">Privacy</a>
   ·
@@ -49,7 +49,7 @@
 | 📱 | **ShitTok** | A vertical video feed with autoplay, preloading, history, and full-screen playback |
 | 😈 | **OnlyFap** | Creator search with mixed photo and video galleries from supported sources |
 | 🎬 | **Player** | Media3 playback, picture-in-picture, resume, speed controls, and gestures |
-| 🖤 | **More** | Favorites, Watch Later, history, downloads, settings, and backup tools |
+| 🖤 | **More** | Favorite-creator Updates, favorites, Watch Later, history, downloads, settings, and backup tools |
 
 ## ⚡ Built to keep moving
 
@@ -66,12 +66,12 @@ Connected sources currently include CrazyShit, EFukt, Bunkr, Fapello, and WikiFe
 ## 📲 Install ZEROCHILL
 
 <p align="center">
-  <a href="https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/ZeroChill.apk">
+  <a href="https://github.com/Addy37/ZEROCHILL/releases/latest/download/ZeroChill.apk">
     <img alt="Get the signed APK" src="https://img.shields.io/badge/GET%20THE%20SIGNED%20APK-ZeroChill.apk-0892D0?style=for-the-badge&logo=android&logoColor=white">
   </a>
 </p>
 
-1. Download **[ZeroChill.apk](https://github.com/Addy37/CrazyShitAndroid/releases/latest/download/ZeroChill.apk)** from the [latest release](https://github.com/Addy37/CrazyShitAndroid/releases/latest).
+1. Download **[ZeroChill.apk](https://github.com/Addy37/ZEROCHILL/releases/latest/download/ZeroChill.apk)** from the [latest release](https://github.com/Addy37/ZEROCHILL/releases/latest).
 2. Open the APK.
 3. Allow installation from your browser or file manager if Android asks.
 
@@ -87,7 +87,7 @@ The `.dev` debug package installs separately and does not update stable installs
 
 **Requirements:** Android 8.0 (API 26) or newer.
 
-New stable releases publish one signed install file, **ZeroChill.apk**, plus **SHA256SUMS.txt** on [GitHub Releases](https://github.com/Addy37/CrazyShitAndroid/releases). Older versioned releases can still contain legacy APK aliases.
+New stable releases publish one signed install file, **ZeroChill.apk**, plus **SHA256SUMS.txt** on [GitHub Releases](https://github.com/Addy37/ZEROCHILL/releases). Older versioned releases can still contain legacy APK aliases.
 
 ## 🔌 Content sources
 
@@ -114,8 +114,8 @@ See **[NOTICE.md](NOTICE.md)** and the **[MIT License](LICENSE)**.
 ## 🛠️ Build from source
 
 <p>
-  <a href="https://github.com/Addy37/CrazyShitAndroid/actions/workflows/build-apk.yml">
-    <img alt="Android build" src="https://github.com/Addy37/CrazyShitAndroid/actions/workflows/build-apk.yml/badge.svg?branch=rebrand%2Fzerochill">
+  <a href="https://github.com/Addy37/ZEROCHILL/actions/workflows/build-apk.yml">
+    <img alt="Android build" src="https://github.com/Addy37/ZEROCHILL/actions/workflows/build-apk.yml/badge.svg?branch=rebrand%2Fzerochill">
   </a>
 </p>
 
