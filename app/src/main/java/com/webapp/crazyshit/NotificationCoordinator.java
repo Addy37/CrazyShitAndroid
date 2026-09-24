@@ -150,16 +150,10 @@ final class NotificationCoordinator {
                 DateUtils.MINUTE_IN_MILLIS,
                 DateUtils.FORMAT_ABBREV_RELATIVE
         );
-        String crazyShit = state.getString(KEY_STATUS_CRAZYSHIT, "Not checked");
-        String efukt = state.getString(KEY_STATUS_EFUKT, "Not checked");
-        String kaotic = state.getString(KEY_STATUS_KAOTIC, "Not checked");
         String bunkr = state.getString(KEY_STATUS_BUNKR, "Not checked");
         String fapello = state.getString(KEY_STATUS_FAPELLO, "Not checked");
         String onlyHaven = state.getString(KEY_STATUS_ONLYHAVEN, "Not checked");
         return "Last checked " + relative + ". "
-                + "CrazyShit: " + crazyShit + " · "
-                + "EFukt: " + efukt + " · "
-                + "Kaotic: " + kaotic + " · "
                 + "Bunkr: " + bunkr + " · "
                 + "Fapello: " + fapello + " · "
                 + "OnlyHaven: " + onlyHaven + ".";
