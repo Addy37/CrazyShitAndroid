@@ -29,10 +29,27 @@ public class UpdateInboxStoreTest {
                 .edit()
                 .clear()
                 .commit();
+        app.getSharedPreferences("creator_favorites", Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .commit();
     }
 
     @Test
-    public void creatorUpdatesGroupIntoOneOnlyFapInboxEntry() {
+    public void inboxKeepsOnlyFavoriteCreatorUpdatesAndIgnoresGeneralVideos() {
+        NativeContentItem favorite = new NativeContentItem(
+                NativeContentItem.KIND_CREATOR,
+                "Emily Rinaudo",
+                "https://fapello.com/emily-rinaudo/",
+                "https://img.example/avatar.jpg",
+                "",
+                "",
+                "",
+                "Fapello",
+                "Emily Rinaudo"
+        );
+        CreatorFavoriteStore.toggle(app, favorite);
+
         NativeContentItem fapello = new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
                 "OnlyFap video #123",
@@ -53,6 +70,16 @@ public class UpdateInboxStoreTest {
                 "",
                 "OnlyHaven"
         );
+        NativeContentItem nonFavorite = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "OnlyFap video #999",
+                "https://fapello.com/video/grace-bartlow/999/",
+                "https://img.example/grace.jpg",
+                "",
+                "Grace Bartlow",
+                "",
+                "Fapello"
+        );
         NativeContentItem crazy = new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
                 "Fresh clip",
@@ -66,7 +93,7 @@ public class UpdateInboxStoreTest {
 
         UpdateInboxStore.record(app, Arrays.asList(
                 new NotificationCoordinator.SourceAlert(
-                        "fapello", "Fapello", Arrays.asList(fapello)
+                        "fapello", "Fapello", Arrays.asList(fapello, nonFavorite)
                 ),
                 new NotificationCoordinator.SourceAlert(
                         "onlyhaven", "OnlyHaven", Arrays.asList(onlyHaven)
@@ -76,24 +103,57 @@ public class UpdateInboxStoreTest {
                 )
         ));
 
+        List<UpdateInboxStore.Entry> all = UpdateInboxStore.all(app);
         List<UpdateInboxStore.Entry> onlyFap =
                 UpdateInboxStore.filtered(app, UpdateInboxStore.CATEGORY_ONLYFAP);
-        List<UpdateInboxStore.Entry> videos =
-                UpdateInboxStore.filtered(app, UpdateInboxStore.CATEGORY_VIDEOS);
 
+        assertEquals(1, all.size());
         assertEquals(1, onlyFap.size());
         assertEquals("Emily Rinaudo", onlyFap.get(0).creatorName);
         assertEquals(2, onlyFap.get(0).count);
         assertEquals(2, onlyFap.get(0).freshUrls.size());
         assertEquals("https://img.example/avatar.jpg", onlyFap.get(0).avatarUrl);
-
-        assertEquals(1, videos.size());
-        assertEquals("CrazyShit", videos.get(0).title);
-        assertEquals(2, UpdateInboxStore.unreadCount(app));
+        assertEquals(1, UpdateInboxStore.unreadCount(app));
 
         UpdateInboxStore.markRead(app, onlyFap.get(0).id);
-        assertEquals(1, UpdateInboxStore.unreadCount(app));
-        UpdateInboxStore.markAllRead(app);
+        assertEquals(0, UpdateInboxStore.unreadCount(app));
+    }
+
+    @Test
+    public void unfavoritingCreatorPrunesExistingInboxEntries() {
+        NativeContentItem favorite = new NativeContentItem(
+                NativeContentItem.KIND_CREATOR,
+                "Emily Rinaudo",
+                "https://fapello.com/emily-rinaudo/",
+                "",
+                "",
+                "",
+                "",
+                "Fapello",
+                "Emily Rinaudo"
+        );
+        CreatorFavoriteStore.toggle(app, favorite);
+
+        NativeContentItem fapello = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "OnlyFap video #123",
+                "https://fapello.com/video/emily-rinaudo/123/",
+                "",
+                "",
+                "Emily Rinaudo",
+                "",
+                "Fapello"
+        );
+        UpdateInboxStore.record(app, Arrays.asList(
+                new NotificationCoordinator.SourceAlert(
+                        "fapello", "Fapello", Arrays.asList(fapello)
+                )
+        ));
+        assertEquals(1, UpdateInboxStore.all(app).size());
+
+        CreatorFavoriteStore.toggle(app, favorite);
+
+        assertTrue(UpdateInboxStore.all(app).isEmpty());
         assertEquals(0, UpdateInboxStore.unreadCount(app));
     }
 
