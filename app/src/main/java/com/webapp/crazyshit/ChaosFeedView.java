@@ -75,7 +75,9 @@ import java.util.concurrent.Executors;
 public final class ChaosFeedView extends FrameLayout {
     public interface Host {
         void openDetails(NativeContentItem item);
-        void onClearDisplayChanged(boolean clear);
+
+        default void onClearDisplayChanged(boolean clear) {
+        }
     }
 
     private static final String PREFS = "chaos_feed";
