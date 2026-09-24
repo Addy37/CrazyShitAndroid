@@ -4,7 +4,6 @@ import android.content.Context;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -12,6 +11,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Builds randomized Chaos batches from the site's broad video catalog.
@@ -21,6 +24,7 @@ import java.util.Set;
  */
 final class ChaosSourceMixer {
     private static final int MAX_SOURCE_PAGE = 8;
+    private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
     private static final int SOURCES_PER_BATCH = 6;
     private static final int REGULAR_ITEMS_PER_SOURCE = 4;
     private static final int SHIT_SHOW_PER_BATCH = 24;
@@ -87,8 +91,24 @@ final class ChaosSourceMixer {
 
         LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
         int sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
+        ArrayList<SourceRequest> selectedRequests = new ArrayList<>();
         for (int i = 0; i < sourceCount; i++) {
-            addRequest(context, regular, nextRequest());
+            selectedRequests.add(nextRequest());
+        }
+        Future<LinkedHashMap<String, NativeContentItem>> regularWork = CRAZY_IO.submit(() -> {
+            LinkedHashMap<String, NativeContentItem> found = new LinkedHashMap<>();
+            for (SourceRequest request : selectedRequests) {
+                if (Thread.currentThread().isInterrupted()) break;
+                addRequest(context, found, request);
+            }
+            return found;
+        });
+        try {
+            regular.putAll(regularWork.get(ChaosStarterSources.STARTUP_MILLIS, TimeUnit.MILLISECONDS));
+        } catch (Exception ignored) {
+            // A slow CrazyShit host must not hold back the other sources.
+        } finally {
+            regularWork.cancel(true);
         }
 
         ArrayList<NativeContentItem> regularItems = new ArrayList<>(regular.values());
@@ -137,32 +157,13 @@ final class ChaosSourceMixer {
     }
 
     private List<NativeContentItem> loadStarterBatch(Context context) {
-        ArrayList<String> starterSources = new ArrayList<>(Arrays.asList(
-                CrazyShitRepository.HOME,
-                CrazyShitRepository.TRENDING,
-                VIDEOS,
-                USER_UPLOADS
-        ));
-        Collections.shuffle(starterSources, random);
-
-        // Usually the first source succeeds. Fall through only when a source is temporarily empty
-        // or unavailable so startup still has a reliable escape hatch without loading the catalog.
-        for (String url : starterSources) {
-            try {
-                ArrayList<NativeContentItem> candidates = new ArrayList<>();
-                for (NativeContentItem item : repository.fetchFeed(context, url, 1)) {
-                    if (item == null || item.url == null || item.url.isEmpty()) continue;
-                    if (!NativeContentItem.KIND_MEDIA.equals(item.kind)) continue;
-                    candidates.add(item);
-                }
-                if (candidates.isEmpty()) continue;
-                Collections.shuffle(candidates, random);
-                int take = Math.min(ChaosStartupPreloader.STARTER_ITEMS, candidates.size());
-                return new ArrayList<>(candidates.subList(0, take));
-            } catch (Exception ignored) {
-            }
+        try {
+            return ChaosStarterSources.first(ChaosStarterSources.live(context, repository, random),
+                    random, ChaosStarterSources.STARTUP_MILLIS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return new ArrayList<>();
         }
-        return new ArrayList<>();
     }
 
 
@@ -451,17 +452,25 @@ final class ChaosSourceMixer {
         urls.add(VIDEOS);
         urls.add(USER_UPLOADS);
 
+        Future<List<NativeContentItem>> categories = CRAZY_IO.submit(
+                () -> repository.fetchCategories(context));
+        boolean loaded = false;
         try {
-            for (NativeContentItem category : repository.fetchCategories(context)) {
+            for (NativeContentItem category : categories.get(
+                    ChaosStarterSources.STARTUP_MILLIS, TimeUnit.MILLISECONDS)) {
                 if (category == null || category.url == null || category.url.trim().isEmpty()) continue;
                 urls.add(category.url.trim());
             }
+            loaded = true;
         } catch (Exception ignored) {
+            // Retry the category catalog on another batch when the host recovers.
+        } finally {
+            categories.cancel(true);
         }
 
         catalog.clear();
         catalog.addAll(urls);
-        catalogLoaded = true;
+        catalogLoaded = loaded;
         refillDeck();
     }
 

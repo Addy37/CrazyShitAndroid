@@ -133,6 +133,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (page.loadTask != null) page.loadTask.cancel(true);
         page.empty.setVisibility(View.GONE);
         page.currentPage = 0;
+        page.displayHomeSource = 0;
         page.endReached = false;
         page.loading = false;
         load(page, false);
@@ -266,6 +267,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     return;
                 }
                 page.homeSource = selected;
+                page.displayHomeSource = 0;
                 homePrefs.edit().putInt("home_source", selected).apply();
                 styleHomeSources(page);
                 page.feedAdapter.replace(java.util.Collections.emptyList());
@@ -763,7 +765,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (page.kind != PageKind.FEED) append = false;
         page.loading = true;
         final int generation = page.generation;
-        final int selectedHomeSource = page.homeSource;
+        final int selectedHomeSource = append && page.displayHomeSource != 0
+                ? page.displayHomeSource : page.homeSource;
         final boolean appendRequest = append;
         final int requestPage = append ? page.currentPage + 1 : 1;
         if (!append && page.itemCount() == 0) page.progress.setVisibility(View.VISIBLE);
@@ -771,6 +774,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.loadTask = io.submit(() -> {
             try {
                 List<NativeContentItem> result;
+                int loadedHomeSource = selectedHomeSource;
                 if (page.kind == PageKind.ONLYFAP) {
                     result = fapzoneCreatorRepository.fetch(
                             activity,
@@ -786,19 +790,27 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 } else if (page.kind == PageKind.CATEGORIES) {
                     result = browseRepository.fetchCategories(activity);
                 } else {
-                    result = homeRepository.fetch(activity, selectedHomeSource, requestPage,
-                            items -> {
-                                if (appendRequest) return;
-                                activity.runOnUiThread(() -> {
-                                    if (generation != page.generation || activity.isFinishing()) return;
-                                    page.feedAdapter.replace(items);
-                                    page.progress.setVisibility(View.GONE);
-                                    page.refresh.setRefreshing(false);
-                                    page.empty.setVisibility(View.GONE);
+                    if (!appendRequest && selectedHomeSource == 1) {
+                        HomeSourceRepository.FeedResult feed =
+                                homeRepository.fetchWithFallback(activity, selectedHomeSource, requestPage);
+                        result = feed.items;
+                        loadedHomeSource = feed.source;
+                    } else {
+                        result = homeRepository.fetch(activity, selectedHomeSource, requestPage,
+                                items -> {
+                                    if (appendRequest) return;
+                                    activity.runOnUiThread(() -> {
+                                        if (generation != page.generation || activity.isFinishing()) return;
+                                        page.feedAdapter.replace(items);
+                                        page.progress.setVisibility(View.GONE);
+                                        page.refresh.setRefreshing(false);
+                                        page.empty.setVisibility(View.GONE);
+                                    });
                                 });
-                            });
+                    }
                 }
 
+                final int displayedSource = loadedHomeSource;
                 activity.runOnUiThread(() -> {
                     if (generation != page.generation) return;
                     page.loading = false;
@@ -807,6 +819,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     page.empty.setVisibility(View.GONE);
 
                     if (page.kind == PageKind.FEED) {
+                        if (!appendRequest) {
+                            page.displayHomeSource = displayedSource;
+                            if (page.homeSource == 1 && displayedSource != 1) {
+                                android.widget.Toast.makeText(activity,
+                                        "CrazyShit unavailable • showing "
+                                                + (displayedSource == 3 ? "Kaotic" : "EFukt"),
+                                        android.widget.Toast.LENGTH_SHORT).show();
+                            }
+                        }
                         if (appendRequest) page.feedAdapter.append(result);
                         else page.feedAdapter.replace(result);
                         if (!result.isEmpty()) page.currentPage = requestPage;
@@ -943,6 +964,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         int seriesSource = SERIES_SOURCE_CRAZYSHIT;
         int fapzoneMode = FapzoneCreatorRepository.MODE_TOP_50;
         int homeSource;
+        int displayHomeSource;
         java.util.concurrent.Future<?> loadTask;
         final java.util.List<TextView> homeChips = new java.util.ArrayList<>();
         int currentPage;

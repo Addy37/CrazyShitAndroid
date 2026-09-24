@@ -11,6 +11,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.RuntimeEnvironment;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
@@ -59,6 +60,42 @@ public class HomeSourceTest {
         assertEquals(2, result.size());
         assertTrue(result.get(0).isSection());
         assertEquals("TODAY'S CRAZY SHIT", result.get(0).title);
+    }
+    @Test public void temporaryCrazyShitFailureUsesKaoticWithoutChangingSelection() throws Exception {
+        List<Integer> requested = new ArrayList<>();
+        HomeSourceRepository repo = new HomeSourceRepository((context, source, page) -> {
+            requested.add(source);
+            if (source == 1) throw new IOException("offline");
+            return Collections.singletonList(item("https://kaotic.com/one"));
+        }, 1000);
+        android.content.SharedPreferences prefs = RuntimeEnvironment.getApplication()
+                .getSharedPreferences("home-failover-test", 0);
+        prefs.edit().putInt("home_source", 1).commit();
+        int savedSource = prefs.getInt("home_source", -1);
+        HomeSourceRepository.FeedResult result = repo.fetchWithFallback(null, savedSource, 1);
+        assertEquals(3, result.source);
+        assertEquals(Arrays.asList(1, 3), requested);
+        assertEquals(1, prefs.getInt("home_source", -1));
+    }
+    @Test public void kaoticFailureFallsThroughToEfukt() throws Exception {
+        HomeSourceRepository repo = new HomeSourceRepository((context, source, page) -> {
+            if (source == 1) return Collections.singletonList(section("Empty"));
+            if (source == 3) throw new IOException("offline");
+            return Collections.singletonList(item("https://efukt.com/one"));
+        }, 1000);
+        assertEquals(2, repo.fetchWithFallback(null, 1, 1).source);
+    }
+    @Test public void healthyCrazyShitKeepsItsFeedAndDoesNotCallFallbacks() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        HomeSourceRepository repo = new HomeSourceRepository((context, source, page) -> {
+            calls.incrementAndGet();
+            assertEquals(1, source);
+            return Arrays.asList(section("TODAY'S CRAZY SHIT"), item("https://crazyshit.com/one"));
+        }, 1000);
+        HomeSourceRepository.FeedResult result = repo.fetchWithFallback(null, 1, 1);
+        assertEquals(1, result.source);
+        assertEquals(2, result.items.size());
+        assertEquals(1, calls.get());
     }
     @Test public void emptyFirstPageIsRetryableButEmptyLaterPageEndsPagination() throws Exception {
         AtomicInteger calls = new AtomicInteger();
