@@ -98,14 +98,9 @@ public class SettingsActivity extends Activity {
 
         addSection(root, "Notifications");
         addSwitch(root,
-                "New content alerts",
-                "Notify you when supported ZEROCHILL sources add fresh content.",
+                "Track content updates",
+                "Check supported ZEROCHILL sources and add fresh activity to More → Updates.",
                 NotificationCoordinator.PREF_NEW_VIDEO_ALERTS,
-                true);
-        addSwitch(root,
-                "Show content titles",
-                "Show titles inside expanded content alerts.",
-                NotificationCoordinator.PREF_SHOW_TITLES,
                 true);
         addAction(root,
                 "Check frequency",
@@ -121,8 +116,8 @@ public class SettingsActivity extends Activity {
                 NotificationCoordinator.PREF_UPDATE_ALERTS,
                 true);
         addAction(root,
-                "Preview notification",
-                "Send a branded test alert and check Android notification access.",
+                "Preview app notification",
+                "Send a branded app-update style alert and check Android notification access.",
                 () -> NotificationCoordinator.showTestNotification(this));
 
         addSection(root, "Playback");
