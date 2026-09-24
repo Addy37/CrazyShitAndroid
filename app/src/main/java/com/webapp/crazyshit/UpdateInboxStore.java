@@ -77,7 +77,9 @@ final class UpdateInboxStore {
 
     static List<Entry> all(Context context) {
         synchronized (LOCK) {
-            return new ArrayList<>(readLocked(context));
+            ArrayList<Entry> entries = readLocked(context);
+            if (pruneNonFavoriteContent(context, entries)) writeLocked(context, entries);
+            return new ArrayList<>(entries);
         }
     }
 
@@ -139,44 +141,22 @@ final class UpdateInboxStore {
         for (NotificationCoordinator.SourceAlert alert : alerts) {
             if (alert == null || alert.items == null || alert.items.isEmpty()) continue;
             String sourceKey = clean(alert.key).toLowerCase(Locale.US);
+            if (!isOnlyFapSource(sourceKey)) continue;
 
-            if (isOnlyFapSource(sourceKey)) {
-                ArrayList<NativeContentItem> fallback = new ArrayList<>();
-                for (NativeContentItem item : alert.items) {
-                    if (item == null || item.url == null || item.url.trim().isEmpty()) continue;
-                    NotificationCoordinator.ExperienceItem wrapped =
-                            new NotificationCoordinator.ExperienceItem(sourceKey, item);
-                    String creator = NotificationCoordinator.onlyFapCreatorName(wrapped);
-                    if (creator.isEmpty()) {
-                        fallback.add(item);
-                        continue;
-                    }
-                    String key = CreatorNameMatcher.normalized(creator);
-                    CreatorAccumulator acc = creators.get(key);
-                    if (acc == null) {
-                        acc = new CreatorAccumulator(creator);
-                        creators.put(key, acc);
-                    }
-                    acc.add(sourceKey, item);
-                }
-                if (!fallback.isEmpty()) {
-                    result.add(genericOnlyFapEntry(
-                            now + sequence++,
-                            alert.source,
-                            sourceKey,
-                            fallback
-                    ));
-                }
-                continue;
-            }
+            for (NativeContentItem item : alert.items) {
+                if (item == null || item.url == null || item.url.trim().isEmpty()) continue;
+                NotificationCoordinator.ExperienceItem wrapped =
+                        new NotificationCoordinator.ExperienceItem(sourceKey, item);
+                String creator = NotificationCoordinator.onlyFapCreatorName(wrapped);
+                if (creator.isEmpty() || !isFavoriteCreator(context, creator)) continue;
 
-            if (isVideoSource(sourceKey)) {
-                result.add(videoEntry(
-                        now + sequence++,
-                        alert.source,
-                        sourceKey,
-                        alert.items
-                ));
+                String key = CreatorNameMatcher.normalized(creator);
+                CreatorAccumulator acc = creators.get(key);
+                if (acc == null) {
+                    acc = new CreatorAccumulator(creator);
+                    creators.put(key, acc);
+                }
+                acc.add(sourceKey, item);
             }
         }
 
@@ -244,54 +224,6 @@ final class UpdateInboxStore {
         }
     }
 
-    private static Entry genericOnlyFapEntry(
-            long timestamp,
-            String source,
-            String sourceKey,
-            List<NativeContentItem> items
-    ) {
-        Entry entry = baseBatchEntry(timestamp, CATEGORY_ONLYFAP, source, sourceKey, items);
-        entry.title = clean(source).isEmpty() ? "OnlyFap" : clean(source);
-        entry.subtitle = entry.count == 1 ? "1 new OnlyFap item" : entry.count + " new OnlyFap items";
-        return entry;
-    }
-
-    private static Entry videoEntry(
-            long timestamp,
-            String source,
-            String sourceKey,
-            List<NativeContentItem> items
-    ) {
-        Entry entry = baseBatchEntry(timestamp, CATEGORY_VIDEOS, source, sourceKey, items);
-        entry.title = clean(source).isEmpty() ? "ZEROCHILL" : clean(source);
-        entry.subtitle = entry.count == 1 ? "1 new video" : entry.count + " new videos";
-        return entry;
-    }
-
-    private static Entry baseBatchEntry(
-            long timestamp,
-            String category,
-            String source,
-            String sourceKey,
-            List<NativeContentItem> items
-    ) {
-        Entry entry = new Entry();
-        entry.timestamp = timestamp;
-        entry.category = category;
-        entry.sourceKey = clean(sourceKey).toLowerCase(Locale.US);
-        entry.sourceLabel = clean(source);
-        for (NativeContentItem item : items) {
-            if (item == null || item.url == null || item.url.trim().isEmpty()) continue;
-            entry.items.add(item);
-            if (!entry.freshUrls.contains(item.url.trim())) entry.freshUrls.add(item.url.trim());
-            if (item.isVideo()) entry.videoCount++;
-        }
-        entry.count = entry.items.size();
-        entry.fingerprint = fingerprint(category, entry.sourceKey, entry.freshUrls);
-        entry.id = entry.fingerprint + ":" + timestamp;
-        return entry;
-    }
-
     private static String fingerprint(String category, String subject, List<String> urls) {
         ArrayList<String> stable = new ArrayList<>();
         if (urls != null) stable.addAll(urls);
@@ -352,8 +284,36 @@ final class UpdateInboxStore {
         return "fapello".equals(key) || "bunkr".equals(key) || "onlyhaven".equals(key);
     }
 
-    private static boolean isVideoSource(String key) {
-        return "crazyshit".equals(key) || "efukt".equals(key) || "kaotic".equals(key);
+    static boolean isFavoriteCreator(Context context, String creatorName) {
+        if (context == null || creatorName == null || creatorName.trim().isEmpty()) return false;
+        String wanted = CreatorNameMatcher.normalized(creatorName);
+        if (wanted.isEmpty()) return false;
+        for (String favorite : CreatorFavoriteStore.names(context)) {
+            if (wanted.equals(CreatorNameMatcher.normalized(favorite))) return true;
+        }
+        return false;
+    }
+
+    private static boolean pruneNonFavoriteContent(Context context, ArrayList<Entry> entries) {
+        boolean changed = false;
+        java.util.Iterator<Entry> iterator = entries.iterator();
+        while (iterator.hasNext()) {
+            Entry entry = iterator.next();
+            if (entry == null) {
+                iterator.remove();
+                changed = true;
+                continue;
+            }
+            if (CATEGORY_APP.equals(entry.category)) continue;
+            boolean keepFavoriteCreator = CATEGORY_ONLYFAP.equals(entry.category)
+                    && !entry.creatorName.isEmpty()
+                    && isFavoriteCreator(context, entry.creatorName);
+            if (!keepFavoriteCreator) {
+                iterator.remove();
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     private static String clean(String value) {
