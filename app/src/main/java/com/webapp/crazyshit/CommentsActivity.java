@@ -394,7 +394,7 @@ public class CommentsActivity extends Activity {
     }
 
     private void renderLoadedComments() {
-        progress.setVisibility(View.GONE);
+        progress.finish();
         commentsContainer.removeAllViews();
 
         if (lastLoginRequired) {
