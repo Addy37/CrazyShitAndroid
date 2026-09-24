@@ -63,9 +63,13 @@ final class UpdateInboxStore {
             entry.fingerprint = fingerprint(CATEGORY_APP, entry.appVersion, Collections.emptyList());
             entry.id = entry.fingerprint + ":" + entry.timestamp;
 
+            ArrayList<Entry> existing = readLocked(context);
+            for (Entry current : existing) {
+                if (entry.fingerprint.equals(current.fingerprint)) return;
+            }
             ArrayList<Entry> combined = new ArrayList<>();
             combined.add(entry);
-            combined.addAll(readLocked(context));
+            combined.addAll(existing);
             dedupeAndTrim(combined);
             writeLocked(context, combined);
         }
