@@ -399,7 +399,7 @@ final class UpdateInboxStore {
                     .put("videoCount", videoCount)
                     .put("read", read)
                     .put("freshUrls", new JSONArray(freshUrls))
-                    .put("items", ContentItemCodec.encodeList(items, 20));
+                    .put("items", ContentItemCodec.encodeList(items, 1));
             return value;
         }
 
@@ -429,7 +429,7 @@ final class UpdateInboxStore {
                     if (!url.isEmpty()) entry.freshUrls.add(url);
                 }
             }
-            entry.items.addAll(ContentItemCodec.decodeList(value.optJSONArray("items"), 20));
+            entry.items.addAll(ContentItemCodec.decodeList(value.optJSONArray("items"), 1));
             if (entry.fingerprint.isEmpty()) {
                 entry.fingerprint = fingerprint(entry.category, entry.title, entry.freshUrls);
             }
