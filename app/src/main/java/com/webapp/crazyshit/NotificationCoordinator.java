@@ -181,7 +181,7 @@ final class NotificationCoordinator {
         if (Build.VERSION.SDK_INT < 33 || canPost(activity)) return;
         SharedPreferences prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         if (prefs.getBoolean(KEY_EDUCATION_SHOWN, false)) return;
-        if (!alertsEnabled(prefs)) return;
+        if (!prefs.getBoolean(PREF_UPDATE_ALERTS, true)) return;
         prefs.edit().putBoolean(KEY_EDUCATION_SHOWN, true).apply();
 
         AlertDialog dialog = new AlertDialog.Builder(activity)
@@ -1057,7 +1057,8 @@ final class NotificationCoordinator {
     }
 
     private static boolean alertsEnabled(SharedPreferences prefs) {
-        return prefs.getBoolean(PREF_UPDATE_ALERTS, true);
+        return prefs.getBoolean(PREF_NEW_VIDEO_ALERTS, true)
+                || prefs.getBoolean(PREF_UPDATE_ALERTS, true);
     }
 
     private static int normalizedHours(int value) {
