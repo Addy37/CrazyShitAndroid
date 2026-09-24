@@ -22,6 +22,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -29,6 +30,7 @@ import androidx.recyclerview.widget.StaggeredGridLayoutManager;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.viewpager2.widget.ViewPager2;
 
+import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
@@ -82,7 +84,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private ViewPager2 creatorTabsPager;
     private TabLayout creatorTabs;
     private CreatorProfileHeader creatorProfile;
-    private int creatorHeroCollapseOffset;
+    private AppBarLayout creatorAppBar;
     private TabLayoutMediator creatorTabsMediator;
     private SwipeRefreshLayout refresh;
     private View progress;
@@ -199,7 +201,6 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (state != null) {
             browserSnapshot = state.getString("browser_snapshot", browserSnapshot);
             bunkrGallerySessionId = state.getString("gallery_session", bunkrGallerySessionId);
-            creatorHeroCollapseOffset = state.getInt("creator_hero_collapse", 0);
         }
         buildUi();
         if (state == null) {
@@ -246,10 +247,30 @@ public final class NativeFeedBrowserActivity extends Activity {
         top.addView(options, new LinearLayout.LayoutParams(dp(48), dp(52)));
         shell.addView(top, new LinearLayout.LayoutParams(-1, dp(64)));
 
+        FrameLayout body = new FrameLayout(this);
         if (isCreatorGallery()) {
+            CoordinatorLayout coordinator = new CoordinatorLayout(this);
+            coordinator.setBackgroundColor(Color.BLACK);
+            shell.addView(coordinator, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+            creatorAppBar = new AppBarLayout(this);
+            creatorAppBar.setBackgroundColor(Color.BLACK);
+            creatorAppBar.setElevation(0f);
+            creatorAppBar.setLiftOnScroll(false);
+            CoordinatorLayout.LayoutParams appBarParams =
+                    new CoordinatorLayout.LayoutParams(-1, -2);
+            appBarParams.gravity = Gravity.TOP;
+            coordinator.addView(creatorAppBar, appBarParams);
+
             creatorProfile = new CreatorProfileHeader(this, title, creatorQuery, baseUrl);
-            creatorProfile.setCollapseOffsetPx(creatorHeroCollapseOffset);
-            shell.addView(creatorProfile);
+            AppBarLayout.LayoutParams profileParams =
+                    new AppBarLayout.LayoutParams(-1, dp(184));
+            profileParams.setScrollFlags(
+                    AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL |
+                            AppBarLayout.LayoutParams.SCROLL_FLAG_EXIT_UNTIL_COLLAPSED
+            );
+            creatorAppBar.addView(creatorProfile, profileParams);
+
             if (!notificationFreshUrls.isEmpty()) {
                 TextView notificationContext = text(
                         notificationFreshUrls.size() == 1
@@ -264,19 +285,39 @@ public final class NativeFeedBrowserActivity extends Activity {
                 notificationContext.setContentDescription(
                         notificationFreshUrls.size() + " new OnlyFap items from Updates"
                 );
-                shell.addView(notificationContext, new LinearLayout.LayoutParams(-1, dp(32)));
+                AppBarLayout.LayoutParams notificationParams =
+                        new AppBarLayout.LayoutParams(-1, dp(32));
+                notificationParams.setScrollFlags(AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL);
+                creatorAppBar.addView(notificationContext, notificationParams);
             }
+
             creatorTabs = new TabLayout(this);
             creatorTabs.setBackgroundColor(Color.BLACK);
             creatorTabs.setSelectedTabIndicatorColor(UiPalette.PRIMARY);
             creatorTabs.setTabTextColors(Color.rgb(174, 174, 182), UiPalette.PRIMARY);
             creatorTabs.setTabMode(TabLayout.MODE_FIXED);
             creatorTabs.setTabGravity(TabLayout.GRAVITY_FILL);
-            shell.addView(creatorTabs, new LinearLayout.LayoutParams(-1, dp(48)));
-        }
+            creatorAppBar.addView(
+                    creatorTabs,
+                    new AppBarLayout.LayoutParams(-1, dp(48))
+            );
 
-        FrameLayout body = new FrameLayout(this);
-        shell.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
+            creatorAppBar.addOnOffsetChangedListener((appBar, verticalOffset) -> {
+                if (creatorProfile == null) return;
+                float progress = Math.min(
+                        1f,
+                        Math.abs(verticalOffset) / (float) Math.max(1, dp(184))
+                );
+                creatorProfile.setAlpha(1f - progress);
+            });
+
+            CoordinatorLayout.LayoutParams bodyParams =
+                    new CoordinatorLayout.LayoutParams(-1, -1);
+            bodyParams.setBehavior(new AppBarLayout.ScrollingViewBehavior());
+            coordinator.addView(body, bodyParams);
+        } else {
+            shell.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
+        }
 
         refresh = new SwipeRefreshLayout(this);
         refresh.setColorSchemeColors(UiPalette.PRIMARY);
@@ -427,7 +468,6 @@ public final class NativeFeedBrowserActivity extends Activity {
                 RecyclerView active = activeCreatorRecycler();
                 if (active != null) {
                     recycler = active;
-                    updateCreatorHeroForRecycler(active);
                     BunkrGalleryAdapter activeAdapter = activeCreatorAdapter();
                     if (activeAdapter != null) {
                         int[] range = visibleRange(active.getLayoutManager());
@@ -467,9 +507,6 @@ public final class NativeFeedBrowserActivity extends Activity {
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
-                if (isCreatorGallery() && view == activeCreatorRecycler()) {
-                    updateCreatorHeroForRecycler(view);
-                }
                 int[] range = visibleRange(view.getLayoutManager());
                 galleryAdapter.preloadVisible(range[0], range[1]);
                 if (dy > 0 && !loading && !endReached &&
@@ -478,26 +515,6 @@ public final class NativeFeedBrowserActivity extends Activity {
                 }
             }
         });
-    }
-
-    private void updateCreatorHeroForRecycler(RecyclerView view) {
-        if (!isCreatorGallery() || creatorProfile == null || view == null) return;
-        RecyclerView.LayoutManager manager = view.getLayoutManager();
-        if (manager == null) return;
-
-        int expanded = creatorProfile.expandedHeightPx();
-        int offset;
-        View firstItem = manager.findViewByPosition(0);
-        if (firstItem != null) {
-            offset = Math.max(0, view.getPaddingTop() - firstItem.getTop());
-        } else {
-            offset = view.canScrollVertically(-1) ? expanded : 0;
-        }
-        offset = Math.min(expanded, offset);
-
-        if (offset == creatorHeroCollapseOffset) return;
-        creatorHeroCollapseOffset = offset;
-        creatorProfile.setCollapseOffsetPx(offset);
     }
 
     private int[] visibleRange(RecyclerView.LayoutManager manager) {
@@ -1512,10 +1529,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (scroll != null) {
             view.getLayoutManager().onRestoreInstanceState(scroll);
             restoredBrowserState.remove(key);
-            if (isCreatorGallery()) {
+            if (isCreatorGallery() && creatorAppBar != null) {
                 view.post(() -> {
                     if (!isFinishing() && !isDestroyed() && view == activeCreatorRecycler()) {
-                        updateCreatorHeroForRecycler(view);
+                        creatorAppBar.setExpanded(!view.canScrollVertically(-1), false);
                     }
                 });
             }
@@ -1526,7 +1543,6 @@ public final class NativeFeedBrowserActivity extends Activity {
         state.putString("browser_snapshot", browserSnapshot);
         state.putString("gallery_session", bunkrGallerySessionId);
         state.putBoolean("notification_fresh_pending_focus", notificationFreshPendingFocus);
-        state.putInt("creator_hero_collapse", creatorHeroCollapseOffset);
         state.putInt("tab", activeCreatorTab());
         if (isCreatorGallery()) {
             for (int i = 0; i < CREATOR_TAB_COUNT; i++) {
