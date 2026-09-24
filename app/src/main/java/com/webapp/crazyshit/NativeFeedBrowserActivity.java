@@ -250,8 +250,8 @@ public final class NativeFeedBrowserActivity extends Activity {
             if (!notificationFreshUrls.isEmpty()) {
                 TextView notificationContext = text(
                         notificationFreshUrls.size() == 1
-                                ? "FROM NOTIFICATION  •  1 NEW UPDATE"
-                                : "FROM NOTIFICATION  •  " + notificationFreshUrls.size() + " NEW UPDATES",
+                                ? "FROM UPDATES  •  1 NEW ITEM"
+                                : "FROM UPDATES  •  " + notificationFreshUrls.size() + " NEW ITEMS",
                         11,
                         UiPalette.PRIMARY
                 );
@@ -259,7 +259,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 notificationContext.setTypeface(null, android.graphics.Typeface.BOLD);
                 notificationContext.setPadding(dp(12), dp(5), dp(12), dp(7));
                 notificationContext.setContentDescription(
-                        notificationFreshUrls.size() + " new OnlyFap updates from notification"
+                        notificationFreshUrls.size() + " new OnlyFap items from Updates"
                 );
                 shell.addView(notificationContext, new LinearLayout.LayoutParams(-1, dp(32)));
             }
