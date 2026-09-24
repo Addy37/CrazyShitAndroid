@@ -18,6 +18,7 @@ import java.util.Set;
 final class UpdateInboxStore {
     static final String CATEGORY_ONLYFAP = "onlyfap";
     static final String CATEGORY_VIDEOS = "videos";
+    static final String CATEGORY_APP = "app";
 
     private static final String PREFS = "zerochill_update_inbox_v1";
     private static final String KEY_ENTRIES = "entries";
@@ -34,6 +35,36 @@ final class UpdateInboxStore {
             if (incoming.isEmpty()) return;
 
             ArrayList<Entry> combined = new ArrayList<>(incoming);
+            combined.addAll(readLocked(context));
+            dedupeAndTrim(combined);
+            writeLocked(context, combined);
+        }
+    }
+
+    static void recordAppUpdate(
+            Context context,
+            String version,
+            String title,
+            boolean beta
+    ) {
+        if (context == null || version == null || version.trim().isEmpty()) return;
+        synchronized (LOCK) {
+            Entry entry = new Entry();
+            entry.timestamp = System.currentTimeMillis();
+            entry.category = CATEGORY_APP;
+            entry.sourceKey = "app";
+            entry.sourceLabel = beta ? "Beta" : "Stable";
+            entry.title = title == null || title.trim().isEmpty()
+                    ? "ZeroChill " + version.trim()
+                    : title.trim();
+            entry.subtitle = "App update " + version.trim() + " is ready";
+            entry.appVersion = version.trim();
+            entry.count = 1;
+            entry.fingerprint = fingerprint(CATEGORY_APP, entry.appVersion, Collections.emptyList());
+            entry.id = entry.fingerprint + ":" + entry.timestamp;
+
+            ArrayList<Entry> combined = new ArrayList<>();
+            combined.add(entry);
             combined.addAll(readLocked(context));
             dedupeAndTrim(combined);
             writeLocked(context, combined);
@@ -337,6 +368,7 @@ final class UpdateInboxStore {
         String avatarUrl = "";
         String avatarReferer = "";
         String fapelloProfileUrl = "";
+        String appVersion = "";
         long timestamp;
         int count;
         int videoCount;
@@ -357,6 +389,7 @@ final class UpdateInboxStore {
                     .put("avatarUrl", avatarUrl)
                     .put("avatarReferer", avatarReferer)
                     .put("fapelloProfileUrl", fapelloProfileUrl)
+                    .put("appVersion", appVersion)
                     .put("timestamp", timestamp)
                     .put("count", count)
                     .put("videoCount", videoCount)
@@ -380,6 +413,7 @@ final class UpdateInboxStore {
             entry.avatarUrl = value.optString("avatarUrl", "");
             entry.avatarReferer = value.optString("avatarReferer", "");
             entry.fapelloProfileUrl = value.optString("fapelloProfileUrl", "");
+            entry.appVersion = value.optString("appVersion", "");
             entry.timestamp = value.optLong("timestamp", 0L);
             entry.count = value.optInt("count", 0);
             entry.videoCount = value.optInt("videoCount", 0);
