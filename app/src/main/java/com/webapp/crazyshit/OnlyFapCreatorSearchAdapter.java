@@ -199,6 +199,7 @@ final class OnlyFapCreatorSearchAdapter
         holder.meta.setText(metaText(item));
         holder.card.setContentDescription(item.title + ", OnlyFap creator");
         holder.card.setOnClickListener(v -> open.accept(item));
+        CreatorGalleryPreloader.warm(holder.card.getContext(), item);
 
         if (!item.imageUrl.equals(holder.imageUrl)) {
             load(holder.avatar, item, true);
