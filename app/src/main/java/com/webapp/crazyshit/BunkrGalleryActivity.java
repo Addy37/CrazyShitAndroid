@@ -417,11 +417,14 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     loadingMore = false;
-                    initialLoading.setVisibility(View.GONE);
+                    boolean finishingInitialLoad = initialLoading.getVisibility() == View.VISIBLE
+                            && adapter.getItemCount() == 0;
                     loadMoreLoading.setVisibility(View.GONE);
                     BunkrGallerySessionStore.Snapshot currentCreator = isCreatorGallery()
                             ? BunkrGallerySessionStore.snapshot(sessionId) : null;
                     int added = adapter.append(currentCreator == null ? visibleResult : filterMedia(currentCreator.items));
+                    if (finishingInitialLoad && added > 0) initialLoading.finish();
+                    else if (!finishingInitialLoad) initialLoading.setVisibility(View.GONE);
                     if (currentCreator != null) {
                         currentPage = currentCreator.currentPage;
                         endReached = currentCreator.endReached;
