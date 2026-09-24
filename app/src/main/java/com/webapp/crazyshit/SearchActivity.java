@@ -20,7 +20,6 @@ import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -62,7 +61,7 @@ public final class SearchActivity extends Activity {
     private final ExecutorService io = Executors.newFixedThreadPool(8);
 
     private EditText input;
-    private View progress;
+    private ZeroChillLoadingView progress;
     private TextView status;
     private RecyclerView recycler;
     private GlobalSearchAdapter adapter;
