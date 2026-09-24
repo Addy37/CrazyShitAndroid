@@ -167,6 +167,13 @@ public final class UpdateInboxActivity extends Activity {
         UpdateInboxStore.markRead(this, entry.id);
         render();
 
+        if (UpdateInboxStore.CATEGORY_APP.equals(entry.category)) {
+            Intent intent = new Intent(this, SettingsActivity.class);
+            intent.putExtra(SettingsActivity.EXTRA_CHECK_FOR_UPDATES, true);
+            startActivity(intent);
+            return;
+        }
+
         if (UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category) &&
                 entry.creatorName != null && !entry.creatorName.trim().isEmpty()) {
             Intent intent = NativeFeedBrowserActivity.createCreatorGallery(
@@ -285,7 +292,9 @@ public final class UpdateInboxActivity extends Activity {
             Glide.with(holder.avatar).clear(holder.avatar);
             int fallback = UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)
                     ? R.drawable.ic_launcher_legacy
-                    : R.drawable.ic_nav_shittok;
+                    : UpdateInboxStore.CATEGORY_APP.equals(entry.category)
+                            ? R.drawable.ic_more_update
+                            : R.drawable.ic_nav_shittok;
             holder.avatar.setImageResource(fallback);
 
             String imageUrl = entry.avatarUrl;
