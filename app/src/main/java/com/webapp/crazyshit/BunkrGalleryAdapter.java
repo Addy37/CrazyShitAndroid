@@ -186,22 +186,15 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         variantParams.gravity = Gravity.BOTTOM | Gravity.END;
         source.addView(sourceVariant, variantParams);
 
-        TextView fresh = new TextView(parent.getContext());
-        fresh.setText("NEW");
-        fresh.setTextColor(Color.BLACK);
-        fresh.setTextSize(10);
-        fresh.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        fresh.setGravity(Gravity.CENTER);
-        fresh.setPadding(dp(parent, 7), dp(parent, 3), dp(parent, 7), dp(parent, 3));
-        GradientDrawable freshBackground = new GradientDrawable();
-        freshBackground.setCornerRadius(dp(parent, 10));
-        freshBackground.setColor(UiPalette.PRIMARY);
-        fresh.setBackground(freshBackground);
+        ImageView fresh = new ImageView(parent.getContext());
+        fresh.setImageResource(R.drawable.ic_new_content);
+        fresh.setContentDescription("New content");
+        fresh.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         fresh.setVisibility(View.GONE);
-        fresh.setElevation(dp(parent, 6));
+        fresh.setElevation(dp(parent, 7));
         FrameLayout.LayoutParams freshParams = new FrameLayout.LayoutParams(
-                -2,
-                dp(parent, 24)
+                dp(parent, 26),
+                dp(parent, 26)
         );
         freshParams.gravity = Gravity.TOP | Gravity.END;
         freshParams.setMargins(0, dp(parent, 6), dp(parent, 6), 0);
@@ -237,7 +230,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ? aspectRatios.getOrDefault(item.url, 1f)
                 : 1f);
         holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
-        boolean fresh = highlightedUrls.contains(item.url);
+        boolean fresh = isHighlighted(item);
         holder.fresh.setVisibility(fresh ? View.VISIBLE : View.GONE);
         SourceBadge source = sourceBadge(item);
         holder.source.setVisibility(source == null ? View.GONE : View.VISIBLE);
@@ -251,7 +244,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.itemView.setContentDescription(
                 (item.isVideo() ? "Video, " : "Photo, ") + item.title +
                         (source == null ? "" : ", source " + source.name) +
-                        (fresh ? ", new from notification" : "")
+                        (fresh ? ", new from Updates" : "")
         );
 
         if (item.imageUrl == null || item.imageUrl.isEmpty()) {
@@ -429,6 +422,29 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         return null;
     }
 
+    private boolean isHighlighted(NativeContentItem item) {
+        if (item == null || highlightedUrls.isEmpty()) return false;
+        String itemUrl = canonicalHighlightUrl(item.url);
+        String uploaderUrl = canonicalHighlightUrl(item.uploader);
+        for (String raw : highlightedUrls) {
+            String highlighted = canonicalHighlightUrl(raw);
+            if (highlighted.isEmpty()) continue;
+            if (highlighted.equals(itemUrl) || highlighted.equals(uploaderUrl)) return true;
+        }
+        return false;
+    }
+
+    private String canonicalHighlightUrl(String value) {
+        if (value == null) return "";
+        String clean = value.trim();
+        int fragment = clean.indexOf('#');
+        if (fragment >= 0) clean = clean.substring(0, fragment);
+        int query = clean.indexOf('?');
+        if (query >= 0) clean = clean.substring(0, query);
+        while (clean.endsWith("/")) clean = clean.substring(0, clean.length() - 1);
+        return clean.toLowerCase(Locale.US);
+    }
+
     private boolean containsIgnoreCase(String value, String query) {
         return value != null && value.toLowerCase(Locale.US).contains(query);
     }
@@ -451,7 +467,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final FrameLayout source;
         final ImageView sourceIcon;
         final TextView sourceVariant;
-        final TextView fresh;
+        final ImageView fresh;
         final View play;
 
         Holder(
@@ -460,7 +476,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 FrameLayout source,
                 ImageView sourceIcon,
                 TextView sourceVariant,
-                TextView fresh,
+                ImageView fresh,
                 View play
         ) {
             super(itemView);
