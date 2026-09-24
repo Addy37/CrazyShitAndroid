@@ -217,7 +217,7 @@ final class NotificationCoordinator {
         card.addView(icon, iconParams);
 
         android.widget.TextView title = new android.widget.TextView(activity);
-        title.setText("ZEROCHILL ALERTS");
+        title.setText("ZEROCHILL APP ALERTS");
         title.setTextColor(android.graphics.Color.WHITE);
         title.setTextSize(22f);
         title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
@@ -226,8 +226,8 @@ final class NotificationCoordinator {
 
         android.widget.TextView body = new android.widget.TextView(activity);
         body.setText(
-                "Fresh content from supported ZEROCHILL sources plus app updates. "
-                        + "Titles are shown by default and can be changed anytime in Settings."
+                "Allow Android notifications for important ZEROCHILL app updates. "
+                        + "Fresh source activity stays inside More → Updates."
         );
         body.setTextColor(android.graphics.Color.rgb(184, 190, 198));
         body.setTextSize(14f);
