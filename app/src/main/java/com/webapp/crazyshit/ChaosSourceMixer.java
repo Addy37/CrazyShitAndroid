@@ -66,7 +66,9 @@ final class ChaosSourceMixer {
     private final ArrayList<String> catalog = new ArrayList<>();
     private final ArrayDeque<String> sourceDeck = new ArrayDeque<>();
     private final Set<String> usedSourcePages = new HashSet<>();
+    private final Object catalogLock = new Object();
     private boolean catalogLoaded;
+    private boolean catalogLoading;
     private boolean efuktCatalogAttempted;
     private boolean bunkrCatalogAttempted;
     private boolean onlyHavenCatalogAttempted;
@@ -192,7 +194,10 @@ final class ChaosSourceMixer {
     private List<NativeContentItem> loadRegularBatch(Context context) {
         ensureCatalog(context);
         LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
-        int sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
+        int sourceCount;
+        synchronized (catalogLock) {
+            sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
+        }
         for (int i = 0; i < sourceCount; i++) {
             if (Thread.currentThread().isInterrupted()) break;
             addRequest(context, regular, nextRequest());
@@ -201,8 +206,10 @@ final class ChaosSourceMixer {
     }
 
     void resetDeck() {
-        sourceDeck.clear();
-        usedSourcePages.clear();
+        synchronized (catalogLock) {
+            sourceDeck.clear();
+            usedSourcePages.clear();
+        }
         starterPending = true;
         shitShow.resetDeck();
         efuktSeriesDeck.clear();
@@ -504,36 +511,44 @@ final class ChaosSourceMixer {
     }
 
     private void ensureCatalog(Context context) {
-        if (catalogLoaded) return;
-
-        LinkedHashSet<String> urls = new LinkedHashSet<>();
-        urls.add(CrazyShitRepository.HOME);
-        urls.add(CrazyShitRepository.TRENDING);
-        urls.add(VIDEOS);
-        urls.add(USER_UPLOADS);
-
-        Future<List<NativeContentItem>> categories = CRAZY_IO.submit(
-                () -> repository.fetchCategories(context));
-        boolean loaded = false;
-        try {
-            for (NativeContentItem category : categories.get(
-                    ChaosStarterSources.STARTUP_MILLIS, TimeUnit.MILLISECONDS)) {
-                if (category == null || category.url == null || category.url.trim().isEmpty()) continue;
-                urls.add(category.url.trim());
+        synchronized (catalogLock) {
+            if (catalog.isEmpty()) {
+                catalog.add(CrazyShitRepository.HOME);
+                catalog.add(CrazyShitRepository.TRENDING);
+                catalog.add(VIDEOS);
+                catalog.add(USER_UPLOADS);
+                refillDeck();
             }
-            loaded = true;
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-        } catch (Exception ignored) {
-            // Retry the category catalog on another batch when the host recovers.
-        } finally {
-            categories.cancel(true);
+            if (catalogLoaded || catalogLoading) return;
+            catalogLoading = true;
         }
 
-        catalog.clear();
-        catalog.addAll(urls);
-        catalogLoaded = loaded;
-        refillDeck();
+        // Category expansion is useful for variety, but it must never delay the base CrazyShit
+        // feeds. Populate it independently and fold it into a later batch when it is ready.
+        CRAZY_IO.execute(() -> {
+            LinkedHashSet<String> discovered = new LinkedHashSet<>();
+            try {
+                for (NativeContentItem category : repository.fetchCategories(context)) {
+                    if (Thread.currentThread().isInterrupted()) break;
+                    if (category == null || category.url == null ||
+                            category.url.trim().isEmpty()) continue;
+                    discovered.add(category.url.trim());
+                }
+            } catch (Exception ignored) {
+            }
+
+            synchronized (catalogLock) {
+                if (!discovered.isEmpty()) {
+                    for (String url : discovered) {
+                        if (!catalog.contains(url)) catalog.add(url);
+                    }
+                    catalogLoaded = true;
+                    sourceDeck.clear();
+                    refillDeck();
+                }
+                catalogLoading = false;
+            }
+        });
     }
 
     private void addRequest(Context context,
@@ -558,26 +573,28 @@ final class ChaosSourceMixer {
     }
 
     private SourceRequest nextRequest() {
-        if (catalog.isEmpty()) return null;
+        synchronized (catalogLock) {
+            if (catalog.isEmpty()) return null;
 
-        int attempts = Math.max(16, catalog.size() * 3);
-        for (int i = 0; i < attempts; i++) {
+            int attempts = Math.max(16, catalog.size() * 3);
+            for (int i = 0; i < attempts; i++) {
+                if (sourceDeck.isEmpty()) refillDeck();
+                String url = sourceDeck.pollFirst();
+                if (url == null || url.isEmpty()) continue;
+
+                int page = 1 + random.nextInt(MAX_SOURCE_PAGE);
+                String key = url + "#" + page;
+                if (usedSourcePages.add(key)) return new SourceRequest(url, page);
+            }
+
+            usedSourcePages.clear();
             if (sourceDeck.isEmpty()) refillDeck();
             String url = sourceDeck.pollFirst();
-            if (url == null || url.isEmpty()) continue;
-
+            if (url == null || url.isEmpty()) return null;
             int page = 1 + random.nextInt(MAX_SOURCE_PAGE);
-            String key = url + "#" + page;
-            if (usedSourcePages.add(key)) return new SourceRequest(url, page);
+            usedSourcePages.add(url + "#" + page);
+            return new SourceRequest(url, page);
         }
-
-        usedSourcePages.clear();
-        if (sourceDeck.isEmpty()) refillDeck();
-        String url = sourceDeck.pollFirst();
-        if (url == null || url.isEmpty()) return null;
-        int page = 1 + random.nextInt(MAX_SOURCE_PAGE);
-        usedSourcePages.add(url + "#" + page);
-        return new SourceRequest(url, page);
     }
 
     private void refillDeck() {
