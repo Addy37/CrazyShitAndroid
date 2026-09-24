@@ -74,7 +74,7 @@ final class LandscapeMoreDialog {
         final boolean sidePanel = isLandscape(activity);
         final CharSequence oldTitle = textValue(activity, "headerTitle");
         final CharSequence oldSubtitle = textValue(activity, "headerSubtitle");
-        setHeader(activity, "More", "Library, account and settings");
+        setHeader(activity, "More", "Library, updates, account and settings");
 
         Dialog dialog = sidePanel ? new Dialog(activity) : new BottomSheetDialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
