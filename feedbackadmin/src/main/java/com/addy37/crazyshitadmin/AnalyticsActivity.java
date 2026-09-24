@@ -132,7 +132,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
                 "Source usage will appear after users open source-specific content.");
         addRankingCard("APP VERSIONS", "How quickly users adopt releases", dashboard.versions, false,
                 "Version adoption will appear after analytics-enabled users open the app.");
-        addDeviceCard("TOP DEVICES", "Phone models active this week", dashboard.deviceModels,
+        addDeviceCard("TOP DEVICES", "Phone models active this week", withoutEmulators(dashboard.deviceModels),
                 "Device models will appear as users open the updated ZEROCHILL app.");
         addDeviceCard("DEVICE BRANDS", "Active users by manufacturer", dashboard.deviceManufacturers,
                 "Device brands will appear as users open the updated ZEROCHILL app.");
@@ -194,6 +194,27 @@ public final class AnalyticsActivity extends AppCompatActivity {
             }
         }
         content.addView(card(title, subtitle, body));
+    }
+
+    private List<AdminRepository.AnalyticsRow> withoutEmulators(
+            List<AdminRepository.AnalyticsRow> rows) {
+        List<AdminRepository.AnalyticsRow> filtered = new java.util.ArrayList<>();
+        for (AdminRepository.AnalyticsRow row : rows) {
+            if (!isEmulatorDevice(row.value)) filtered.add(row);
+        }
+        return filtered;
+    }
+
+    private boolean isEmulatorDevice(String value) {
+        if (value == null || value.isEmpty()) return false;
+        String normalized = value.toLowerCase(Locale.US);
+        return normalized.contains("android sdk built for x86")
+                || normalized.contains("sdk_gphone")
+                || normalized.contains("generic_x86")
+                || normalized.contains("aosp_x86")
+                || normalized.contains("emulator")
+                || normalized.contains("goldfish")
+                || normalized.contains("ranchu");
     }
 
     private void addDeviceCard(String title, String subtitle,
