@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /** Shared gallery state, with media and paging cursors saved in one atomic snapshot. */
 final class BunkrGallerySessionStore {
-    private static final int MAX_SESSIONS = 4;
+    private static final int MAX_SESSIONS = 8;
     private static final LinkedHashMap<String, Session> SESSIONS = new LinkedHashMap<>();
 
     static final class Snapshot {
