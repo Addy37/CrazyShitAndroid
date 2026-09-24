@@ -133,11 +133,11 @@ public final class AnalyticsActivity extends AppCompatActivity {
         addRankingCard("APP VERSIONS", "How quickly users adopt releases", dashboard.versions, false,
                 "Version adoption will appear after analytics-enabled users open the app.");
         addDeviceCard("TOP DEVICES", "Phone models active this week", withoutEmulators(dashboard.deviceModels),
-                "Device models will appear as users open the updated ZEROCHILL app.");
+                "Device models will appear as users open the updated ZEROCHILL app.", true);
         addDeviceCard("DEVICE BRANDS", "Active users by manufacturer", dashboard.deviceManufacturers,
-                "Device brands will appear as users open the updated ZEROCHILL app.");
+                "Device brands will appear as users open the updated ZEROCHILL app.", false);
         addDeviceCard("ANDROID VERSIONS", "Android versions active this week", dashboard.androidVersions,
-                "Android versions will appear as users open the updated ZEROCHILL app.");
+                "Android versions will appear as users open the updated ZEROCHILL app.", false);
 
         if (dashboard.dailyUsers == 0 && dashboard.weeklyUsers == 0 && dashboard.monthlyUsers == 0) {
             TextView waiting = text(
@@ -200,7 +200,7 @@ public final class AnalyticsActivity extends AppCompatActivity {
             List<AdminRepository.AnalyticsRow> rows) {
         List<AdminRepository.AnalyticsRow> filtered = new java.util.ArrayList<>();
         for (AdminRepository.AnalyticsRow row : rows) {
-            if (!isEmulatorDevice(row.value)) filtered.add(row);
+            if (!isEmulatorDevice(row.value) && !isUnknownDevice(row.value)) filtered.add(row);
         }
         return filtered;
     }
@@ -217,8 +217,44 @@ public final class AnalyticsActivity extends AppCompatActivity {
                 || normalized.contains("ranchu");
     }
 
+    private boolean isUnknownDevice(String value) {
+        return value == null || value.trim().isEmpty() || "unknown".equalsIgnoreCase(value.trim());
+    }
+
+    private String friendlyDeviceName(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return "Unknown";
+        String normalized = raw.trim().toLowerCase(Locale.US);
+
+        if (normalized.contains("cph2655")) return "OnePlus 13";
+
+        if (normalized.contains("sm-s948")) return "Samsung Galaxy S26 Ultra";
+        if (normalized.contains("sm-s947")) return "Samsung Galaxy S26+";
+        if (normalized.contains("sm-s942")) return "Samsung Galaxy S26";
+        if (normalized.contains("sm-s938")) return "Samsung Galaxy S25 Ultra";
+        if (normalized.contains("sm-s937")) return "Samsung Galaxy S25 Edge";
+        if (normalized.contains("sm-s936")) return "Samsung Galaxy S25+";
+        if (normalized.contains("sm-s931")) return "Samsung Galaxy S25";
+        if (normalized.contains("sm-s928")) return "Samsung Galaxy S24 Ultra";
+        if (normalized.contains("sm-s926")) return "Samsung Galaxy S24+";
+        if (normalized.contains("sm-s921")) return "Samsung Galaxy S24";
+        if (normalized.contains("sm-s918")) return "Samsung Galaxy S23 Ultra";
+        if (normalized.contains("sm-s916")) return "Samsung Galaxy S23+";
+        if (normalized.contains("sm-s911")) return "Samsung Galaxy S23";
+
+        if (normalized.contains("sm-f966")) return "Samsung Galaxy Z Fold7";
+        if (normalized.contains("sm-f766")) return "Samsung Galaxy Z Flip7";
+        if (normalized.contains("sm-f956")) return "Samsung Galaxy Z Fold6";
+        if (normalized.contains("sm-f741")) return "Samsung Galaxy Z Flip6";
+
+        if (normalized.contains("moto g power") && normalized.contains("2025")) {
+            return "Motorola Moto G Power (2025)";
+        }
+
+        return raw.trim();
+    }
+
     private void addDeviceCard(String title, String subtitle,
-            List<AdminRepository.AnalyticsRow> rows, String emptyText) {
+            List<AdminRepository.AnalyticsRow> rows, String emptyText, boolean friendlyModels) {
         LinearLayout body = vertical(0);
         if (rows.isEmpty()) {
             body.addView(text(emptyText, 13, color(R.color.app_on_surface_variant)));
@@ -227,7 +263,8 @@ public final class AnalyticsActivity extends AppCompatActivity {
             for (AdminRepository.AnalyticsRow row : rows) {
                 LinearLayout block = vertical(0);
                 block.setPadding(0, dp(7), 0, dp(7));
-                TextView name = text(row.value, 15, color(R.color.app_on_surface));
+                TextView name = text(friendlyModels ? friendlyDeviceName(row.value) : row.value,
+                        15, color(R.color.app_on_surface));
                 name.setTypeface(null, Typeface.BOLD);
                 block.addView(name);
                 block.addView(text(String.format(Locale.US,
