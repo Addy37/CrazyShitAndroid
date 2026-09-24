@@ -209,7 +209,7 @@ public final class SearchActivity extends Activity {
                 : "Search CrazyShit, EFukt, OnlyFap, Collections, Categories and your Library");
         content.addView(status, new FrameLayout.LayoutParams(-1, -1));
 
-        progress = new ZeroChillLoadingView(this, null);
+        progress = new ZeroChillLoadingView(this, null, true);
         progress.setVisibility(View.GONE);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(72), dp(72));
         progressParams.gravity = Gravity.CENTER;
@@ -392,7 +392,7 @@ public final class SearchActivity extends Activity {
         onlyFapLocal = new ArrayList<>();
         if (onlyFapAdapter != null) onlyFapAdapter.replace(onlyFapLocal);
         recycler.scrollToPosition(0);
-        progress.setVisibility(View.GONE);
+        progress.setVisibility(View.VISIBLE);
         status.setVisibility(View.GONE);
         searchState.setVisibility(View.VISIBLE);
         searchState.setText("Finding saved creators · Checking sources…");
@@ -411,6 +411,7 @@ public final class SearchActivity extends Activity {
                 if (destroyed || isFinishing() || token != generation) return;
                 onlyFapLocal = local;
                 if (onlyFapAdapter != null) onlyFapAdapter.replace(local);
+                if (!local.isEmpty()) progress.setVisibility(View.GONE);
                 status.setVisibility(View.GONE);
                 searchState.setText(local.size() + " saved creators · Checking sources…");
             });
@@ -429,6 +430,7 @@ public final class SearchActivity extends Activity {
                                 List<NativeContentItem> combined = OnlyFapCreatorResults.merge(
                                         onlyFapLocal, visible, 80);
                                 if (onlyFapAdapter != null) onlyFapAdapter.replace(combined);
+                                if (!combined.isEmpty()) progress.setVisibility(View.GONE);
                                 searchState.setText(combined.size() + " creators · Checking sources…");
                                 searchState.setContentDescription(searchState.getText());
                             });
