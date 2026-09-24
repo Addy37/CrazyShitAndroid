@@ -179,7 +179,12 @@ public final class NativeFeedBrowserActivity extends Activity {
                 }
             }
         }
-        notificationFreshPendingFocus = !notificationFreshUrls.isEmpty();
+        notificationFreshPendingFocus = state == null
+                ? !notificationFreshUrls.isEmpty()
+                : state.getBoolean(
+                        "notification_fresh_pending_focus",
+                        !notificationFreshUrls.isEmpty()
+                );
         bunkrGallerySessionId = value(
                 getIntent().getStringExtra(EXTRA_CREATOR_GALLERY_SESSION),
                 ""
@@ -1486,6 +1491,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putString("browser_snapshot", browserSnapshot);
         state.putString("gallery_session", bunkrGallerySessionId);
+        state.putBoolean("notification_fresh_pending_focus", notificationFreshPendingFocus);
         state.putInt("tab", activeCreatorTab());
         if (isCreatorGallery()) {
             for (int i = 0; i < CREATOR_TAB_COUNT; i++) {
