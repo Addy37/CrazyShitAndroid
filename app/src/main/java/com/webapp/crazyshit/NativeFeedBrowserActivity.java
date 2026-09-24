@@ -33,7 +33,9 @@ import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -51,6 +53,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_BUNKR_CREATOR_QUERY = "browser_bunkr_creator_query";
     public static final String EXTRA_FAPELLO_PROFILE_URL = "browser_fapello_profile_url";
     public static final String EXTRA_CREATOR_GALLERY_SESSION = "browser_creator_gallery_session";
+    public static final String EXTRA_NOTIFICATION_FRESH_URLS =
+            "browser_notification_fresh_urls";
     public static final String SOURCE_CRAZYSHIT = "crazyshit";
     public static final String SOURCE_EFUKT = "efukt";
     public static final String SOURCE_BUNKR = "bunkr";
@@ -95,6 +99,9 @@ public final class NativeFeedBrowserActivity extends Activity {
     private int currentPage;
     private int generation;
     private int creatorGalleryColumns;
+    private final ArrayList<String> notificationFreshUrls = new ArrayList<>();
+    private final Set<String> notificationFreshUrlSet = new LinkedHashSet<>();
+    private boolean notificationFreshPendingFocus;
 
     public static Intent create(Activity activity, String title, String baseUrl, boolean memeMode) {
         return create(activity, title, baseUrl, memeMode, SOURCE_CRAZYSHIT);
@@ -162,6 +169,22 @@ public final class NativeFeedBrowserActivity extends Activity {
         source = value(getIntent().getStringExtra(EXTRA_SOURCE), SOURCE_CRAZYSHIT);
         creatorQuery = value(getIntent().getStringExtra(EXTRA_BUNKR_CREATOR_QUERY), "");
         fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL), "");
+        ArrayList<String> freshUrls =
+                getIntent().getStringArrayListExtra(EXTRA_NOTIFICATION_FRESH_URLS);
+        if (freshUrls != null) {
+            for (String freshUrl : freshUrls) {
+                String clean = value(freshUrl, "");
+                if (!clean.isEmpty() && notificationFreshUrlSet.add(clean)) {
+                    notificationFreshUrls.add(clean);
+                }
+            }
+        }
+        notificationFreshPendingFocus = state == null
+                ? !notificationFreshUrls.isEmpty()
+                : state.getBoolean(
+                        "notification_fresh_pending_focus",
+                        !notificationFreshUrls.isEmpty()
+                );
         bunkrGallerySessionId = value(
                 getIntent().getStringExtra(EXTRA_CREATOR_GALLERY_SESSION),
                 ""
@@ -224,6 +247,22 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (isCreatorGallery()) {
             creatorProfile = new CreatorProfileHeader(this, title, creatorQuery, baseUrl);
             shell.addView(creatorProfile);
+            if (!notificationFreshUrls.isEmpty()) {
+                TextView notificationContext = text(
+                        notificationFreshUrls.size() == 1
+                                ? "FROM UPDATES  •  1 NEW ITEM"
+                                : "FROM UPDATES  •  " + notificationFreshUrls.size() + " NEW ITEMS",
+                        11,
+                        UiPalette.PRIMARY
+                );
+                notificationContext.setGravity(Gravity.CENTER);
+                notificationContext.setTypeface(null, android.graphics.Typeface.BOLD);
+                notificationContext.setPadding(dp(12), dp(5), dp(12), dp(7));
+                notificationContext.setContentDescription(
+                        notificationFreshUrls.size() + " new OnlyFap items from Updates"
+                );
+                shell.addView(notificationContext, new LinearLayout.LayoutParams(-1, dp(32)));
+            }
             creatorTabs = new TabLayout(this);
             creatorTabs.setBackgroundColor(Color.BLACK);
             creatorTabs.setSelectedTabIndicatorColor(UiPalette.PRIMARY);
@@ -332,7 +371,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private BunkrGalleryAdapter createBunkrGalleryAdapter(boolean adaptiveAspectRatios) {
-        return new BunkrGalleryAdapter(
+        BunkrGalleryAdapter galleryAdapter = new BunkrGalleryAdapter(
                 this,
                 new BunkrGalleryAdapter.Listener() {
                     @Override
@@ -347,6 +386,10 @@ public final class NativeFeedBrowserActivity extends Activity {
                 },
                 adaptiveAspectRatios
         );
+        if (isCreatorGallery() && !notificationFreshUrls.isEmpty()) {
+            galleryAdapter.setHighlightedUrls(notificationFreshUrls);
+        }
+        return galleryAdapter;
     }
 
     private void buildCreatorTabs() {
@@ -660,21 +703,32 @@ public final class NativeFeedBrowserActivity extends Activity {
             if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.replace(items);
             return;
         }
+        List<NativeContentItem> prioritized = prioritizeNotificationItems(
+                items,
+                notificationFreshUrls
+        );
         int activeTab = activeCreatorTab();
         for (int tab = 0; tab < CREATOR_TAB_COUNT; tab++) {
             if (creatorTabAdapters[tab] != null) {
                 creatorTabAdapters[tab].replace(
-                        filterCreatorItems(items, tab),
+                        filterCreatorItems(prioritized, tab),
                         tab == activeTab
                 );
             }
         }
         updateCreatorTabLabels();
+        maybeFocusNotificationFresh(prioritized);
     }
 
     private void appendBunkrItems(List<NativeContentItem> items) {
         if (!isCreatorGallery()) {
             if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.append(items);
+            return;
+        }
+        if (!notificationFreshUrls.isEmpty() && bunkrGalleryAdapter != null) {
+            ArrayList<NativeContentItem> combined = bunkrGalleryAdapter.snapshot();
+            if (items != null) combined.addAll(items);
+            replaceBunkrItems(combined);
             return;
         }
         int activeTab = activeCreatorTab();
@@ -687,6 +741,54 @@ public final class NativeFeedBrowserActivity extends Activity {
             }
         }
         updateCreatorTabLabels();
+    }
+
+    static List<NativeContentItem> prioritizeNotificationItems(
+            List<NativeContentItem> items,
+            List<String> freshUrls
+    ) {
+        ArrayList<NativeContentItem> prioritized = new ArrayList<>();
+        if (items == null || items.isEmpty()) return prioritized;
+        if (freshUrls == null || freshUrls.isEmpty()) {
+            prioritized.addAll(items);
+            return prioritized;
+        }
+
+        LinkedHashSet<String> added = new LinkedHashSet<>();
+        for (String freshUrl : freshUrls) {
+            if (freshUrl == null || freshUrl.trim().isEmpty()) continue;
+            for (NativeContentItem item : items) {
+                if (item == null || item.url == null) continue;
+                if (freshUrl.trim().equals(item.url) && added.add(item.url)) {
+                    prioritized.add(item);
+                    break;
+                }
+            }
+        }
+        for (NativeContentItem item : items) {
+            if (item == null || item.url == null || item.url.isEmpty()) continue;
+            if (added.add(item.url)) prioritized.add(item);
+        }
+        return prioritized;
+    }
+
+    private void maybeFocusNotificationFresh(List<NativeContentItem> items) {
+        if (!notificationFreshPendingFocus || items == null || items.isEmpty()) return;
+        boolean found = false;
+        for (NativeContentItem item : items) {
+            if (item != null && notificationFreshUrlSet.contains(item.url)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) return;
+        notificationFreshPendingFocus = false;
+        if (creatorTabsPager == null) return;
+        creatorTabsPager.post(() -> {
+            creatorTabsPager.setCurrentItem(CREATOR_TAB_ALL, false);
+            RecyclerView all = creatorTabRecyclers[CREATOR_TAB_ALL];
+            if (all != null) all.scrollToPosition(0);
+        });
     }
 
     private ArrayList<NativeContentItem> filterCreatorItems(
@@ -1389,6 +1491,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putString("browser_snapshot", browserSnapshot);
         state.putString("gallery_session", bunkrGallerySessionId);
+        state.putBoolean("notification_fresh_pending_focus", notificationFreshPendingFocus);
         state.putInt("tab", activeCreatorTab());
         if (isCreatorGallery()) {
             for (int i = 0; i < CREATOR_TAB_COUNT; i++) {

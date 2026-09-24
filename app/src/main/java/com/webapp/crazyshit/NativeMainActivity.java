@@ -105,6 +105,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        NotificationCoordinator.clearContentNotifications(this);
         if (state != null) restoredPrimaryPage = state.getInt("primary_page", -1);
         ZeroChillUi.applySystemBars(this);
         FeedViewStyleController.prepareVisualRefresh(this);

@@ -29,7 +29,9 @@ import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.target.Target;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,6 +50,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
     private final Map<String, Float> aspectRatios = new HashMap<>();
+    private final LinkedHashSet<String> highlightedUrls = new LinkedHashSet<>();
     private final Context context;
     private final Listener listener;
     private final boolean adaptiveAspectRatios;
@@ -87,6 +90,17 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             if (preloadAhead) preloadRange(start, Math.min(items.size(), start + (adaptiveAspectRatios ? 6 : 12)));
         }
     }
+
+    void setHighlightedUrls(Collection<String> urls) {
+        highlightedUrls.clear();
+        if (urls != null) {
+            for (String url : urls) {
+                if (url != null && !url.trim().isEmpty()) highlightedUrls.add(url.trim());
+            }
+        }
+        if (!items.isEmpty()) notifyDataSetChanged();
+    }
+
 
     void preloadVisible(int first, int last) {
         int from = Math.max(0, first);
@@ -172,6 +186,20 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         variantParams.gravity = Gravity.BOTTOM | Gravity.END;
         source.addView(sourceVariant, variantParams);
 
+        ImageView fresh = new ImageView(parent.getContext());
+        fresh.setImageResource(R.drawable.ic_new_content);
+        fresh.setContentDescription("New content");
+        fresh.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        fresh.setVisibility(View.GONE);
+        fresh.setElevation(dp(parent, 7));
+        FrameLayout.LayoutParams freshParams = new FrameLayout.LayoutParams(
+                dp(parent, 26),
+                dp(parent, 26)
+        );
+        freshParams.gravity = Gravity.TOP | Gravity.END;
+        freshParams.setMargins(0, dp(parent, 6), dp(parent, 6), 0);
+        tile.addView(fresh, freshParams);
+
         FrameLayout play = new FrameLayout(parent.getContext());
         GradientDrawable playBackground = new GradientDrawable();
         playBackground.setCornerRadius(dp(parent, 8));
@@ -192,7 +220,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         playIcon.setPadding(dp(parent, 11), dp(parent, 11), dp(parent, 9), dp(parent, 11));
         play.addView(playIcon, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(tile, image, source, sourceIcon, sourceVariant, play);
+        return new Holder(tile, image, source, sourceIcon, sourceVariant, fresh, play);
     }
 
     @Override
@@ -202,6 +230,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ? aspectRatios.getOrDefault(item.url, 1f)
                 : 1f);
         holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
+        boolean fresh = isHighlighted(item);
+        holder.fresh.setVisibility(fresh ? View.VISIBLE : View.GONE);
         SourceBadge source = sourceBadge(item);
         holder.source.setVisibility(source == null ? View.GONE : View.VISIBLE);
         if (source != null) {
@@ -213,7 +243,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         }
         holder.itemView.setContentDescription(
                 (item.isVideo() ? "Video, " : "Photo, ") + item.title +
-                        (source == null ? "" : ", source " + source.name)
+                        (source == null ? "" : ", source " + source.name) +
+                        (fresh ? ", new from Updates" : "")
         );
 
         if (item.imageUrl == null || item.imageUrl.isEmpty()) {
@@ -391,6 +422,29 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         return null;
     }
 
+    private boolean isHighlighted(NativeContentItem item) {
+        if (item == null || highlightedUrls.isEmpty()) return false;
+        String itemUrl = canonicalHighlightUrl(item.url);
+        String uploaderUrl = canonicalHighlightUrl(item.uploader);
+        for (String raw : highlightedUrls) {
+            String highlighted = canonicalHighlightUrl(raw);
+            if (highlighted.isEmpty()) continue;
+            if (highlighted.equals(itemUrl) || highlighted.equals(uploaderUrl)) return true;
+        }
+        return false;
+    }
+
+    private String canonicalHighlightUrl(String value) {
+        if (value == null) return "";
+        String clean = value.trim();
+        int fragment = clean.indexOf('#');
+        if (fragment >= 0) clean = clean.substring(0, fragment);
+        int query = clean.indexOf('?');
+        if (query >= 0) clean = clean.substring(0, query);
+        while (clean.endsWith("/")) clean = clean.substring(0, clean.length() - 1);
+        return clean.toLowerCase(Locale.US);
+    }
+
     private boolean containsIgnoreCase(String value, String query) {
         return value != null && value.toLowerCase(Locale.US).contains(query);
     }
@@ -413,6 +467,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final FrameLayout source;
         final ImageView sourceIcon;
         final TextView sourceVariant;
+        final ImageView fresh;
         final View play;
 
         Holder(
@@ -421,6 +476,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 FrameLayout source,
                 ImageView sourceIcon,
                 TextView sourceVariant,
+                ImageView fresh,
                 View play
         ) {
             super(itemView);
@@ -429,6 +485,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.source = source;
             this.sourceIcon = sourceIcon;
             this.sourceVariant = sourceVariant;
+            this.fresh = fresh;
             this.play = play;
         }
     }

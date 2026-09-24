@@ -157,6 +157,39 @@ public class NotificationCoordinatorFormattingTest {
         assertTrue(lines.isEmpty());
     }
 
+    @Test
+    public void onlyFapCreatorAlertsSplitByCreatorAndCarryFreshUrls() {
+        NotificationCoordinator.ExperienceAlert onlyFap =
+                NotificationCoordinator.consolidateAlerts(Arrays.asList(
+                        alert("fapello", "Fapello", media(
+                                "OnlyFap video #32318226",
+                                "https://fapello.com/video/emily-rinaudo/32318226/"
+                        )),
+                        alert("bunkr", "Bunkr", series(
+                                "Emily Rinaudo | EmjayyPlays",
+                                "https://bunkr.example/a/emily"
+                        )),
+                        alert("fapello", "Fapello", media(
+                                "OnlyFap video #32266421",
+                                "https://fapello.com/video/grace-bartlow/32266421/"
+                        ))
+                )).get(0);
+
+        NotificationCoordinator.CreatorAlertBatch batch =
+                NotificationCoordinator.groupOnlyFapCreators(onlyFap);
+
+        assertEquals(2, batch.creators.size());
+        NotificationCoordinator.CreatorAlert emily = batch.creators.get(0);
+        assertEquals("Emily Rinaudo", emily.name);
+        assertEquals(2, emily.items.size());
+        assertEquals(2, emily.freshUrls.size());
+        assertTrue(emily.freshUrls.contains(
+                "https://fapello.com/video/emily-rinaudo/32318226/"
+        ));
+        assertTrue(emily.freshUrls.contains("https://bunkr.example/a/emily"));
+        assertTrue(batch.fallback.items.isEmpty());
+    }
+
     private static NotificationCoordinator.SourceAlert alert(
             String key,
             String label,

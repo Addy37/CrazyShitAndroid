@@ -32,6 +32,10 @@ import androidx.work.OneTimeWorkRequest;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.model.GlideUrl;
+import com.bumptech.glide.load.model.LazyHeaders;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,6 +63,9 @@ final class NotificationCoordinator {
     private static final String KEY_EDUCATION_SHOWN = "notification_education_shown";
     private static final String KEY_PERMISSION_REQUESTED = "notification_permission_requested";
     private static final String KEY_LAST_UPDATE = "last_notified_update";
+    private static final String KEY_ACTIVE_ONLYFAP_CREATOR_IDS =
+            "active_onlyfap_creator_notification_ids";
+    private static final int MAX_ONLYFAP_CREATOR_NOTIFICATIONS = 6;
     static final String KEY_CHECK_STARTED = "content_check_started_at";
     static final String KEY_CHECK_FINISHED = "content_check_finished_at";
     static final String KEY_STATUS_CRAZYSHIT = "content_check_status_crazyshit";
@@ -143,16 +150,10 @@ final class NotificationCoordinator {
                 DateUtils.MINUTE_IN_MILLIS,
                 DateUtils.FORMAT_ABBREV_RELATIVE
         );
-        String crazyShit = state.getString(KEY_STATUS_CRAZYSHIT, "Not checked");
-        String efukt = state.getString(KEY_STATUS_EFUKT, "Not checked");
-        String kaotic = state.getString(KEY_STATUS_KAOTIC, "Not checked");
         String bunkr = state.getString(KEY_STATUS_BUNKR, "Not checked");
         String fapello = state.getString(KEY_STATUS_FAPELLO, "Not checked");
         String onlyHaven = state.getString(KEY_STATUS_ONLYHAVEN, "Not checked");
         return "Last checked " + relative + ". "
-                + "CrazyShit: " + crazyShit + " · "
-                + "EFukt: " + efukt + " · "
-                + "Kaotic: " + kaotic + " · "
                 + "Bunkr: " + bunkr + " · "
                 + "Fapello: " + fapello + " · "
                 + "OnlyHaven: " + onlyHaven + ".";
@@ -174,7 +175,7 @@ final class NotificationCoordinator {
         if (Build.VERSION.SDK_INT < 33 || canPost(activity)) return;
         SharedPreferences prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         if (prefs.getBoolean(KEY_EDUCATION_SHOWN, false)) return;
-        if (!alertsEnabled(prefs)) return;
+        if (!prefs.getBoolean(PREF_UPDATE_ALERTS, true)) return;
         prefs.edit().putBoolean(KEY_EDUCATION_SHOWN, true).apply();
 
         AlertDialog dialog = new AlertDialog.Builder(activity)
@@ -210,7 +211,7 @@ final class NotificationCoordinator {
         card.addView(icon, iconParams);
 
         android.widget.TextView title = new android.widget.TextView(activity);
-        title.setText("ZEROCHILL ALERTS");
+        title.setText("ZEROCHILL APP ALERTS");
         title.setTextColor(android.graphics.Color.WHITE);
         title.setTextSize(22f);
         title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
@@ -219,8 +220,8 @@ final class NotificationCoordinator {
 
         android.widget.TextView body = new android.widget.TextView(activity);
         body.setText(
-                "Fresh content from supported ZEROCHILL sources plus app updates. "
-                        + "Titles are shown by default and can be changed anytime in Settings."
+                "Allow Android notifications for important ZEROCHILL app updates. "
+                        + "Fresh source activity stays inside More → Updates."
         );
         body.setTextColor(android.graphics.Color.rgb(184, 190, 198));
         body.setTextSize(14f);
@@ -261,11 +262,11 @@ final class NotificationCoordinator {
 
         PendingIntent open = appPendingIntent(activity, 9301);
         Notification notification = baseBuilder(activity, CHANNEL_VIDEOS, "ZC")
-                .setContentTitle("ZEROCHILL alerts are ready")
-                .setContentText("Fresh content and app updates will appear here.")
+                .setContentTitle("ZEROCHILL notifications are ready")
+                .setContentText("App update alerts can appear here.")
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(
-                        "Fresh content from supported ZEROCHILL sources and app update alerts "
-                                + "will appear here."
+                        "App update alerts can appear as Android notifications. "
+                                + "Fresh content is collected inside More → Updates."
                 ))
                 .setContentIntent(open)
                 .addAction(R.drawable.ic_nav_home, "Open app", open)
@@ -275,46 +276,27 @@ final class NotificationCoordinator {
     }
 
     static void showNewVideoNotifications(Context context, List<SourceAlert> alerts) {
-        if (!canPost(context) || alerts == null || alerts.isEmpty()) return;
-        createChannels(context);
+        if (context == null || alerts == null || alerts.isEmpty()) return;
+        UpdateInboxStore.record(context, alerts);
+        clearContentNotifications(context);
+    }
 
-        List<ExperienceAlert> experiences = consolidateAlerts(alerts);
-        if (experiences.isEmpty()) return;
-
+    static void clearContentNotifications(Context context) {
+        if (context == null) return;
         NotificationManagerCompat manager = NotificationManagerCompat.from(context);
         manager.cancel(ID_GROUP);
         cancelLegacySourceNotifications(manager);
-
-        boolean grouped = experiences.size() > 1;
-        int total = 0;
-        for (ExperienceAlert alert : experiences) total += alert.items.size();
-
-        for (ExperienceAlert alert : experiences) {
-            NotificationCompat.Builder builder = experienceBuilder(context, alert);
-            if (grouped) {
-                builder.setGroup(GROUP_NEW_CONTENT)
-                        .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY);
+        SharedPreferences state = context.getSharedPreferences(STATE, Context.MODE_PRIVATE);
+        String previous = state.getString(KEY_ACTIVE_ONLYFAP_CREATOR_IDS, "");
+        if (previous != null && !previous.trim().isEmpty()) {
+            for (String raw : previous.split(",")) {
+                try {
+                    manager.cancel(Integer.parseInt(raw.trim()));
+                } catch (Exception ignored) {
+                }
             }
-            manager.notify(sourceNotificationId(alert.key), builder.build());
         }
-
-        if (grouped) {
-            PendingIntent open = appPendingIntent(context, 9302);
-            String text = total + (total == 1 ? " new item" : " new items") +
-                    " across " + experienceLabels(experiences);
-            Notification summary = baseBuilder(context, CHANNEL_VIDEOS, "ZC")
-                    .setContentTitle("Fresh ZEROCHILL content")
-                    .setContentText(text)
-                    .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
-                    .setContentIntent(open)
-                    .setGroup(GROUP_NEW_CONTENT)
-                    .setGroupSummary(true)
-                    .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
-                    .setNumber(total)
-                    .setAutoCancel(true)
-                    .build();
-            manager.notify(ID_GROUP, summary);
-        }
+        state.edit().remove(KEY_ACTIVE_ONLYFAP_CREATOR_IDS).apply();
     }
 
     static List<ExperienceAlert> consolidateAlerts(List<SourceAlert> alerts) {
@@ -424,6 +406,214 @@ final class NotificationCoordinator {
                 .edit()
                 .remove(KEY_LAST_UPDATE)
                 .apply();
+    }
+
+    static CreatorAlertBatch groupOnlyFapCreators(ExperienceAlert alert) {
+        CreatorAlertBatch batch = new CreatorAlertBatch();
+        if (alert == null || alert.items == null) return batch;
+
+        LinkedHashMap<String, CreatorAlert> grouped = new LinkedHashMap<>();
+        for (ExperienceItem wrapped : alert.items) {
+            String creator = onlyFapCreatorName(wrapped);
+            if (creator.isEmpty()) {
+                batch.fallback.items.add(wrapped);
+                continue;
+            }
+            String key = CreatorNameMatcher.normalized(creator);
+            CreatorAlert update = grouped.get(key);
+            if (update == null) {
+                update = new CreatorAlert(creator);
+                grouped.put(key, update);
+            }
+            update.items.add(wrapped);
+            if (wrapped.item != null && wrapped.item.url != null &&
+                    !wrapped.item.url.trim().isEmpty() &&
+                    !update.freshUrls.contains(wrapped.item.url.trim())) {
+                update.freshUrls.add(wrapped.item.url.trim());
+            }
+        }
+
+        for (CreatorAlert update : grouped.values()) {
+            if (batch.creators.size() < MAX_ONLYFAP_CREATOR_NOTIFICATIONS) {
+                batch.creators.add(update);
+            } else {
+                batch.fallback.items.addAll(update.items);
+            }
+        }
+        return batch;
+    }
+
+    private static void enrichCreatorAlert(Context context, CreatorAlert alert) {
+        if (context == null || alert == null || alert.name.trim().isEmpty()) return;
+        String wanted = CreatorNameMatcher.normalized(alert.name);
+
+        for (NativeContentItem candidate : CreatorCatalog.all(context)) {
+            if (!wanted.equals(CreatorNameMatcher.normalized(candidate.title)) &&
+                    !wanted.equals(CreatorNameMatcher.normalized(candidate.searchQuery))) continue;
+            applyCreatorMetadata(alert, candidate);
+            if (!alert.avatarUrl.isEmpty() && !alert.fapelloProfileUrl.isEmpty()) return;
+        }
+
+        for (ExperienceItem wrapped : alert.items) {
+            if (wrapped == null || wrapped.item == null) continue;
+            if ("onlyhaven".equals(wrapped.sourceKey) &&
+                    !wrapped.item.imageUrl.trim().isEmpty()) {
+                if (alert.avatarUrl.isEmpty()) {
+                    alert.avatarUrl = wrapped.item.imageUrl.trim();
+                    alert.avatarReferer = wrapped.item.url == null ? "" : wrapped.item.url.trim();
+                }
+            }
+        }
+
+        if (!alert.avatarUrl.isEmpty() && !alert.fapelloProfileUrl.isEmpty()) return;
+        try {
+            for (FapelloRepository.Model model :
+                    new FapelloRepository().searchConfirmedModels(context, alert.name, 4)) {
+                if (model == null ||
+                        !wanted.equals(CreatorNameMatcher.normalized(model.name))) continue;
+                NativeContentItem profile = CreatorCatalog.fromModel(model);
+                CreatorCatalog.remember(context, java.util.Collections.singletonList(profile));
+                applyCreatorMetadata(alert, profile);
+                break;
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void applyCreatorMetadata(CreatorAlert alert, NativeContentItem creator) {
+        if (alert == null || creator == null) return;
+        if (alert.avatarUrl.isEmpty() && creator.imageUrl != null &&
+                !creator.imageUrl.trim().isEmpty()) {
+            alert.avatarUrl = creator.imageUrl.trim();
+            alert.avatarReferer = creator.url == null ? "" : creator.url.trim();
+        }
+        if (alert.fapelloProfileUrl.isEmpty() &&
+                FapelloRepository.isModelUrl(creator.url)) {
+            alert.fapelloProfileUrl = creator.url.trim();
+        }
+    }
+
+    private static NotificationCompat.Builder creatorNotificationBuilder(
+            Context context,
+            CreatorAlert alert
+    ) {
+        int count = alert.items.size();
+        int videos = 0;
+        for (ExperienceItem wrapped : alert.items) {
+            if (wrapped != null && wrapped.item != null && wrapped.item.isVideo()) videos++;
+        }
+        String body = videos == count && count > 0
+                ? count + (count == 1 ? " new video on OnlyFap" : " new videos on OnlyFap")
+                : count == 1 ? "New content on OnlyFap" : count + " new items on OnlyFap";
+        String details = body + ". Tap to open " + alert.name + "'s creator gallery.";
+
+        PendingIntent open = creatorPendingIntent(context, alert);
+        Bitmap avatar = creatorAvatar(context, alert);
+        Notification publicVersion = new NotificationCompat.Builder(context, CHANNEL_VIDEOS)
+                .setSmallIcon(R.drawable.ic_notification_crazyshit)
+                .setContentTitle("New OnlyFap content")
+                .setContentText("Open ZEROCHILL to view it.")
+                .build();
+
+        return baseBuilder(context, CHANNEL_VIDEOS, "OF")
+                .setLargeIcon(avatar)
+                .setContentTitle(alert.name)
+                .setContentText(body)
+                .setSubText("OnlyFap")
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(details))
+                .setContentIntent(open)
+                .addAction(R.drawable.ic_nav_onlyfap, "Open gallery", open)
+                .setPublicVersion(publicVersion)
+                .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+                .setNumber(count)
+                .setAutoCancel(true);
+    }
+
+    static Intent creatorGalleryIntent(Context context, CreatorAlert alert) {
+        Intent intent = new Intent(context, NativeFeedBrowserActivity.class);
+        intent.putExtra(NativeFeedBrowserActivity.EXTRA_TITLE, alert.name);
+        intent.putExtra(
+                NativeFeedBrowserActivity.EXTRA_BASE_URL,
+                BunkrRepository.searchUrl(alert.name)
+        );
+        intent.putExtra(NativeFeedBrowserActivity.EXTRA_MEME_MODE, false);
+        intent.putExtra(NativeFeedBrowserActivity.EXTRA_SOURCE, NativeFeedBrowserActivity.SOURCE_BUNKR);
+        intent.putExtra(NativeFeedBrowserActivity.EXTRA_BUNKR_CREATOR_QUERY, alert.name);
+        if (FapelloRepository.isModelUrl(alert.fapelloProfileUrl)) {
+            intent.putExtra(
+                    NativeFeedBrowserActivity.EXTRA_FAPELLO_PROFILE_URL,
+                    alert.fapelloProfileUrl
+            );
+        }
+        intent.putStringArrayListExtra(
+                NativeFeedBrowserActivity.EXTRA_NOTIFICATION_FRESH_URLS,
+                new ArrayList<>(alert.freshUrls)
+        );
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        return intent;
+    }
+
+    private static PendingIntent creatorPendingIntent(Context context, CreatorAlert alert) {
+        int id = creatorNotificationId(alert.name);
+        return PendingIntent.getActivity(
+                context,
+                id + 10_000,
+                creatorGalleryIntent(context, alert),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+    }
+
+    private static Bitmap creatorAvatar(Context context, CreatorAlert alert) {
+        if (alert == null || alert.avatarUrl.isEmpty()) return brandIcon(context, "OF");
+        try {
+            LazyHeaders.Builder headers = new LazyHeaders.Builder();
+            if (!alert.avatarReferer.isEmpty()) {
+                headers.addHeader("Referer", alert.avatarReferer);
+            }
+            GlideUrl model = new GlideUrl(alert.avatarUrl, headers.build());
+            int size = Math.max(128, Math.round(
+                    72f * context.getResources().getDisplayMetrics().density
+            ));
+            return Glide.with(context.getApplicationContext())
+                    .asBitmap()
+                    .load(model)
+                    .circleCrop()
+                    .submit(size, size)
+                    .get();
+        } catch (Exception ignored) {
+            return brandIcon(context, "OF");
+        }
+    }
+
+    private static int creatorNotificationId(String creator) {
+        String key = "onlyfap:" + CreatorNameMatcher.normalized(creator);
+        return 5200 + Math.abs(key.hashCode() % 3000);
+    }
+
+    private static void replaceActiveCreatorNotifications(
+            Context context,
+            NotificationManagerCompat manager,
+            List<Integer> activeIds
+    ) {
+        SharedPreferences state = context.getSharedPreferences(STATE, Context.MODE_PRIVATE);
+        String previous = state.getString(KEY_ACTIVE_ONLYFAP_CREATOR_IDS, "");
+        if (previous != null && !previous.trim().isEmpty()) {
+            for (String raw : previous.split(",")) {
+                try {
+                    int id = Integer.parseInt(raw.trim());
+                    if (!activeIds.contains(id)) manager.cancel(id);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        StringBuilder encoded = new StringBuilder();
+        for (Integer id : activeIds) {
+            if (id == null) continue;
+            if (encoded.length() > 0) encoded.append(',');
+            encoded.append(id);
+        }
+        state.edit().putString(KEY_ACTIVE_ONLYFAP_CREATOR_IDS, encoded.toString()).apply();
     }
 
     private static NotificationCompat.Builder experienceBuilder(
@@ -861,14 +1051,32 @@ final class NotificationCoordinator {
     }
 
     private static boolean alertsEnabled(SharedPreferences prefs) {
-        boolean content = prefs.getBoolean(PREF_NEW_VIDEO_ALERTS, true);
-        return content || prefs.getBoolean(PREF_UPDATE_ALERTS, true);
+        return prefs.getBoolean(PREF_NEW_VIDEO_ALERTS, true)
+                || prefs.getBoolean(PREF_UPDATE_ALERTS, true);
     }
 
     private static int normalizedHours(int value) {
         if (value >= 6) return 6;
         if (value >= 3) return 3;
         return 1;
+    }
+
+    static final class CreatorAlert {
+        final String name;
+        final List<ExperienceItem> items = new ArrayList<>();
+        final ArrayList<String> freshUrls = new ArrayList<>();
+        String avatarUrl = "";
+        String avatarReferer = "";
+        String fapelloProfileUrl = "";
+
+        CreatorAlert(String name) {
+            this.name = name == null ? "" : name.trim();
+        }
+    }
+
+    static final class CreatorAlertBatch {
+        final List<CreatorAlert> creators = new ArrayList<>();
+        final ExperienceAlert fallback = new ExperienceAlert("onlyfap", "OnlyFap");
     }
 
     static final class ExperienceItem {

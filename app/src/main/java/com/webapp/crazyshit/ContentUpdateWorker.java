@@ -31,10 +31,6 @@ import java.util.regex.Pattern;
 public final class ContentUpdateWorker extends Worker {
     private static final String APP_PREFS = "app_prefs";
     private static final String STATE_PREFS = "notification_state";
-    private static final String STABLE_API =
-            "https://api.github.com/repos/Addy37/CrazyShitAndroid/releases/latest";
-    private static final String RELEASES_API =
-            "https://api.github.com/repos/Addy37/CrazyShitAndroid/releases?per_page=100";
     private static final Pattern NUMBER = Pattern.compile("\\d+");
     private static final int MAX_SEEN = 160;
     private static final int MAX_REASONABLE_NEW_ITEMS = 20;
@@ -60,21 +56,28 @@ public final class ContentUpdateWorker extends Worker {
                 .apply();
 
         if (prefs.getBoolean(NotificationCoordinator.PREF_NEW_VIDEO_ALERTS, true)) {
-            for (SourceCheck check : sourceChecks(context)) {
-                attempted++;
-                CheckResult result = runSourceCheck(context, state, check, alerts);
-                statuses.put(check.key, result.status);
-                if (result.success) succeeded++;
+            if (CreatorFavoriteStore.names(context).isEmpty()) {
+                for (SourceCheck check : sourceChecks(context)) {
+                    statuses.put(check.key, "No favorite creators");
+                }
+            } else {
+                for (SourceCheck check : sourceChecks(context)) {
+                    attempted++;
+                    CheckResult result = runSourceCheck(context, state, check, alerts);
+                    statuses.put(check.key, result.status);
+                    if (result.success) succeeded++;
+                }
             }
         } else {
             for (SourceCheck check : sourceChecks(context)) {
-                statuses.put(check.key, "Content alerts off");
+                statuses.put(check.key, "Favorite creator tracking off");
             }
         }
 
         if (!alerts.isEmpty()) {
-            NotificationCoordinator.showNewVideoNotifications(context, alerts);
+            UpdateInboxStore.record(context, alerts);
         }
+        NotificationCoordinator.clearContentNotifications(context);
 
         String updateStatus = prefs.getBoolean(NotificationCoordinator.PREF_UPDATE_ALERTS, true)
                 ? "Waiting to check"
@@ -94,15 +97,15 @@ public final class ContentUpdateWorker extends Worker {
                 .putLong(NotificationCoordinator.KEY_CHECK_FINISHED, System.currentTimeMillis())
                 .putString(
                         NotificationCoordinator.KEY_STATUS_CRAZYSHIT,
-                        status(statuses, "crazyshit")
+                        "Not tracked"
                 )
                 .putString(
                         NotificationCoordinator.KEY_STATUS_EFUKT,
-                        status(statuses, "efukt")
+                        "Not tracked"
                 )
                 .putString(
                         NotificationCoordinator.KEY_STATUS_KAOTIC,
-                        status(statuses, "kaotic")
+                        "Not tracked"
                 )
                 .putString(
                         NotificationCoordinator.KEY_STATUS_BUNKR,
@@ -132,26 +135,6 @@ public final class ContentUpdateWorker extends Worker {
 
     private List<SourceCheck> sourceChecks(Context context) {
         ArrayList<SourceCheck> checks = new ArrayList<>();
-        checks.add(new SourceCheck(
-                "crazyshit",
-                "CrazyShit",
-                () -> new CrazyShitRepository()
-                        .fetchFeed(context, CrazyShitRepository.HOME, 1)
-        ));
-        checks.add(new SourceCheck(
-                "efukt",
-                "EFukt",
-                () -> new EfuktRepository().fetchLatest(context)
-        ));
-        checks.add(new SourceCheck(
-                "kaotic",
-                "Kaotic",
-                () -> new WebVideoSourceRepository().fetchFeed(
-                        context,
-                        WebVideoSourceRepository.Source.KAOTIC,
-                        1
-                )
-        ));
         checks.add(new SourceCheck(
                 "bunkr",
                 "Bunkr",
@@ -363,6 +346,12 @@ public final class ContentUpdateWorker extends Worker {
         if (release == null) return;
         String current = currentVersion(context);
         if (compareVersions(release.version, current) > 0) {
+            UpdateInboxStore.recordAppUpdate(
+                    context,
+                    release.version,
+                    release.title,
+                    release.beta
+            );
             NotificationCoordinator.showUpdateNotification(
                     context,
                     release.version,
@@ -375,13 +364,13 @@ public final class ContentUpdateWorker extends Worker {
     }
 
     private Release fetchStable() throws Exception {
-        JSONObject release = new JSONObject(httpGet(STABLE_API));
+        JSONObject release = new JSONObject(httpGetFirst(ZeroChillReleaseEndpoints.stableApis()));
         if (release.optBoolean("draft", false)) return null;
         return parseRelease(release, false);
     }
 
     private Release fetchLatestBeta() throws Exception {
-        JSONArray releases = new JSONArray(httpGet(RELEASES_API));
+        JSONArray releases = new JSONArray(httpGetFirst(ZeroChillReleaseEndpoints.releasesApis()));
         Release latest = null;
         for (int i = 0; i < releases.length(); i++) {
             JSONObject release = releases.optJSONObject(i);
@@ -417,6 +406,19 @@ public final class ContentUpdateWorker extends Worker {
         if (!hasMatchingApk) return null;
         String title = release.optString("name", version);
         return new Release(version, title, beta);
+    }
+
+    private String httpGetFirst(List<String> addresses) throws Exception {
+        Exception lastError = null;
+        for (String address : addresses) {
+            try {
+                return httpGet(address);
+            } catch (Exception error) {
+                lastError = error;
+            }
+        }
+        if (lastError != null) throw lastError;
+        throw new Exception("No update endpoint was available");
     }
 
     private String httpGet(String address) throws Exception {
