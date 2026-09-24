@@ -13,8 +13,8 @@ public final class ShitTokPreloadPolicyTest {
 
         assertTrue(ChaosFeedView.shouldPreparePlayer(10, selected));
         assertTrue(ChaosFeedView.shouldPreparePlayer(11, selected));
+        assertTrue(ChaosFeedView.shouldPreparePlayer(12, selected));
         assertFalse(ChaosFeedView.shouldPreparePlayer(9, selected));
-        assertFalse(ChaosFeedView.shouldPreparePlayer(12, selected));
         assertFalse(ChaosFeedView.shouldPreparePlayer(13, selected));
     }
 
