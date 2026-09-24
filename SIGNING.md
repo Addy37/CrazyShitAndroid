@@ -25,7 +25,7 @@ The actual key and secret values must never be committed to this repository.
 4. Run the workflow and enter the release version, such as `1.0.0`.
 5. The workflow builds, signs, verifies, hashes, and publishes the APK to GitHub Releases.
 
-The release page uses `ZeroChill.apk` as the primary public asset. It also publishes `ZeroFilter.apk` and `CrazyShit.apk` compatibility aliases so historical fixed download URLs keep working. Upgrade checks accept all three names.
+The release page publishes one public install asset, `ZeroChill.apk`, plus `SHA256SUMS.txt`. Older versioned releases may retain legacy APK aliases. Upgrade verification still accepts the old names when checking a previous stable release.
 
 ## Key loss
 
