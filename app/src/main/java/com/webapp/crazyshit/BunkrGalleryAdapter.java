@@ -29,7 +29,9 @@ import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.target.Target;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,6 +50,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
     private final Map<String, Float> aspectRatios = new HashMap<>();
+    private final LinkedHashSet<String> highlightedUrls = new LinkedHashSet<>();
     private final Context context;
     private final Listener listener;
     private final boolean adaptiveAspectRatios;
@@ -87,6 +90,17 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             if (preloadAhead) preloadRange(start, Math.min(items.size(), start + (adaptiveAspectRatios ? 6 : 12)));
         }
     }
+
+    void setHighlightedUrls(Collection<String> urls) {
+        highlightedUrls.clear();
+        if (urls != null) {
+            for (String url : urls) {
+                if (url != null && !url.trim().isEmpty()) highlightedUrls.add(url.trim());
+            }
+        }
+        if (!items.isEmpty()) notifyDataSetChanged();
+    }
+
 
     void preloadVisible(int first, int last) {
         int from = Math.max(0, first);
@@ -172,6 +186,27 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         variantParams.gravity = Gravity.BOTTOM | Gravity.END;
         source.addView(sourceVariant, variantParams);
 
+        TextView fresh = new TextView(parent.getContext());
+        fresh.setText("NEW");
+        fresh.setTextColor(Color.BLACK);
+        fresh.setTextSize(10);
+        fresh.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        fresh.setGravity(Gravity.CENTER);
+        fresh.setPadding(dp(parent, 7), dp(parent, 3), dp(parent, 7), dp(parent, 3));
+        GradientDrawable freshBackground = new GradientDrawable();
+        freshBackground.setCornerRadius(dp(parent, 10));
+        freshBackground.setColor(UiPalette.PRIMARY);
+        fresh.setBackground(freshBackground);
+        fresh.setVisibility(View.GONE);
+        fresh.setElevation(dp(parent, 6));
+        FrameLayout.LayoutParams freshParams = new FrameLayout.LayoutParams(
+                -2,
+                dp(parent, 24)
+        );
+        freshParams.gravity = Gravity.TOP | Gravity.END;
+        freshParams.setMargins(0, dp(parent, 6), dp(parent, 6), 0);
+        tile.addView(fresh, freshParams);
+
         FrameLayout play = new FrameLayout(parent.getContext());
         GradientDrawable playBackground = new GradientDrawable();
         playBackground.setCornerRadius(dp(parent, 8));
@@ -192,7 +227,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         playIcon.setPadding(dp(parent, 11), dp(parent, 11), dp(parent, 9), dp(parent, 11));
         play.addView(playIcon, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(tile, image, source, sourceIcon, sourceVariant, play);
+        return new Holder(tile, image, source, sourceIcon, sourceVariant, fresh, play);
     }
 
     @Override
@@ -202,6 +237,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ? aspectRatios.getOrDefault(item.url, 1f)
                 : 1f);
         holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
+        boolean fresh = highlightedUrls.contains(item.url);
+        holder.fresh.setVisibility(fresh ? View.VISIBLE : View.GONE);
         SourceBadge source = sourceBadge(item);
         holder.source.setVisibility(source == null ? View.GONE : View.VISIBLE);
         if (source != null) {
@@ -213,7 +250,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         }
         holder.itemView.setContentDescription(
                 (item.isVideo() ? "Video, " : "Photo, ") + item.title +
-                        (source == null ? "" : ", source " + source.name)
+                        (source == null ? "" : ", source " + source.name) +
+                        (fresh ? ", new from notification" : "")
         );
 
         if (item.imageUrl == null || item.imageUrl.isEmpty()) {
@@ -413,6 +451,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final FrameLayout source;
         final ImageView sourceIcon;
         final TextView sourceVariant;
+        final TextView fresh;
         final View play;
 
         Holder(
@@ -421,6 +460,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 FrameLayout source,
                 ImageView sourceIcon,
                 TextView sourceVariant,
+                TextView fresh,
                 View play
         ) {
             super(itemView);
@@ -429,6 +469,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.source = source;
             this.sourceIcon = sourceIcon;
             this.sourceVariant = sourceVariant;
+            this.fresh = fresh;
             this.play = play;
         }
     }
