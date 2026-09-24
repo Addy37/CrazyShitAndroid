@@ -34,7 +34,7 @@ final class ChaosSourceMixer {
     private static final int BATCH_BUNKR = 4;
     private static final int BATCH_FAPELLO = 5;
     private static final int BATCH_ONLY_HAVEN = 6;
-    private static final int SOURCES_PER_BATCH = 6;
+    private static final int SOURCES_PER_BATCH = 3;
     private static final int REGULAR_ITEMS_PER_SOURCE = 4;
     private static final int SHIT_SHOW_PER_BATCH = 24;
     private static final int EFUKT_ITEMS_PER_BATCH = 12;
@@ -266,14 +266,18 @@ final class ChaosSourceMixer {
     private void ensureEfuktCatalog(Context context) {
         if (efuktCatalogAttempted) return;
         efuktCatalogAttempted = true;
+        boolean loaded = false;
         try {
             for (NativeContentItem series : efukt.fetchSeries(context)) {
+                if (Thread.currentThread().isInterrupted()) break;
                 if (series == null || series.url == null || series.url.isEmpty()) continue;
                 if (!NativeContentItem.KIND_SERIES.equals(series.kind)) continue;
                 efuktSeries.add(series);
             }
+            loaded = !Thread.currentThread().isInterrupted();
         } catch (Exception ignored) {
         }
+        if (!loaded && efuktSeries.isEmpty()) efuktCatalogAttempted = false;
         refillEfuktDeck();
     }
 
@@ -402,15 +406,19 @@ final class ChaosSourceMixer {
     private void ensureOnlyHavenCatalog(Context context) {
         if (onlyHavenCatalogAttempted) return;
         onlyHavenCatalogAttempted = true;
+        boolean loaded = false;
         try {
             for (OnlyHavenRepository.Creator creator :
                     onlyHaven.fetchTrendingCreators(context, ONLY_HAVEN_TRENDING_CREATORS)) {
+                if (Thread.currentThread().isInterrupted()) break;
                 if (creator == null || creator.url == null || creator.url.isEmpty()) continue;
                 if (creator.isKnownEmpty()) continue;
                 onlyHavenCreators.add(creator);
             }
+            loaded = !Thread.currentThread().isInterrupted();
         } catch (Exception ignored) {
         }
+        if (!loaded && onlyHavenCreators.isEmpty()) onlyHavenCatalogAttempted = false;
         refillOnlyHavenDeck();
     }
 
@@ -425,14 +433,18 @@ final class ChaosSourceMixer {
     private void ensureBunkrCatalog(Context context) {
         if (bunkrCatalogAttempted) return;
         bunkrCatalogAttempted = true;
+        boolean loaded = false;
         try {
             for (NativeContentItem album : bunkr.fetchAlbums(context, 1)) {
+                if (Thread.currentThread().isInterrupted()) break;
                 if (album == null || album.url == null || album.url.isEmpty()) continue;
                 if (!NativeContentItem.KIND_SERIES.equals(album.kind)) continue;
                 bunkrAlbums.add(album);
             }
+            loaded = !Thread.currentThread().isInterrupted();
         } catch (Exception ignored) {
         }
+        if (!loaded && bunkrAlbums.isEmpty()) bunkrCatalogAttempted = false;
         refillBunkrDeck();
     }
 
