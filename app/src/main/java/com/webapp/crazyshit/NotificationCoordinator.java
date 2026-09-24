@@ -325,6 +325,7 @@ final class NotificationCoordinator {
         }
 
         if (onlyFap != null) {
+            manager.cancel(sourceNotificationId("onlyfap"));
             if (showTitles && !creatorBatch.creators.isEmpty()) {
                 for (CreatorAlert creator : creatorBatch.creators) {
                     enrichCreatorAlert(context, creator);
