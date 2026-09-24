@@ -34,10 +34,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class AppUpdater {
-    private static final String STABLE_API =
-            "https://api.github.com/repos/Addy37/CrazyShitAndroid/releases/latest";
-    private static final String RELEASES_API =
-            "https://api.github.com/repos/Addy37/CrazyShitAndroid/releases?per_page=100";
     private static final long CHECK_INTERVAL_MS = 4L * 60L * 60L * 1000L;
     private static final Pattern NUMBER = Pattern.compile("\\d+");
 
@@ -129,13 +125,13 @@ final class AppUpdater {
     }
 
     private ReleaseInfo fetchStable() throws Exception {
-        JSONObject release = new JSONObject(httpGet(STABLE_API));
+        JSONObject release = new JSONObject(httpGetFirst(ZeroChillReleaseEndpoints.stableApis()));
         if (release.optBoolean("draft", false)) return null;
         return parseRelease(release, false);
     }
 
     private ReleaseInfo fetchLatestBeta() throws Exception {
-        JSONArray releases = new JSONArray(httpGet(RELEASES_API));
+        JSONArray releases = new JSONArray(httpGetFirst(ZeroChillReleaseEndpoints.releasesApis()));
         ReleaseInfo latest = null;
         for (int i = 0; i < releases.length(); i++) {
             JSONObject release = releases.optJSONObject(i);
@@ -178,6 +174,19 @@ final class AppUpdater {
         String title = release.optString("name", tag);
         String page = release.optString("html_url", "");
         return new ReleaseInfo(tag, title, apkName, apkUrl, page, beta);
+    }
+
+    private String httpGetFirst(List<String> addresses) throws Exception {
+        Exception lastError = null;
+        for (String address : addresses) {
+            try {
+                return httpGet(address);
+            } catch (Exception error) {
+                lastError = error;
+            }
+        }
+        if (lastError != null) throw lastError;
+        throw new Exception("No update endpoint was available");
     }
 
     private String httpGet(String address) throws Exception {
