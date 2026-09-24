@@ -25,16 +25,16 @@ import java.util.List;
 /** In-app activity inbox for source updates. */
 public final class UpdateInboxActivity extends Activity {
     private static final String FILTER_ALL = "";
-    private static final String FILTER_ONLYFAP = UpdateInboxStore.CATEGORY_ONLYFAP;
-    private static final String FILTER_VIDEOS = UpdateInboxStore.CATEGORY_VIDEOS;
+    private static final String FILTER_CREATORS = UpdateInboxStore.CATEGORY_ONLYFAP;
+    private static final String FILTER_APP = UpdateInboxStore.CATEGORY_APP;
 
     private RecyclerView recycler;
     private UpdateAdapter adapter;
     private TextView count;
     private TextView empty;
     private TextView allFilter;
-    private TextView onlyFapFilter;
-    private TextView videosFilter;
+    private TextView creatorsFilter;
+    private TextView appFilter;
     private TextView markAll;
     private String activeFilter = FILTER_ALL;
 
@@ -94,11 +94,11 @@ public final class UpdateInboxActivity extends Activity {
         filters.setPadding(dp(12), dp(4), dp(12), dp(8));
 
         allFilter = filter("All", FILTER_ALL);
-        onlyFapFilter = filter("OnlyFap", FILTER_ONLYFAP);
-        videosFilter = filter("Videos", FILTER_VIDEOS);
+        creatorsFilter = filter("Creators", FILTER_CREATORS);
+        appFilter = filter("App", FILTER_APP);
         filters.addView(allFilter, filterParams(0));
-        filters.addView(onlyFapFilter, filterParams(1));
-        filters.addView(videosFilter, filterParams(2));
+        filters.addView(creatorsFilter, filterParams(1));
+        filters.addView(appFilter, filterParams(2));
         root.addView(filters);
 
         empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
@@ -146,12 +146,12 @@ public final class UpdateInboxActivity extends Activity {
 
         empty.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
         empty.setText(UpdateInboxStore.all(this).isEmpty()
-                ? "No updates yet\n\nZEROCHILL will collect fresh source activity here."
+                ? "No updates yet\n\nZEROCHILL will collect new content from your favorite creators here."
                 : "No updates in this section.");
 
         styleFilter(allFilter, FILTER_ALL.equals(activeFilter));
-        styleFilter(onlyFapFilter, FILTER_ONLYFAP.equals(activeFilter));
-        styleFilter(videosFilter, FILTER_VIDEOS.equals(activeFilter));
+        styleFilter(creatorsFilter, FILTER_CREATORS.equals(activeFilter));
+        styleFilter(appFilter, FILTER_APP.equals(activeFilter));
     }
 
     private void styleFilter(TextView view, boolean selected) {
@@ -277,9 +277,11 @@ public final class UpdateInboxActivity extends Activity {
         public void onBindViewHolder(Holder holder, int position) {
             UpdateInboxStore.Entry entry = items.get(position);
             holder.title.setText(entry.title);
-            holder.subtitle.setText(
-                    entry.subtitle + (entry.sourceLabel.isEmpty() ? "" : "  •  " + entry.sourceLabel)
-            );
+            String detail = entry.subtitle + (entry.sourceLabel.isEmpty() ? "" : "  •  " + entry.sourceLabel);
+            if (UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)) {
+                detail += "  •  Tap to see marked new items";
+            }
+            holder.subtitle.setText(detail);
             holder.time.setText(relativeTime(entry.timestamp));
             holder.unread.setVisibility(entry.read ? View.INVISIBLE : View.VISIBLE);
             holder.itemView.setAlpha(entry.read ? 0.76f : 1f);
@@ -292,9 +294,7 @@ public final class UpdateInboxActivity extends Activity {
             Glide.with(holder.avatar).clear(holder.avatar);
             int fallback = UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)
                     ? R.drawable.ic_launcher_legacy
-                    : UpdateInboxStore.CATEGORY_APP.equals(entry.category)
-                            ? R.drawable.ic_more_update
-                            : R.drawable.ic_nav_chaos;
+                    : R.drawable.ic_more_update;
             holder.avatar.setImageResource(fallback);
 
             String imageUrl = entry.avatarUrl;
