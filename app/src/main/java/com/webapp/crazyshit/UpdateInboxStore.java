@@ -34,8 +34,10 @@ final class UpdateInboxStore {
             ArrayList<Entry> incoming = buildEntries(context.getApplicationContext(), alerts);
             if (incoming.isEmpty()) return;
 
+            ArrayList<Entry> existing = readLocked(context);
+            pruneNonFavoriteContent(context, existing);
             ArrayList<Entry> combined = new ArrayList<>(incoming);
-            combined.addAll(readLocked(context));
+            combined.addAll(existing);
             dedupeAndTrim(combined);
             writeLocked(context, combined);
         }
@@ -64,6 +66,7 @@ final class UpdateInboxStore {
             entry.id = entry.fingerprint + ":" + entry.timestamp;
 
             ArrayList<Entry> existing = readLocked(context);
+            pruneNonFavoriteContent(context, existing);
             for (Entry current : existing) {
                 if (entry.fingerprint.equals(current.fingerprint)) return;
             }
