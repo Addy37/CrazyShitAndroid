@@ -711,7 +711,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.recycler.setItemAnimator(null);
         page.refresh.addView(page.recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
 
-        page.progress = new ZeroChillLoadingView(activity, null);
+        boolean brandedInitialLoad = index == PAGE_HOME || index == PAGE_SERIES;
+        page.progress = new ZeroChillLoadingView(activity, null, brandedInitialLoad);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(72), dp(72));
         progressParams.gravity = Gravity.CENTER;
         page.root.addView(page.progress, progressParams);
@@ -810,7 +811,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                                     activity.runOnUiThread(() -> {
                                         if (generation != page.generation || activity.isFinishing()) return;
                                         page.feedAdapter.replace(items);
-                                        page.progress.setVisibility(View.GONE);
+                                        finishInitialProgress(page, !items.isEmpty());
                                         page.refresh.setRefreshing(false);
                                         page.empty.setVisibility(View.GONE);
                                     });
@@ -822,7 +823,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 activity.runOnUiThread(() -> {
                     if (generation != page.generation) return;
                     page.loading = false;
-                    page.progress.setVisibility(View.GONE);
+                    finishInitialProgress(page, !appendRequest && !result.isEmpty());
                     page.refresh.setRefreshing(false);
                     page.empty.setVisibility(View.GONE);
 
@@ -880,6 +881,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 });
             }
         });
+    }
+
+    private void finishInitialProgress(Page page, boolean animate) {
+        if (page == null || page.progress == null) return;
+        if (animate && page.progress instanceof ZeroChillLoadingView) {
+            ((ZeroChillLoadingView) page.progress).finish();
+        } else {
+            page.progress.setVisibility(View.GONE);
+        }
     }
 
     private void showPopularCreatorProgress(

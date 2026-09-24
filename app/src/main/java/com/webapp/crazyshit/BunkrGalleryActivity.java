@@ -93,7 +93,8 @@ public final class BunkrGalleryActivity extends Activity {
     private TextView downloadAction;
     private TextView itemTitleView;
     private TextView itemMetaView;
-    private ProgressBar initialLoading;
+    private ZeroChillLoadingView initialLoading;
+    private ProgressBar loadMoreLoading;
     private boolean chromeVisible = true;
     private boolean restoreChromeAfterLandscape;
     private boolean landscapeFullscreen;
@@ -163,6 +164,7 @@ public final class BunkrGalleryActivity extends Activity {
         buildUi();
         applyViewerOrientation(getResources().getConfiguration().orientation);
         if (snapshot == null || snapshot.items.isEmpty()) {
+            initialLoading.setVisibility(View.VISIBLE);
             loadInitialPage();
         } else {
             showSnapshot(snapshot);
@@ -271,10 +273,19 @@ public final class BunkrGalleryActivity extends Activity {
         bottomParams.gravity = Gravity.BOTTOM;
         root.addView(bottomBar, bottomParams);
 
-        initialLoading = new ProgressBar(this);
-        FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(dp(52), dp(52));
+        initialLoading = new ZeroChillLoadingView(this, "Loading gallery...", true);
+        FrameLayout.LayoutParams loadingParams =
+                new FrameLayout.LayoutParams(dp(160), dp(132));
         loadingParams.gravity = Gravity.CENTER;
         root.addView(initialLoading, loadingParams);
+        initialLoading.setVisibility(View.GONE);
+
+        loadMoreLoading = new ProgressBar(this);
+        loadMoreLoading.setVisibility(View.GONE);
+        FrameLayout.LayoutParams loadMoreParams =
+                new FrameLayout.LayoutParams(dp(40), dp(40));
+        loadMoreParams.gravity = Gravity.CENTER;
+        root.addView(loadMoreLoading, loadMoreParams);
 
         setContentView(root);
 
@@ -293,8 +304,11 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void showSnapshot(BunkrGallerySessionStore.Snapshot snapshot) {
-        initialLoading.setVisibility(View.GONE);
+        boolean finishInitialLoader = initialLoading.getVisibility() == View.VISIBLE
+                && snapshot != null && !snapshot.items.isEmpty();
         adapter.replace(filterMedia(snapshot.items), snapshot.resolvedUrls);
+        if (finishInitialLoader && adapter.getItemCount() > 0) initialLoading.finish();
+        else initialLoading.setVisibility(View.GONE);
         currentPage = snapshot.currentPage;
         endReached = snapshot.endReached;
         if (adapter.getItemCount() == 0) {
@@ -403,10 +417,14 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing()) return;
                     loadingMore = false;
-                    initialLoading.setVisibility(View.GONE);
+                    boolean finishingInitialLoad = initialLoading.getVisibility() == View.VISIBLE
+                            && adapter.getItemCount() == 0;
+                    loadMoreLoading.setVisibility(View.GONE);
                     BunkrGallerySessionStore.Snapshot currentCreator = isCreatorGallery()
                             ? BunkrGallerySessionStore.snapshot(sessionId) : null;
                     int added = adapter.append(currentCreator == null ? visibleResult : filterMedia(currentCreator.items));
+                    if (finishingInitialLoad && added > 0) initialLoading.finish();
+                    else if (!finishingInitialLoad) initialLoading.setVisibility(View.GONE);
                     if (currentCreator != null) {
                         currentPage = currentCreator.currentPage;
                         endReached = currentCreator.endReached;
@@ -425,7 +443,11 @@ public final class BunkrGalleryActivity extends Activity {
                     preloadNeighbors(pager.getCurrentItem());
                     if (fapelloFailure != null) showFapelloFailure(fapelloFailure);
                     if (isCreatorGallery() && added == 0 && !endReached) {
-                        initialLoading.setVisibility(View.VISIBLE);
+                        if (adapter.getItemCount() == 0) {
+                            initialLoading.setVisibility(View.VISIBLE);
+                        } else {
+                            loadMoreLoading.setVisibility(View.VISIBLE);
+                        }
                         pager.post(this::loadMore);
                     }
                 });
@@ -433,6 +455,7 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     loadingMore = false;
                     initialLoading.setVisibility(View.GONE);
+                    loadMoreLoading.setVisibility(View.GONE);
                     if (adapter.getItemCount() == 0) {
                         Toast.makeText(
                                 this,

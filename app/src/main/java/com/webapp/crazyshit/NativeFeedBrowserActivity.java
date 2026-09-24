@@ -297,7 +297,8 @@ public final class NativeFeedBrowserActivity extends Activity {
             gallerySkeleton = new CreatorGallerySkeleton(this);
             body.addView(gallerySkeleton, new FrameLayout.LayoutParams(-1, -1));
         }
-        progress = isCreatorGallery() ? new ZeroChillLoadingView(this, "Loading gallery...")
+        progress = isCreatorGallery()
+                ? new ZeroChillLoadingView(this, "Loading gallery...", true)
                 : new ZeroChillLoadingView(this, null);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
                 dp(isCreatorGallery() ? 160 : 72), dp(isCreatorGallery() ? 132 : 72));
