@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -25,6 +26,14 @@ import java.util.concurrent.TimeUnit;
 final class ChaosSourceMixer {
     private static final int MAX_SOURCE_PAGE = 8;
     private static final ExecutorService CRAZY_IO = Executors.newFixedThreadPool(2);
+    private static final ExecutorService SOURCE_IO = Executors.newFixedThreadPool(6);
+    private static final long MIX_BATCH_BUDGET_MS = 2_200L;
+    private static final int BATCH_REGULAR = 1;
+    private static final int BATCH_EFUKT = 2;
+    private static final int BATCH_KAOTIC = 3;
+    private static final int BATCH_BUNKR = 4;
+    private static final int BATCH_FAPELLO = 5;
+    private static final int BATCH_ONLY_HAVEN = 6;
     private static final int SOURCES_PER_BATCH = 6;
     private static final int REGULAR_ITEMS_PER_SOURCE = 4;
     private static final int SHIT_SHOW_PER_BATCH = 24;
@@ -70,9 +79,7 @@ final class ChaosSourceMixer {
 
     List<NativeContentItem> loadRandomBatch(Context context) {
         // Cold-start optimization: warm Shit Show immediately, but let the first Chaos request
-        // return a small regular-video queue instead of waiting for the full catalog + Shit Show
-        // mix. The splash normally seeds this queue first, and ChaosFeedView asks for the full
-        // mixed pool immediately afterward because the starter is still under 14 items.
+        // return a small starter queue instead of waiting for the full mixed catalog.
         shitShow.prewarm(context);
         if (starterPending) {
             starterPending = false;
@@ -84,63 +91,113 @@ final class ChaosSourceMixer {
             if (!starter.isEmpty()) return starter;
         }
 
-        // Pull video from every active video-capable ZeroChill source. This is ShitTok's own
-        // randomized pool; it does not reroute or remove items from Home, Shows, or OnlyFap.
-        // Every source degrades cleanly when unavailable.
-        ensureCatalog(context);
+        // Full refills race independent sources together. A slow or dead provider gets the same
+        // bounded batch window as every other provider instead of serially delaying ShitTok.
+        ExecutorCompletionService<SourceBatch> completions =
+                new ExecutorCompletionService<>(SOURCE_IO);
+        ArrayList<Future<SourceBatch>> work = new ArrayList<>();
+        work.add(completions.submit(() -> new SourceBatch(
+                BATCH_REGULAR, loadRegularBatch(context))));
+        work.add(completions.submit(() -> new SourceBatch(
+                BATCH_EFUKT, loadEfuktBatch(context))));
+        work.add(completions.submit(() -> new SourceBatch(
+                BATCH_KAOTIC, loadKaoticBatch(context))));
+        work.add(completions.submit(() -> new SourceBatch(
+                BATCH_BUNKR, loadBunkrBatch(context))));
+        work.add(completions.submit(() -> new SourceBatch(
+                BATCH_FAPELLO, loadFapelloBatch(context))));
+        work.add(completions.submit(() -> new SourceBatch(
+                BATCH_ONLY_HAVEN, loadOnlyHavenBatch(context))));
 
-        LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
-        int sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
-        ArrayList<SourceRequest> selectedRequests = new ArrayList<>();
-        for (int i = 0; i < sourceCount; i++) {
-            selectedRequests.add(nextRequest());
-        }
-        Future<LinkedHashMap<String, NativeContentItem>> regularWork = CRAZY_IO.submit(() -> {
-            LinkedHashMap<String, NativeContentItem> found = new LinkedHashMap<>();
-            for (SourceRequest request : selectedRequests) {
-                if (Thread.currentThread().isInterrupted()) break;
-                addRequest(context, found, request);
-            }
-            return found;
-        });
+        ArrayList<NativeContentItem> regularItems = new ArrayList<>();
+        ArrayList<NativeContentItem> efuktItems = new ArrayList<>();
+        ArrayList<NativeContentItem> kaoticItems = new ArrayList<>();
+        ArrayList<NativeContentItem> bunkrItems = new ArrayList<>();
+        ArrayList<NativeContentItem> fapelloItems = new ArrayList<>();
+        ArrayList<NativeContentItem> onlyHavenItems = new ArrayList<>();
+
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(MIX_BATCH_BUDGET_MS);
+        int remainingWork = work.size();
         try {
-            regular.putAll(regularWork.get(ChaosStarterSources.STARTUP_MILLIS, TimeUnit.MILLISECONDS));
-        } catch (Exception ignored) {
-            // A slow CrazyShit host must not hold back the other sources.
+            while (remainingWork-- > 0) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0L) break;
+                Future<SourceBatch> completed = completions.poll(
+                        remaining, TimeUnit.NANOSECONDS);
+                if (completed == null) break;
+                try {
+                    SourceBatch batch = completed.get();
+                    if (batch == null || batch.items == null) continue;
+                    switch (batch.source) {
+                        case BATCH_REGULAR:
+                            regularItems.addAll(batch.items);
+                            break;
+                        case BATCH_EFUKT:
+                            efuktItems.addAll(batch.items);
+                            break;
+                        case BATCH_KAOTIC:
+                            kaoticItems.addAll(batch.items);
+                            break;
+                        case BATCH_BUNKR:
+                            bunkrItems.addAll(batch.items);
+                            break;
+                        case BATCH_FAPELLO:
+                            fapelloItems.addAll(batch.items);
+                            break;
+                        case BATCH_ONLY_HAVEN:
+                            onlyHavenItems.addAll(batch.items);
+                            break;
+                        default:
+                            break;
+                    }
+                } catch (Exception ignored) {
+                    // Other source tasks continue contributing to this batch.
+                }
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
         } finally {
-            regularWork.cancel(true);
+            for (Future<SourceBatch> request : work) {
+                if (!request.isDone()) request.cancel(true);
+            }
         }
 
-        ArrayList<NativeContentItem> regularItems = new ArrayList<>(regular.values());
         Collections.shuffle(regularItems, random);
+        Collections.shuffle(efuktItems, random);
+        Collections.shuffle(kaoticItems, random);
+        Collections.shuffle(bunkrItems, random);
+        Collections.shuffle(fapelloItems, random);
+        Collections.shuffle(onlyHavenItems, random);
 
         ArrayList<NativeContentItem> shitShowItems = new ArrayList<>();
-        for (NativeContentItem item : shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)) {
+        HashSet<String> regularUrls = new HashSet<>();
+        for (NativeContentItem item : regularItems) {
+            if (item != null && item.url != null) regularUrls.add(item.url);
+        }
+        for (NativeContentItem item : shitShow.takeReadyBatch(SHIT_SHOW_PER_BATCH)) {
             if (item == null || item.url == null || item.url.isEmpty()) continue;
-            if (regular.containsKey(item.url)) continue;
+            if (regularUrls.contains(item.url)) continue;
             shitShowItems.add(item);
         }
         Collections.shuffle(shitShowItems, random);
 
-        ArrayList<NativeContentItem> efuktItems = new ArrayList<>(loadEfuktBatch(context));
-        Collections.shuffle(efuktItems, random);
         List<NativeContentItem> regularAndEfukt = weaveEfukt(regularItems, efuktItems);
-
-        ArrayList<NativeContentItem> kaoticItems = new ArrayList<>(loadKaoticBatch(context));
-        Collections.shuffle(kaoticItems, random);
         List<NativeContentItem> homeSources = weaveEfukt(regularAndEfukt, kaoticItems);
-
-        ArrayList<NativeContentItem> bunkrItems = new ArrayList<>(loadBunkrBatch(context));
-        Collections.shuffle(bunkrItems, random);
-        ArrayList<NativeContentItem> fapelloItems = new ArrayList<>(loadFapelloBatch(context));
-        Collections.shuffle(fapelloItems, random);
-        ArrayList<NativeContentItem> onlyHavenItems = new ArrayList<>(loadOnlyHavenBatch(context));
-        Collections.shuffle(onlyHavenItems, random);
-
         List<NativeContentItem> fapzoneItems = weaveEfukt(bunkrItems, fapelloItems);
         fapzoneItems = weaveEfukt(fapzoneItems, onlyHavenItems);
         List<NativeContentItem> mixedExternal = weaveEfukt(homeSources, fapzoneItems);
         return weaveShitShow(mixedExternal, shitShowItems);
+    }
+
+    private List<NativeContentItem> loadRegularBatch(Context context) {
+        ensureCatalog(context);
+        LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
+        int sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
+        for (int i = 0; i < sourceCount; i++) {
+            if (Thread.currentThread().isInterrupted()) break;
+            addRequest(context, regular, nextRequest());
+        }
+        return new ArrayList<>(regular.values());
     }
 
     void resetDeck() {
@@ -523,6 +580,16 @@ final class ChaosSourceMixer {
         ArrayList<String> shuffled = new ArrayList<>(catalog);
         Collections.shuffle(shuffled, random);
         sourceDeck.addAll(shuffled);
+    }
+
+    private static final class SourceBatch {
+        final int source;
+        final List<NativeContentItem> items;
+
+        SourceBatch(int source, List<NativeContentItem> items) {
+            this.source = source;
+            this.items = items == null ? new ArrayList<>() : items;
+        }
     }
 
     private static final class SourceRequest {
