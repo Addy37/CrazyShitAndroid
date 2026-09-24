@@ -360,6 +360,12 @@ public final class ContentUpdateWorker extends Worker {
         if (release == null) return;
         String current = currentVersion(context);
         if (compareVersions(release.version, current) > 0) {
+            UpdateInboxStore.recordAppUpdate(
+                    context,
+                    release.version,
+                    release.title,
+                    release.beta
+            );
             NotificationCoordinator.showUpdateNotification(
                     context,
                     release.version,
