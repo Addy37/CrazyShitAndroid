@@ -16,7 +16,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
-import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -114,7 +113,7 @@ public class CommentsActivity extends Activity {
     private LinearLayout commentsContainer;
     private LinearLayout sortBar;
     private TextView sortView;
-    private ProgressBar progress;
+    private ZeroChillLoadingView progress;
     private TextView actionView;
     private WebView extractor;
     private int attempts;
@@ -251,8 +250,8 @@ public class CommentsActivity extends Activity {
         commentsContainer.setPadding(dp(12), dp(12), dp(12), dp(24));
         scroll.addView(commentsContainer, new ScrollView.LayoutParams(-1, -2));
 
-        progress = new ProgressBar(this);
-        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(46), dp(46));
+        progress = new ZeroChillLoadingView(this, "Loading comments...", true);
+        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(160), dp(132));
         pp.gravity = Gravity.CENTER;
         root.addView(progress, pp);
 
@@ -294,7 +293,6 @@ public class CommentsActivity extends Activity {
         sortBar.setVisibility(View.GONE);
         loadedComments.clear();
         commentsContainer.removeAllViews();
-        commentsContainer.addView(messageView("Loading comments…", false), new LinearLayout.LayoutParams(-1, -2));
         actionView.setText("WEB");
         actionView.setOnClickListener(v -> openWebsite());
         try {
