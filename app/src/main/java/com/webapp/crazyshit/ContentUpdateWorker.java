@@ -56,15 +56,21 @@ public final class ContentUpdateWorker extends Worker {
                 .apply();
 
         if (prefs.getBoolean(NotificationCoordinator.PREF_NEW_VIDEO_ALERTS, true)) {
-            for (SourceCheck check : sourceChecks(context)) {
-                attempted++;
-                CheckResult result = runSourceCheck(context, state, check, alerts);
-                statuses.put(check.key, result.status);
-                if (result.success) succeeded++;
+            if (CreatorFavoriteStore.names(context).isEmpty()) {
+                for (SourceCheck check : sourceChecks(context)) {
+                    statuses.put(check.key, "No favorite creators");
+                }
+            } else {
+                for (SourceCheck check : sourceChecks(context)) {
+                    attempted++;
+                    CheckResult result = runSourceCheck(context, state, check, alerts);
+                    statuses.put(check.key, result.status);
+                    if (result.success) succeeded++;
+                }
             }
         } else {
             for (SourceCheck check : sourceChecks(context)) {
-                statuses.put(check.key, "Content alerts off");
+                statuses.put(check.key, "Favorite creator tracking off");
             }
         }
 
@@ -91,15 +97,15 @@ public final class ContentUpdateWorker extends Worker {
                 .putLong(NotificationCoordinator.KEY_CHECK_FINISHED, System.currentTimeMillis())
                 .putString(
                         NotificationCoordinator.KEY_STATUS_CRAZYSHIT,
-                        status(statuses, "crazyshit")
+                        "Not tracked"
                 )
                 .putString(
                         NotificationCoordinator.KEY_STATUS_EFUKT,
-                        status(statuses, "efukt")
+                        "Not tracked"
                 )
                 .putString(
                         NotificationCoordinator.KEY_STATUS_KAOTIC,
-                        status(statuses, "kaotic")
+                        "Not tracked"
                 )
                 .putString(
                         NotificationCoordinator.KEY_STATUS_BUNKR,
@@ -129,26 +135,6 @@ public final class ContentUpdateWorker extends Worker {
 
     private List<SourceCheck> sourceChecks(Context context) {
         ArrayList<SourceCheck> checks = new ArrayList<>();
-        checks.add(new SourceCheck(
-                "crazyshit",
-                "CrazyShit",
-                () -> new CrazyShitRepository()
-                        .fetchFeed(context, CrazyShitRepository.HOME, 1)
-        ));
-        checks.add(new SourceCheck(
-                "efukt",
-                "EFukt",
-                () -> new EfuktRepository().fetchLatest(context)
-        ));
-        checks.add(new SourceCheck(
-                "kaotic",
-                "Kaotic",
-                () -> new WebVideoSourceRepository().fetchFeed(
-                        context,
-                        WebVideoSourceRepository.Source.KAOTIC,
-                        1
-                )
-        ));
         checks.add(new SourceCheck(
                 "bunkr",
                 "Bunkr",
