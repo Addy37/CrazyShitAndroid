@@ -22,6 +22,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -29,6 +30,7 @@ import androidx.recyclerview.widget.StaggeredGridLayoutManager;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.viewpager2.widget.ViewPager2;
 
+import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
@@ -82,6 +84,7 @@ public final class NativeFeedBrowserActivity extends Activity {
     private ViewPager2 creatorTabsPager;
     private TabLayout creatorTabs;
     private CreatorProfileHeader creatorProfile;
+    private AppBarLayout creatorAppBar;
     private TabLayoutMediator creatorTabsMediator;
     private SwipeRefreshLayout refresh;
     private View progress;
@@ -244,9 +247,30 @@ public final class NativeFeedBrowserActivity extends Activity {
         top.addView(options, new LinearLayout.LayoutParams(dp(48), dp(52)));
         shell.addView(top, new LinearLayout.LayoutParams(-1, dp(64)));
 
+        FrameLayout body = new FrameLayout(this);
         if (isCreatorGallery()) {
+            CoordinatorLayout coordinator = new CoordinatorLayout(this);
+            coordinator.setBackgroundColor(Color.BLACK);
+            shell.addView(coordinator, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+            creatorAppBar = new AppBarLayout(this);
+            creatorAppBar.setBackgroundColor(Color.BLACK);
+            creatorAppBar.setElevation(0f);
+            creatorAppBar.setLiftOnScroll(false);
+            CoordinatorLayout.LayoutParams appBarParams =
+                    new CoordinatorLayout.LayoutParams(-1, -2);
+            appBarParams.gravity = Gravity.TOP;
+            coordinator.addView(creatorAppBar, appBarParams);
+
             creatorProfile = new CreatorProfileHeader(this, title, creatorQuery, baseUrl);
-            shell.addView(creatorProfile);
+            AppBarLayout.LayoutParams profileParams =
+                    new AppBarLayout.LayoutParams(-1, dp(184));
+            profileParams.setScrollFlags(
+                    AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL |
+                            AppBarLayout.LayoutParams.SCROLL_FLAG_EXIT_UNTIL_COLLAPSED
+            );
+            creatorAppBar.addView(creatorProfile, profileParams);
+
             if (!notificationFreshUrls.isEmpty()) {
                 TextView notificationContext = text(
                         notificationFreshUrls.size() == 1
@@ -261,19 +285,39 @@ public final class NativeFeedBrowserActivity extends Activity {
                 notificationContext.setContentDescription(
                         notificationFreshUrls.size() + " new OnlyFap items from Updates"
                 );
-                shell.addView(notificationContext, new LinearLayout.LayoutParams(-1, dp(32)));
+                AppBarLayout.LayoutParams notificationParams =
+                        new AppBarLayout.LayoutParams(-1, dp(32));
+                notificationParams.setScrollFlags(AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL);
+                creatorAppBar.addView(notificationContext, notificationParams);
             }
+
             creatorTabs = new TabLayout(this);
             creatorTabs.setBackgroundColor(Color.BLACK);
             creatorTabs.setSelectedTabIndicatorColor(UiPalette.PRIMARY);
             creatorTabs.setTabTextColors(Color.rgb(174, 174, 182), UiPalette.PRIMARY);
             creatorTabs.setTabMode(TabLayout.MODE_FIXED);
             creatorTabs.setTabGravity(TabLayout.GRAVITY_FILL);
-            shell.addView(creatorTabs, new LinearLayout.LayoutParams(-1, dp(48)));
-        }
+            creatorAppBar.addView(
+                    creatorTabs,
+                    new AppBarLayout.LayoutParams(-1, dp(48))
+            );
 
-        FrameLayout body = new FrameLayout(this);
-        shell.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
+            creatorAppBar.addOnOffsetChangedListener((appBar, verticalOffset) -> {
+                if (creatorProfile == null) return;
+                float progress = Math.min(
+                        1f,
+                        Math.abs(verticalOffset) / (float) Math.max(1, dp(184))
+                );
+                creatorProfile.setAlpha(1f - progress);
+            });
+
+            CoordinatorLayout.LayoutParams bodyParams =
+                    new CoordinatorLayout.LayoutParams(-1, -1);
+            bodyParams.setBehavior(new AppBarLayout.ScrollingViewBehavior());
+            coordinator.addView(body, bodyParams);
+        } else {
+            shell.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
+        }
 
         refresh = new SwipeRefreshLayout(this);
         refresh.setColorSchemeColors(UiPalette.PRIMARY);
@@ -1485,6 +1529,13 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (scroll != null) {
             view.getLayoutManager().onRestoreInstanceState(scroll);
             restoredBrowserState.remove(key);
+            if (isCreatorGallery() && creatorAppBar != null) {
+                view.post(() -> {
+                    if (!isFinishing() && !isDestroyed() && view == activeCreatorRecycler()) {
+                        creatorAppBar.setExpanded(!view.canScrollVertically(-1), false);
+                    }
+                });
+            }
         }
     }
 

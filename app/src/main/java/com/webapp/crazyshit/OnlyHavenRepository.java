@@ -431,6 +431,15 @@ final class OnlyHavenRepository {
         return "";
     }
 
+    String creatorHeaderUrl(Creator creator) {
+        if (creator == null || clean(creator.service).isEmpty() || clean(creator.id).isEmpty()) {
+            return "";
+        }
+        SourceConfig.OnlyHaven config = config();
+        return imageBase(config) + "creator/" + urlToken(creator.service) + "/" +
+                urlToken(creator.id) + "/header.webp";
+    }
+
     private String imageBase(SourceConfig.OnlyHaven config) {
         String base = clean(config.imageBaseUrl);
         if (base.isEmpty()) base = "https://img.cum.st/";
