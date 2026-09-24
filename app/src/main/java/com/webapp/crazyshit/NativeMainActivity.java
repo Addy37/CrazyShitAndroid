@@ -100,6 +100,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private int portraitInsetRight = -1;
     private int portraitInsetBottom = -1;
     private boolean restoringPortraitFromFullscreen;
+    private boolean chaosClearDisplay;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -181,6 +182,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             @Override
             public void onOpenComments(NativeContentItem item) {
                 openComments(item);
+            }
+
+            @Override
+            public void onChaosClearDisplayChanged(boolean clear) {
+                setChaosClearDisplay(clear);
             }
         });
 
@@ -435,6 +441,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             selectNavSilently(NAV_HOME);
         }
 
+        if (position != MainPagerAdapter.PAGE_CHAOS) chaosClearDisplay = false;
         if (primaryPagerAdapter != null) primaryPagerAdapter.setPrimaryActive(position);
         if (headerTitle != null) {
             if (position == MainPagerAdapter.PAGE_HOME) {
@@ -475,7 +482,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void applyChaosFullscreenChrome() {
         boolean landscape = getResources().getConfiguration().orientation ==
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE;
-        setChaosFullscreenChrome(screen == Screen.CHAOS && landscape);
+        setChaosFullscreenChrome(screen == Screen.CHAOS && (landscape || chaosClearDisplay));
+    }
+
+    private void setChaosClearDisplay(boolean clear) {
+        chaosClearDisplay = clear && screen == Screen.CHAOS;
+        applyChaosFullscreenChrome();
     }
 
     private void setChaosFullscreenChrome(boolean fullscreen) {
