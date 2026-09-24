@@ -4,13 +4,15 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `0a061a0cf4964fb0cbd7d06d65d0662a0be04f8d`
+- Approved product baseline commit: `b1e48ed9076248acff6b8d1f21d567f45c2960c5`
 - Latest production release source commit: `0a061a0cf4964fb0cbd7d06d65d0662a0be04f8d`
-- Device-tested APK source commit: `643579212b5c35b59c7b7666998b518b6cbd6149`
+- Device-tested APK source commit: `54e53961f34e4e8f33da5ae45169aad06f282818`
 - Latest release PR: #134
 - Approval date: 2026-09-24
 
 The approved baseline contains the complete current ZEROCHILL stack, including Home/Collections glass UI, OnlyFap and OnlyHaven work, ShitTok all-source/fullscreen and preload work, creator search and bundled catalog, release orientation and action-sheet cleanup, Account Coming Soon, Memes removal from the release UI, product-level notification consolidation, aggregate device and Android adoption analytics, and the approved OnlyFap creator-gallery optimizations from PR #115.
+
+PR #137 was device-approved and merged as `b1e48ed`. The current approved product baseline now includes the in-app More → Updates inbox, favorite-creator-only OnlyFap tracking, direct creator-gallery routing, compact cyan fresh-content markers, the approved animated loading mascot rollout from PR #135, and transition-safe update endpoints that prefer `Addy37/ZEROCHILL` with a legacy `Addy37/CrazyShitAndroid` fallback until the repository rename is complete.
 
 The approved gallery behavior includes progressive creator results, ZEROCHILL loading treatment and skeletons, fluid pinch density changes, refresh suppression during pinch, full-screen media resolution five items ahead and one behind, image warm-up, and bounded video preloading.
 
