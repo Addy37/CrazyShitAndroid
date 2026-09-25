@@ -85,7 +85,7 @@ public class SettingsActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(8), dp(16), dp(36));
+        root.setPadding(dp(16), 0, dp(16), dp(36));
         root.setBackgroundColor(background);
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
