@@ -95,7 +95,7 @@ final class ShowsHubView extends FrameLayout {
 
         content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(12), dp(66), dp(12), dp(34));
+        content.setPadding(dp(12), dp(26), dp(12), dp(34));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         TextView eyebrow = text("ZEROCHILL SHOWS", 11f,
@@ -103,7 +103,7 @@ final class ShowsHubView extends FrameLayout {
         eyebrow.setTypeface(null, android.graphics.Typeface.BOLD);
         eyebrow.setLetterSpacing(0.12f);
         LinearLayout.LayoutParams eyebrowParams = new LinearLayout.LayoutParams(-1, -2);
-        eyebrowParams.setMargins(dp(4), dp(8), dp(4), dp(7));
+        eyebrowParams.setMargins(dp(4), dp(4), dp(4), dp(7));
         content.addView(eyebrow, eyebrowParams);
 
         heroCard = new MaterialCardView(context);
@@ -192,7 +192,7 @@ final class ShowsHubView extends FrameLayout {
         heroCopy.addView(heroAction, heroActionParams);
 
         LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(258));
-        heroParams.setMargins(0, 0, 0, dp(18));
+        heroParams.setMargins(0, 0, 0, dp(14));
         content.addView(heroCard, heroParams);
 
         loadingLabel = text(
@@ -539,24 +539,48 @@ final class ShowsHubView extends FrameLayout {
         LinearLayout block = new LinearLayout(getContext());
         block.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(-1, -2);
-        blockParams.setMargins(0, 0, 0, dp(20));
+        blockParams.setMargins(0, 0, 0, dp(12));
         content.addView(block, blockParams);
 
         LinearLayout heading = new LinearLayout(getContext());
         heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setPadding(dp(3), 0, dp(3), dp(8));
+        heading.setPadding(dp(3), 0, dp(3), dp(9));
 
-        TextView titleView = text("Continue Watching", 20f, Color.WHITE);
+        TextView titleView = text(
+                "CONTINUE WATCHING",
+                11f,
+                ZeroChillUi.color(getContext(), R.color.zc_cyan)
+        );
         titleView.setTypeface(null, android.graphics.Typeface.BOLD);
-        heading.addView(titleView);
+        titleView.setLetterSpacing(0.08f);
+        titleView.setPadding(dp(10), dp(5), dp(10), dp(5));
+        GradientDrawable continueBadge = new GradientDrawable();
+        continueBadge.setColor(Color.argb(
+                42,
+                Color.red(UiPalette.PRIMARY),
+                Color.green(UiPalette.PRIMARY),
+                Color.blue(UiPalette.PRIMARY)
+        ));
+        continueBadge.setStroke(
+                dp(1),
+                Color.argb(
+                        150,
+                        Color.red(UiPalette.PRIMARY),
+                        Color.green(UiPalette.PRIMARY),
+                        Color.blue(UiPalette.PRIMARY)
+                )
+        );
+        continueBadge.setCornerRadius(dp(14));
+        titleView.setBackground(continueBadge);
+        heading.addView(titleView, new LinearLayout.LayoutParams(-2, -2));
 
         TextView subtitleView = text(
                 "Shows videos you started",
                 12f,
                 ZeroChillUi.color(getContext(), R.color.zc_text_secondary)
         );
-        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
-        subtitleParams.topMargin = dp(1);
+        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-2, -2);
+        subtitleParams.topMargin = dp(4);
         heading.addView(subtitleView, subtitleParams);
         block.addView(heading);
 
@@ -572,7 +596,7 @@ final class ShowsHubView extends FrameLayout {
         ContinueAdapter adapter = new ContinueAdapter();
         rail.setAdapter(adapter);
         rail.setPadding(dp(2), 0, dp(22), 0);
-        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(154)));
+        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(150)));
 
         block.setVisibility(View.GONE);
         return new ContinueShelf(block, rail, adapter);
@@ -582,14 +606,14 @@ final class ShowsHubView extends FrameLayout {
         LinearLayout block = new LinearLayout(getContext());
         block.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(-1, -2);
-        blockParams.setMargins(0, 0, 0, dp(20));
+        blockParams.setMargins(0, 0, 0, dp(18));
         content.addView(block, blockParams);
 
         LinearLayout heading = new LinearLayout(getContext());
         heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setPadding(dp(3), 0, dp(3), dp(8));
+        heading.setPadding(dp(3), 0, dp(3), dp(10));
 
-        TextView titleView = text(title, 20f, Color.WHITE);
+        TextView titleView = text(title, 19f, Color.WHITE);
         titleView.setTypeface(null, android.graphics.Typeface.BOLD);
         heading.addView(titleView);
 
@@ -599,7 +623,7 @@ final class ShowsHubView extends FrameLayout {
                 ZeroChillUi.color(getContext(), R.color.zc_text_secondary)
         );
         LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
-        subtitleParams.topMargin = dp(1);
+        subtitleParams.topMargin = dp(2);
         heading.addView(subtitleView, subtitleParams);
         block.addView(heading);
 
@@ -730,7 +754,7 @@ final class ShowsHubView extends FrameLayout {
         ) {
             MaterialCardView card = new MaterialCardView(getContext());
             ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
-            card.setRadius(dp(16));
+            card.setRadius(dp(18));
             card.setCardElevation(0f);
             card.setStrokeWidth(dp(1));
             card.setStrokeColor(ZeroChillUi.color(getContext(), R.color.zc_edge));
@@ -740,7 +764,7 @@ final class ShowsHubView extends FrameLayout {
 
             RecyclerView.LayoutParams params =
                     new RecyclerView.LayoutParams(dp(220), dp(140));
-            params.setMargins(dp(3), dp(2), dp(8), dp(4));
+            params.setMargins(dp(3), dp(2), dp(10), dp(4));
             card.setLayoutParams(params);
 
             FrameLayout frame = new FrameLayout(getContext());
@@ -858,7 +882,7 @@ final class ShowsHubView extends FrameLayout {
         public RailHolder onCreateViewHolder(@NonNull android.view.ViewGroup parent, int viewType) {
             MaterialCardView card = new MaterialCardView(getContext());
             ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
-            card.setRadius(dp(16));
+            card.setRadius(dp(18));
             card.setCardElevation(0f);
             card.setStrokeWidth(dp(1));
             card.setStrokeColor(ZeroChillUi.color(getContext(), R.color.zc_edge));
@@ -869,7 +893,7 @@ final class ShowsHubView extends FrameLayout {
             int width = dp(wide ? 205 : 146);
             int height = dp(wide ? 132 : 202);
             RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(width, height);
-            params.setMargins(dp(3), dp(2), dp(8), dp(4));
+            params.setMargins(dp(3), dp(2), dp(10), dp(4));
             card.setLayoutParams(params);
 
             FrameLayout frame = new FrameLayout(getContext());
