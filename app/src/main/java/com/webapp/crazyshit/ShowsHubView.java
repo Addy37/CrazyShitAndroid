@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
@@ -34,6 +35,10 @@ final class ShowsHubView extends FrameLayout {
         void onOpen(NativeContentItem item);
     }
 
+    interface PrewarmListener {
+        void onPrewarm(NativeContentItem item);
+    }
+
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -42,7 +47,9 @@ final class ShowsHubView extends FrameLayout {
 
     private final Listener listener;
     private final Listener videoListener;
+    private final PrewarmListener prewarmListener;
     private final Handler heroHandler = new Handler(Looper.getMainLooper());
+    private final ScrollView scroll;
     private final LinearLayout content;
     private final MaterialCardView heroCard;
     private final ImageView heroImage;
@@ -66,14 +73,21 @@ final class ShowsHubView extends FrameLayout {
     private NativeContentItem heroItem;
     private int heroIndex = -1;
     private boolean active;
+    private Bundle pendingRestoreState;
 
-    ShowsHubView(Context context, Listener listener, Listener videoListener) {
+    ShowsHubView(
+            Context context,
+            Listener listener,
+            Listener videoListener,
+            PrewarmListener prewarmListener
+    ) {
         super(context);
         this.listener = listener;
         this.videoListener = videoListener;
+        this.prewarmListener = prewarmListener;
         setBackgroundColor(ZeroChillUi.background(context));
 
-        ScrollView scroll = new ScrollView(context);
+        scroll = new ScrollView(context);
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
         scroll.setVerticalScrollBarEnabled(false);
@@ -235,6 +249,7 @@ final class ShowsHubView extends FrameLayout {
     void setCrazyShit(List<NativeContentItem> items) {
         crazyItems = safe(items);
         crazyShelf.adapter.replace(crazyItems);
+        preloadShelfArtwork(crazyItems, 4);
         crazyShelf.container.setVisibility(crazyItems.isEmpty() ? View.GONE : View.VISIBLE);
         rebuildHeroCandidates();
     }
@@ -242,6 +257,7 @@ final class ShowsHubView extends FrameLayout {
     void setEfukt(List<NativeContentItem> items) {
         efuktItems = safe(items);
         efuktShelf.adapter.replace(efuktItems);
+        preloadShelfArtwork(efuktItems, 4);
         efuktShelf.container.setVisibility(efuktItems.isEmpty() ? View.GONE : View.VISIBLE);
         rebuildHeroCandidates();
     }
@@ -249,12 +265,14 @@ final class ShowsHubView extends FrameLayout {
     void setCategories(List<NativeContentItem> items) {
         categoryItems = safe(items);
         categoryShelf.adapter.replace(categoryItems);
+        preloadShelfArtwork(categoryItems, 4);
         categoryShelf.container.setVisibility(categoryItems.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     void setKaoticCategories(List<NativeContentItem> items) {
         kaoticCategoryItems = safe(items);
         kaoticCategoryShelf.adapter.replace(kaoticCategoryItems);
+        preloadShelfArtwork(kaoticCategoryItems, 4);
         kaoticCategoryShelf.container.setVisibility(
                 kaoticCategoryItems.isEmpty() ? View.GONE : View.VISIBLE
         );
@@ -265,6 +283,22 @@ final class ShowsHubView extends FrameLayout {
         if (itemCount() == 0) {
             loadingLabel.setText("Shows could not load right now.");
         }
+        applyPendingRestoreState();
+    }
+
+    void saveState(Bundle out) {
+        if (out == null) return;
+        out.putInt("scroll_y", scroll.getScrollY());
+        out.putInt("hero_index", heroIndex);
+        saveRailState(out, "continue", continueShelf.rail);
+        saveRailState(out, "crazy", crazyShelf.rail);
+        saveRailState(out, "efukt", efuktShelf.rail);
+        saveRailState(out, "categories", categoryShelf.rail);
+        saveRailState(out, "kaotic_categories", kaoticCategoryShelf.rail);
+    }
+
+    void restoreState(Bundle state) {
+        pendingRestoreState = state == null ? null : new Bundle(state);
     }
 
     int itemCount() {
@@ -419,6 +453,12 @@ final class ShowsHubView extends FrameLayout {
         preloadArtwork(heroItems.get((heroIndex + 1) % heroItems.size()));
     }
 
+    private void preloadShelfArtwork(List<NativeContentItem> items, int limit) {
+        if (items == null || items.isEmpty() || limit <= 0) return;
+        int count = Math.min(limit, items.size());
+        for (int index = 0; index < count; index++) preloadArtwork(items.get(index));
+    }
+
     private void preloadArtwork(NativeContentItem item) {
         if (item == null || EmbeddedBrowseArtwork.has(getContext(), item.url)) return;
         String imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
@@ -433,6 +473,49 @@ final class ShowsHubView extends FrameLayout {
                 .load(new GlideUrl(imageUrl, headers.build()))
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .preload();
+    }
+
+    private void saveRailState(Bundle out, String key, RecyclerView rail) {
+        if (out == null || rail == null) return;
+        RecyclerView.LayoutManager manager = rail.getLayoutManager();
+        if (!(manager instanceof LinearLayoutManager)) return;
+        LinearLayoutManager linear = (LinearLayoutManager) manager;
+        int position = linear.findFirstVisibleItemPosition();
+        if (position < 0) return;
+        View child = linear.findViewByPosition(position);
+        int offset = child == null ? 0 : child.getLeft() - rail.getPaddingLeft();
+        out.putInt(key + "_position", position);
+        out.putInt(key + "_offset", offset);
+    }
+
+    private void restoreRailState(Bundle state, String key, RecyclerView rail) {
+        if (state == null || rail == null || !state.containsKey(key + "_position")) return;
+        RecyclerView.LayoutManager manager = rail.getLayoutManager();
+        if (!(manager instanceof LinearLayoutManager)) return;
+        int position = state.getInt(key + "_position", 0);
+        int offset = state.getInt(key + "_offset", 0);
+        LinearLayoutManager linear = (LinearLayoutManager) manager;
+        rail.post(() -> linear.scrollToPositionWithOffset(position, offset));
+    }
+
+    private void applyPendingRestoreState() {
+        Bundle state = pendingRestoreState;
+        if (state == null) return;
+        pendingRestoreState = null;
+
+        int restoredHero = state.getInt("hero_index", -1);
+        if (restoredHero >= 0 && restoredHero < heroItems.size()) {
+            showHero(restoredHero, false);
+        }
+
+        restoreRailState(state, "continue", continueShelf.rail);
+        restoreRailState(state, "crazy", crazyShelf.rail);
+        restoreRailState(state, "efukt", efuktShelf.rail);
+        restoreRailState(state, "categories", categoryShelf.rail);
+        restoreRailState(state, "kaotic_categories", kaoticCategoryShelf.rail);
+
+        int y = Math.max(0, state.getInt("scroll_y", 0));
+        scroll.post(() -> scroll.scrollTo(0, y));
     }
 
     @Override
@@ -492,7 +575,7 @@ final class ShowsHubView extends FrameLayout {
         block.addView(rail, new LinearLayout.LayoutParams(-1, dp(154)));
 
         block.setVisibility(View.GONE);
-        return new ContinueShelf(block, adapter);
+        return new ContinueShelf(block, rail, adapter);
     }
 
     private Shelf addShelf(String title, String subtitle, boolean wideCards) {
@@ -538,7 +621,7 @@ final class ShowsHubView extends FrameLayout {
         ));
 
         block.setVisibility(View.GONE);
-        return new Shelf(block, adapter);
+        return new Shelf(block, rail, adapter);
     }
 
     private void loadArtwork(ImageView view, NativeContentItem item, boolean hero) {
@@ -830,6 +913,16 @@ final class ShowsHubView extends FrameLayout {
         }
 
         @Override
+        public void onViewAttachedToWindow(@NonNull RailHolder holder) {
+            super.onViewAttachedToWindow(holder);
+            int position = holder.getBindingAdapterPosition();
+            if (position < 0 || position >= items.size()) return;
+            NativeContentItem item = items.get(position);
+            preloadArtwork(item);
+            if (prewarmListener != null) prewarmListener.onPrewarm(item);
+        }
+
+        @Override
         public void onViewRecycled(@NonNull RailHolder holder) {
             Glide.with(holder.image).clear(holder.image);
             holder.card.setOnClickListener(null);
@@ -844,20 +937,24 @@ final class ShowsHubView extends FrameLayout {
 
     private final class Shelf {
         final LinearLayout container;
+        final RecyclerView rail;
         final RailAdapter adapter;
 
-        Shelf(LinearLayout container, RailAdapter adapter) {
+        Shelf(LinearLayout container, RecyclerView rail, RailAdapter adapter) {
             this.container = container;
+            this.rail = rail;
             this.adapter = adapter;
         }
     }
 
     private final class ContinueShelf {
         final LinearLayout container;
+        final RecyclerView rail;
         final ContinueAdapter adapter;
 
-        ContinueShelf(LinearLayout container, ContinueAdapter adapter) {
+        ContinueShelf(LinearLayout container, RecyclerView rail, ContinueAdapter adapter) {
             this.container = container;
+            this.rail = rail;
             this.adapter = adapter;
         }
     }

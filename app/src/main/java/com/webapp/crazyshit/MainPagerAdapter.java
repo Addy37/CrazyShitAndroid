@@ -179,6 +179,22 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (shows != null && shows.showsHub != null) shows.showsHub.refreshContinueWatching();
     }
 
+    public void saveState(android.os.Bundle out) {
+        if (out == null) return;
+        Page shows = pageAt(PAGE_SERIES);
+        if (shows == null || shows.showsHub == null) return;
+        android.os.Bundle showsState = new android.os.Bundle();
+        shows.showsHub.saveState(showsState);
+        out.putBundle("shows_hub_state", showsState);
+    }
+
+    public void restoreState(android.os.Bundle state) {
+        if (state == null) return;
+        Page shows = pageAt(PAGE_SERIES);
+        if (shows == null || shows.showsHub == null) return;
+        shows.showsHub.restoreState(state.getBundle("shows_hub_state"));
+    }
+
     public void onHostPause() {
         chaosView.onHostPause();
     }
@@ -396,7 +412,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.showsHub = new ShowsHubView(
                     activity,
                     this::openShowDetails,
-                    host::onOpenItem
+                    host::onOpenItem,
+                    item -> ShowsCollectionWarmCache.request(activity, item)
             );
             page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
             // Shows is now a single combined hub. Keep the legacy source preference

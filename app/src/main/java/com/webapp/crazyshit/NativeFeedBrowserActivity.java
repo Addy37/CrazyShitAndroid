@@ -737,7 +737,12 @@ public final class NativeFeedBrowserActivity extends Activity {
             try {
                 List<NativeContentItem> result;
                 BunkrCreatorGalleryRepository.Batch creatorBatch = null;
-                if (memeMode) {
+                List<NativeContentItem> warmedShow = !append && showDetailsMode
+                        ? ShowsCollectionWarmCache.get(baseUrl)
+                        : null;
+                if (warmedShow != null && !warmedShow.isEmpty()) {
+                    result = warmedShow;
+                } else if (memeMode) {
                     result = memeRepository.fetch(this, requestPage);
                 } else if (isCreatorGallery()) {
                     creatorBatch = creatorGalleryRepository.fetchNext(

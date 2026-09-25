@@ -110,6 +110,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         ZeroChillUi.applySystemBars(this);
         FeedViewStyleController.prepareVisualRefresh(this);
         buildUi();
+        if (state != null && primaryPagerAdapter != null) {
+            primaryPagerAdapter.restoreState(state);
+        }
         appUpdater = new AppUpdater(this);
         configureBack();
 
@@ -1134,6 +1137,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     @Override protected void onSaveInstanceState(Bundle state) {
         if (primaryPager != null) state.putInt("primary_page", primaryPager.getCurrentItem());
+        if (primaryPagerAdapter != null) primaryPagerAdapter.saveState(state);
         super.onSaveInstanceState(state);
     }
 
