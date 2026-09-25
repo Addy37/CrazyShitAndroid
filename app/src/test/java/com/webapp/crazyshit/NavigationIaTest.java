@@ -80,7 +80,7 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
-    @Test public void primaryTabsSwipeOnlyFromBottomNavigationPill() {
+    @Test public void primaryTabsDragFromSelectedBottomCapsule() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
                 .putBoolean("access_notice_2_8_3_accepted", true).apply();
@@ -98,34 +98,43 @@ public class NavigationIaTest {
         assertFalse(pager.isUserInputEnabled());
         assertEquals(MainPagerAdapter.PAGE_HOME, pager.getCurrentItem());
 
-        int width = nav.getWidth();
-        int height = nav.getHeight();
-        if (width <= 0 || height <= 0) {
-            width = BrowseUi.dp(activity, 360);
-            height = activity.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height);
-            nav.layout(0, 0, width, height);
-        }
+        View home = nav.findViewById(1);
+        View shows = nav.findViewById(2);
+        assertNotNull(home);
+        assertNotNull(shows);
 
+        android.graphics.Rect homeRect = new android.graphics.Rect();
+        android.graphics.Rect showsRect = new android.graphics.Rect();
+        home.getDrawingRect(homeRect);
+        shows.getDrawingRect(showsRect);
+        nav.offsetDescendantRectToMyCoords(home, homeRect);
+        nav.offsetDescendantRectToMyCoords(shows, showsRect);
+
+        float downX = homeRect.exactCenterX();
+        float downY = homeRect.exactCenterY();
+        float targetX = showsRect.exactCenterX();
         long downTime = android.os.SystemClock.uptimeMillis();
-        float y = height * 0.5f;
+
         nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
                 downTime, downTime,
                 android.view.MotionEvent.ACTION_DOWN,
-                width * 0.72f, y, 0
+                downX, downY, 0
         ));
         nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
                 downTime, downTime + 16L,
                 android.view.MotionEvent.ACTION_MOVE,
-                width * 0.50f, y, 0
+                downX + ((targetX - downX) * 0.65f), downY, 0
         ));
         nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
                 downTime, downTime + 32L,
                 android.view.MotionEvent.ACTION_UP,
-                width * 0.30f, y, 0
+                targetX, downY, 0
         ));
         shadowOf(android.os.Looper.getMainLooper()).idle();
 
         assertEquals(MainPagerAdapter.PAGE_SERIES, pager.getCurrentItem());
+        assertEquals((float) MainPagerAdapter.PAGE_SERIES,
+                nav.pagerPositionForTest(), 0.01f);
         controller.pause().stop().destroy();
     }
 
