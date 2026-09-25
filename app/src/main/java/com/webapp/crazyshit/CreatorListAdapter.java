@@ -91,6 +91,7 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
 
     @Override public void onBindViewHolder(Holder holder, int position) {
         NativeContentItem item = items.get(position);
+        holder.bound = item;
         boolean favorite = favorites.contains(CreatorFavoriteStore.key(item));
         holder.name.setText(item.title);
         String source = item.description == null ? "" : item.description.trim();
@@ -129,6 +130,8 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
     }
 
     @Override public void onViewRecycled(Holder holder) {
+        CreatorGalleryPreloader.cancelQueued(holder.bound);
+        holder.bound = null;
         Glide.with(holder.avatar).clear(holder.avatar);
         super.onViewRecycled(holder);
     }
@@ -138,6 +141,7 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
     static final class Holder extends RecyclerView.ViewHolder {
         final ImageView avatar;
         final TextView name, subtitle, star;
+        NativeContentItem bound;
         Holder(LinearLayout row, ImageView avatar, TextView name, TextView subtitle, TextView star) {
             super(row); this.avatar = avatar; this.name = name; this.subtitle = subtitle; this.star = star;
         }
