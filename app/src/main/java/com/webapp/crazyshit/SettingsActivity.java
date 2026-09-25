@@ -305,22 +305,21 @@ public class SettingsActivity extends Activity {
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{
                         Color.BLACK,
-                        Color.argb(235, 0, 0, 0),
-                        Color.argb(150, 0, 0, 0),
+                        Color.argb(205, 0, 0, 0),
                         Color.TRANSPARENT
                 }
         );
         topScrim.setBackground(scrim);
         FrameLayout.LayoutParams scrimParams =
-                new FrameLayout.LayoutParams(-1, dp(96));
+                new FrameLayout.LayoutParams(-1, dp(40));
         scrimParams.gravity = Gravity.TOP;
         shell.addView(topScrim, scrimParams);
 
-        applyWindowInsets(scroll);
+        applyWindowInsets(scroll, topScrim);
         setContentView(shell);
     }
 
-    private void applyWindowInsets(ScrollView scroll) {
+    private void applyWindowInsets(ScrollView scroll, View topScrim) {
         if (scroll == null) return;
         scroll.setClipToPadding(true);
         ViewCompat.setOnApplyWindowInsetsListener(scroll, (view, windowInsets) -> {
@@ -329,8 +328,20 @@ public class SettingsActivity extends Activity {
                             | WindowInsetsCompat.Type.displayCutout()
             );
             // Settings intentionally draws under the status bar. Keep only side and bottom
-            // safe areas while a fixed black scrim protects the system-bar region visually.
+            // safe areas while a compact gradient protects the status icons visually.
             view.setPadding(safe.left, 0, safe.right, safe.bottom);
+
+            if (topScrim != null) {
+                int statusProtection = Math.max(
+                        safe.top,
+                        Math.round(safe.top * 1.2f)
+                );
+                android.view.ViewGroup.LayoutParams params = topScrim.getLayoutParams();
+                if (params != null && params.height != statusProtection) {
+                    params.height = statusProtection;
+                    topScrim.setLayoutParams(params);
+                }
+            }
             return WindowInsetsCompat.CONSUMED;
         });
         ViewCompat.requestApplyInsets(scroll);
