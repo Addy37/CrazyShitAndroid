@@ -61,7 +61,7 @@ public final class CreatorsActivity extends Activity {
             startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, item.title,
                     item.searchQuery.isEmpty() ? item.title : item.searchQuery,
                     FapelloRepository.isModelUrl(item.url) ? item.url : "",
-                    CreatorGalleryPreloader.sessionId(item)));
+                    CreatorGalleryPreloader.sessionId(this, item)));
         }, this::render);
         recycler.setAdapter(adapter);
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
