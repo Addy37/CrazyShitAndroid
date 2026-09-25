@@ -170,6 +170,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (onlyFap != null && onlyFap.browseAdapter != null) onlyFap.browseAdapter.notifyDataSetChanged();
         Page home = pageAt(PAGE_HOME);
         if (home != null && home.feedAdapter != null) home.feedAdapter.refreshPlaybackState();
+        Page shows = pageAt(PAGE_SERIES);
+        if (shows != null && shows.showsHub != null) shows.showsHub.refreshContinueWatching();
     }
 
     public void onHostPause() {
@@ -384,7 +386,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.recycler.setAdapter(page.browseAdapter);
         page.recycler.setLayoutManager(new GridLayoutManager(activity, 2));
         if (kind == PageKind.SERIES) {
-            page.showsHub = new ShowsHubView(activity, this::openShowDetails);
+            page.showsHub = new ShowsHubView(
+                    activity,
+                    this::openShowDetails,
+                    host::onOpenItem
+            );
             page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
             addSeriesSourceSelector(page);
             page.empty.setOnClickListener(v -> {

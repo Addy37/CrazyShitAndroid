@@ -4,6 +4,8 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -35,15 +37,22 @@ final class ShowsHubView extends FrameLayout {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
+    private static final long HERO_ROTATION_MS = 14_000L;
+    private static final int HERO_MAX_ITEMS = 5;
 
     private final Listener listener;
+    private final Listener videoListener;
+    private final Handler heroHandler = new Handler(Looper.getMainLooper());
     private final LinearLayout content;
+    private final MaterialCardView heroCard;
     private final ImageView heroImage;
     private final TextView heroSource;
     private final TextView heroTitle;
     private final TextView heroHint;
     private final TextView heroAction;
+    private final TextView heroDots;
     private final TextView loadingLabel;
+    private final ContinueShelf continueShelf;
     private final Shelf crazyShelf;
     private final Shelf efuktShelf;
     private final Shelf categoryShelf;
@@ -51,11 +60,14 @@ final class ShowsHubView extends FrameLayout {
     private List<NativeContentItem> crazyItems = Collections.emptyList();
     private List<NativeContentItem> efuktItems = Collections.emptyList();
     private List<NativeContentItem> categoryItems = Collections.emptyList();
+    private List<NativeContentItem> heroItems = Collections.emptyList();
     private NativeContentItem heroItem;
+    private int heroIndex = -1;
 
-    ShowsHubView(Context context, Listener listener) {
+    ShowsHubView(Context context, Listener listener, Listener videoListener) {
         super(context);
         this.listener = listener;
+        this.videoListener = videoListener;
         setBackgroundColor(ZeroChillUi.background(context));
 
         ScrollView scroll = new ScrollView(context);
@@ -77,7 +89,7 @@ final class ShowsHubView extends FrameLayout {
         eyebrowParams.setMargins(dp(4), dp(8), dp(4), dp(7));
         content.addView(eyebrow, eyebrowParams);
 
-        MaterialCardView heroCard = new MaterialCardView(context);
+        heroCard = new MaterialCardView(context);
         ZeroChillUi.styleMaterialCard(heroCard, R.dimen.zc_radius_large);
         heroCard.setRadius(dp(22));
         heroCard.setCardElevation(0f);
@@ -105,6 +117,18 @@ final class ShowsHubView extends FrameLayout {
                 }
         ));
         heroFrame.addView(heroShade, new FrameLayout.LayoutParams(-1, -1));
+
+        heroDots = text("", 15f, Color.WHITE);
+        heroDots.setGravity(Gravity.CENTER);
+        heroDots.setVisibility(View.GONE);
+        heroDots.setContentDescription("Featured show position");
+        FrameLayout.LayoutParams heroDotsParams = new FrameLayout.LayoutParams(
+                -2,
+                dp(32),
+                Gravity.TOP | Gravity.END
+        );
+        heroDotsParams.setMargins(0, dp(12), dp(12), 0);
+        heroFrame.addView(heroDots, heroDotsParams);
 
         LinearLayout heroCopy = new LinearLayout(context);
         heroCopy.setOrientation(LinearLayout.VERTICAL);
@@ -164,19 +188,27 @@ final class ShowsHubView extends FrameLayout {
         loadingParams.setMargins(0, 0, 0, dp(10));
         content.addView(loadingLabel, loadingParams);
 
+        continueShelf = addContinueShelf();
         crazyShelf = addShelf("CrazyShit Shows", "Series and recurring collections", false);
         efuktShelf = addShelf("EFukt Series", "Browse EFukt by series", false);
         categoryShelf = addShelf("Categories", "Jump into a type of content", true);
 
         heroCard.setOnClickListener(v -> openHero());
         heroAction.setOnClickListener(v -> openHero());
+        refreshContinueWatching();
     }
 
     void clear() {
         crazyItems = Collections.emptyList();
         efuktItems = Collections.emptyList();
         categoryItems = Collections.emptyList();
+        heroHandler.removeCallbacksAndMessages(null);
+        heroCard.animate().cancel();
+        heroCard.setAlpha(1f);
+        heroItems = Collections.emptyList();
         heroItem = null;
+        heroIndex = -1;
+        heroDots.setVisibility(View.GONE);
         crazyShelf.adapter.replace(Collections.emptyList());
         efuktShelf.adapter.replace(Collections.emptyList());
         categoryShelf.adapter.replace(Collections.emptyList());
@@ -197,21 +229,20 @@ final class ShowsHubView extends FrameLayout {
         crazyItems = safe(items);
         crazyShelf.adapter.replace(crazyItems);
         crazyShelf.container.setVisibility(crazyItems.isEmpty() ? View.GONE : View.VISIBLE);
-        updateHero();
+        rebuildHeroCandidates();
     }
 
     void setEfukt(List<NativeContentItem> items) {
         efuktItems = safe(items);
         efuktShelf.adapter.replace(efuktItems);
         efuktShelf.container.setVisibility(efuktItems.isEmpty() ? View.GONE : View.VISIBLE);
-        updateHero();
+        rebuildHeroCandidates();
     }
 
     void setCategories(List<NativeContentItem> items) {
         categoryItems = safe(items);
         categoryShelf.adapter.replace(categoryItems);
         categoryShelf.container.setVisibility(categoryItems.isEmpty() ? View.GONE : View.VISIBLE);
-        updateHero();
     }
 
     void finishLoading() {
@@ -225,49 +256,214 @@ final class ShowsHubView extends FrameLayout {
         return crazyItems.size() + efuktItems.size() + categoryItems.size();
     }
 
-    private void updateHero() {
-        if (heroItem != null) {
-            if (itemCount() > 0) loadingLabel.setVisibility(View.GONE);
-            return;
-        }
-
-        NativeContentItem candidate = firstWithArtwork(crazyItems);
-        String source = "CRAZYSHIT";
-        String hint = "Featured from CrazyShit Shows";
-
-        if (candidate == null) {
-            candidate = firstWithArtwork(efuktItems);
-            source = "EFUKT";
-            hint = "Featured from EFukt Series";
-        }
-        if (candidate == null) {
-            candidate = firstWithArtwork(categoryItems);
-            source = "CATEGORY";
-            hint = "Featured category";
-        }
-        if (candidate == null) return;
-
-        heroItem = candidate;
-        heroSource.setText(source);
-        heroTitle.setText(candidate.title);
-        heroHint.setText(hint);
-        heroAction.setVisibility(View.VISIBLE);
-        loadArtwork(heroImage, candidate, true);
-        loadingLabel.setVisibility(View.GONE);
+    void refreshContinueWatching() {
+        List<PlaybackHistoryStore.Item> items =
+                PlaybackHistoryStore.continueWatchingShows(getContext());
+        continueShelf.adapter.replace(items);
+        continueShelf.container.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
-    private NativeContentItem firstWithArtwork(List<NativeContentItem> items) {
-        if (items == null || items.isEmpty()) return null;
-        for (NativeContentItem item : items) {
-            if (item == null) continue;
-            if (EmbeddedBrowseArtwork.has(getContext(), item.url)) return item;
-            if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) return item;
+    private void rebuildHeroCandidates() {
+        ArrayList<NativeContentItem> next = new ArrayList<>();
+        appendHeroCandidates(next, crazyItems, 3);
+        appendHeroCandidates(next, efuktItems, 2);
+
+        String currentUrl = heroItem == null ? "" : heroItem.url;
+        heroItems = next;
+        heroIndex = indexOfUrl(heroItems, currentUrl);
+        if (heroIndex < 0 && !heroItems.isEmpty()) {
+            showHero(0, false);
+        } else {
+            updateHeroDots();
+            prewarmNextHero();
         }
-        return items.get(0);
+        if (itemCount() > 0) loadingLabel.setVisibility(View.GONE);
+        scheduleHeroRotation();
+    }
+
+    private void appendHeroCandidates(
+            List<NativeContentItem> target,
+            List<NativeContentItem> source,
+            int limit
+    ) {
+        if (source == null || target.size() >= HERO_MAX_ITEMS || limit <= 0) return;
+        int added = 0;
+        for (NativeContentItem item : source) {
+            if (item == null || !hasArtwork(item) || containsUrl(target, item.url)) continue;
+            target.add(item);
+            added++;
+            if (added >= limit || target.size() >= HERO_MAX_ITEMS) break;
+        }
+    }
+
+    private boolean hasArtwork(NativeContentItem item) {
+        return EmbeddedBrowseArtwork.has(getContext(), item.url)
+                || (item.imageUrl != null && !item.imageUrl.trim().isEmpty());
+    }
+
+    private boolean containsUrl(List<NativeContentItem> items, String url) {
+        return indexOfUrl(items, url) >= 0;
+    }
+
+    private int indexOfUrl(List<NativeContentItem> items, String url) {
+        if (url == null || url.isEmpty() || items == null) return -1;
+        for (int index = 0; index < items.size(); index++) {
+            NativeContentItem item = items.get(index);
+            if (item != null && url.equals(item.url)) return index;
+        }
+        return -1;
+    }
+
+    private void showHero(int index, boolean animate) {
+        if (index < 0 || index >= heroItems.size()) return;
+        NativeContentItem next = heroItems.get(index);
+        Runnable apply = () -> {
+            heroIndex = index;
+            heroItem = next;
+            boolean efukt = EfuktRepository.isEfuktUrl(next.url);
+            heroSource.setText(efukt ? "EFUKT" : "CRAZYSHIT");
+            heroTitle.setText(next.title);
+            heroHint.setText(efukt
+                    ? "Featured from EFukt Series"
+                    : "Featured from CrazyShit Shows");
+            heroAction.setVisibility(View.VISIBLE);
+            loadArtwork(heroImage, next, true);
+            updateHeroDots();
+            loadingLabel.setVisibility(View.GONE);
+            prewarmNextHero();
+        };
+
+        heroCard.animate().cancel();
+        if (!animate || !ZeroChillMotion.animationsEnabled(getContext())) {
+            heroCard.setAlpha(1f);
+            apply.run();
+            return;
+        }
+        heroCard.animate()
+                .alpha(0.48f)
+                .setDuration(180L)
+                .withEndAction(() -> {
+                    apply.run();
+                    heroCard.animate().alpha(1f).setDuration(320L).start();
+                })
+                .start();
+    }
+
+    private void updateHeroDots() {
+        if (heroItems.size() <= 1 || heroIndex < 0) {
+            heroDots.setVisibility(View.GONE);
+            return;
+        }
+        StringBuilder dots = new StringBuilder();
+        for (int index = 0; index < heroItems.size(); index++) {
+            if (index > 0) dots.append("  ");
+            dots.append(index == heroIndex ? "●" : "○");
+        }
+        heroDots.setText(dots.toString());
+        heroDots.setTextColor(UiPalette.PRIMARY);
+        heroDots.setContentDescription(
+                "Featured show " + (heroIndex + 1) + " of " + heroItems.size()
+        );
+        heroDots.setVisibility(View.VISIBLE);
+    }
+
+    private void scheduleHeroRotation() {
+        heroHandler.removeCallbacksAndMessages(null);
+        if (heroItems.size() <= 1 || !isAttachedToWindow()
+                || !ZeroChillMotion.animationsEnabled(getContext())) return;
+        heroHandler.postDelayed(this::rotateHero, HERO_ROTATION_MS);
+    }
+
+    private void rotateHero() {
+        if (!isAttachedToWindow() || getWindowVisibility() != View.VISIBLE
+                || heroItems.size() <= 1) {
+            scheduleHeroRotation();
+            return;
+        }
+        int next = (Math.max(0, heroIndex) + 1) % heroItems.size();
+        showHero(next, true);
+        scheduleHeroRotation();
+    }
+
+    private void prewarmNextHero() {
+        if (heroItems.size() <= 1 || heroIndex < 0) return;
+        preloadArtwork(heroItems.get((heroIndex + 1) % heroItems.size()));
+    }
+
+    private void preloadArtwork(NativeContentItem item) {
+        if (item == null || EmbeddedBrowseArtwork.has(getContext(), item.url)) return;
+        String imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
+        if (imageUrl.isEmpty()) return;
+
+        LazyHeaders.Builder headers = new LazyHeaders.Builder()
+                .addHeader("User-Agent", USER_AGENT);
+        if (item.url != null && item.url.startsWith("http")) {
+            headers.addHeader("Referer", item.url);
+        }
+        Glide.with(this)
+                .load(new GlideUrl(imageUrl, headers.build()))
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .preload();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        scheduleHeroRotation();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        heroHandler.removeCallbacksAndMessages(null);
+        heroCard.animate().cancel();
+        super.onDetachedFromWindow();
     }
 
     private void openHero() {
         if (heroItem != null && listener != null) listener.onOpen(heroItem);
+    }
+
+    private ContinueShelf addContinueShelf() {
+        LinearLayout block = new LinearLayout(getContext());
+        block.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(-1, -2);
+        blockParams.setMargins(0, 0, 0, dp(20));
+        content.addView(block, blockParams);
+
+        LinearLayout heading = new LinearLayout(getContext());
+        heading.setOrientation(LinearLayout.VERTICAL);
+        heading.setPadding(dp(3), 0, dp(3), dp(8));
+
+        TextView titleView = text("Continue Watching", 20f, Color.WHITE);
+        titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+        heading.addView(titleView);
+
+        TextView subtitleView = text(
+                "Shows videos you started",
+                12f,
+                ZeroChillUi.color(getContext(), R.color.zc_text_secondary)
+        );
+        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
+        subtitleParams.topMargin = dp(1);
+        heading.addView(subtitleView, subtitleParams);
+        block.addView(heading);
+
+        RecyclerView rail = new RecyclerView(getContext());
+        rail.setClipToPadding(false);
+        rail.setHorizontalScrollBarEnabled(false);
+        rail.setOverScrollMode(OVER_SCROLL_NEVER);
+        LinearLayoutManager manager =
+                new LinearLayoutManager(getContext(), RecyclerView.HORIZONTAL, false);
+        manager.setInitialPrefetchItemCount(4);
+        rail.setLayoutManager(manager);
+
+        ContinueAdapter adapter = new ContinueAdapter();
+        rail.setAdapter(adapter);
+        rail.setPadding(dp(2), 0, dp(22), 0);
+        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(154)));
+
+        block.setVisibility(View.GONE);
+        return new ContinueShelf(block, adapter);
     }
 
     private Shelf addShelf(String title, String subtitle, boolean wideCards) {
@@ -359,6 +555,17 @@ final class ShowsHubView extends FrameLayout {
         return new ArrayList<>(items);
     }
 
+    private String formatTime(long millis) {
+        long total = Math.max(0L, millis / 1000L);
+        long hours = total / 3600L;
+        long minutes = (total % 3600L) / 60L;
+        long seconds = total % 60L;
+        if (hours > 0L) {
+            return String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, seconds);
+        }
+        return String.format(java.util.Locale.US, "%d:%02d", minutes, seconds);
+    }
+
     private TextView text(String value, float size, int color) {
         TextView view = new TextView(getContext());
         view.setText(value);
@@ -369,6 +576,137 @@ final class ShowsHubView extends FrameLayout {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private final class ContinueAdapter extends RecyclerView.Adapter<ContinueHolder> {
+        private final List<PlaybackHistoryStore.Item> items = new ArrayList<>();
+
+        ContinueAdapter() {
+            setHasStableIds(true);
+        }
+
+        void replace(List<PlaybackHistoryStore.Item> next) {
+            items.clear();
+            if (next != null) {
+                int count = Math.min(12, next.size());
+                items.addAll(next.subList(0, count));
+            }
+            notifyDataSetChanged();
+        }
+
+        @Override
+        public long getItemId(int position) {
+            return items.get(position).pageUrl.hashCode();
+        }
+
+        @NonNull
+        @Override
+        public ContinueHolder onCreateViewHolder(
+                @NonNull android.view.ViewGroup parent,
+                int viewType
+        ) {
+            MaterialCardView card = new MaterialCardView(getContext());
+            ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
+            card.setRadius(dp(16));
+            card.setCardElevation(0f);
+            card.setStrokeWidth(dp(1));
+            card.setStrokeColor(ZeroChillUi.color(getContext(), R.color.zc_edge));
+            card.setClickable(true);
+            card.setFocusable(true);
+            ZeroChillMotion.installPressFeedback(card);
+
+            RecyclerView.LayoutParams params =
+                    new RecyclerView.LayoutParams(dp(220), dp(140));
+            params.setMargins(dp(3), dp(2), dp(8), dp(4));
+            card.setLayoutParams(params);
+
+            FrameLayout frame = new FrameLayout(getContext());
+            card.addView(frame, new MaterialCardView.LayoutParams(-1, -1));
+
+            ImageView image = new ImageView(getContext());
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            image.setBackground(new ColorDrawable(Color.rgb(20, 22, 25)));
+            frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
+
+            View shade = new View(getContext());
+            shade.setBackground(new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[] {
+                            Color.argb(0, 0, 0, 0),
+                            Color.argb(54, 0, 0, 0),
+                            Color.argb(244, 0, 0, 0)
+                    }
+            ));
+            frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+
+            TextView meta = text("", 10.5f, UiPalette.PRIMARY);
+            meta.setTypeface(null, android.graphics.Typeface.BOLD);
+            meta.setLetterSpacing(0.05f);
+            FrameLayout.LayoutParams metaParams =
+                    new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
+            metaParams.setMargins(dp(11), dp(10), dp(11), 0);
+            frame.addView(meta, metaParams);
+
+            TextView title = text("", 14.5f, Color.WHITE);
+            title.setTypeface(null, android.graphics.Typeface.BOLD);
+            title.setMaxLines(2);
+            title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            title.setGravity(Gravity.BOTTOM);
+            title.setPadding(dp(11), dp(8), dp(11), dp(12));
+            frame.addView(title, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+
+            FrameLayout progressTrack = new FrameLayout(getContext());
+            progressTrack.setBackgroundColor(Color.argb(190, 5, 8, 10));
+            FrameLayout.LayoutParams trackParams =
+                    new FrameLayout.LayoutParams(-1, dp(4), Gravity.BOTTOM);
+            frame.addView(progressTrack, trackParams);
+
+            View progressFill = new View(getContext());
+            progressFill.setBackgroundColor(UiPalette.PRIMARY);
+            progressFill.setPivotX(0f);
+            progressTrack.addView(progressFill, new FrameLayout.LayoutParams(-1, -1));
+
+            return new ContinueHolder(card, image, title, meta, progressTrack, progressFill);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ContinueHolder holder, int position) {
+            PlaybackHistoryStore.Item history = items.get(position);
+            NativeContentItem item = new NativeContentItem(
+                    NativeContentItem.KIND_MEDIA,
+                    history.title,
+                    history.pageUrl,
+                    history.posterUrl,
+                    "",
+                    "",
+                    ""
+            );
+            holder.title.setText(history.title);
+            holder.meta.setText("CONTINUE · " + formatTime(history.positionMs));
+            holder.card.setContentDescription("Resume " + history.title);
+            float progress = history.durationMs <= 0L
+                    ? 0f
+                    : Math.max(0f, Math.min(1f,
+                    history.positionMs / (float) history.durationMs));
+            holder.progressFill.setScaleX(progress);
+            holder.progressTrack.setVisibility(history.durationMs > 0L ? View.VISIBLE : View.GONE);
+            holder.card.setOnClickListener(v -> {
+                if (videoListener != null) videoListener.onOpen(item);
+            });
+            loadArtwork(holder.image, item, false);
+        }
+
+        @Override
+        public void onViewRecycled(@NonNull ContinueHolder holder) {
+            Glide.with(holder.image).clear(holder.image);
+            holder.card.setOnClickListener(null);
+            super.onViewRecycled(holder);
+        }
+
+        @Override
+        public int getItemCount() {
+            return items.size();
+        }
     }
 
     private final class RailAdapter extends RecyclerView.Adapter<RailHolder> {
@@ -471,6 +809,42 @@ final class ShowsHubView extends FrameLayout {
         Shelf(LinearLayout container, RailAdapter adapter) {
             this.container = container;
             this.adapter = adapter;
+        }
+    }
+
+    private final class ContinueShelf {
+        final LinearLayout container;
+        final ContinueAdapter adapter;
+
+        ContinueShelf(LinearLayout container, ContinueAdapter adapter) {
+            this.container = container;
+            this.adapter = adapter;
+        }
+    }
+
+    private static final class ContinueHolder extends RecyclerView.ViewHolder {
+        final MaterialCardView card;
+        final ImageView image;
+        final TextView title;
+        final TextView meta;
+        final View progressTrack;
+        final View progressFill;
+
+        ContinueHolder(
+                MaterialCardView card,
+                ImageView image,
+                TextView title,
+                TextView meta,
+                View progressTrack,
+                View progressFill
+        ) {
+            super(card);
+            this.card = card;
+            this.image = image;
+            this.title = title;
+            this.meta = meta;
+            this.progressTrack = progressTrack;
+            this.progressFill = progressFill;
         }
     }
 
