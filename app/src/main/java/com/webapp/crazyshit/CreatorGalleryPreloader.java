@@ -17,9 +17,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Warms small creator-gallery sessions for creator cards that are visible or close to visible.
@@ -34,8 +36,17 @@ final class CreatorGalleryPreloader {
     private static final int MAX_RESERVED = 8;
     private static final int IMAGE_WARM_LIMIT = 8;
     private static final int IMAGE_CACHE_KEYS = 160;
+    static final int PRIORITY_NORMAL = 0;
+    static final int PRIORITY_HIGH = 10;
 
-    private static final ExecutorService IO = Executors.newFixedThreadPool(2);
+    private static final AtomicLong SEQUENCE = new AtomicLong();
+    private static final ThreadPoolExecutor IO = new ThreadPoolExecutor(
+            2,
+            2,
+            30L,
+            TimeUnit.SECONDS,
+            new PriorityBlockingQueue<>()
+    );
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<String, String> SESSIONS = new ConcurrentHashMap<>();
     private static final Set<String> WARMING = ConcurrentHashMap.newKeySet();
@@ -53,15 +64,29 @@ final class CreatorGalleryPreloader {
     }
 
     static void warm(Context context, NativeContentItem creator) {
+        warm(context, creator, PRIORITY_NORMAL);
+    }
+
+    static void warm(Context context, NativeContentItem creator, int priority) {
         if (creator == null || !creator.isCreator()) return;
         String query = creator.searchQuery == null || creator.searchQuery.trim().isEmpty()
                 ? creator.title
                 : creator.searchQuery.trim();
         String fapelloProfile = FapelloRepository.isModelUrl(creator.url) ? creator.url : "";
-        warm(context, creator.title, query, fapelloProfile);
+        warm(context, creator.title, query, fapelloProfile, priority);
     }
 
     static void warm(Context context, String creatorName, String query, String fapelloProfileUrl) {
+        warm(context, creatorName, query, fapelloProfileUrl, PRIORITY_NORMAL);
+    }
+
+    static void warm(
+            Context context,
+            String creatorName,
+            String query,
+            String fapelloProfileUrl,
+            int priority
+    ) {
         if (context == null) return;
         String cleanName = clean(creatorName);
         String cleanQuery = clean(query);
@@ -92,7 +117,7 @@ final class CreatorGalleryPreloader {
         String finalQuery = cleanQuery;
         String finalFapelloProfile = clean(fapelloProfileUrl);
 
-        IO.execute(() -> {
+        IO.execute(new WarmTask(priority, SEQUENCE.getAndIncrement(), () -> {
             String sessionId = "";
             try {
                 String nowRecent = BunkrGallerySessionStore.recentCreator(finalQuery);
@@ -102,6 +127,19 @@ final class CreatorGalleryPreloader {
                             BunkrGallerySessionStore.snapshot(nowRecent);
                     if (snapshot != null) warmImages(safeContext, snapshot.items);
                     return;
+                }
+
+                String persistedId =
+                        BunkrGallerySessionStore.recentCreatorId(safeContext, finalQuery);
+                if (persistedId != null) {
+                    BunkrGallerySessionStore.Snapshot persisted =
+                            BunkrGallerySessionStore.restoreRecentCreator(
+                                    safeContext, finalQuery);
+                    if (persisted != null) {
+                        SESSIONS.put(key, persistedId);
+                        warmImages(safeContext, persisted.items);
+                        return;
+                    }
                 }
 
                 sessionId = BunkrGallerySessionStore.createCreator(
@@ -138,7 +176,7 @@ final class CreatorGalleryPreloader {
                     SESSIONS.remove(key, sessionId);
                 }
             }
-        });
+        }));
     }
 
     static String sessionId(NativeContentItem creator) {
@@ -147,6 +185,14 @@ final class CreatorGalleryPreloader {
                 ? creator.title
                 : creator.searchQuery.trim();
         return sessionId(query);
+    }
+
+    static String sessionId(Context context, NativeContentItem creator) {
+        if (creator == null) return "";
+        String query = creator.searchQuery == null || creator.searchQuery.trim().isEmpty()
+                ? creator.title
+                : creator.searchQuery.trim();
+        return sessionId(context, query);
     }
 
     static String sessionId(String query) {
@@ -162,6 +208,13 @@ final class CreatorGalleryPreloader {
             return "";
         }
         return session;
+    }
+
+    static String sessionId(Context context, String query) {
+        String inMemory = sessionId(query);
+        if (!inMemory.isEmpty()) return inMemory;
+        String persisted = BunkrGallerySessionStore.recentCreatorId(context, clean(query));
+        return persisted == null ? "" : persisted;
     }
 
     private static boolean reserve() {
@@ -233,6 +286,30 @@ final class CreatorGalleryPreloader {
             return item.uploader;
         }
         return item == null ? null : item.url;
+    }
+
+    private static final class WarmTask implements Runnable, Comparable<WarmTask> {
+        private final int priority;
+        private final long sequence;
+        private final Runnable work;
+
+        WarmTask(int priority, long sequence, Runnable work) {
+            this.priority = priority;
+            this.sequence = sequence;
+            this.work = work;
+        }
+
+        @Override
+        public void run() {
+            work.run();
+        }
+
+        @Override
+        public int compareTo(WarmTask other) {
+            if (other == null) return -1;
+            int byPriority = Integer.compare(other.priority, priority);
+            return byPriority != 0 ? byPriority : Long.compare(sequence, other.sequence);
+        }
     }
 
     private static String key(String creator) {
