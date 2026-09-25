@@ -73,7 +73,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private SwipeRefreshLayout swipeRefresh;
     private View progress;
     private TextView emptyView;
-    private BottomNavigationView bottomNavigation;
+    private ZeroChillBottomNavigationView bottomNavigation;
     private NativeFeedAdapter feedAdapter;
     private NativeMiniPlayer miniPlayer;
     private FrameLayout legacyContent;
