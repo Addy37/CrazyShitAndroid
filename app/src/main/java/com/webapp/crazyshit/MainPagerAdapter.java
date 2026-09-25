@@ -42,7 +42,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private static final int SERIES_SOURCE_BUNKR = 2;
     private static final int SERIES_SOURCE_CATEGORIES = 3;
     private static final int SERIES_SOURCE_HUB = 4;
-    private static final String PREF_SERIES_SOURCE = "native_series_source_v2";
+    private static final String PREF_SERIES_SOURCE = "native_series_source";
     private static final String PREF_FAPZONE_MODE = "native_fapzone_mode";
 
     public interface Host {
@@ -394,7 +394,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         android.content.SharedPreferences prefs =
                 activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
         int storedSource = prefs.getInt(PREF_SERIES_SOURCE, SERIES_SOURCE_HUB);
-        if (storedSource == SERIES_SOURCE_HUB ||
+        if (storedSource == SERIES_SOURCE_BUNKR) {
+            // Value 2 was the removed OnlyFap source in older builds. Preserve the existing
+            // migration to CrazyShit instead of repurposing that persisted value.
+            page.seriesSource = SERIES_SOURCE_CRAZYSHIT;
+            prefs.edit().putInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT).apply();
+        } else if (storedSource == SERIES_SOURCE_HUB ||
                 storedSource == SERIES_SOURCE_CRAZYSHIT ||
                 storedSource == SERIES_SOURCE_EFUKT ||
                 storedSource == SERIES_SOURCE_CATEGORIES) {
