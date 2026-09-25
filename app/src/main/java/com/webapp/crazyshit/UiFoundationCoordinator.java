@@ -59,7 +59,8 @@ final class UiFoundationCoordinator {
             ResponsiveFitmentController.applySoon(activity);
         } else if (activity instanceof VideoDetailActivity) {
             VideoDetailActivity detail = (VideoDetailActivity) activity;
-            RelatedVideosPolish.attach(detail);
+            if (!detail.isShowsOrigin()) RelatedVideosPolish.attach(detail);
+            else RelatedVideosPolish.detach(detail);
             PredictiveBackPolish.attach(detail);
             ResponsiveFitmentController.applySoon(activity);
         } else {

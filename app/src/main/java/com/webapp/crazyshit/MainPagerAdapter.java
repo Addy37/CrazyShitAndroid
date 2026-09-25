@@ -401,6 +401,81 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         ));
     }
 
+    private void openShowsResume(PlaybackHistoryStore.Item history) {
+        if (history == null || history.pageUrl == null || history.pageUrl.trim().isEmpty()) return;
+        NativeContentItem item = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                history.title,
+                history.pageUrl,
+                history.posterUrl,
+                "",
+                "",
+                ""
+        );
+        io.execute(() -> {
+            CrazyShitRepository.StreamInfo stream = null;
+            try {
+                stream = PlayableSourceRouter.resolve(activity, item);
+            } catch (Exception ignored) {
+            }
+            CrazyShitRepository.StreamInfo resolved = stream;
+            activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
+                if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    android.content.Intent fallback =
+                            new android.content.Intent(activity, WebFallbackActivity.class);
+                    fallback.putExtra(WebFallbackActivity.EXTRA_URL, history.pageUrl);
+                    activity.startActivity(fallback);
+                    return;
+                }
+
+                String resolvedPage = resolved.pageUrl == null ? history.pageUrl : resolved.pageUrl;
+                String source = WebVideoSourceRepository.isKaoticUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_KAOTIC
+                        : EfuktRepository.isEfuktUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                        : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
+
+                android.content.Intent intent =
+                        new android.content.Intent(activity, VideoDetailActivity.class);
+                intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, resolved.mediaUrl);
+                // Keep the history identity stable when a resolver canonicalizes or redirects
+                // the source page. This updates the same Continue Watching entry on exit.
+                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, history.pageUrl);
+                intent.putExtra(PlayerActivity.EXTRA_TITLE, history.title);
+                intent.putExtra(PlayerActivity.EXTRA_START_POSITION, history.positionMs);
+                intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
+                intent.putExtra(
+                        VideoDetailActivity.EXTRA_MEDIA_REFERER,
+                        resolved.requestReferer
+                );
+                if (history.posterUrl != null && !history.posterUrl.trim().isEmpty()) {
+                    intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, history.posterUrl);
+                }
+                try {
+                    intent.putExtra(
+                            PlayerActivity.EXTRA_USER_AGENT,
+                            android.webkit.WebSettings.getDefaultUserAgent(activity)
+                    );
+                } catch (Exception ignored) {
+                }
+                try {
+                    String cookies = android.webkit.CookieManager.getInstance()
+                            .getCookie(resolved.mediaUrl);
+                    if ((cookies == null || cookies.isEmpty()) && resolvedPage != null) {
+                        cookies = android.webkit.CookieManager.getInstance().getCookie(resolvedPage);
+                    }
+                    if (cookies != null) {
+                        intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
+                    }
+                } catch (Exception ignored) {
+                }
+                activity.startActivity(intent);
+            });
+        });
+    }
+
     private Page buildBrowsePage(int index, PageKind kind) {
         Page page = createPageShell(index, kind, "", "");
         NativeCategoryAdapter.Listener browseListener =
@@ -412,7 +487,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.showsHub = new ShowsHubView(
                     activity,
                     this::openShowDetails,
-                    host::onOpenItem,
+                    this::openShowsResume,
                     item -> ShowsCollectionWarmCache.request(activity, item)
             );
             page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));

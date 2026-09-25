@@ -35,6 +35,10 @@ final class ShowsHubView extends FrameLayout {
         void onOpen(NativeContentItem item);
     }
 
+    interface ContinueListener {
+        void onResume(PlaybackHistoryStore.Item item);
+    }
+
     interface PrewarmListener {
         void onPrewarm(NativeContentItem item);
     }
@@ -46,7 +50,7 @@ final class ShowsHubView extends FrameLayout {
     private static final int HERO_MAX_ITEMS = 5;
 
     private final Listener listener;
-    private final Listener videoListener;
+    private final ContinueListener continueListener;
     private final PrewarmListener prewarmListener;
     private final Handler heroHandler = new Handler(Looper.getMainLooper());
     private final ScrollView scroll;
@@ -78,12 +82,12 @@ final class ShowsHubView extends FrameLayout {
     ShowsHubView(
             Context context,
             Listener listener,
-            Listener videoListener,
+            ContinueListener continueListener,
             PrewarmListener prewarmListener
     ) {
         super(context);
         this.listener = listener;
-        this.videoListener = videoListener;
+        this.continueListener = continueListener;
         this.prewarmListener = prewarmListener;
         setBackgroundColor(ZeroChillUi.background(context));
 
@@ -697,6 +701,27 @@ final class ShowsHubView extends FrameLayout {
                 .into(view);
     }
 
+    private void loadContinueArtwork(
+            ImageView view,
+            NativeContentItem item,
+            String pageUrl
+    ) {
+        java.io.File savedFrame = ShowsContinueFrameStore.find(getContext(), pageUrl);
+        if (savedFrame == null) {
+            loadArtwork(view, item, false);
+            return;
+        }
+        Glide.with(view)
+                .load(savedFrame)
+                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .skipMemoryCache(false)
+                .centerCrop()
+                .dontAnimate()
+                .placeholder(new ColorDrawable(Color.rgb(20, 22, 25)))
+                .error(new ColorDrawable(Color.rgb(20, 22, 25)))
+                .into(view);
+    }
+
     private List<NativeContentItem> safe(List<NativeContentItem> items) {
         if (items == null || items.isEmpty()) return Collections.emptyList();
         return new ArrayList<>(items);
@@ -838,9 +863,9 @@ final class ShowsHubView extends FrameLayout {
             holder.progressFill.setScaleX(progress);
             holder.progressTrack.setVisibility(history.durationMs > 0L ? View.VISIBLE : View.GONE);
             holder.card.setOnClickListener(v -> {
-                if (videoListener != null) videoListener.onOpen(item);
+                if (continueListener != null) continueListener.onResume(history);
             });
-            loadArtwork(holder.image, item, false);
+            loadContinueArtwork(holder.image, item, history.pageUrl);
         }
 
         @Override
