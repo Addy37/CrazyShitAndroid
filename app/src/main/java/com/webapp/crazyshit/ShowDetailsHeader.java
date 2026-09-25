@@ -29,6 +29,7 @@ final class ShowDetailsHeader extends FrameLayout {
     private final ImageView artwork;
     private final TextView count;
     private final String collectionUrl;
+    private final String itemNoun;
 
     ShowDetailsHeader(
             Context context,
@@ -37,10 +38,12 @@ final class ShowDetailsHeader extends FrameLayout {
             String description,
             String collectionUrl,
             String imageUrl,
+            String itemNoun,
             Listener listener
     ) {
         super(context);
         this.collectionUrl = collectionUrl == null ? "" : collectionUrl;
+        this.itemNoun = "episode".equalsIgnoreCase(itemNoun) ? "episode" : "video";
         setBackgroundColor(Color.BLACK);
 
         artwork = new ImageView(context);
@@ -103,16 +106,18 @@ final class ShowDetailsHeader extends FrameLayout {
         copy.addView(metaRow, metaParams);
 
         count = text(
-                "Loading videos…",
+                "Loading " + pluralItemNoun() + "…",
                 12f,
                 ZeroChillUi.color(context, R.color.zc_text_secondary)
         );
         metaRow.addView(count, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView action = text("BROWSE VIDEOS", 12f, Color.BLACK);
+        TextView action = text("BROWSE " + pluralItemNoun().toUpperCase(java.util.Locale.US), 12f, Color.BLACK);
         action.setTypeface(null, android.graphics.Typeface.BOLD);
         action.setGravity(Gravity.CENTER);
-        action.setContentDescription("Browse videos in " + clean(title, "this show"));
+        action.setContentDescription(
+                "Browse " + pluralItemNoun() + " in " + clean(title, "this show")
+        );
         GradientDrawable actionBackground = new GradientDrawable();
         actionBackground.setColor(UiPalette.PRIMARY);
         actionBackground.setCornerRadius(dp(19));
@@ -130,12 +135,16 @@ final class ShowDetailsHeader extends FrameLayout {
 
     void setItemCount(int itemCount) {
         if (itemCount <= 0) {
-            count.setText("No videos loaded yet");
+            count.setText("No " + pluralItemNoun() + " loaded yet");
         } else if (itemCount == 1) {
-            count.setText("1 video");
+            count.setText("1 " + itemNoun);
         } else {
-            count.setText(itemCount + " videos");
+            count.setText(itemCount + " " + pluralItemNoun());
         }
+    }
+
+    private String pluralItemNoun() {
+        return itemNoun + "s";
     }
 
     private void loadArtwork(String imageUrl) {
