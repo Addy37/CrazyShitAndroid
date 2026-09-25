@@ -312,17 +312,28 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     }
 
                     @Override
-                    public void onNavigationDragBy(float deltaX) {
+                    public void onNavigationDragBy(float deltaPageFraction) {
                         if (primaryPager != null && primaryPager.isFakeDragging()) {
-                            primaryPager.fakeDragBy(deltaX);
+                            float pageWidth = Math.max(1f, primaryPager.getWidth());
+                            primaryPager.fakeDragBy(deltaPageFraction * pageWidth);
                         }
                     }
 
                     @Override
                     public void onNavigationDragEnd(boolean canceled) {
-                        if (primaryPager != null && primaryPager.isFakeDragging()) {
-                            primaryPager.endFakeDrag();
-                        }
+                        if (primaryPager == null || !primaryPager.isFakeDragging()) return;
+                        float releasePosition = bottomNavigation == null
+                                ? primaryPager.getCurrentItem()
+                                : bottomNavigation.pagerPositionForTest();
+                        int target = Math.max(
+                                MainPagerAdapter.PAGE_HOME,
+                                Math.min(MainPagerAdapter.PAGE_ONLYFAP, Math.round(releasePosition))
+                        );
+                        primaryPager.endFakeDrag();
+                        primaryPager.setCurrentItem(
+                                target,
+                                ZeroChillMotion.animationsEnabled(NativeMainActivity.this)
+                        );
                     }
                 }
         );
