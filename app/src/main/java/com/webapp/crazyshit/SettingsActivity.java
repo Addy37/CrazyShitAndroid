@@ -9,6 +9,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -16,6 +17,7 @@ import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.WebStorage;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -291,8 +293,31 @@ public class SettingsActivity extends Activity {
         footer.setPadding(dp(8), dp(28), dp(8), 0);
         root.addView(footer);
 
+        FrameLayout shell = new FrameLayout(this);
+        shell.setBackgroundColor(background);
+        shell.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+
+        View topScrim = new View(this);
+        topScrim.setClickable(false);
+        topScrim.setFocusable(false);
+        topScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        GradientDrawable scrim = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{
+                        Color.BLACK,
+                        Color.argb(235, 0, 0, 0),
+                        Color.argb(150, 0, 0, 0),
+                        Color.TRANSPARENT
+                }
+        );
+        topScrim.setBackground(scrim);
+        FrameLayout.LayoutParams scrimParams =
+                new FrameLayout.LayoutParams(-1, dp(96));
+        scrimParams.gravity = Gravity.TOP;
+        shell.addView(topScrim, scrimParams);
+
         applyWindowInsets(scroll);
-        setContentView(scroll);
+        setContentView(shell);
     }
 
     private void applyWindowInsets(ScrollView scroll) {
@@ -303,7 +328,9 @@ public class SettingsActivity extends Activity {
                     WindowInsetsCompat.Type.systemBars()
                             | WindowInsetsCompat.Type.displayCutout()
             );
-            view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+            // Settings intentionally draws under the status bar. Keep only side and bottom
+            // safe areas while a fixed black scrim protects the system-bar region visually.
+            view.setPadding(safe.left, 0, safe.right, safe.bottom);
             return WindowInsetsCompat.CONSUMED;
         });
         ViewCompat.requestApplyInsets(scroll);
