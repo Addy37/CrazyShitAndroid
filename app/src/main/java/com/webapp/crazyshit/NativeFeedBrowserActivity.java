@@ -417,7 +417,6 @@ public final class NativeFeedBrowserActivity extends Activity {
                     showDescription,
                     baseUrl,
                     showImageUrl,
-                    showItemNoun(),
                     () -> {
                         if (showDetailsAppBar != null) {
                             showDetailsAppBar.setExpanded(false, true);
@@ -457,7 +456,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             detailsFeed.setOrientation(LinearLayout.VERTICAL);
             detailsFeed.setBackgroundColor(Color.BLACK);
 
-            TextView section = text(showSectionLabel(), 12, UiPalette.PRIMARY);
+            TextView section = text("VIDEOS", 12, UiPalette.PRIMARY);
             section.setTypeface(null, android.graphics.Typeface.BOLD);
             section.setLetterSpacing(0.12f);
             section.setGravity(Gravity.CENTER_VERTICAL);
@@ -1273,9 +1272,7 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void showOptions(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
-        if (!isBunkr() && !showDetailsMode) {
-            menu.getMenu().add(Menu.NONE, 1, 0, "View style");
-        }
+        if (!isBunkr()) menu.getMenu().add(Menu.NONE, 1, 0, "View style");
         menu.getMenu().add(Menu.NONE, 2, 1, "Open website");
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
@@ -1309,7 +1306,6 @@ public final class NativeFeedBrowserActivity extends Activity {
     }
 
     private int viewMode() {
-        if (showDetailsMode) return NativeFeedAdapter.VIEW_EPISODES;
         int mode = getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getInt("native_view_collection", NativeFeedAdapter.VIEW_LIST);
         if (mode < NativeFeedAdapter.VIEW_CARDS || mode > NativeFeedAdapter.VIEW_POSTERS) {
@@ -1622,18 +1618,6 @@ public final class NativeFeedBrowserActivity extends Activity {
         if (isEfukt()) return "EFUKT SERIES";
         if (NativeContentItem.KIND_CATEGORY.equals(showKind)) return "CRAZYSHIT CATEGORY";
         return "CRAZYSHIT SHOW";
-    }
-
-    private boolean isShowCategory() {
-        return NativeContentItem.KIND_CATEGORY.equals(showKind);
-    }
-
-    private String showSectionLabel() {
-        return isShowCategory() ? "VIDEOS" : "EPISODES";
-    }
-
-    private String showItemNoun() {
-        return isShowCategory() ? "video" : "episode";
     }
 
     private void updateShowDetailsHeader() {
