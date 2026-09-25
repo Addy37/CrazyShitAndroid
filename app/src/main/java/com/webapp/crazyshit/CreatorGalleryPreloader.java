@@ -193,7 +193,7 @@ final class CreatorGalleryPreloader {
                 : creator.searchQuery.trim();
         String key = key(query);
         WarmTask task = PENDING.get(key);
-        if (task == null || !IO.remove(task)) return;
+        if (task == null || task.priority >= PRIORITY_HIGH || !IO.remove(task)) return;
         if (PENDING.remove(key, task)) {
             WARMING.remove(key);
             RESERVED.decrementAndGet();
