@@ -85,6 +85,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     private TabLayout creatorTabs;
     private CreatorProfileHeader creatorProfile;
     private AppBarLayout creatorAppBar;
+    private AppBarLayout collectionAppBar;
+    private CollectionDetailHeader collectionHeader;
     private TabLayoutMediator creatorTabsMediator;
     private SwipeRefreshLayout refresh;
     private View progress;
@@ -368,6 +370,59 @@ public final class NativeFeedBrowserActivity extends Activity {
                     new CoordinatorLayout.LayoutParams(-1, -1);
             bodyParams.setBehavior(new AppBarLayout.ScrollingViewBehavior());
             coordinator.addView(body, bodyParams);
+        } else if (isCollectionDetails()) {
+            CoordinatorLayout coordinator = new CoordinatorLayout(this);
+            coordinator.setBackgroundColor(Color.BLACK);
+            shell.addView(coordinator, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+            collectionAppBar = new AppBarLayout(this);
+            collectionAppBar.setBackgroundColor(Color.BLACK);
+            collectionAppBar.setElevation(0f);
+            collectionAppBar.setLiftOnScroll(false);
+            CoordinatorLayout.LayoutParams appBarParams =
+                    new CoordinatorLayout.LayoutParams(-1, -2);
+            appBarParams.gravity = Gravity.TOP;
+            coordinator.addView(collectionAppBar, appBarParams);
+
+            collectionHeader = new CollectionDetailHeader(
+                    this,
+                    title,
+                    baseUrl,
+                    source,
+                    isSeriesDetails()
+            );
+            int heroHeight = getResources().getConfiguration().orientation
+                    == Configuration.ORIENTATION_LANDSCAPE ? 188 : 252;
+            AppBarLayout.LayoutParams heroParams =
+                    new AppBarLayout.LayoutParams(-1, dp(heroHeight));
+            heroParams.setScrollFlags(
+                    AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL |
+                            AppBarLayout.LayoutParams.SCROLL_FLAG_EXIT_UNTIL_COLLAPSED
+            );
+            collectionAppBar.addView(collectionHeader, heroParams);
+
+            TextView sectionLabel = text(
+                    isSeriesDetails() ? "EPISODES" : "VIDEOS",
+                    12,
+                    Color.WHITE
+            );
+            sectionLabel.setGravity(Gravity.CENTER_VERTICAL);
+            sectionLabel.setTypeface(null, android.graphics.Typeface.BOLD);
+            sectionLabel.setLetterSpacing(0.08f);
+            sectionLabel.setPadding(dp(18), 0, dp(18), 0);
+            sectionLabel.setBackgroundColor(Color.BLACK);
+            sectionLabel.setContentDescription(
+                    isSeriesDetails() ? "Episodes" : "Videos"
+            );
+            collectionAppBar.addView(
+                    sectionLabel,
+                    new AppBarLayout.LayoutParams(-1, dp(44))
+            );
+
+            CoordinatorLayout.LayoutParams bodyParams =
+                    new CoordinatorLayout.LayoutParams(-1, -1);
+            bodyParams.setBehavior(new AppBarLayout.ScrollingViewBehavior());
+            coordinator.addView(body, bodyParams);
         } else {
             shell.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
         }
@@ -423,6 +478,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     ).show();
                 }
             });
+            adapter.setCollectionDetailPresentation(isCollectionDetails());
             recycler.setAdapter(adapter);
             refresh.addView(recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
             attachFeedScrollListener(recycler);
@@ -612,6 +668,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         loading = false;
         endReached = false;
         empty.setVisibility(View.GONE);
+        if (collectionHeader != null) collectionHeader.setLoading();
         if (isBunkr()) {
             replaceBunkrItems(new ArrayList<>());
             bunkrGallerySessionId = isCreatorGallery()
@@ -697,6 +754,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     } else {
                         adapter.replace(result);
                     }
+                    updateCollectionDetailCount();
                     int added = itemCount() - before;
                     if (currentCreator == null && !result.isEmpty() && (!append || added > 0)) currentPage = requestPage;
                     if (isCreatorGallery()) {
@@ -1176,7 +1234,9 @@ public final class NativeFeedBrowserActivity extends Activity {
 
     private void showOptions(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
-        if (!isBunkr()) menu.getMenu().add(Menu.NONE, 1, 0, "View style");
+        if (!isBunkr() && !isCollectionDetails()) {
+            menu.getMenu().add(Menu.NONE, 1, 0, "View style");
+        }
         menu.getMenu().add(Menu.NONE, 2, 1, "Open website");
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 1) {
@@ -1249,6 +1309,18 @@ public final class NativeFeedBrowserActivity extends Activity {
             if (bunkrGalleryAdapter.getItemCount() > 0) {
                 int safe = Math.min(position, bunkrGalleryAdapter.getItemCount() - 1);
                 gallery.scrollToPositionWithOffset(safe, offset);
+            }
+            return;
+        }
+
+        if (isCollectionDetails()) {
+            adapter.setCollectionDetailPresentation(true);
+            adapter.setViewMode(NativeFeedAdapter.VIEW_LIST);
+            LinearLayoutManager details = new LinearLayoutManager(this);
+            recycler.setLayoutManager(details);
+            if (adapter.getItemCount() > 0) {
+                int safe = Math.min(position, adapter.getItemCount() - 1);
+                details.scrollToPositionWithOffset(safe, offset);
             }
             return;
         }
@@ -1506,6 +1578,23 @@ public final class NativeFeedBrowserActivity extends Activity {
         return SOURCE_EFUKT.equals(source) || EfuktRepository.isEfuktUrl(baseUrl);
     }
 
+    private boolean isCollectionDetails() {
+        if (isBunkr() || memeMode) return false;
+        String url = baseUrl == null ? "" : baseUrl.toLowerCase(java.util.Locale.US);
+        return url.contains("/series/") ||
+                url.contains("/category/") ||
+                SOURCE_EFUKT.equals(source);
+    }
+
+    private boolean isSeriesDetails() {
+        String url = baseUrl == null ? "" : baseUrl.toLowerCase(java.util.Locale.US);
+        return SOURCE_EFUKT.equals(source) || url.contains("/series/");
+    }
+
+    private void updateCollectionDetailCount() {
+        if (collectionHeader != null) collectionHeader.setItemCount(itemCount());
+    }
+
     private boolean isBunkr() {
         return SOURCE_BUNKR.equals(source) || BunkrRepository.isAlbumUrl(baseUrl);
     }
@@ -1550,6 +1639,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     if (gallery.items.isEmpty() && !endReached) { load(false); return; }
                 } else if (feed != null) {
                     adapter.replace(ContentItemCodec.decodeList(feed.optJSONArray("items"), 2000));
+                    updateCollectionDetailCount();
                     currentPage = feed.optInt("page"); endReached = feed.optBoolean("end");
                 } else {
                     if (isBunkr()) {
