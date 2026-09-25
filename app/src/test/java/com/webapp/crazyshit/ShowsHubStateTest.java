@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.app.Application;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ScrollView;
@@ -9,6 +10,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
 import java.util.ArrayList;
@@ -17,6 +19,7 @@ import java.util.List;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class ShowsHubStateTest {
     @Test
     public void restoresVerticalHubPositionAfterRecreation() {
