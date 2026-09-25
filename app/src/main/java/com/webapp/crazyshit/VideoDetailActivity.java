@@ -154,6 +154,8 @@ public class VideoDetailActivity extends Activity {
     private int relatedLoadGeneration;
     private int relatedPlayGeneration;
     private boolean portraitSeekScrubbing;
+    private Boolean showsPortraitOrientation;
+    private long lastShowsFramePositionMs = -1L;
 
     private final Runnable portraitProgressTicker = new Runnable() {
         @Override
@@ -255,13 +257,15 @@ public class VideoDetailActivity extends Activity {
 
         buildUi();
         buildPlayer(requestedStartPosition);
-        thumbnailResolvers = new RenderedThumbnailResolver[RELATED_THUMBNAIL_WORKERS];
-        for (int i = 0; i < thumbnailResolvers.length; i++) {
-            thumbnailResolvers[i] = new RenderedThumbnailResolver(this, this::onThumbnailResolved);
+        if (!showsOrigin) {
+            thumbnailResolvers = new RenderedThumbnailResolver[RELATED_THUMBNAIL_WORKERS];
+            for (int i = 0; i < thumbnailResolvers.length; i++) {
+                thumbnailResolvers[i] = new RenderedThumbnailResolver(this, this::onThumbnailResolved);
+            }
         }
         configureBackHandling();
         applyOrientation(getResources().getConfiguration().orientation);
-        loadRelated();
+        if (!showsOrigin) loadRelated();
         root.post(this::playEntranceOnce);
     }
 
@@ -813,12 +817,25 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onVideoSizeChanged(VideoSize videoSize) {
-                float displayWidth = videoSize == null
-                        ? 0f
-                        : videoSize.width * videoSize.pixelWidthHeightRatio;
-                boolean isPortrait = videoSize != null
-                        && videoSize.width > 0
-                        && videoSize.height > displayWidth;
+                if (videoSize == null || videoSize.width <= 0 || videoSize.height <= 0) return;
+                boolean isPortrait = isPortraitVideoSize(
+                        videoSize.width,
+                        videoSize.height,
+                        videoSize.pixelWidthHeightRatio
+                );
+                if (showsOrigin) {
+                    portraitVideo = isPortrait;
+                    if (showsPortraitOrientation == null ||
+                            showsPortraitOrientation.booleanValue() != isPortrait) {
+                        showsPortraitOrientation = isPortrait;
+                        PhoneOrientationPolicy.enterShowsFullscreen(
+                                VideoDetailActivity.this,
+                                isPortrait
+                        );
+                    }
+                    applyOrientation(getResources().getConfiguration().orientation);
+                    return;
+                }
                 if (portraitVideo == isPortrait) return;
                 portraitVideo = isPortrait;
                 if (!portraitVideo && portraitFullscreen) setPortraitFullscreen(false);
@@ -828,6 +845,12 @@ public class VideoDetailActivity extends Activity {
         player.prepare();
         startPortraitProgressTicker();
         showPortraitSeekBar();
+    }
+
+    static boolean isPortraitVideoSize(int width, int height, float pixelWidthHeightRatio) {
+        if (width <= 0 || height <= 0) return false;
+        float ratio = pixelWidthHeightRatio > 0f ? pixelWidthHeightRatio : 1f;
+        return height > (width * ratio);
     }
 
     static float portraitProgressFraction(long positionMs, long durationMs) {
@@ -842,7 +865,8 @@ public class VideoDetailActivity extends Activity {
     }
 
     private boolean canShowPortraitSeekBar() {
-        return getResources().getConfiguration().orientation
+        return !showsOrigin
+                && getResources().getConfiguration().orientation
                 != Configuration.ORIENTATION_LANDSCAPE
                 && !portraitFullscreen
                 && !rotatableFullscreen;
@@ -910,7 +934,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void loadRelated() {
-        if (relatedContainer == null) return;
+        if (showsOrigin || relatedContainer == null) return;
         final int requestGeneration = ++relatedLoadGeneration;
         relatedContainer.removeAllViews();
         TextView loadingText = new TextView(this);
@@ -988,7 +1012,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     void renderContextRelated(List<NativeContentItem> items) {
-        if (isFinishing() || items == null || items.isEmpty()) return;
+        if (showsOrigin || isFinishing() || items == null || items.isEmpty()) return;
         relatedLoadGeneration++;
         renderRelated(items);
     }
@@ -1213,7 +1237,7 @@ public class VideoDetailActivity extends Activity {
                 mediaReferer,
                 posterUrl,
                 position,
-                captureRelatedBackPreview()
+                capturePlayerFrame()
         ));
         while (relatedHistory.size() > RELATED_HISTORY_LIMIT) {
             recycleHistoryPreview(relatedHistory.removeFirst());
@@ -1255,7 +1279,7 @@ public class VideoDetailActivity extends Activity {
         return true;
     }
 
-    private Bitmap captureRelatedBackPreview() {
+    private Bitmap capturePlayerFrame() {
         TextureView texture = findTextureView(playerView);
         if (texture == null || !texture.isAvailable() || texture.getWidth() <= 0 || texture.getHeight() <= 0) {
             return null;
@@ -1533,7 +1557,8 @@ public class VideoDetailActivity extends Activity {
                 "View this video on the site",
                 () -> openWebsite(pageUrl)
         ));
-        if (getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE) {
+        if (!showsOrigin &&
+                getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE) {
             if (portraitVideo) {
                 actions.add(VideoActionSheet.action(
                         portraitFullscreen
@@ -1692,7 +1717,7 @@ public class VideoDetailActivity extends Activity {
     private void applyOrientation(int orientation) {
         boolean landscape = orientation == Configuration.ORIENTATION_LANDSCAPE;
         if (landscape) portraitFullscreen = false;
-        boolean fullscreen = landscape || portraitFullscreen || rotatableFullscreen;
+        boolean fullscreen = showsOrigin || landscape || portraitFullscreen || rotatableFullscreen;
         if (detailsScroll != null) {
             detailsScroll.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
             detailsScroll.setAlpha(1f);
@@ -1749,6 +1774,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
+        if (showsOrigin) return;
         if (position == SensorMediaOrientationListener.Position.LANDSCAPE) {
             sensorFullscreen = true;
             rotatableFullscreen = true;
@@ -1766,6 +1792,10 @@ public class VideoDetailActivity extends Activity {
 
     private void updatePortraitFullscreenButton() {
         if (portraitFullscreenButton == null) return;
+        if (showsOrigin) {
+            portraitFullscreenButton.setVisibility(View.GONE);
+            return;
+        }
         boolean portraitOrientation = getResources().getConfiguration().orientation
                 != Configuration.ORIENTATION_LANDSCAPE;
         portraitFullscreenButton.setVisibility(
@@ -1787,7 +1817,9 @@ public class VideoDetailActivity extends Activity {
         boolean portrait = getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE;
         boolean enabled = getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getBoolean("swipe_down_minimize", true);
-        playerContainer.setSwipeEnabled(portrait && enabled && !minimizing && !rotatableFullscreen);
+        playerContainer.setSwipeEnabled(
+                !showsOrigin && portrait && enabled && !minimizing && !rotatableFullscreen
+        );
     }
 
     private void setFullscreenUi(boolean enabled) {
@@ -1821,6 +1853,11 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void handleBack() {
+        if (showsOrigin) {
+            savePlaybackState(false);
+            finish();
+            return;
+        }
         if (portraitFullscreen || rotatableFullscreen) {
             setRotatableFullscreen(false);
             return;
@@ -1895,6 +1932,7 @@ public class VideoDetailActivity extends Activity {
                 ended,
                 showsOrigin
         );
+        updateShowsContinueFrame(ended, position, duration);
 
         if (!rememberPositionEnabled()) return;
         SharedPreferences prefs = getSharedPreferences("player_positions", MODE_PRIVATE);
@@ -1904,6 +1942,30 @@ public class VideoDetailActivity extends Activity {
         } else if (position > 3000L) {
             prefs.edit().putLong(positionKey(), position).apply();
         }
+    }
+
+    private void updateShowsContinueFrame(boolean ended, long positionMs, long durationMs) {
+        if (!showsOrigin || pageUrl == null || pageUrl.trim().isEmpty()) return;
+        boolean complete = ended ||
+                (durationMs > 0L && positionMs >= (long) (durationMs * 0.95f));
+        if (complete) {
+            ShowsContinueFrameStore.deleteAsync(this, pageUrl);
+            lastShowsFramePositionMs = positionMs;
+            return;
+        }
+        if (positionMs < 5_000L) return;
+        if (lastShowsFramePositionMs >= 0L &&
+                Math.abs(positionMs - lastShowsFramePositionMs) < 2_000L) {
+            return;
+        }
+        Bitmap frame = capturePlayerFrame();
+        if (frame == null) return;
+        lastShowsFramePositionMs = positionMs;
+        ShowsContinueFrameStore.saveAsync(this, pageUrl, frame);
+    }
+
+    boolean isShowsOrigin() {
+        return showsOrigin;
     }
 
     private boolean recoverPlayback(PlaybackException error) {
