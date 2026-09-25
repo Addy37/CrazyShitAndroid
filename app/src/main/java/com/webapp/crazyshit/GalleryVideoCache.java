@@ -43,6 +43,12 @@ final class GalleryVideoCache {
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
     }
 
+    static long preloadBytesForDistance(int distance) {
+        return distance <= 1
+                ? PRELOAD_NEAR_BYTES
+                : distance == 2 ? PRELOAD_SECOND_BYTES : PRELOAD_FAR_BYTES;
+    }
+
     static void warm(Context context, DefaultHttpDataSource.Factory upstream, String url) {
         warm(context, upstream, url, 3);
     }
@@ -54,9 +60,7 @@ final class GalleryVideoCache {
             int distance
     ) {
         if (url == null || url.isEmpty() || url.contains(".m3u8") || url.contains(".mpd")) return;
-        long bytes = distance <= 1
-                ? PRELOAD_NEAR_BYTES
-                : distance == 2 ? PRELOAD_SECOND_BYTES : PRELOAD_FAR_BYTES;
+        long bytes = preloadBytesForDistance(distance);
         try {
             CacheDataSource source = factory(context, upstream).createDataSource();
             DataSpec spec = new DataSpec.Builder().setUri(Uri.parse(url))
