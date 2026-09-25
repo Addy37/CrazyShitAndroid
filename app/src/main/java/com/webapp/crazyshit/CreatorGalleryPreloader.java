@@ -73,8 +73,11 @@ final class CreatorGalleryPreloader {
         String query = creator.searchQuery == null || creator.searchQuery.trim().isEmpty()
                 ? creator.title
                 : creator.searchQuery.trim();
-        String fapelloProfile = FapelloRepository.isModelUrl(creator.url) ? creator.url : "";
-        warm(context, creator.title, query, fapelloProfile, priority);
+        String sourceProfile = FapelloRepository.isModelUrl(creator.url) ||
+                OnlyHavenRepository.isOnlyHavenUrl(creator.url)
+                ? creator.url
+                : "";
+        warm(context, creator.title, query, sourceProfile, priority);
     }
 
     static void warm(Context context, String creatorName, String query, String fapelloProfileUrl) {
@@ -224,11 +227,17 @@ final class CreatorGalleryPreloader {
         String key = key(cleanQuery);
         String session = SESSIONS.get(key);
         if (session == null) return "";
-        if (BunkrGallerySessionStore.snapshot(session) == null) {
+        BunkrGallerySessionStore.Snapshot snapshot =
+                BunkrGallerySessionStore.snapshot(session);
+        if (snapshot == null) {
             SESSIONS.remove(key, session);
             return "";
         }
-        return session;
+        // Do not hand the UI an in-flight preload that still has no media. The repository
+        // serializes one gallery session at a time, so reusing an empty warming session can
+        // make the visible gallery wait behind background work. Once the first preview lands,
+        // the same session becomes safe to reuse instantly.
+        return snapshot.items.isEmpty() ? "" : session;
     }
 
     static String sessionId(Context context, String query) {
