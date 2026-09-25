@@ -22,6 +22,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.materialswitch.MaterialSwitch;
@@ -288,7 +291,22 @@ public class SettingsActivity extends Activity {
         footer.setPadding(dp(8), dp(28), dp(8), 0);
         root.addView(footer);
 
+        applyWindowInsets(scroll);
         setContentView(scroll);
+    }
+
+    private void applyWindowInsets(ScrollView scroll) {
+        if (scroll == null) return;
+        scroll.setClipToPadding(true);
+        ViewCompat.setOnApplyWindowInsetsListener(scroll, (view, windowInsets) -> {
+            Insets safe = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars()
+                            | WindowInsetsCompat.Type.displayCutout()
+            );
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+            return WindowInsetsCompat.CONSUMED;
+        });
+        ViewCompat.requestApplyInsets(scroll);
     }
 
     private LinearLayout addGroup(LinearLayout root, String title) {
