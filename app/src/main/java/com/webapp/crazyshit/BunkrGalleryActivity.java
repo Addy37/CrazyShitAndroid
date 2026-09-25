@@ -591,7 +591,12 @@ public final class BunkrGalleryActivity extends Activity {
                     : videoReferers.getOrDefault(item.url, item.url);
             if (warmedVideos.add(url)) warmIo.execute(() -> {
                 if (withinPreloadWindow(position)) {
-                    GalleryVideoCache.warm(this, videoHttpFactory(url, referer), url);
+                    GalleryVideoCache.warm(
+                            this,
+                            videoHttpFactory(url, referer),
+                            url,
+                            Math.abs(position - pager.getCurrentItem())
+                    );
                 } else {
                     runOnUiThread(() -> warmedVideos.remove(url));
                 }
@@ -618,8 +623,12 @@ public final class BunkrGalleryActivity extends Activity {
                                 ? item.url : resolved.requestReferer;
                         warmIo.execute(() -> {
                             if (withinPreloadWindow(position)) {
-                                GalleryVideoCache.warm(this,
-                                        videoHttpFactory(resolved.mediaUrl, referer), resolved.mediaUrl);
+                                GalleryVideoCache.warm(
+                                        this,
+                                        videoHttpFactory(resolved.mediaUrl, referer),
+                                        resolved.mediaUrl,
+                                        Math.abs(position - pager.getCurrentItem())
+                                );
                             } else {
                                 runOnUiThread(() -> warmedVideos.remove(resolved.mediaUrl));
                             }
