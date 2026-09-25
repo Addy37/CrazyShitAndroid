@@ -13,7 +13,7 @@ final class ShitTokCreatorGalleryPreloader {
         CreatorGalleryPreloader.warm(context, creator, creator, "");
     }
 
-    static String sessionId(String creator) {
-        return CreatorGalleryPreloader.sessionId(creator);
+    static String sessionId(android.content.Context context, String creator) {
+        return CreatorGalleryPreloader.sessionId(context, creator);
     }
 }
