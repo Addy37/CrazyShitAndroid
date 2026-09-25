@@ -435,7 +435,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         title.setEllipsize(TextUtils.TruncateAt.END);
         titleRow.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView menu = BrowseUi.action(parent.getContext(), "⋮", "Episode options", v -> { });
+        TextView menu = BrowseUi.action(parent.getContext(), "⋮", "Video options", v -> { });
         menu.setTag("video_options");
         menu.setTextSize(22);
         menu.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_secondary));
@@ -475,10 +475,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         action.setClickable(true);
         action.setFocusable(true);
         action.setContentDescription("Play episode");
+        action.setSingleLine(true);
+        action.setEllipsize(TextUtils.TruncateAt.END);
         action.setBackground(episodeActionBackground(parent.getContext()));
         ZeroChillMotion.installPressFeedback(action);
         LinearLayout.LayoutParams actionParams =
-                new LinearLayout.LayoutParams(dp(parent, landscape ? 86 : 96), dp(parent, 34));
+                new LinearLayout.LayoutParams(dp(parent, landscape ? 110 : 118), dp(parent, 34));
         actionParams.setMarginStart(dp(parent, 8));
         footer.addView(action, actionParams);
 
