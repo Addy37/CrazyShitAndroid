@@ -439,7 +439,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 android.content.Intent intent =
                         new android.content.Intent(activity, VideoDetailActivity.class);
                 intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, resolved.mediaUrl);
-                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, resolvedPage);
+                // Keep the history identity stable when a resolver canonicalizes or redirects
+                // the source page. This updates the same Continue Watching entry on exit.
+                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, history.pageUrl);
                 intent.putExtra(PlayerActivity.EXTRA_TITLE, history.title);
                 intent.putExtra(PlayerActivity.EXTRA_START_POSITION, history.positionMs);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
