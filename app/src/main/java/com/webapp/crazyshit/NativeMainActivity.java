@@ -315,7 +315,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     public void onNavigationDragBy(float deltaPageFraction) {
                         if (primaryPager != null && primaryPager.isFakeDragging()) {
                             float pageWidth = Math.max(1f, primaryPager.getWidth());
-                            primaryPager.fakeDragBy(deltaPageFraction * pageWidth);
+                            // The capsule moves toward the destination icon while the page
+                            // content moves in the opposite direction underneath it.
+                            primaryPager.fakeDragBy(-deltaPageFraction * pageWidth);
                         }
                     }
 
