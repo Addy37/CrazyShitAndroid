@@ -131,7 +131,15 @@ final class BunkrCreatorGalleryRepository {
         });
 
         FastLaneResult fastLane = runFastFirstPaint(
-                context, appContext, state, listener);
+                context,
+                appContext,
+                state,
+                listener,
+                bunkrCatalog,
+                fapelloCatalog,
+                wikiCatalog,
+                havenCatalog
+        );
 
         IOException bunkrCatalogError = catalogResult(bunkrCatalog);
         IOException fapelloCatalogError = catalogResult(fapelloCatalog);
@@ -423,7 +431,11 @@ final class BunkrCreatorGalleryRepository {
             Context context,
             Context appContext,
             State state,
-            ProgressListener listener
+            ProgressListener listener,
+            Future<IOException> bunkrCatalog,
+            Future<IOException> fapelloCatalog,
+            Future<IOException> wikiCatalog,
+            Future<IOException> havenCatalog
     ) {
         FastLaneResult result = new FastLaneResult();
         if (listener == null) return result;
@@ -479,10 +491,15 @@ final class BunkrCreatorGalleryRepository {
         while (completedCount < requests.size()) {
             long remaining = deadline - SystemClock.elapsedRealtime();
             if (remaining <= 0L) break;
+            if (bunkrCatalog.isDone() && fapelloCatalog.isDone()
+                    && wikiCatalog.isDone() && havenCatalog.isDone()) {
+                break;
+            }
             try {
                 Future<FastPage> future = completed.poll(
-                        remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
-                if (future == null) break;
+                        Math.min(remaining, 60L),
+                        java.util.concurrent.TimeUnit.MILLISECONDS);
+                if (future == null) continue;
                 completedCount++;
                 FastPage page = future.get();
                 if (page.fapelloPage != null) {
