@@ -157,6 +157,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void setPrimaryActive(int position) {
         chaosView.setActive(position == PAGE_CHAOS);
+        Page shows = pageAt(PAGE_SERIES);
+        if (shows != null && shows.showsHub != null) {
+            shows.showsHub.setActive(position == PAGE_SERIES);
+        }
         if (position == PAGE_CHAOS) return;
         Page page = pageAt(position);
         if (page != null && page.itemCount() == 0 && !page.loading && !page.endReached) {

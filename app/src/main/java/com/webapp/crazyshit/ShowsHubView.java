@@ -63,6 +63,7 @@ final class ShowsHubView extends FrameLayout {
     private List<NativeContentItem> heroItems = Collections.emptyList();
     private NativeContentItem heroItem;
     private int heroIndex = -1;
+    private boolean active;
 
     ShowsHubView(Context context, Listener listener, Listener videoListener) {
         super(context);
@@ -263,6 +264,19 @@ final class ShowsHubView extends FrameLayout {
         continueShelf.container.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
+    void setActive(boolean active) {
+        if (this.active == active) return;
+        this.active = active;
+        if (!active) {
+            heroHandler.removeCallbacksAndMessages(null);
+            heroCard.animate().cancel();
+            heroCard.setAlpha(1f);
+            return;
+        }
+        prewarmNextHero();
+        scheduleHeroRotation();
+    }
+
     private void rebuildHeroCandidates() {
         ArrayList<NativeContentItem> next = new ArrayList<>();
         appendHeroCandidates(next, crazyItems, 3);
@@ -369,13 +383,13 @@ final class ShowsHubView extends FrameLayout {
 
     private void scheduleHeroRotation() {
         heroHandler.removeCallbacksAndMessages(null);
-        if (heroItems.size() <= 1 || !isAttachedToWindow()
+        if (!active || heroItems.size() <= 1 || !isAttachedToWindow()
                 || !ZeroChillMotion.animationsEnabled(getContext())) return;
         heroHandler.postDelayed(this::rotateHero, HERO_ROTATION_MS);
     }
 
     private void rotateHero() {
-        if (!isAttachedToWindow() || getWindowVisibility() != View.VISIBLE
+        if (!active || !isAttachedToWindow() || getWindowVisibility() != View.VISIBLE
                 || heroItems.size() <= 1) {
             scheduleHeroRotation();
             return;
@@ -386,7 +400,7 @@ final class ShowsHubView extends FrameLayout {
     }
 
     private void prewarmNextHero() {
-        if (heroItems.size() <= 1 || heroIndex < 0) return;
+        if (!active || heroItems.size() <= 1 || heroIndex < 0) return;
         preloadArtwork(heroItems.get((heroIndex + 1) % heroItems.size()));
     }
 
