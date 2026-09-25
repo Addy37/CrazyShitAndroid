@@ -337,7 +337,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         activity,
                         item.title,
                         query,
-                        FapelloRepository.isModelUrl(item.url) ? item.url : "",
+                        NativeFeedBrowserActivity.creatorProfileHint(item),
                         CreatorGalleryPreloader.sessionId(activity, item)
                 ));
                 return;
