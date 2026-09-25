@@ -21,6 +21,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Keeps Home, Shows, ShitTok and OnlyFap alive for true horizontal paging.
@@ -40,7 +41,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private static final int SERIES_SOURCE_EFUKT = 1;
     private static final int SERIES_SOURCE_BUNKR = 2;
     private static final int SERIES_SOURCE_CATEGORIES = 3;
-    private static final String PREF_SERIES_SOURCE = "native_series_source";
+    private static final int SERIES_SOURCE_HUB = 4;
+    private static final String PREF_SERIES_SOURCE = "native_series_source_v2";
     private static final String PREF_FAPZONE_MODE = "native_fapzone_mode";
 
     public interface Host {
@@ -139,6 +141,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (page == null) return;
         page.generation++;
         if (page.loadTask != null) page.loadTask.cancel(true);
+        cancelShowsHubTasks(page);
+        if (page.kind == PageKind.SERIES &&
+                page.seriesSource == SERIES_SOURCE_HUB &&
+                page.showsHub != null) {
+            page.showsHub.clear();
+        }
         page.empty.setVisibility(View.GONE);
         page.currentPage = 0;
         page.displayHomeSource = 0;
@@ -183,6 +191,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             if (page == null) continue;
             page.generation++;
             if (page.loadTask != null) page.loadTask.cancel(true);
+            cancelShowsHubTasks(page);
             if (page.browseAdapter != null) page.browseAdapter.close();
             if (page.feedAdapter != null) page.feedAdapter.close();
         }
@@ -325,40 +334,44 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         return page;
     }
 
-    private Page buildBrowsePage(int index, PageKind kind) {
-        Page page = createPageShell(index, kind, "", "");
-        page.browseAdapter = new NativeCategoryAdapter(activity, item -> {
-            if (item == null) return;
-            if (item.isCreator()) {
-                String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
-                        ? item.title
-                        : item.searchQuery.trim();
-                activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
-                        activity,
-                        item.title,
-                        query,
-                        NativeFeedBrowserActivity.creatorProfileHint(item),
-                        CreatorGalleryPreloader.sessionId(activity, item)
-                ));
-                return;
-            }
-            if (item.url == null || item.url.isEmpty()) return;
-            String source = BunkrRepository.isAlbumUrl(item.url)
-                    ? NativeFeedBrowserActivity.SOURCE_BUNKR
-                    : EfuktRepository.isEfuktUrl(item.url)
-                    ? NativeFeedBrowserActivity.SOURCE_EFUKT
-                    : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
-            activity.startActivity(NativeFeedBrowserActivity.create(
+    private void openBrowseItem(NativeContentItem item) {
+        if (item == null) return;
+        if (item.isCreator()) {
+            String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
+                    ? item.title
+                    : item.searchQuery.trim();
+            activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
                     activity,
                     item.title,
-                    item.url,
-                    false,
-                    source
+                    query,
+                    NativeFeedBrowserActivity.creatorProfileHint(item),
+                    CreatorGalleryPreloader.sessionId(activity, item)
             ));
-        });
+            return;
+        }
+        if (item.url == null || item.url.isEmpty()) return;
+        String source = BunkrRepository.isAlbumUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_BUNKR
+                : EfuktRepository.isEfuktUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
+        activity.startActivity(NativeFeedBrowserActivity.create(
+                activity,
+                item.title,
+                item.url,
+                false,
+                source
+        ));
+    }
+
+    private Page buildBrowsePage(int index, PageKind kind) {
+        Page page = createPageShell(index, kind, "", "");
+        page.browseAdapter = new NativeCategoryAdapter(activity, this::openBrowseItem);
         page.recycler.setAdapter(page.browseAdapter);
         page.recycler.setLayoutManager(new GridLayoutManager(activity, 2));
         if (kind == PageKind.SERIES) {
+            page.showsHub = new ShowsHubView(activity, this::openBrowseItem);
+            page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
             addSeriesSourceSelector(page);
             page.empty.setOnClickListener(v -> {
                 String url = page.seriesSource == SERIES_SOURCE_EFUKT
@@ -380,14 +393,15 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void addSeriesSourceSelector(Page page) {
         android.content.SharedPreferences prefs =
                 activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE);
-        int storedSource = prefs.getInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT);
-        if (storedSource == SERIES_SOURCE_CRAZYSHIT ||
+        int storedSource = prefs.getInt(PREF_SERIES_SOURCE, SERIES_SOURCE_HUB);
+        if (storedSource == SERIES_SOURCE_HUB ||
+                storedSource == SERIES_SOURCE_CRAZYSHIT ||
                 storedSource == SERIES_SOURCE_EFUKT ||
                 storedSource == SERIES_SOURCE_CATEGORIES) {
             page.seriesSource = storedSource;
         } else {
-            page.seriesSource = SERIES_SOURCE_CRAZYSHIT;
-            prefs.edit().putInt(PREF_SERIES_SOURCE, SERIES_SOURCE_CRAZYSHIT).apply();
+            page.seriesSource = SERIES_SOURCE_HUB;
+            prefs.edit().putInt(PREF_SERIES_SOURCE, SERIES_SOURCE_HUB).apply();
         }
 
         LinearLayout selector = new LinearLayout(activity);
@@ -399,10 +413,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         selector.setBackground(ZeroChillUi.sourceRailGlass(activity));
         selector.setElevation(ZeroChillUi.dimension(activity, R.dimen.zc_elevation_low));
 
+        page.featuredSource = seriesSourceButton("Featured");
         page.crazyShitSource = seriesSourceButton("CrazyShit");
         page.efuktSource = seriesSourceButton("EFukt");
         page.categoriesSource = seriesSourceButton("Categories");
         TextView[] sourceButtons = {
+                page.featuredSource,
                 page.crazyShitSource,
                 page.efuktSource,
                 page.categoriesSource
@@ -414,6 +430,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             selector.addView(sourceButtons[index], params);
         }
 
+        page.featuredSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_HUB));
         page.crazyShitSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CRAZYSHIT));
         page.efuktSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_EFUKT));
         page.categoriesSource.setOnClickListener(v -> switchSeriesSource(page, SERIES_SOURCE_CATEGORIES));
@@ -572,9 +589,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 .edit()
                 .putInt(PREF_SERIES_SOURCE, source)
                 .apply();
-        updateSeriesSourceButtons(page);
         page.generation++;
+        if (page.loadTask != null) page.loadTask.cancel(true);
+        cancelShowsHubTasks(page);
         page.loading = false;
+        updateSeriesSourceButtons(page);
         page.endReached = false;
         page.currentPage = 0;
         page.browseAdapter.replace(java.util.Collections.emptyList());
@@ -603,13 +622,25 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void updateSeriesSourceButtons(Page page) {
+        boolean hub = page.seriesSource == SERIES_SOURCE_HUB;
+        styleSeriesSourceButton(page.featuredSource, hub);
         styleSeriesSourceButton(page.crazyShitSource, page.seriesSource == SERIES_SOURCE_CRAZYSHIT);
         styleSeriesSourceButton(page.efuktSource, page.seriesSource == SERIES_SOURCE_EFUKT);
         styleSeriesSourceButton(page.categoriesSource, page.seriesSource == SERIES_SOURCE_CATEGORIES);
+
+        if (page.showsHub != null) {
+            page.showsHub.setVisibility(hub ? View.VISIBLE : View.GONE);
+        }
         if (page.refresh != null) {
+            page.refresh.setVisibility(hub ? View.GONE : View.VISIBLE);
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
             params.topMargin = 0;
             page.refresh.setLayoutParams(params);
+        }
+        if (hub) {
+            page.empty.setVisibility(View.GONE);
+            page.progress.setVisibility(View.GONE);
+            return;
         }
         if (page.recycler != null) {
             page.recycler.setPadding(0, dp(61), 0, dp(18));
@@ -772,6 +803,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private void load(Page page, boolean append) {
         if (page == null || page.loading || page.endReached) return;
+        if (page.kind == PageKind.SERIES && page.seriesSource == SERIES_SOURCE_HUB) {
+            loadShowsHub(page);
+            return;
+        }
         if (page.kind != PageKind.FEED) append = false;
         page.loading = true;
         final int generation = page.generation;
@@ -884,6 +919,83 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         });
     }
 
+    private void loadShowsHub(Page page) {
+        if (page == null || page.showsHub == null || page.loading) return;
+        cancelShowsHubTasks(page);
+        page.loading = true;
+        page.endReached = false;
+        page.empty.setVisibility(View.GONE);
+        page.progress.setVisibility(View.GONE);
+        page.showsHub.clear();
+
+        final int generation = page.generation;
+        AtomicInteger remaining = new AtomicInteger(3);
+
+        page.showsHubTasks.add(io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = browseRepository.fetchSeries(activity);
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            activity.runOnUiThread(() -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setCrazyShit(items);
+                }
+            });
+            finishShowsHubSource(page, generation, remaining);
+        }));
+
+        page.showsHubTasks.add(io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = efuktRepository.fetchSeries(activity);
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            activity.runOnUiThread(() -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setEfukt(items);
+                }
+            });
+            finishShowsHubSource(page, generation, remaining);
+        }));
+
+        page.showsHubTasks.add(io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = browseRepository.fetchCategories(activity);
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            activity.runOnUiThread(() -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setCategories(items);
+                }
+            });
+            finishShowsHubSource(page, generation, remaining);
+        }));
+    }
+
+    private void finishShowsHubSource(Page page, int generation, AtomicInteger remaining) {
+        if (remaining.decrementAndGet() != 0) return;
+        activity.runOnUiThread(() -> {
+            if (generation != page.generation) return;
+            page.loading = false;
+            page.endReached = true;
+            page.showsHubTasks.clear();
+            if (page.showsHub != null) page.showsHub.finishLoading();
+        });
+    }
+
+    private void cancelShowsHubTasks(Page page) {
+        if (page == null) return;
+        for (java.util.concurrent.Future<?> task : page.showsHubTasks) {
+            if (task != null) task.cancel(true);
+        }
+        page.showsHubTasks.clear();
+    }
+
     private void finishInitialProgress(Page page, boolean animate) {
         if (page == null || page.progress == null) return;
         if (animate && page.progress instanceof ZeroChillLoadingView) {
@@ -966,6 +1078,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         TextView empty;
         NativeFeedAdapter feedAdapter;
         NativeCategoryAdapter browseAdapter;
+        ShowsHubView showsHub;
+        TextView featuredSource;
         TextView crazyShitSource;
         TextView efuktSource;
         TextView bunkrSource;
@@ -980,11 +1094,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         TextView seriesCaptionHint;
         TextView seriesCaptionBadge;
         int viewMode = NativeFeedAdapter.VIEW_LIST;
-        int seriesSource = SERIES_SOURCE_CRAZYSHIT;
+        int seriesSource = SERIES_SOURCE_HUB;
         int fapzoneMode = FapzoneCreatorRepository.MODE_TOP_50;
         int homeSource;
         int displayHomeSource;
         java.util.concurrent.Future<?> loadTask;
+        final java.util.List<java.util.concurrent.Future<?>> showsHubTasks =
+                new java.util.ArrayList<>();
         final java.util.List<TextView> homeChips = new java.util.ArrayList<>();
         int currentPage;
         boolean loading;
@@ -1000,6 +1116,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
         int itemCount() {
             if (feedAdapter != null) return feedAdapter.getItemCount();
+            if (kind == PageKind.SERIES && seriesSource == SERIES_SOURCE_HUB && showsHub != null) {
+                return showsHub.itemCount();
+            }
             return browseAdapter == null ? 0 : browseAdapter.getItemCount();
         }
     }
