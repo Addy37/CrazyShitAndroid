@@ -33,7 +33,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 final class ZeroChillBottomNavigationView extends BottomNavigationView {
     interface OnNavigationDragListener {
         boolean onNavigationDragStart();
-        void onNavigationDragBy(float deltaX);
+        void onNavigationDragBy(float deltaPageFraction);
         void onNavigationDragEnd(boolean canceled);
     }
 
@@ -59,6 +59,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private float dragDownX;
     private float dragDownY;
     private float dragLastX;
+    private float navigationDragPageStep = 1f;
     private boolean navigationDragCandidate;
     private boolean navigationDragActive;
     private OnNavigationDragListener navigationDragListener;
@@ -108,6 +109,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             dragDownX = event.getX();
             dragDownY = event.getY();
             dragLastX = dragDownX;
+            navigationDragPageStep = pageStepDistance();
             navigationDragActive = false;
             navigationDragCandidate = isInsideSelectedCapsule(dragDownX, dragDownY);
             return super.dispatchTouchEvent(event);
@@ -125,7 +127,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             if (started) {
                 navigationDragActive = true;
                 cancelChildTouch(event);
-                navigationDragListener.onNavigationDragBy(dx);
+                navigationDragListener.onNavigationDragBy(dx / navigationDragPageStep);
                 dragLastX = event.getX();
                 return true;
             }
@@ -136,7 +138,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             float deltaX = event.getX() - dragLastX;
             dragLastX = event.getX();
             if (navigationDragListener != null && deltaX != 0f) {
-                navigationDragListener.onNavigationDragBy(deltaX);
+                navigationDragListener.onNavigationDragBy(deltaX / navigationDragPageStep);
             }
             return true;
         }
@@ -163,6 +165,18 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
             navigationDragCandidate = false;
         }
         return super.dispatchTouchEvent(event);
+    }
+
+    private float pageStepDistance() {
+        View first = findViewById(PAGE_NAV_IDS[0]);
+        View second = findViewById(PAGE_NAV_IDS[1]);
+        if (first == null || second == null ||
+                first.getWidth() <= 0 || second.getWidth() <= 0) {
+            return Math.max(1f, getWidth() / 5f);
+        }
+        descendantRect(first, firstRect);
+        descendantRect(second, secondRect);
+        return Math.max(1f, Math.abs(secondRect.exactCenterX() - firstRect.exactCenterX()));
     }
 
     private boolean isInsideSelectedCapsule(float x, float y) {
