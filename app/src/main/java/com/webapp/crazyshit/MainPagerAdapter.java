@@ -378,7 +378,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private Page buildBrowsePage(int index, PageKind kind) {
         Page page = createPageShell(index, kind, "", "");
-        page.browseAdapter = new NativeCategoryAdapter(activity, this::openBrowseItem);
+        NativeCategoryAdapter.Listener browseListener =
+                kind == PageKind.SERIES ? this::openShowDetails : this::openBrowseItem;
+        page.browseAdapter = new NativeCategoryAdapter(activity, browseListener);
         page.recycler.setAdapter(page.browseAdapter);
         page.recycler.setLayoutManager(new GridLayoutManager(activity, 2));
         if (kind == PageKind.SERIES) {
