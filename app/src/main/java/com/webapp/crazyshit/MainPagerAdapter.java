@@ -364,13 +364,25 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         ));
     }
 
+    private void openShowDetails(NativeContentItem item) {
+        if (item == null || item.url == null || item.url.isEmpty()) return;
+        String source = EfuktRepository.isEfuktUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
+        activity.startActivity(NativeFeedBrowserActivity.createShowDetails(
+                activity,
+                item,
+                source
+        ));
+    }
+
     private Page buildBrowsePage(int index, PageKind kind) {
         Page page = createPageShell(index, kind, "", "");
         page.browseAdapter = new NativeCategoryAdapter(activity, this::openBrowseItem);
         page.recycler.setAdapter(page.browseAdapter);
         page.recycler.setLayoutManager(new GridLayoutManager(activity, 2));
         if (kind == PageKind.SERIES) {
-            page.showsHub = new ShowsHubView(activity, this::openBrowseItem);
+            page.showsHub = new ShowsHubView(activity, this::openShowDetails);
             page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
             addSeriesSourceSelector(page);
             page.empty.setOnClickListener(v -> {
