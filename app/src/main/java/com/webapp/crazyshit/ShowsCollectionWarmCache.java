@@ -27,7 +27,7 @@ final class ShowsCollectionWarmCache {
             30L,
             TimeUnit.SECONDS,
             new ArrayBlockingQueue<>(4),
-            new ThreadPoolExecutor.DiscardPolicy()
+            new ThreadPoolExecutor.AbortPolicy()
     );
 
     private static final Set<String> IN_FLIGHT = ConcurrentHashMap.newKeySet();
