@@ -23,6 +23,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.OptIn;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
@@ -246,6 +249,7 @@ public final class BunkrGalleryActivity extends Activity {
         FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, dp(64));
         topParams.gravity = Gravity.TOP;
         root.addView(topBar, topParams);
+        applyTopBarInsets();
 
         bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.VERTICAL);
@@ -301,6 +305,35 @@ public final class BunkrGalleryActivity extends Activity {
                 if (position >= Math.max(0, adapter.getItemCount() - 5)) loadMore();
             }
         });
+    }
+
+    private void applyTopBarInsets() {
+        if (topBar == null) return;
+        final int baseLeft = dp(6);
+        final int baseTop = dp(5);
+        final int baseRight = dp(6);
+        final int baseBottom = dp(5);
+        final int baseHeight = dp(64);
+
+        ViewCompat.setOnApplyWindowInsetsListener(topBar, (view, windowInsets) -> {
+            Insets safe = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.statusBars()
+                            | WindowInsetsCompat.Type.displayCutout()
+            );
+            view.setPadding(
+                    baseLeft + safe.left,
+                    baseTop + safe.top,
+                    baseRight + safe.right,
+                    baseBottom
+            );
+            android.view.ViewGroup.LayoutParams params = view.getLayoutParams();
+            if (params != null && params.height != baseHeight + safe.top) {
+                params.height = baseHeight + safe.top;
+                view.setLayoutParams(params);
+            }
+            return windowInsets;
+        });
+        ViewCompat.requestApplyInsets(topBar);
     }
 
     private void showSnapshot(BunkrGallerySessionStore.Snapshot snapshot) {
