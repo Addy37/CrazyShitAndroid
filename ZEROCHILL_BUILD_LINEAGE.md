@@ -4,17 +4,19 @@ This file identifies the current approved ZEROCHILL product baseline for test AP
 
 - Source-of-truth branch: `rebrand/zerochill`
 - Integration branch: `integration/zerochill-current`
-- Approved product baseline commit: `e45402a4ba146fa66d7ba467f6c7a7439574f36f`
-- Latest production release source commit: `e45402a4ba146fa66d7ba467f6c7a7439574f36f`
-- Device-tested APK source commit: `4e798fcef0fc9bc4d0d4eb1ea3f71710b985cd55`
-- Latest release PR: #143
-- Approval date: 2026-09-24
+- Approved product baseline commit: `afd270e0e4442811d16aabbf85a3b39342df96b5`
+- Latest production release source commit: `afd270e0e4442811d16aabbf85a3b39342df96b5`
+- Device-tested APK source commit: `ff47eb7be8f91554439f15ff4e773f4382bea3e2`
+- Latest release PR: #148
+- Approval date: 2026-09-25
 
 The approved baseline contains the complete current ZEROCHILL stack, including Home/Collections glass UI, OnlyFap and OnlyHaven work, ShitTok all-source/fullscreen and preload work, creator search and bundled catalog, release orientation and action-sheet cleanup, Account Coming Soon, Memes removal from the release UI, product-level notification consolidation, aggregate device and Android adoption analytics, and the approved OnlyFap creator-gallery optimizations from PR #115.
 
 PR #137 was device-approved and merged as `b1e48ed`. The current approved product baseline now includes the in-app More → Updates inbox, favorite-creator-only OnlyFap tracking, direct creator-gallery routing, compact cyan fresh-content markers, the approved animated loading mascot rollout from PR #135, and transition-safe update endpoints that prefer `Addy37/ZEROCHILL` while retaining the legacy `Addy37/CrazyShitAndroid` fallback for installed versions.
 
 The approved gallery behavior includes progressive creator results, ZEROCHILL loading treatment and skeletons, fluid pinch density changes, refresh suppression during pinch, full-screen media resolution five items ahead and one behind, image warm-up, and bounded video preloading.
+
+ZeroChill v3.1.6 was published from `afd270e` after PR #148. It includes the device-approved OnlyFap maximum-speed work from PR #146, including race-to-first-media loading, persistent hot-gallery sessions, smarter creator prewarming, and the fullscreen gallery status-bar fix. It also includes the compact Settings redesign and final status-bar fade treatment from PR #147. The signed candidate and Android 15 in-place upgrade checks passed before release, and production tag `v3.1.6` points to `afd270e`.
 
 ZeroChill v3.1.5 was published from `e45402a` after PR #143. It includes the device-approved OnlyFap creator hero/collapsing-header work from PR #141 and the bounded creator-gallery prewarming from PR #142 across OnlyFap shelves, creator search, favorites, global search, and ShitTok creator links. The production release workflow verified the signed package and certificate, confirmed upgrade compatibility from v3.1.4, and published only `ZeroChill.apk` plus `SHA256SUMS.txt`.
 
