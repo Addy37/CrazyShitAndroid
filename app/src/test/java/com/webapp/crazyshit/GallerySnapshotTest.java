@@ -52,11 +52,17 @@ public class GallerySnapshotTest {
                 context, id, Collections.singletonList(item), false, cursor);
 
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-        while (!id.equals(BunkrGallerySessionStore.recentCreatorId(context, query))
-                && System.nanoTime() < deadline) {
+        JSONObject persisted = null;
+        do {
+            persisted = ScreenSnapshotStore.read(context, id);
+            if (id.equals(BunkrGallerySessionStore.recentCreatorId(context, query))
+                    && persisted != null && persisted.has("cursor")) {
+                break;
+            }
             Thread.sleep(10);
-        }
+        } while (System.nanoTime() < deadline);
         assertEquals(id, BunkrGallerySessionStore.recentCreatorId(context, query));
+        assertNotNull(persisted);
 
         Map<?, ?> sessions =
                 ReflectionHelpers.getStaticField(BunkrGallerySessionStore.class, "SESSIONS");
