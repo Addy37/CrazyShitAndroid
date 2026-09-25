@@ -1089,6 +1089,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, baseUrl);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                if (showDetailsMode) {
+                    intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
+                }
                 if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
                     intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
                 }
