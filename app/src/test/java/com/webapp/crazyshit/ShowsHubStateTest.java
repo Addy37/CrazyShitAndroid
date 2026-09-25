@@ -25,6 +25,7 @@ public class ShowsHubStateTest {
     public void restoresVerticalHubPositionAfterRecreation() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ShowsHubView first = hub(activity);
+        activity.setContentView(first);
         first.setCrazyShit(items(12, "/series/"));
         first.setEfukt(items(8, "https://efukt.com/series/test-"));
         first.setCategories(items(10, "/category/"));
@@ -39,6 +40,7 @@ public class ShowsHubStateTest {
         assertTrue(saved.getInt("scroll_y", 0) > 0);
 
         ShowsHubView restored = hub(activity);
+        activity.setContentView(restored);
         restored.restoreState(saved);
         restored.setCrazyShit(items(12, "/series/"));
         restored.setEfukt(items(8, "https://efukt.com/series/test-"));
