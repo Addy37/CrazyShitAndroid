@@ -102,7 +102,13 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
         holder.star.setBackgroundColor(Color.TRANSPARENT);
         holder.star.setContentDescription((favorite ? "Unfavorite " : "Favorite ") + item.title);
         holder.itemView.setOnClickListener(v -> open.accept(item));
-        CreatorGalleryPreloader.warm(holder.itemView.getContext(), item);
+        CreatorGalleryPreloader.warm(
+                holder.itemView.getContext(),
+                item,
+                position < 3
+                        ? CreatorGalleryPreloader.PRIORITY_HIGH
+                        : CreatorGalleryPreloader.PRIORITY_NORMAL
+        );
         android.view.View.OnClickListener toggle = v -> {
             CreatorFavoriteStore.toggle(context, item);
             favoriteChanged.run();
