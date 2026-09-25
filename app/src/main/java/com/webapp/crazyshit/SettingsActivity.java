@@ -305,7 +305,7 @@ public class SettingsActivity extends Activity {
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{
                         Color.BLACK,
-                        Color.argb(205, 0, 0, 0),
+                        Color.argb(105, 0, 0, 0),
                         Color.TRANSPARENT
                 }
         );
@@ -323,19 +323,24 @@ public class SettingsActivity extends Activity {
         if (scroll == null) return;
         scroll.setClipToPadding(true);
         ViewCompat.setOnApplyWindowInsetsListener(scroll, (view, windowInsets) -> {
-            Insets safe = windowInsets.getInsets(
+            Insets systemBars = windowInsets.getInsets(
                     WindowInsetsCompat.Type.systemBars()
-                            | WindowInsetsCompat.Type.displayCutout()
             );
-            // Settings intentionally draws under the status bar. Keep only side and bottom
-            // safe areas while a compact gradient protects the status icons visually.
-            view.setPadding(safe.left, 0, safe.right, safe.bottom);
+            Insets cutout = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.displayCutout()
+            );
+            Insets statusBars = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.statusBars()
+            );
+
+            int safeLeft = Math.max(systemBars.left, cutout.left);
+            int safeRight = Math.max(systemBars.right, cutout.right);
+            view.setPadding(safeLeft, 0, safeRight, systemBars.bottom);
 
             if (topScrim != null) {
-                int statusProtection = Math.max(
-                        safe.top,
-                        Math.round(safe.top * 1.2f)
-                );
+                // Only shade the visible status-bar strip. Do not size this from the cutout
+                // inset because some devices report a much taller safe area than the icons use.
+                int statusProtection = Math.min(statusBars.top, dp(30));
                 android.view.ViewGroup.LayoutParams params = topScrim.getLayoutParams();
                 if (params != null && params.height != statusProtection) {
                     params.height = statusProtection;
