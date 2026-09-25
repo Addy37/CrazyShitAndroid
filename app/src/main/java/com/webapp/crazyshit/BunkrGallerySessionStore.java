@@ -9,6 +9,7 @@ import java.util.UUID;
 /** Shared gallery state, with media and paging cursors saved in one atomic snapshot. */
 final class BunkrGallerySessionStore {
     private static final int MAX_SESSIONS = 8;
+    private static final String HOT_PREFS = "onlyfap_hot_gallery_sessions";
     private static final LinkedHashMap<String, Session> SESSIONS = new LinkedHashMap<>();
 
     static final class Snapshot {
@@ -69,6 +70,41 @@ final class BunkrGallerySessionStore {
             Session session = SESSIONS.get(ids[i]);
             if (session != null && query.equalsIgnoreCase(session.creatorQuery)
                     && !session.items.isEmpty() && !session.cursor.isEmpty()) return ids[i];
+        }
+        return null;
+    }
+
+    /**
+     * Returns the most recent persisted creator session id without parsing the snapshot.
+     * This is cheap enough for a creator tap and lets the activity restore the gallery off-thread.
+     */
+    static String recentCreatorId(android.content.Context context, String query) {
+        String warm = recentCreator(query);
+        if (warm != null) return warm;
+        if (context == null) return null;
+        String key = creatorKey(query);
+        if (key.isEmpty()) return null;
+        String id = context.getApplicationContext()
+                .getSharedPreferences(HOT_PREFS, 0)
+                .getString(key, "");
+        return id == null || id.trim().isEmpty() ? null : id.trim();
+    }
+
+    /**
+     * Restores the persisted hot gallery for prewarming. Network work only starts when this misses.
+     */
+    static Snapshot restoreRecentCreator(android.content.Context context, String query) {
+        String id = recentCreatorId(context, query);
+        if (id == null) return null;
+        Snapshot restored = restore(context, id);
+        if (restored != null && query != null &&
+                query.trim().equalsIgnoreCase(restored.creatorQuery) &&
+                !restored.items.isEmpty() && !restored.cursor.isEmpty()) {
+            return restored;
+        }
+        if (context != null) {
+            context.getApplicationContext().getSharedPreferences(HOT_PREFS, 0)
+                    .edit().remove(creatorKey(query)).apply();
         }
         return null;
     }
@@ -173,6 +209,12 @@ final class BunkrGallerySessionStore {
                         .put("items", ContentItemCodec.encodeList(snapshot.items, 10000));
                 if (!snapshot.cursor.isEmpty()) value.put("cursor", new org.json.JSONObject(snapshot.cursor));
                 ScreenSnapshotStore.save(app, id, value);
+                if (!snapshot.creatorQuery.isEmpty() && !snapshot.items.isEmpty()
+                        && !snapshot.cursor.isEmpty()) {
+                    app.getSharedPreferences(HOT_PREFS, 0).edit()
+                            .putString(creatorKey(snapshot.creatorQuery), id)
+                            .apply();
+                }
             } catch (Exception ignored) { }
         });
     }
@@ -195,6 +237,13 @@ final class BunkrGallerySessionStore {
             trim();
             return new Snapshot(restored);
         }
+    }
+
+    private static String creatorKey(String query) {
+        if (query == null) return "";
+        String normalized = CreatorNameMatcher.normalized(query);
+        if (normalized.isEmpty()) normalized = query.trim().toLowerCase(java.util.Locale.US);
+        return normalized.isEmpty() ? "" : "creator:" + normalized;
     }
 
     private static final java.util.concurrent.ExecutorService SNAPSHOT_IO = java.util.concurrent.Executors.newSingleThreadExecutor();

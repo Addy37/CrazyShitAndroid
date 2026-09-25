@@ -194,12 +194,19 @@ final class OnlyFapCreatorSearchAdapter
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
+        holder.bound = item;
         holder.name.setText(item.title);
         holder.handle.setText(creatorHandle(item));
         holder.meta.setText(metaText(item));
         holder.card.setContentDescription(item.title + ", OnlyFap creator");
         holder.card.setOnClickListener(v -> open.accept(item));
-        CreatorGalleryPreloader.warm(holder.card.getContext(), item);
+        CreatorGalleryPreloader.warm(
+                holder.card.getContext(),
+                item,
+                position < 3
+                        ? CreatorGalleryPreloader.PRIORITY_HIGH
+                        : CreatorGalleryPreloader.PRIORITY_NORMAL
+        );
 
         if (!item.imageUrl.equals(holder.imageUrl)) {
             load(holder.avatar, item, true);
@@ -210,6 +217,8 @@ final class OnlyFapCreatorSearchAdapter
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        CreatorGalleryPreloader.cancelQueued(holder.bound);
+        holder.bound = null;
         Glide.with(holder.avatar).clear(holder.avatar);
         Glide.with(holder.preview).clear(holder.preview);
         holder.imageUrl = null;
@@ -297,6 +306,7 @@ final class OnlyFapCreatorSearchAdapter
         final TextView handle;
         final TextView meta;
         String imageUrl;
+        NativeContentItem bound;
 
         Holder(
                 MaterialCardView card,

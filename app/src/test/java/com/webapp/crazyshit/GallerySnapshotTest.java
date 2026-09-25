@@ -33,6 +33,49 @@ public class GallerySnapshotTest {
         assertEquals(id, BunkrGallerySessionStore.recentCreator("gallerypreview123"));
     }
 
+    @Test public void persistedCreatorSessionCanBeRecoveredByQuery() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        String query = "HotCacheCreator987";
+        String id = BunkrGallerySessionStore.createCreator(query, "", query);
+        NativeContentItem item = new NativeContentItem(
+                NativeContentItem.KIND_IMAGE,
+                "Photo",
+                "https://fapello.com/hot-cache-creator/1/",
+                "",
+                "",
+                "",
+                "",
+                ""
+        );
+        JSONObject cursor = new JSONObject().put("query", query).put("next", 2);
+        BunkrGallerySessionStore.recordCreatorBatch(
+                context, id, Collections.singletonList(item), false, cursor);
+
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        JSONObject persisted = null;
+        do {
+            persisted = ScreenSnapshotStore.read(context, id);
+            if (id.equals(BunkrGallerySessionStore.recentCreatorId(context, query))
+                    && persisted != null && persisted.has("cursor")) {
+                break;
+            }
+            Thread.sleep(10);
+        } while (System.nanoTime() < deadline);
+        assertEquals(id, BunkrGallerySessionStore.recentCreatorId(context, query));
+        assertNotNull(persisted);
+
+        Map<?, ?> sessions =
+                ReflectionHelpers.getStaticField(BunkrGallerySessionStore.class, "SESSIONS");
+        sessions.clear();
+
+        assertEquals(id, BunkrGallerySessionStore.recentCreatorId(context, query));
+        BunkrGallerySessionStore.Snapshot restored =
+                BunkrGallerySessionStore.restoreRecentCreator(context, query);
+        assertNotNull(restored);
+        assertEquals(1, restored.items.size());
+        assertEquals(item.url, restored.items.get(0).url);
+    }
+
     @Test public void mediaAndCursorRecoverTogetherWithoutAnActivityCallback() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         String id = BunkrGallerySessionStore.createCreator("Anna", "https://fapello.com/anna/", "Anna");
