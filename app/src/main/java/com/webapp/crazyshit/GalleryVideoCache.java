@@ -17,8 +17,10 @@ import java.io.File;
 /** Small, separate cache for the first bytes of adjacent gallery videos. */
 @UnstableApi
 final class GalleryVideoCache {
-    private static final long MAX_BYTES = 32L * 1024L * 1024L;
-    private static final long PRELOAD_BYTES = 256L * 1024L;
+    private static final long MAX_BYTES = 64L * 1024L * 1024L;
+    private static final long PRELOAD_NEAR_BYTES = 1024L * 1024L;
+    private static final long PRELOAD_SECOND_BYTES = 512L * 1024L;
+    private static final long PRELOAD_FAR_BYTES = 256L * 1024L;
     private static SimpleCache cache;
     private static StandaloneDatabaseProvider database;
 
@@ -42,11 +44,23 @@ final class GalleryVideoCache {
     }
 
     static void warm(Context context, DefaultHttpDataSource.Factory upstream, String url) {
+        warm(context, upstream, url, 3);
+    }
+
+    static void warm(
+            Context context,
+            DefaultHttpDataSource.Factory upstream,
+            String url,
+            int distance
+    ) {
         if (url == null || url.isEmpty() || url.contains(".m3u8") || url.contains(".mpd")) return;
+        long bytes = distance <= 1
+                ? PRELOAD_NEAR_BYTES
+                : distance == 2 ? PRELOAD_SECOND_BYTES : PRELOAD_FAR_BYTES;
         try {
             CacheDataSource source = factory(context, upstream).createDataSource();
             DataSpec spec = new DataSpec.Builder().setUri(Uri.parse(url))
-                    .setLength(PRELOAD_BYTES).build();
+                    .setLength(bytes).build();
             new CacheWriter(source, spec, null, null).cache();
         } catch (Exception ignored) {
             // A failed warm-up must never block normal playback.
