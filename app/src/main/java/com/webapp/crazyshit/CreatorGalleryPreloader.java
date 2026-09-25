@@ -49,6 +49,7 @@ final class CreatorGalleryPreloader {
     );
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<String, String> SESSIONS = new ConcurrentHashMap<>();
+    private static final Map<String, WarmTask> PENDING = new ConcurrentHashMap<>();
     private static final Set<String> WARMING = ConcurrentHashMap.newKeySet();
     private static final AtomicInteger RESERVED = new AtomicInteger();
 
@@ -117,7 +118,11 @@ final class CreatorGalleryPreloader {
         String finalQuery = cleanQuery;
         String finalFapelloProfile = clean(fapelloProfileUrl);
 
-        IO.execute(new WarmTask(priority, SEQUENCE.getAndIncrement(), () -> {
+        WarmTask task = new WarmTask(
+                key,
+                priority,
+                SEQUENCE.getAndIncrement(),
+                () -> {
             String sessionId = "";
             try {
                 String nowRecent = BunkrGallerySessionStore.recentCreator(finalQuery);
@@ -176,7 +181,23 @@ final class CreatorGalleryPreloader {
                     SESSIONS.remove(key, sessionId);
                 }
             }
-        }));
+        });
+        PENDING.put(key, task);
+        IO.execute(task);
+    }
+
+    static void cancelQueued(NativeContentItem creator) {
+        if (creator == null || !creator.isCreator()) return;
+        String query = creator.searchQuery == null || creator.searchQuery.trim().isEmpty()
+                ? creator.title
+                : creator.searchQuery.trim();
+        String key = key(query);
+        WarmTask task = PENDING.get(key);
+        if (task == null || !IO.remove(task)) return;
+        if (PENDING.remove(key, task)) {
+            WARMING.remove(key);
+            RESERVED.decrementAndGet();
+        }
     }
 
     static String sessionId(NativeContentItem creator) {
@@ -289,11 +310,13 @@ final class CreatorGalleryPreloader {
     }
 
     private static final class WarmTask implements Runnable, Comparable<WarmTask> {
+        private final String key;
         private final int priority;
         private final long sequence;
         private final Runnable work;
 
-        WarmTask(int priority, long sequence, Runnable work) {
+        WarmTask(String key, int priority, long sequence, Runnable work) {
+            this.key = key;
             this.priority = priority;
             this.sequence = sequence;
             this.work = work;
@@ -301,6 +324,7 @@ final class CreatorGalleryPreloader {
 
         @Override
         public void run() {
+            PENDING.remove(key, this);
             work.run();
         }
 
