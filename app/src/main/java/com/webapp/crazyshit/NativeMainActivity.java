@@ -193,6 +193,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
         primaryPager = new ViewPager2(this);
         primaryPager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
+        // Content gestures belong to content. Primary tab swipes are handled only by the
+        // bottom navigation pill so shelves, galleries and scrubbers never fight the pager.
+        primaryPager.setUserInputEnabled(false);
         primaryPager.setOffscreenPageLimit(MainPagerAdapter.PAGE_COUNT - 1);
         primaryPager.setAdapter(primaryPagerAdapter);
         primaryPager.setPageTransformer((page, position) -> {
@@ -286,6 +289,17 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         menu.add(Menu.NONE, NAV_CHAOS, 2, "ShitTok").setIcon(R.drawable.ic_nav_chaos);
         menu.add(Menu.NONE, NAV_ONLYFAP, 3, "OnlyFap").setIcon(R.drawable.ic_nav_onlyfap);
         menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
+        bottomNavigation.setOnNavigationSwipeListener(direction -> {
+            if (primaryPager == null || primaryPager.getVisibility() != View.VISIBLE) return;
+            int current = primaryPager.getCurrentItem();
+            int target = Math.max(
+                    MainPagerAdapter.PAGE_HOME,
+                    Math.min(MainPagerAdapter.PAGE_ONLYFAP, current + direction)
+            );
+            if (target == current) return;
+            haptic(bottomNavigation);
+            showPrimaryPage(target, true);
+        });
         bottomNavigation.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
             if (id == NAV_HOME) {
