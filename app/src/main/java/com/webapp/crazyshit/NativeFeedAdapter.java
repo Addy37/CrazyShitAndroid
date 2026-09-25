@@ -51,7 +51,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     public static final int VIEW_COMPACT = VIEW_LIST;
     public static final int VIEW_GRID = 2;
     public static final int VIEW_POSTERS = 3;
-    public static final int VIEW_EPISODES = 4;
     private static final int TYPE_SECTION = 100;
 
     private static final String SITE = "https://crazyshit.com/";
@@ -109,7 +108,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     public void setViewMode(int mode) {
         int next = mode;
-        if (next < VIEW_CARDS || next > VIEW_EPISODES) next = VIEW_LIST;
+        if (next < VIEW_CARDS || next > VIEW_POSTERS) next = VIEW_LIST;
         if (viewMode == next) return;
         viewMode = next;
         notifyDataSetChanged();
@@ -276,7 +275,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         if (viewType == VIEW_LIST) return createListHolder(parent);
         if (viewType == VIEW_GRID) return createGridHolder(parent);
         if (viewType == VIEW_POSTERS) return createPosterHolder(parent);
-        if (viewType == VIEW_EPISODES) return createEpisodeHolder(parent);
         return createCardsHolder(parent);
     }
 
@@ -399,104 +397,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         unusedDescription.setVisibility(View.GONE);
         CopyViews copy = new CopyViews(title, info, unusedComments, unusedDescription);
         return new Holder(card, media, copy);
-    }
-
-    private Holder createEpisodeHolder(ViewGroup parent) {
-        boolean landscape = isLandscape(parent);
-        int cardHeight = landscape ? 118 : 132;
-        int mediaWidth = responsiveEpisodeMediaWidthDp(parent);
-        int mediaHeight = Math.max(72, Math.round(mediaWidth * 9f / 16f));
-
-        MaterialCardView card = baseCard(parent, 12, 5, 15, cardHeight);
-        LinearLayout row = new LinearLayout(parent.getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(parent, 8), dp(parent, 8), dp(parent, 8), dp(parent, 8));
-        card.addView(row, new MaterialCardView.LayoutParams(-1, -1));
-
-        MediaViews media = addMedia(parent, row, mediaHeight, mediaWidth);
-
-        LinearLayout copy = new LinearLayout(parent.getContext());
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setGravity(Gravity.CENTER_VERTICAL);
-        copy.setPadding(dp(parent, 12), 0, 0, 0);
-        row.addView(copy, new LinearLayout.LayoutParams(0, -1, 1f));
-
-        LinearLayout titleRow = new LinearLayout(parent.getContext());
-        titleRow.setOrientation(LinearLayout.HORIZONTAL);
-        titleRow.setGravity(Gravity.TOP | Gravity.CENTER_VERTICAL);
-        copy.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
-
-        TextView title = new TextView(parent.getContext());
-        title.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_primary));
-        title.setTextSize(landscape ? 14.5f : 15.5f);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setMaxLines(2);
-        title.setEllipsize(TextUtils.TruncateAt.END);
-        titleRow.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView menu = BrowseUi.action(parent.getContext(), "⋮", "Video options", v -> { });
-        menu.setTag("video_options");
-        menu.setTextSize(22);
-        menu.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_secondary));
-        menu.setBackgroundColor(Color.TRANSPARENT);
-        titleRow.addView(menu, new LinearLayout.LayoutParams(dp(parent, 38), dp(parent, 38)));
-
-        TextView description = new TextView(parent.getContext());
-        description.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_secondary));
-        description.setTextSize(11.5f);
-        description.setMaxLines(2);
-        description.setEllipsize(TextUtils.TruncateAt.END);
-        description.setVisibility(View.GONE);
-        LinearLayout.LayoutParams descriptionParams = new LinearLayout.LayoutParams(-1, -2);
-        descriptionParams.topMargin = dp(parent, 2);
-        copy.addView(description, descriptionParams);
-
-        LinearLayout footer = new LinearLayout(parent.getContext());
-        footer.setOrientation(LinearLayout.HORIZONTAL);
-        footer.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
-        footerParams.topMargin = dp(parent, 5);
-        copy.addView(footer, footerParams);
-
-        TextView info = new TextView(parent.getContext());
-        info.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_muted));
-        info.setTextSize(10.5f);
-        info.setSingleLine(true);
-        info.setEllipsize(TextUtils.TruncateAt.END);
-        footer.addView(info, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView action = new TextView(parent.getContext());
-        action.setText("Play");
-        action.setTextSize(11f);
-        action.setTypeface(null, android.graphics.Typeface.BOLD);
-        action.setTextColor(UiPalette.PRIMARY);
-        action.setGravity(Gravity.CENTER);
-        action.setClickable(true);
-        action.setFocusable(true);
-        action.setContentDescription("Play episode");
-        action.setSingleLine(true);
-        action.setEllipsize(TextUtils.TruncateAt.END);
-        action.setBackground(episodeActionBackground(parent.getContext()));
-        ZeroChillMotion.installPressFeedback(action);
-        LinearLayout.LayoutParams actionParams =
-                new LinearLayout.LayoutParams(dp(parent, landscape ? 110 : 118), dp(parent, 34));
-        actionParams.setMarginStart(dp(parent, 8));
-        footer.addView(action, actionParams);
-
-        TextView comments = new TextView(parent.getContext());
-        comments.setVisibility(View.GONE);
-
-        CopyViews copyViews = new CopyViews(title, info, comments, description);
-        return new Holder(card, media, copyViews, action);
-    }
-
-    private GradientDrawable episodeActionBackground(Context context) {
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.argb(165, 7, 13, 17));
-        background.setCornerRadius(dp(context, 17));
-        background.setStroke(dp(context, 1), UiPalette.PRIMARY);
-        return background;
     }
 
     private MaterialCardView baseCard(
@@ -745,10 +645,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         holder.comments.setOnClickListener(null);
         holder.overlayComments.setVisibility(View.GONE);
         holder.overlayComments.setOnClickListener(null);
-        if (holder.episodeAction != null) {
-            holder.episodeAction.setOnClickListener(v -> listener.onOpen(item));
-            holder.episodeAction.setContentDescription("Play " + item.title);
-        }
 
         if (!meme && item.comments != null && !item.comments.isEmpty()) {
             String compact = compactCount(item.comments);
@@ -818,13 +714,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         holder.progressTrack.setVisibility(View.GONE);
         holder.progressFill.setScaleX(0f);
         holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_edge));
-        if (holder.episodeAction != null) {
-            holder.episodeAction.setText("Play");
-            holder.episodeAction.setTextColor(UiPalette.PRIMARY);
-            holder.episodeAction.setContentDescription(
-                    item == null ? "Play episode" : "Play " + item.title
-            );
-        }
         if (item == null || item.isMeme()) return;
 
         PlaybackHistoryStore.Item history = playbackByUrl.get(item.url);
@@ -841,10 +730,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             ));
             holder.watchBadge.setVisibility(View.VISIBLE);
             holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_divider));
-            if (holder.episodeAction != null) {
-                holder.episodeAction.setText("Replay");
-                holder.episodeAction.setContentDescription("Replay " + item.title);
-            }
             return;
         }
 
@@ -858,12 +743,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         ));
         holder.watchBadge.setVisibility(View.VISIBLE);
         holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim));
-        if (holder.episodeAction != null) {
-            holder.episodeAction.setText("Continue · " + formatTime(history.positionMs));
-            holder.episodeAction.setContentDescription(
-                    "Continue " + item.title + " at " + formatTime(history.positionMs)
-            );
-        }
 
         if (history.durationMs > 0L) {
             float fraction = Math.max(0f, Math.min(1f, history.positionMs / (float) history.durationMs));
@@ -1134,15 +1013,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         return Math.max(heightDp, Math.min(targetByShare, targetByAspect));
     }
 
-    private static int responsiveEpisodeMediaWidthDp(View parent) {
-        Configuration config = parent.getResources().getConfiguration();
-        int widthDp = Math.max(320, config.screenWidthDp);
-        boolean landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE;
-        float share = landscape ? 0.32f : 0.42f;
-        int target = Math.round((widthDp - 40) * share);
-        return Math.max(132, Math.min(landscape ? 210 : 176, target));
-    }
-
     private static int responsiveGridMediaHeightDp(View parent) {
         Configuration config = parent.getResources().getConfiguration();
         int widthDp = Math.max(320, config.screenWidthDp);
@@ -1165,10 +1035,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private static int dp(View view, int value) {
         return Math.round(value * view.getResources().getDisplayMetrics().density);
-    }
-
-    private static int dp(Context context, int value) {
-        return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
     private static final class MediaViews {
@@ -1226,13 +1092,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final TextView comments;
         final TextView description;
         final TextView sectionTitle;
-        final TextView episodeAction;
 
         Holder(MaterialCardView card, MediaViews media, CopyViews copy) {
-            this(card, media, copy, null);
-        }
-
-        Holder(MaterialCardView card, MediaViews media, CopyViews copy, TextView episodeAction) {
             super(card);
             this.card = card;
             this.image = media.image;
@@ -1246,7 +1107,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.comments = copy.comments;
             this.description = copy.description;
             this.sectionTitle = null;
-            this.episodeAction = episodeAction;
         }
 
         Holder(MaterialCardView card, TextView sectionTitle) {
@@ -1263,7 +1123,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.comments = null;
             this.description = null;
             this.sectionTitle = sectionTitle;
-            this.episodeAction = null;
         }
     }
 }
