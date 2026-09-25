@@ -1,3 +1,3 @@
-* Added the approved OnlyFap creator hero with real creator header artwork and a smooth collapsing fade that gives gallery space back as you scroll.
-* Creator galleries now begin warming from visible and near-visible creator cards across OnlyFap shelves, search, favorites, and ShitTok creator links.
-* Reuses partial warm gallery sessions on tap for faster first results while keeping background work bounded and avoiding video-file predownloads.
+* OnlyFap creator galleries now open faster with race-to-first-media loading, persistent hot-gallery sessions, and smarter prewarming from shelves, search, favorites, and creator links.
+* Fullscreen creator media keeps its edge-to-edge look while top controls stay clear of the status bar and display cutout.
+* Settings has been reorganized into compact, user-friendly groups with shorter descriptions, safer data-cleanup actions, and a refined status-bar fade.
