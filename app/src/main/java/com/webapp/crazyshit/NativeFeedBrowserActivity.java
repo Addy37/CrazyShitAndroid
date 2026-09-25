@@ -154,13 +154,25 @@ public final class NativeFeedBrowserActivity extends Activity {
                 SOURCE_BUNKR
         );
         intent.putExtra(EXTRA_BUNKR_CREATOR_QUERY, cleanQuery);
-        if (FapelloRepository.isModelUrl(fapelloProfileUrl)) {
+        if (FapelloRepository.isModelUrl(fapelloProfileUrl) ||
+                OnlyHavenRepository.isOnlyHavenUrl(fapelloProfileUrl)) {
+            // Keep the legacy extra key for compatibility. It now carries a known creator
+            // profile from either fast source so the gallery can skip redundant discovery.
             intent.putExtra(EXTRA_FAPELLO_PROFILE_URL, fapelloProfileUrl);
         }
         if (gallerySessionId != null && !gallerySessionId.trim().isEmpty()) {
             intent.putExtra(EXTRA_CREATOR_GALLERY_SESSION, gallerySessionId.trim());
         }
         return intent;
+    }
+
+    static String creatorProfileHint(NativeContentItem item) {
+        if (item == null || item.url == null) return "";
+        String url = item.url.trim();
+        return FapelloRepository.isModelUrl(url) ||
+                OnlyHavenRepository.isOnlyHavenUrl(url)
+                ? url
+                : "";
     }
 
     @Override
