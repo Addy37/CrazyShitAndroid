@@ -13,6 +13,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -30,8 +31,15 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
  * Android versions keep the same static selected-glass drawable.
  */
 final class ZeroChillBottomNavigationView extends BottomNavigationView {
+    interface OnNavigationDragListener {
+        boolean onNavigationDragStart();
+        void onNavigationDragBy(float deltaPageFraction);
+        void onNavigationDragEnd(boolean canceled);
+    }
+
     private static final int[] PAGE_NAV_IDS = {1, 2, 4, 3};
     private static final long REFLECTION_SETTLE_MS = 180L;
+    private static final float HORIZONTAL_DOMINANCE = 1.25f;
 
     private final Drawable selectedGlass;
     private final Rect firstRect = new Rect();
@@ -47,11 +55,20 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private boolean gpuReflectionDisabled;
     private ValueAnimator reflectionAnimator;
     private Api33Reflection shaderReflection;
+    private final int swipeTouchSlop;
+    private float dragDownX;
+    private float dragDownY;
+    private float dragLastX;
+    private float navigationDragPageStep = 1f;
+    private boolean navigationDragCandidate;
+    private boolean navigationDragActive;
+    private OnNavigationDragListener navigationDragListener;
 
     ZeroChillBottomNavigationView(Context context) {
         super(context);
         Drawable drawable = ContextCompat.getDrawable(context, R.drawable.zc_nav_selected_glass);
         selectedGlass = drawable == null ? null : drawable.mutate();
+        swipeTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setWillNotDraw(false);
         addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateItemColors());
     }
@@ -67,6 +84,10 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         updateItemColors();
     }
 
+    void setOnNavigationDragListener(OnNavigationDragListener listener) {
+        navigationDragListener = listener;
+    }
+
     float pagerPositionForTest() {
         return pagerPosition;
     }
@@ -79,27 +100,124 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (event != null && getWidth() > 0) {
-            int action = event.getActionMasked();
-            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
-                removeCallbacks(settleReflectionRunnable);
-                if (reflectionAnimator != null) reflectionAnimator.cancel();
-                touchReflectionActive = true;
-                float capsuleCenter = capsuleCenterX();
-                float capsuleWidth = Math.max(1f, capsuleWidth());
-                // A finger can nudge the sheen within the capsule, never across the bar.
-                reflectionFocus = clamp(0.5f + (event.getX() - capsuleCenter)
-                        / capsuleWidth * 0.12f, 0.38f, 0.62f);
-                if (action == MotionEvent.ACTION_DOWN) animatePress(0.975f);
-                invalidate();
-            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                touchReflectionActive = false;
-                removeCallbacks(settleReflectionRunnable);
-                animatePress(1f);
-                postDelayed(settleReflectionRunnable, 30L);
+        if (event == null) return super.dispatchTouchEvent(null);
+
+        int action = event.getActionMasked();
+        updateTouchReflection(event, action);
+
+        if (action == MotionEvent.ACTION_DOWN) {
+            dragDownX = event.getX();
+            dragDownY = event.getY();
+            dragLastX = dragDownX;
+            navigationDragPageStep = pageStepDistance();
+            navigationDragActive = false;
+            navigationDragCandidate = isInsideSelectedCapsule(dragDownX, dragDownY);
+            return super.dispatchTouchEvent(event);
+        }
+
+        float dx = event.getX() - dragDownX;
+        float dy = event.getY() - dragDownY;
+        boolean horizontalIntent = navigationDragCandidate
+                && Math.abs(dx) > swipeTouchSlop
+                && Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE;
+
+        if (action == MotionEvent.ACTION_MOVE && !navigationDragActive && horizontalIntent) {
+            boolean started = navigationDragListener != null
+                    && navigationDragListener.onNavigationDragStart();
+            if (started) {
+                navigationDragActive = true;
+                cancelChildTouch(event);
+                navigationDragListener.onNavigationDragBy(dx / navigationDragPageStep);
+                dragLastX = event.getX();
+                return true;
             }
+            navigationDragCandidate = false;
+        }
+
+        if (action == MotionEvent.ACTION_MOVE && navigationDragActive) {
+            float deltaX = event.getX() - dragLastX;
+            dragLastX = event.getX();
+            if (navigationDragListener != null && deltaX != 0f) {
+                navigationDragListener.onNavigationDragBy(deltaX / navigationDragPageStep);
+            }
+            return true;
+        }
+
+        if (action == MotionEvent.ACTION_UP && navigationDragActive) {
+            navigationDragActive = false;
+            navigationDragCandidate = false;
+            if (navigationDragListener != null) {
+                navigationDragListener.onNavigationDragEnd(false);
+            }
+            return true;
+        }
+
+        if (action == MotionEvent.ACTION_CANCEL && navigationDragActive) {
+            navigationDragActive = false;
+            navigationDragCandidate = false;
+            if (navigationDragListener != null) {
+                navigationDragListener.onNavigationDragEnd(true);
+            }
+            return true;
+        }
+
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            navigationDragCandidate = false;
         }
         return super.dispatchTouchEvent(event);
+    }
+
+    private float pageStepDistance() {
+        View first = findViewById(PAGE_NAV_IDS[0]);
+        View second = findViewById(PAGE_NAV_IDS[1]);
+        if (first == null || second == null ||
+                first.getWidth() <= 0 || second.getWidth() <= 0) {
+            return Math.max(1f, getWidth() / 5f);
+        }
+        descendantRect(first, firstRect);
+        descendantRect(second, secondRect);
+        return Math.max(1f, Math.abs(secondRect.exactCenterX() - firstRect.exactCenterX()));
+    }
+
+    private boolean isInsideSelectedCapsule(float x, float y) {
+        int index = Math.max(0, Math.min(PAGE_NAV_IDS.length - 1, Math.round(pagerPosition)));
+        View item = findViewById(PAGE_NAV_IDS[index]);
+        if (item == null || item.getWidth() <= 0 || item.getHeight() <= 0) return false;
+
+        descendantRect(item, firstRect);
+        float left = firstRect.left + dp(4);
+        float right = firstRect.right - dp(4);
+        float top = firstRect.top + dp(3);
+        float bottom = firstRect.bottom + dp(10);
+        return x >= left && x <= right && y >= top && y <= bottom;
+    }
+
+    private void updateTouchReflection(MotionEvent event, int action) {
+        if (getWidth() <= 0) return;
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
+            removeCallbacks(settleReflectionRunnable);
+            if (reflectionAnimator != null) reflectionAnimator.cancel();
+            touchReflectionActive = true;
+            float capsuleCenter = capsuleCenterX();
+            float capsuleWidth = Math.max(1f, capsuleWidth());
+            // A finger can nudge the sheen within the capsule, never across the bar.
+            reflectionFocus = clamp(0.5f + (event.getX() - capsuleCenter)
+                    / capsuleWidth * 0.12f, 0.38f, 0.62f);
+            if (action == MotionEvent.ACTION_DOWN) animatePress(0.975f);
+            invalidate();
+        } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            touchReflectionActive = false;
+            removeCallbacks(settleReflectionRunnable);
+            animatePress(1f);
+            postDelayed(settleReflectionRunnable, 30L);
+        }
+    }
+
+    private void cancelChildTouch(MotionEvent source) {
+        MotionEvent cancel = MotionEvent.obtain(source);
+        cancel.setAction(MotionEvent.ACTION_CANCEL);
+        super.dispatchTouchEvent(cancel);
+        cancel.recycle();
     }
 
     @Override
@@ -108,6 +226,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         if (reflectionAnimator != null) reflectionAnimator.cancel();
         if (pressAnimator != null) pressAnimator.cancel();
         reflectionAnimator = null;
+        navigationDragListener = null;
         super.onDetachedFromWindow();
     }
 

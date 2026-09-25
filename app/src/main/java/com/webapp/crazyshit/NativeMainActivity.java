@@ -73,7 +73,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private SwipeRefreshLayout swipeRefresh;
     private View progress;
     private TextView emptyView;
-    private BottomNavigationView bottomNavigation;
+    private ZeroChillBottomNavigationView bottomNavigation;
     private NativeFeedAdapter feedAdapter;
     private NativeMiniPlayer miniPlayer;
     private FrameLayout legacyContent;
@@ -193,6 +193,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
         primaryPager = new ViewPager2(this);
         primaryPager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
+        // Content gestures belong to content. Primary tab swipes are handled only by the
+        // bottom navigation pill so shelves, galleries and scrubbers never fight the pager.
+        primaryPager.setUserInputEnabled(false);
         primaryPager.setOffscreenPageLimit(MainPagerAdapter.PAGE_COUNT - 1);
         primaryPager.setAdapter(primaryPagerAdapter);
         primaryPager.setPageTransformer((page, position) -> {
@@ -210,7 +213,17 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
         primaryPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
+            public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
+                if (bottomNavigation != null) {
+                    bottomNavigation.setPagerPosition(position + positionOffset);
+                }
+            }
+
+            @Override
             public void onPageSelected(int position) {
+                if (bottomNavigation != null) {
+                    bottomNavigation.setPagerPosition(position);
+                }
                 showPagerChrome(position);
             }
         });
@@ -286,6 +299,46 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         menu.add(Menu.NONE, NAV_CHAOS, 2, "ShitTok").setIcon(R.drawable.ic_nav_chaos);
         menu.add(Menu.NONE, NAV_ONLYFAP, 3, "OnlyFap").setIcon(R.drawable.ic_nav_onlyfap);
         menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
+        bottomNavigation.setOnNavigationDragListener(
+                new ZeroChillBottomNavigationView.OnNavigationDragListener() {
+                    @Override
+                    public boolean onNavigationDragStart() {
+                        if (primaryPager == null ||
+                                primaryPager.getVisibility() != View.VISIBLE ||
+                                primaryPager.isFakeDragging()) {
+                            return false;
+                        }
+                        return primaryPager.beginFakeDrag();
+                    }
+
+                    @Override
+                    public void onNavigationDragBy(float deltaPageFraction) {
+                        if (primaryPager != null && primaryPager.isFakeDragging()) {
+                            float pageWidth = Math.max(1f, primaryPager.getWidth());
+                            // The capsule moves toward the destination icon while the page
+                            // content moves in the opposite direction underneath it.
+                            primaryPager.fakeDragBy(-deltaPageFraction * pageWidth);
+                        }
+                    }
+
+                    @Override
+                    public void onNavigationDragEnd(boolean canceled) {
+                        if (primaryPager == null || !primaryPager.isFakeDragging()) return;
+                        float releasePosition = bottomNavigation == null
+                                ? primaryPager.getCurrentItem()
+                                : bottomNavigation.pagerPositionForTest();
+                        int target = Math.max(
+                                MainPagerAdapter.PAGE_HOME,
+                                Math.min(MainPagerAdapter.PAGE_ONLYFAP, Math.round(releasePosition))
+                        );
+                        primaryPager.endFakeDrag();
+                        primaryPager.setCurrentItem(
+                                target,
+                                ZeroChillMotion.animationsEnabled(NativeMainActivity.this)
+                        );
+                    }
+                }
+        );
         bottomNavigation.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
             if (id == NAV_HOME) {

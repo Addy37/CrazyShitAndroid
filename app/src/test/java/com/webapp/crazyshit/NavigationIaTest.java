@@ -28,6 +28,50 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class NavigationIaTest {
+    @Test public void showsDetailsIntentCarriesRealCollectionPresentationData() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeContentItem item = new NativeContentItem(
+                NativeContentItem.KIND_SERIES,
+                "Test Show",
+                "https://crazyshit.com/series/test-show/",
+                "https://cdn.example.com/show.jpg",
+                "",
+                "",
+                "",
+                "Real source description"
+        );
+        Intent intent = NativeFeedBrowserActivity.createShowDetails(
+                controller.get(),
+                item,
+                NativeFeedBrowserActivity.SOURCE_CRAZYSHIT
+        );
+
+        assertEquals(NativeFeedBrowserActivity.class.getName(),
+                intent.getComponent().getClassName());
+        assertTrue(intent.getBooleanExtra(NativeFeedBrowserActivity.EXTRA_SHOW_DETAILS, false));
+        assertEquals(item.title,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_TITLE));
+        assertEquals(item.url,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_BASE_URL));
+        assertEquals(item.imageUrl,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SHOW_IMAGE_URL));
+        assertEquals(item.description,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SHOW_DESCRIPTION));
+        assertEquals(item.kind,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SHOW_KIND));
+        assertEquals(NativeFeedBrowserActivity.SOURCE_CRAZYSHIT,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SOURCE));
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void restoredSlotThreeIsOnlyFapWithStablePublicNavigation() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
@@ -80,8 +124,66 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @Test public void primaryTabsDragFromSelectedBottomCapsule() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        ViewPager2 pager = ReflectionHelpers.getField(activity, "primaryPager");
+        ZeroChillBottomNavigationView nav =
+                ReflectionHelpers.getField(activity, "bottomNavigation");
+
+        assertFalse(pager.isUserInputEnabled());
+        assertEquals(MainPagerAdapter.PAGE_HOME, pager.getCurrentItem());
+
+        View home = nav.findViewById(1);
+        View shows = nav.findViewById(2);
+        assertNotNull(home);
+        assertNotNull(shows);
+
+        android.graphics.Rect homeRect = new android.graphics.Rect();
+        android.graphics.Rect showsRect = new android.graphics.Rect();
+        home.getDrawingRect(homeRect);
+        shows.getDrawingRect(showsRect);
+        nav.offsetDescendantRectToMyCoords(home, homeRect);
+        nav.offsetDescendantRectToMyCoords(shows, showsRect);
+
+        float downX = homeRect.exactCenterX();
+        float downY = homeRect.exactCenterY();
+        float targetX = showsRect.exactCenterX();
+        long downTime = android.os.SystemClock.uptimeMillis();
+
+        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                downTime, downTime,
+                android.view.MotionEvent.ACTION_DOWN,
+                downX, downY, 0
+        ));
+        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                downTime, downTime + 16L,
+                android.view.MotionEvent.ACTION_MOVE,
+                downX + ((targetX - downX) * 0.65f), downY, 0
+        ));
+        nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                downTime, downTime + 32L,
+                android.view.MotionEvent.ACTION_UP,
+                targetX, downY, 0
+        ));
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        assertEquals(MainPagerAdapter.PAGE_SERIES, pager.getCurrentItem());
+        assertEquals((float) MainPagerAdapter.PAGE_SERIES,
+                nav.pagerPositionForTest(), 0.01f);
+        controller.pause().stop().destroy();
+    }
+
     @SuppressWarnings({"rawtypes", "unchecked"})
-    @Test public void shitTokKeepsLegacyPortraitViewportWhilePagerCanSwipeBehindNav() {
+    @Test public void shitTokKeepsLegacyPortraitViewportWithPrimaryPager() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
                 .putBoolean("access_notice_2_8_3_accepted", true).apply();

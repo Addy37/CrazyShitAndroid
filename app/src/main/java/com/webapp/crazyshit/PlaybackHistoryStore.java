@@ -30,24 +30,50 @@ public final class PlaybackHistoryStore {
             long durationMs,
             boolean ended
     ) {
+        record(context, title, pageUrl, "", positionMs, durationMs, ended, false);
+    }
+
+    public static void record(
+            Context context,
+            String title,
+            String pageUrl,
+            String posterUrl,
+            long positionMs,
+            long durationMs,
+            boolean ended,
+            boolean fromShows
+    ) {
         if (context == null || pageUrl == null || pageUrl.trim().isEmpty()) return;
         if (!ended && positionMs < MIN_HISTORY_MS) return;
 
+        String cleanPageUrl = pageUrl.trim();
         List<Item> items = load(context);
-        items.removeIf(item -> pageUrl.equals(item.pageUrl));
+        Item previous = null;
+        for (Item item : items) {
+            if (cleanPageUrl.equals(item.pageUrl)) {
+                previous = item;
+                break;
+            }
+        }
+        items.removeIf(item -> cleanPageUrl.equals(item.pageUrl));
 
         boolean complete = ended || isComplete(positionMs, durationMs);
         long safePosition = Math.max(0L, positionMs);
         long safeDuration = Math.max(0L, durationMs);
         String safeTitle = title == null || title.trim().isEmpty() ? "Video" : title.trim();
+        String safePoster = posterUrl == null ? "" : posterUrl.trim();
+        if (safePoster.isEmpty() && previous != null) safePoster = previous.posterUrl;
+        boolean showsRelated = fromShows || (previous != null && previous.fromShows);
 
         items.add(0, new Item(
                 safeTitle,
-                pageUrl.trim(),
+                cleanPageUrl,
+                safePoster,
                 safePosition,
                 safeDuration,
                 System.currentTimeMillis(),
-                complete
+                complete,
+                showsRelated
         ));
 
         if (items.size() > MAX_ITEMS) {
@@ -71,10 +97,12 @@ public final class PlaybackHistoryStore {
                 items.add(new Item(
                         object.optString("title", "Video"),
                         pageUrl,
+                        object.optString("posterUrl", ""),
                         Math.max(0L, object.optLong("positionMs", 0L)),
                         Math.max(0L, object.optLong("durationMs", 0L)),
                         Math.max(0L, object.optLong("lastWatched", 0L)),
-                        object.optBoolean("complete", false)
+                        object.optBoolean("complete", false),
+                        object.optBoolean("fromShows", false)
                 ));
             }
         } catch (Exception ignored) {
@@ -86,9 +114,16 @@ public final class PlaybackHistoryStore {
     public static List<Item> continueWatching(Context context) {
         ArrayList<Item> out = new ArrayList<>();
         for (Item item : load(context)) {
-            if (item.complete) continue;
-            if (item.positionMs < MIN_CONTINUE_MS) continue;
-            if (item.durationMs > 0L && isComplete(item.positionMs, item.durationMs)) continue;
+            if (!isContinueCandidate(item)) continue;
+            out.add(item);
+        }
+        return out;
+    }
+
+    public static List<Item> continueWatchingShows(Context context) {
+        ArrayList<Item> out = new ArrayList<>();
+        for (Item item : load(context)) {
+            if (!item.fromShows || !isContinueCandidate(item)) continue;
             out.add(item);
         }
         return out;
@@ -109,6 +144,12 @@ public final class PlaybackHistoryStore {
                 .apply();
     }
 
+    private static boolean isContinueCandidate(Item item) {
+        if (item == null || item.complete) return false;
+        if (item.positionMs < MIN_CONTINUE_MS) return false;
+        return item.durationMs <= 0L || !isComplete(item.positionMs, item.durationMs);
+    }
+
     private static boolean isComplete(long positionMs, long durationMs) {
         return durationMs > 0L && positionMs >= (long) (durationMs * COMPLETE_FRACTION);
     }
@@ -120,10 +161,12 @@ public final class PlaybackHistoryStore {
                 JSONObject object = new JSONObject();
                 object.put("title", item.title);
                 object.put("pageUrl", item.pageUrl);
+                object.put("posterUrl", item.posterUrl);
                 object.put("positionMs", item.positionMs);
                 object.put("durationMs", item.durationMs);
                 object.put("lastWatched", item.lastWatched);
                 object.put("complete", item.complete);
+                object.put("fromShows", item.fromShows);
                 array.put(object);
             }
         } catch (Exception ignored) {
@@ -135,25 +178,31 @@ public final class PlaybackHistoryStore {
     public static final class Item {
         public final String title;
         public final String pageUrl;
+        public final String posterUrl;
         public final long positionMs;
         public final long durationMs;
         public final long lastWatched;
         public final boolean complete;
+        public final boolean fromShows;
 
         Item(
                 String title,
                 String pageUrl,
+                String posterUrl,
                 long positionMs,
                 long durationMs,
                 long lastWatched,
-                boolean complete
+                boolean complete,
+                boolean fromShows
         ) {
             this.title = title == null || title.trim().isEmpty() ? "Video" : title;
             this.pageUrl = pageUrl == null ? "" : pageUrl;
+            this.posterUrl = posterUrl == null ? "" : posterUrl;
             this.positionMs = Math.max(0L, positionMs);
             this.durationMs = Math.max(0L, durationMs);
             this.lastWatched = Math.max(0L, lastWatched);
             this.complete = complete;
+            this.fromShows = fromShows;
         }
 
         public int progressPercent() {

@@ -57,6 +57,10 @@ public final class NativeFeedBrowserActivity extends Activity {
     public static final String EXTRA_CREATOR_GALLERY_SESSION = "browser_creator_gallery_session";
     public static final String EXTRA_NOTIFICATION_FRESH_URLS =
             "browser_notification_fresh_urls";
+    public static final String EXTRA_SHOW_DETAILS = "browser_show_details";
+    public static final String EXTRA_SHOW_IMAGE_URL = "browser_show_image_url";
+    public static final String EXTRA_SHOW_DESCRIPTION = "browser_show_description";
+    public static final String EXTRA_SHOW_KIND = "browser_show_kind";
     public static final String SOURCE_CRAZYSHIT = "crazyshit";
     public static final String SOURCE_EFUKT = "efukt";
     public static final String SOURCE_BUNKR = "bunkr";
@@ -85,6 +89,8 @@ public final class NativeFeedBrowserActivity extends Activity {
     private TabLayout creatorTabs;
     private CreatorProfileHeader creatorProfile;
     private AppBarLayout creatorAppBar;
+    private ShowDetailsHeader showDetailsHeader;
+    private AppBarLayout showDetailsAppBar;
     private TabLayoutMediator creatorTabsMediator;
     private SwipeRefreshLayout refresh;
     private View progress;
@@ -95,6 +101,10 @@ public final class NativeFeedBrowserActivity extends Activity {
     private String source;
     private String creatorQuery;
     private String fapelloProfileUrl;
+    private String showImageUrl;
+    private String showDescription;
+    private String showKind;
+    private boolean showDetailsMode;
     private boolean memeMode;
     private boolean loading;
     private boolean endReached;
@@ -122,6 +132,20 @@ public final class NativeFeedBrowserActivity extends Activity {
         intent.putExtra(EXTRA_BASE_URL, baseUrl);
         intent.putExtra(EXTRA_MEME_MODE, memeMode);
         intent.putExtra(EXTRA_SOURCE, source);
+        return intent;
+    }
+
+    public static Intent createShowDetails(
+            Activity activity,
+            NativeContentItem item,
+            String source
+    ) {
+        if (item == null) return create(activity, "Shows", CrazyShitRepository.HOME, false, source);
+        Intent intent = create(activity, item.title, item.url, false, source);
+        intent.putExtra(EXTRA_SHOW_DETAILS, true);
+        intent.putExtra(EXTRA_SHOW_IMAGE_URL, item.imageUrl);
+        intent.putExtra(EXTRA_SHOW_DESCRIPTION, item.description);
+        intent.putExtra(EXTRA_SHOW_KIND, item.kind);
         return intent;
     }
 
@@ -184,6 +208,10 @@ public final class NativeFeedBrowserActivity extends Activity {
         source = value(getIntent().getStringExtra(EXTRA_SOURCE), SOURCE_CRAZYSHIT);
         creatorQuery = value(getIntent().getStringExtra(EXTRA_BUNKR_CREATOR_QUERY), "");
         fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL), "");
+        showDetailsMode = getIntent().getBooleanExtra(EXTRA_SHOW_DETAILS, false);
+        showImageUrl = value(getIntent().getStringExtra(EXTRA_SHOW_IMAGE_URL), "");
+        showDescription = value(getIntent().getStringExtra(EXTRA_SHOW_DESCRIPTION), "");
+        showKind = value(getIntent().getStringExtra(EXTRA_SHOW_KIND), NativeContentItem.KIND_SERIES);
         ArrayList<String> freshUrls =
                 getIntent().getStringArrayListExtra(EXTRA_NOTIFICATION_FRESH_URLS);
         if (freshUrls != null) {
@@ -287,7 +315,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         back.setOnClickListener(v -> finish());
         top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(52)));
 
-        TextView heading = text(isCreatorGallery() ? "OnlyFap" : title, 20, Color.WHITE);
+        TextView heading = text(isCreatorGallery() ? "OnlyFap" : showDetailsMode ? "Shows" : title, 20, Color.WHITE);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         heading.setSingleLine(true);
         heading.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -368,6 +396,54 @@ public final class NativeFeedBrowserActivity extends Activity {
                     new CoordinatorLayout.LayoutParams(-1, -1);
             bodyParams.setBehavior(new AppBarLayout.ScrollingViewBehavior());
             coordinator.addView(body, bodyParams);
+        } else if (showDetailsMode) {
+            CoordinatorLayout coordinator = new CoordinatorLayout(this);
+            coordinator.setBackgroundColor(Color.BLACK);
+            shell.addView(coordinator, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+            showDetailsAppBar = new AppBarLayout(this);
+            showDetailsAppBar.setBackgroundColor(Color.BLACK);
+            showDetailsAppBar.setElevation(0f);
+            showDetailsAppBar.setLiftOnScroll(false);
+            CoordinatorLayout.LayoutParams appBarParams =
+                    new CoordinatorLayout.LayoutParams(-1, -2);
+            appBarParams.gravity = Gravity.TOP;
+            coordinator.addView(showDetailsAppBar, appBarParams);
+
+            showDetailsHeader = new ShowDetailsHeader(
+                    this,
+                    title,
+                    showSourceLabel(),
+                    showDescription,
+                    baseUrl,
+                    showImageUrl,
+                    () -> {
+                        if (showDetailsAppBar != null) {
+                            showDetailsAppBar.setExpanded(false, true);
+                        }
+                        if (recycler != null) recycler.scrollToPosition(0);
+                    }
+            );
+            AppBarLayout.LayoutParams headerParams =
+                    new AppBarLayout.LayoutParams(-1, dp(286));
+            headerParams.setScrollFlags(
+                    AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL |
+                            AppBarLayout.LayoutParams.SCROLL_FLAG_EXIT_UNTIL_COLLAPSED
+            );
+            showDetailsAppBar.addView(showDetailsHeader, headerParams);
+            showDetailsAppBar.addOnOffsetChangedListener((appBar, verticalOffset) -> {
+                if (showDetailsHeader == null) return;
+                float progress = Math.min(
+                        1f,
+                        Math.abs(verticalOffset) / (float) Math.max(1, dp(286))
+                );
+                showDetailsHeader.setAlpha(1f - (progress * 0.78f));
+            });
+
+            CoordinatorLayout.LayoutParams bodyParams =
+                    new CoordinatorLayout.LayoutParams(-1, -1);
+            bodyParams.setBehavior(new AppBarLayout.ScrollingViewBehavior());
+            coordinator.addView(body, bodyParams);
         } else {
             shell.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
         }
@@ -375,7 +451,22 @@ public final class NativeFeedBrowserActivity extends Activity {
         refresh = new SwipeRefreshLayout(this);
         refresh.setColorSchemeColors(UiPalette.PRIMARY);
         refresh.setOnRefreshListener(this::reload);
-        body.addView(refresh, new FrameLayout.LayoutParams(-1, -1));
+        if (showDetailsMode) {
+            LinearLayout detailsFeed = new LinearLayout(this);
+            detailsFeed.setOrientation(LinearLayout.VERTICAL);
+            detailsFeed.setBackgroundColor(Color.BLACK);
+
+            TextView section = text("VIDEOS", 12, UiPalette.PRIMARY);
+            section.setTypeface(null, android.graphics.Typeface.BOLD);
+            section.setLetterSpacing(0.12f);
+            section.setGravity(Gravity.CENTER_VERTICAL);
+            section.setPadding(dp(16), dp(9), dp(16), dp(8));
+            detailsFeed.addView(section, new LinearLayout.LayoutParams(-1, dp(40)));
+            detailsFeed.addView(refresh, new LinearLayout.LayoutParams(-1, 0, 1f));
+            body.addView(detailsFeed, new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            body.addView(refresh, new FrameLayout.LayoutParams(-1, -1));
+        }
 
         if (isBunkr()) {
             if (bunkrGallerySessionId == null || bunkrGallerySessionId.isEmpty()) {
@@ -624,6 +715,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         } else {
             adapter.replace(new ArrayList<>());
         }
+        updateShowDetailsHeader();
         load(false);
     }
 
@@ -705,6 +797,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     } else if (result.isEmpty() || (append && added == 0) || isEfukt()) {
                         endReached = true;
                     }
+                    updateShowDetailsHeader();
                     if (isBunkr() && !isCreatorGallery()) {
                         if (append) {
                             BunkrGallerySessionStore.append(
@@ -996,6 +1089,9 @@ public final class NativeFeedBrowserActivity extends Activity {
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, baseUrl);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                if (showDetailsMode) {
+                    intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
+                }
                 if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
                     intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
                 }
@@ -1518,6 +1614,16 @@ public final class NativeFeedBrowserActivity extends Activity {
         return !isEfukt() && !isBunkr();
     }
 
+    private String showSourceLabel() {
+        if (isEfukt()) return "EFUKT SERIES";
+        if (NativeContentItem.KIND_CATEGORY.equals(showKind)) return "CRAZYSHIT CATEGORY";
+        return "CRAZYSHIT SHOW";
+    }
+
+    private void updateShowDetailsHeader() {
+        if (showDetailsHeader != null) showDetailsHeader.setItemCount(itemCount());
+    }
+
     private int itemCount() {
         return isBunkr()
                 ? (bunkrGalleryAdapter == null ? 0 : bunkrGalleryAdapter.getItemCount())
@@ -1551,6 +1657,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 } else if (feed != null) {
                     adapter.replace(ContentItemCodec.decodeList(feed.optJSONArray("items"), 2000));
                     currentPage = feed.optInt("page"); endReached = feed.optBoolean("end");
+                    updateShowDetailsHeader();
                 } else {
                     if (isBunkr()) {
                         bunkrGallerySessionId = isCreatorGallery()
@@ -1628,6 +1735,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             updateCreatorEmptyState();
         } else if (adapter != null) {
             adapter.refreshPlaybackState();
+            updateShowDetailsHeader();
         }
         applyLayout();
     }

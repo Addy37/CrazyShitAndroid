@@ -78,6 +78,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_SOURCE = "content_source";
     public static final String EXTRA_MEDIA_REFERER = "media_referer";
     public static final String EXTRA_POSTER_URL = "poster_url";
+    public static final String EXTRA_SHOWS_ORIGIN = "shows_origin";
 
     private static final String SITE = "https://crazyshit.com/";
     private static final int CONTROL_TIMEOUT_MS = 2600;
@@ -134,6 +135,7 @@ public class VideoDetailActivity extends Activity {
     private String source;
     private String mediaReferer;
     private String posterUrl;
+    private boolean showsOrigin;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
     private long requestedStartPosition;
@@ -234,6 +236,7 @@ public class VideoDetailActivity extends Activity {
         source = clean(getIntent().getStringExtra(EXTRA_SOURCE));
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
         posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
+        showsOrigin = getIntent().getBooleanExtra(EXTRA_SHOWS_ORIGIN, false);
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -1854,6 +1857,8 @@ public class VideoDetailActivity extends Activity {
         result.putExtra(EXTRA_COMMENTS, comments);
         result.putExtra(EXTRA_RELATED_FEED_URL, relatedFeedUrl);
         result.putExtra(EXTRA_SOURCE, source);
+        result.putExtra(EXTRA_SHOWS_ORIGIN, showsOrigin);
+        if (!posterUrl.isEmpty()) result.putExtra(EXTRA_POSTER_URL, posterUrl);
         if (player != null) result.putExtra(PlayerActivity.EXTRA_START_POSITION, player.getCurrentPosition());
         setResult(RESULT_OK, result);
         finish();
@@ -1880,7 +1885,16 @@ public class VideoDetailActivity extends Activity {
         long duration = player.getDuration();
         if (duration < 0L) duration = 0L;
 
-        PlaybackHistoryStore.record(this, title, pageUrl, position, duration, ended);
+        PlaybackHistoryStore.record(
+                this,
+                title,
+                pageUrl,
+                posterUrl,
+                position,
+                duration,
+                ended,
+                showsOrigin
+        );
 
         if (!rememberPositionEnabled()) return;
         SharedPreferences prefs = getSharedPreferences("player_positions", MODE_PRIVATE);
