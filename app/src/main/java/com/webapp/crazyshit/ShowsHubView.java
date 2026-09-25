@@ -56,10 +56,12 @@ final class ShowsHubView extends FrameLayout {
     private final Shelf crazyShelf;
     private final Shelf efuktShelf;
     private final Shelf categoryShelf;
+    private final Shelf kaoticCategoryShelf;
 
     private List<NativeContentItem> crazyItems = Collections.emptyList();
     private List<NativeContentItem> efuktItems = Collections.emptyList();
     private List<NativeContentItem> categoryItems = Collections.emptyList();
+    private List<NativeContentItem> kaoticCategoryItems = Collections.emptyList();
     private List<NativeContentItem> heroItems = Collections.emptyList();
     private NativeContentItem heroItem;
     private int heroIndex = -1;
@@ -152,7 +154,7 @@ final class ShowsHubView extends FrameLayout {
         heroCopy.addView(heroTitle, heroTitleParams);
 
         heroHint = text(
-                "CrazyShit, EFukt and Categories together in one media hub.",
+                "CrazyShit, EFukt and Kaotic together in one media hub.",
                 13f,
                 ZeroChillUi.color(context, R.color.zc_text_secondary)
         );
@@ -192,7 +194,8 @@ final class ShowsHubView extends FrameLayout {
         continueShelf = addContinueShelf();
         crazyShelf = addShelf("CrazyShit Shows", "Series and recurring collections", false);
         efuktShelf = addShelf("EFukt Series", "Browse EFukt by series", false);
-        categoryShelf = addShelf("Categories", "Jump into a type of content", true);
+        categoryShelf = addShelf("CrazyShit Categories", "Jump into a type of content", true);
+        kaoticCategoryShelf = addShelf("Kaotic Categories", "Browse Kaotic by category", true);
 
         heroCard.setOnClickListener(v -> openHero());
         heroAction.setOnClickListener(v -> openHero());
@@ -203,6 +206,7 @@ final class ShowsHubView extends FrameLayout {
         crazyItems = Collections.emptyList();
         efuktItems = Collections.emptyList();
         categoryItems = Collections.emptyList();
+        kaoticCategoryItems = Collections.emptyList();
         heroHandler.removeCallbacksAndMessages(null);
         heroCard.animate().cancel();
         heroCard.setAlpha(1f);
@@ -213,14 +217,16 @@ final class ShowsHubView extends FrameLayout {
         crazyShelf.adapter.replace(Collections.emptyList());
         efuktShelf.adapter.replace(Collections.emptyList());
         categoryShelf.adapter.replace(Collections.emptyList());
+        kaoticCategoryShelf.adapter.replace(Collections.emptyList());
         crazyShelf.container.setVisibility(View.GONE);
         efuktShelf.container.setVisibility(View.GONE);
         categoryShelf.container.setVisibility(View.GONE);
+        kaoticCategoryShelf.container.setVisibility(View.GONE);
         loadingLabel.setText("Loading Shows…");
         loadingLabel.setVisibility(View.VISIBLE);
         heroSource.setText("FEATURED");
         heroTitle.setText("A new way to browse Shows");
-        heroHint.setText("CrazyShit, EFukt and Categories together in one media hub.");
+        heroHint.setText("CrazyShit, EFukt and Kaotic together in one media hub.");
         heroAction.setVisibility(View.GONE);
         Glide.with(heroImage).clear(heroImage);
         heroImage.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
@@ -246,15 +252,24 @@ final class ShowsHubView extends FrameLayout {
         categoryShelf.container.setVisibility(categoryItems.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
+    void setKaoticCategories(List<NativeContentItem> items) {
+        kaoticCategoryItems = safe(items);
+        kaoticCategoryShelf.adapter.replace(kaoticCategoryItems);
+        kaoticCategoryShelf.container.setVisibility(
+                kaoticCategoryItems.isEmpty() ? View.GONE : View.VISIBLE
+        );
+    }
+
     void finishLoading() {
         loadingLabel.setVisibility(itemCount() == 0 ? View.VISIBLE : View.GONE);
         if (itemCount() == 0) {
-            loadingLabel.setText("Shows could not load right now. Try one of the source tabs above.");
+            loadingLabel.setText("Shows could not load right now.");
         }
     }
 
     int itemCount() {
-        return crazyItems.size() + efuktItems.size() + categoryItems.size();
+        return crazyItems.size() + efuktItems.size()
+                + categoryItems.size() + kaoticCategoryItems.size();
     }
 
     void refreshContinueWatching() {
@@ -544,7 +559,18 @@ final class ShowsHubView extends FrameLayout {
         String imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
         if (imageUrl.isEmpty()) {
             Glide.with(view).clear(view);
-            view.setImageDrawable(new ColorDrawable(Color.rgb(20, 22, 25)));
+            if (WebVideoSourceRepository.isKaoticUrl(item.url)) {
+                view.setImageDrawable(new GradientDrawable(
+                        GradientDrawable.Orientation.BR_TL,
+                        new int[] {
+                                Color.rgb(4, 7, 9),
+                                Color.rgb(7, 42, 55),
+                                Color.rgb(4, 7, 9)
+                        }
+                ));
+            } else {
+                view.setImageDrawable(new ColorDrawable(Color.rgb(20, 22, 25)));
+            }
             return;
         }
 
