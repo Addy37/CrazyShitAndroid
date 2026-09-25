@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Application;
 import android.content.Context;
+import android.view.ContextThemeWrapper;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
@@ -27,7 +28,10 @@ public class NativeFeedEpisodePresentationTest {
 
     @Before
     public void setUp() {
-        context = RuntimeEnvironment.getApplication();
+        context = new ContextThemeWrapper(
+                RuntimeEnvironment.getApplication(),
+                R.style.Theme_CrazyShit
+        );
         context.getSharedPreferences("playback_history", Context.MODE_PRIVATE)
                 .edit()
                 .clear()
