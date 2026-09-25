@@ -396,7 +396,18 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     host::onOpenItem
             );
             page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
-            addSeriesSourceSelector(page);
+            // Shows is now a single combined hub. Keep the legacy source preference
+            // pinned to the hub so upgrades from older installs cannot reopen a hidden
+            // CrazyShit / EFukt / Categories sub-tab.
+            page.seriesSource = SERIES_SOURCE_HUB;
+            activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                    .edit()
+                    .putInt(PREF_SERIES_SOURCE, SERIES_SOURCE_HUB)
+                    .apply();
+            page.showsHub.setVisibility(View.VISIBLE);
+            page.refresh.setVisibility(View.GONE);
+            page.empty.setVisibility(View.GONE);
+            page.progress.setVisibility(View.GONE);
             page.empty.setOnClickListener(v -> {
                 String url = page.seriesSource == SERIES_SOURCE_EFUKT
                         ? EfuktRepository.SERIES
