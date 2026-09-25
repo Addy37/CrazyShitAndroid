@@ -82,6 +82,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private int resolverCursor;
     private int viewMode = VIEW_LIST;
+    private boolean collectionDetailPresentation;
     private boolean closed;
 
     public NativeFeedAdapter(Context context, Listener listener) {
@@ -116,6 +117,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     public int getViewMode() {
         return viewMode;
+    }
+
+    public void setCollectionDetailPresentation(boolean enabled) {
+        if (collectionDetailPresentation == enabled) return;
+        collectionDetailPresentation = enabled;
+        notifyDataSetChanged();
     }
 
     public void close() {
@@ -265,7 +272,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     @Override
     public int getItemViewType(int position) {
-        return items.get(position).isSection() ? TYPE_SECTION : viewMode;
+        if (items.get(position).isSection()) return TYPE_SECTION;
+        return collectionDetailPresentation ? VIEW_LIST : viewMode;
     }
 
     @NonNull
@@ -319,11 +327,21 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private Holder createListHolder(ViewGroup parent) {
         boolean landscape = isLandscape(parent);
-        int height = landscape ? 106 : 118;
-        int width = homePresentation
+        int height = collectionDetailPresentation
+                ? (landscape ? 104 : 112)
+                : (landscape ? 106 : 118);
+        int width = collectionDetailPresentation
+                ? Math.round(height * 16f / 9f)
+                : homePresentation
                 ? responsiveHomeListMediaWidthDp(parent, height)
                 : landscape ? 150 : 166;
-        MaterialCardView card = baseCard(parent, 12, 4, 15, height);
+        MaterialCardView card = baseCard(
+                parent,
+                12,
+                collectionDetailPresentation ? 5 : 4,
+                collectionDetailPresentation ? 14 : 15,
+                height
+        );
         LinearLayout row = new LinearLayout(parent.getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -333,10 +351,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         CopyViews copy = addCopy(
                 parent,
                 row,
-                homePresentation ? 14 : landscape ? 14 : 15,
-                11,
-                homePresentation ? 9 : 12,
-                homePresentation ? 7 : landscape ? 7 : 9,
+                collectionDetailPresentation ? 14 : homePresentation ? 14 : landscape ? 14 : 15,
+                collectionDetailPresentation ? 10 : 11,
+                collectionDetailPresentation ? 11 : homePresentation ? 9 : 12,
+                collectionDetailPresentation ? 7 : homePresentation ? 7 : landscape ? 7 : 9,
                 false
         );
         return new Holder(card, media, copy);
@@ -460,8 +478,12 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         ));
         int size = dense ? 40 : 46;
         FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(dp(parent, size), dp(parent, size));
-        playParams.gravity = Gravity.BOTTOM | Gravity.START;
-        playParams.setMargins(dp(parent, 8), 0, 0, dp(parent, 8));
+        playParams.gravity = collectionDetailPresentation
+                ? Gravity.CENTER
+                : Gravity.BOTTOM | Gravity.START;
+        if (!collectionDetailPresentation) {
+            playParams.setMargins(dp(parent, 8), 0, 0, dp(parent, 8));
+        }
         mediaFrame.addView(play, playParams);
 
         TextView watchBadge = new TextView(parent.getContext());
@@ -548,7 +570,9 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         title.setTextColor(ZeroChillUi.color(parent.getContext(), R.color.zc_text_primary));
         title.setTextSize(titleSize);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setMaxLines(homePresentation && viewMode == VIEW_LIST ? 4 : 2);
+        title.setMaxLines(collectionDetailPresentation
+                ? 3
+                : homePresentation && viewMode == VIEW_LIST ? 4 : 2);
         title.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout titleRow = new LinearLayout(parent.getContext());
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
