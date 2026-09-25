@@ -31,10 +31,10 @@ final class ShowsCollectionWarmCache {
     );
 
     private static final Set<String> IN_FLIGHT = ConcurrentHashMap.newKeySet();
-    private static final LinkedHashMap<String, Entry> CACHE =
-            new LinkedHashMap<String, Entry>(MAX_ENTRIES, 0.75f, true) {
+    private static final LinkedHashMap<String, CachedPage> CACHE =
+            new LinkedHashMap<String, CachedPage>(MAX_ENTRIES, 0.75f, true) {
                 @Override
-                protected boolean removeEldestEntry(Map.Entry<String, Entry> eldest) {
+                protected boolean removeEldestEntry(Map.Entry<String, CachedPage> eldest) {
                     return size() > MAX_ENTRIES;
                 }
             };
@@ -71,7 +71,7 @@ final class ShowsCollectionWarmCache {
         String key = clean(url);
         if (key.isEmpty()) return null;
         synchronized (CACHE) {
-            Entry entry = CACHE.get(key);
+            CachedPage entry = CACHE.get(key);
             if (entry == null) return null;
             if (System.currentTimeMillis() - entry.createdAt > TTL_MS) {
                 CACHE.remove(key);
@@ -83,7 +83,7 @@ final class ShowsCollectionWarmCache {
 
     private static void put(String url, List<NativeContentItem> items) {
         synchronized (CACHE) {
-            CACHE.put(url, new Entry(new ArrayList<>(items), System.currentTimeMillis()));
+            CACHE.put(url, new CachedPage(new ArrayList<>(items), System.currentTimeMillis()));
         }
     }
 
@@ -112,11 +112,11 @@ final class ShowsCollectionWarmCache {
         return value == null ? "" : value.trim();
     }
 
-    private static final class Entry {
+    private static final class CachedPage {
         final List<NativeContentItem> items;
         final long createdAt;
 
-        Entry(List<NativeContentItem> items, long createdAt) {
+        CachedPage(List<NativeContentItem> items, long createdAt) {
             this.items = items;
             this.createdAt = createdAt;
         }
