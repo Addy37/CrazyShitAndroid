@@ -28,6 +28,50 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class NavigationIaTest {
+    @Test public void showsDetailsIntentCarriesRealCollectionPresentationData() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeContentItem item = new NativeContentItem(
+                NativeContentItem.KIND_SERIES,
+                "Test Show",
+                "https://crazyshit.com/series/test-show/",
+                "https://cdn.example.com/show.jpg",
+                "",
+                "",
+                "",
+                "Real source description"
+        );
+        Intent intent = NativeFeedBrowserActivity.createShowDetails(
+                controller.get(),
+                item,
+                NativeFeedBrowserActivity.SOURCE_CRAZYSHIT
+        );
+
+        assertEquals(NativeFeedBrowserActivity.class.getName(),
+                intent.getComponent().getClassName());
+        assertTrue(intent.getBooleanExtra(NativeFeedBrowserActivity.EXTRA_SHOW_DETAILS, false));
+        assertEquals(item.title,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_TITLE));
+        assertEquals(item.url,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_BASE_URL));
+        assertEquals(item.imageUrl,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SHOW_IMAGE_URL));
+        assertEquals(item.description,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SHOW_DESCRIPTION));
+        assertEquals(item.kind,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SHOW_KIND));
+        assertEquals(NativeFeedBrowserActivity.SOURCE_CRAZYSHIT,
+                intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_SOURCE));
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void restoredSlotThreeIsOnlyFapWithStablePublicNavigation() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
