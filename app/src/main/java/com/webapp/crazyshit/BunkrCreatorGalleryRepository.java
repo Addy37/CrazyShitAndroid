@@ -36,6 +36,7 @@ final class BunkrCreatorGalleryRepository {
     private static final int MAX_FAPELLO_PAGES = 250;
     private static final int BATCH_TARGET = 48;
     private static final int MAX_MEDIA_ITEMS = 10_000;
+    private static final long FAST_FIRST_PAINT_BUDGET_MS = 1_200L;
     private static final long ALBUM_BATCH_BUDGET_MS = 16_000L;
     private static final ExecutorService ALBUM_IO = Executors.newFixedThreadPool(8);
     private static final LinkedHashMap<String, State> STATES =
@@ -99,7 +100,9 @@ final class BunkrCreatorGalleryRepository {
 
         Context appContext = context.getApplicationContext();
 
-        // These independent catalogs must not serialize the first visible gallery row.
+        // All catalog discovery runs concurrently. If we already know a creator profile from
+        // the tapped card or a restored cursor, use that known profile as a fast lane while the
+        // broader catalogs keep loading in parallel.
         Future<IOException> wikiCatalog = ALBUM_IO.submit(() -> loadWikiFeetCatalog(appContext, state));
         Future<IOException> havenCatalog = ALBUM_IO.submit(() -> loadOnlyHavenCatalog(appContext, state));
         Future<IOException> fapelloCatalog = ALBUM_IO.submit(() -> {
@@ -115,16 +118,22 @@ final class BunkrCreatorGalleryRepository {
                 return error;
             }
         });
-        IOException bunkrCatalogError = null;
-        try {
-            loadAlbumsIfNeeded(appContext, state);
-            state.bunkrSearchFailures = 0;
-        } catch (IOException error) {
-            bunkrCatalogError = error;
-            state.bunkrSearchFailures++;
-            if (state.bunkrSearchFailures >= 2) state.searchFinished = true;
-        }
+        Future<IOException> bunkrCatalog = ALBUM_IO.submit(() -> {
+            try {
+                loadAlbumsIfNeeded(appContext, state);
+                state.bunkrSearchFailures = 0;
+                return null;
+            } catch (IOException error) {
+                state.bunkrSearchFailures++;
+                if (state.bunkrSearchFailures >= 2) state.searchFinished = true;
+                return error;
+            }
+        });
 
+        FastLaneResult fastLane = runFastFirstPaint(
+                context, appContext, state, listener);
+
+        IOException bunkrCatalogError = catalogResult(bunkrCatalog);
         IOException fapelloCatalogError = catalogResult(fapelloCatalog);
         IOException wikiFeetCatalogError = catalogResult(wikiCatalog);
         IOException onlyHavenCatalogError = catalogResult(havenCatalog);
@@ -233,13 +242,16 @@ final class BunkrCreatorGalleryRepository {
         }
 
         ArrayList<NativeContentItem> bunkrResult = new ArrayList<>();
-        ArrayList<NativeContentItem> progressiveResult = new ArrayList<>();
+        ArrayList<NativeContentItem> progressiveResult =
+                new ArrayList<>(fastLane.progressiveItems);
         int bunkrPublished = 0;
-        ArrayList<NativeContentItem> fapelloResult = new ArrayList<>();
-        int fapelloPublished = 0;
+        ArrayList<NativeContentItem> fapelloResult =
+                new ArrayList<>(fastLane.fapelloItems);
+        int fapelloPublished = fapelloResult.size();
         Set<Future<FapelloPage>> finishedFapello = new HashSet<>();
-        ArrayList<NativeContentItem> onlyHavenResult = new ArrayList<>();
-        int onlyHavenPublished = 0;
+        ArrayList<NativeContentItem> onlyHavenResult =
+                new ArrayList<>(fastLane.onlyHavenItems);
+        int onlyHavenPublished = onlyHavenResult.size();
         Set<Future<OnlyHavenPage>> finishedOnlyHaven = new HashSet<>();
         ArrayList<NativeContentItem> wikiFeetResult = new ArrayList<>();
         int wikiFeetPublished = 0;
@@ -405,6 +417,113 @@ final class BunkrCreatorGalleryRepository {
             throw new IOException("OnlyFap sources could not be reached", fapelloCatalogError);
         }
         return new Batch(result, state.finished(), state.lastFapelloFailure);
+    }
+
+    private FastLaneResult runFastFirstPaint(
+            Context context,
+            Context appContext,
+            State state,
+            ProgressListener listener
+    ) {
+        FastLaneResult result = new FastLaneResult();
+        if (listener == null) return result;
+
+        ExecutorCompletionService<FastPage> completed =
+                new ExecutorCompletionService<>(ALBUM_IO);
+        ArrayList<Future<FastPage>> requests = new ArrayList<>();
+        LinkedHashMap<Future<FastPage>, FastPage> metadata = new LinkedHashMap<>();
+
+        FapelloCursor fapello = state.fapelloPending.pollFirst();
+        if (fapello != null) {
+            FastPage meta = FastPage.fapello(fapello);
+            Future<FastPage> request = completed.submit(() -> {
+                try {
+                    return FastPage.fapello(new FapelloPage(
+                            fapello,
+                            new FapelloRepository().fetchModelMediaPage(
+                                    context, fapello.model, fapello.nextPage),
+                            null
+                    ));
+                } catch (Exception error) {
+                    return FastPage.fapello(new FapelloPage(fapello, null, error));
+                }
+            });
+            requests.add(request);
+            metadata.put(request, meta);
+        }
+
+        OnlyHavenCursor haven = state.onlyHavenPending.pollFirst();
+        if (haven != null) {
+            FastPage meta = FastPage.onlyHaven(haven);
+            Future<FastPage> request = completed.submit(() -> {
+                try {
+                    return FastPage.onlyHaven(new OnlyHavenPage(
+                            haven,
+                            new OnlyHavenRepository().fetchCreatorMedia(
+                                    appContext, haven.creator, haven.nextPage, ONLYHAVEN_PAGE_SIZE),
+                            null
+                    ));
+                } catch (Exception error) {
+                    return FastPage.onlyHaven(new OnlyHavenPage(
+                            haven, new ArrayList<>(), error));
+                }
+            });
+            requests.add(request);
+            metadata.put(request, meta);
+        }
+
+        if (requests.isEmpty()) return result;
+
+        long deadline = SystemClock.elapsedRealtime() + FAST_FIRST_PAINT_BUDGET_MS;
+        int completedCount = 0;
+        while (completedCount < requests.size()) {
+            long remaining = deadline - SystemClock.elapsedRealtime();
+            if (remaining <= 0L) break;
+            try {
+                Future<FastPage> future = completed.poll(
+                        remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
+                if (future == null) break;
+                completedCount++;
+                FastPage page = future.get();
+                if (page.fapelloPage != null) {
+                    int before = result.fapelloItems.size();
+                    applyFapelloPage(state, result.fapelloItems, page.fapelloPage);
+                    if (result.fapelloItems.size() > before) {
+                        ArrayList<NativeContentItem> added = new ArrayList<>(
+                                result.fapelloItems.subList(
+                                        before, result.fapelloItems.size()));
+                        result.progressiveItems.addAll(added);
+                        listener.onItems(added);
+                    }
+                } else if (page.onlyHavenPage != null) {
+                    int before = result.onlyHavenItems.size();
+                    applyOnlyHavenPage(state, result.onlyHavenItems, page.onlyHavenPage);
+                    if (result.onlyHavenItems.size() > before) {
+                        ArrayList<NativeContentItem> added = new ArrayList<>(
+                                result.onlyHavenItems.subList(
+                                        before, result.onlyHavenItems.size()));
+                        result.progressiveItems.addAll(added);
+                        listener.onItems(added);
+                    }
+                }
+                metadata.remove(future);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception ignored) {
+            }
+        }
+
+        for (Map.Entry<Future<FastPage>, FastPage> pending : metadata.entrySet()) {
+            pending.getKey().cancel(true);
+            FastPage page = pending.getValue();
+            if (page.fapelloCursor != null) {
+                state.fapelloPending.addFirst(page.fapelloCursor);
+            } else if (page.onlyHavenCursor != null) {
+                state.onlyHavenPending.addFirst(page.onlyHavenCursor);
+            }
+        }
+        return result;
     }
 
     private IOException catalogResult(Future<IOException> request) {
@@ -899,6 +1018,47 @@ final class BunkrCreatorGalleryRepository {
         while (STATES.size() > MAX_SESSIONS) {
             String oldest = STATES.keySet().iterator().next();
             STATES.remove(oldest);
+        }
+    }
+
+    private static final class FastLaneResult {
+        final ArrayList<NativeContentItem> progressiveItems = new ArrayList<>();
+        final ArrayList<NativeContentItem> fapelloItems = new ArrayList<>();
+        final ArrayList<NativeContentItem> onlyHavenItems = new ArrayList<>();
+    }
+
+    private static final class FastPage {
+        final FapelloPage fapelloPage;
+        final OnlyHavenPage onlyHavenPage;
+        final FapelloCursor fapelloCursor;
+        final OnlyHavenCursor onlyHavenCursor;
+
+        private FastPage(
+                FapelloPage fapelloPage,
+                OnlyHavenPage onlyHavenPage,
+                FapelloCursor fapelloCursor,
+                OnlyHavenCursor onlyHavenCursor
+        ) {
+            this.fapelloPage = fapelloPage;
+            this.onlyHavenPage = onlyHavenPage;
+            this.fapelloCursor = fapelloCursor;
+            this.onlyHavenCursor = onlyHavenCursor;
+        }
+
+        static FastPage fapello(FapelloCursor cursor) {
+            return new FastPage(null, null, cursor, null);
+        }
+
+        static FastPage fapello(FapelloPage page) {
+            return new FastPage(page, null, null, null);
+        }
+
+        static FastPage onlyHaven(OnlyHavenCursor cursor) {
+            return new FastPage(null, null, null, cursor);
+        }
+
+        static FastPage onlyHaven(OnlyHavenPage page) {
+            return new FastPage(null, page, null, null);
         }
     }
 
