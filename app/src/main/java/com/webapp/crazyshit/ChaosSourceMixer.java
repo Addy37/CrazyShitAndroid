@@ -98,18 +98,18 @@ final class ChaosSourceMixer {
         ExecutorCompletionService<SourceBatch> completions =
                 new ExecutorCompletionService<>(SOURCE_IO);
         ArrayList<Future<SourceBatch>> work = new ArrayList<>();
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_REGULAR, loadRegularBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_EFUKT, loadEfuktBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_KAOTIC, loadKaoticBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_BUNKR, loadBunkrBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_FAPELLO, loadFapelloBatch(context))));
-        work.add(completions.submit(() -> new SourceBatch(
-                BATCH_ONLY_HAVEN, loadOnlyHavenBatch(context))));
+        submitSourceBatch(completions, work, BATCH_REGULAR,
+                SourceHealthManager.CRAZYSHIT, () -> loadRegularBatch(context));
+        submitSourceBatch(completions, work, BATCH_EFUKT,
+                SourceHealthManager.EFUKT, () -> loadEfuktBatch(context));
+        submitSourceBatch(completions, work, BATCH_KAOTIC,
+                SourceHealthManager.KAOTIC, () -> loadKaoticBatch(context));
+        submitSourceBatch(completions, work, BATCH_BUNKR,
+                SourceHealthManager.BUNKR, () -> loadBunkrBatch(context));
+        submitSourceBatch(completions, work, BATCH_FAPELLO,
+                SourceHealthManager.FAPELLO, () -> loadFapelloBatch(context));
+        submitSourceBatch(completions, work, BATCH_ONLY_HAVEN,
+                SourceHealthManager.ONLY_HAVEN, () -> loadOnlyHavenBatch(context));
 
         ArrayList<NativeContentItem> regularItems = new ArrayList<>();
         ArrayList<NativeContentItem> efuktItems = new ArrayList<>();
@@ -189,6 +189,38 @@ final class ChaosSourceMixer {
         fapzoneItems = weaveEfukt(fapzoneItems, onlyHavenItems);
         List<NativeContentItem> mixedExternal = weaveEfukt(homeSources, fapzoneItems);
         return weaveShitShow(mixedExternal, shitShowItems);
+    }
+
+    private void submitSourceBatch(
+            ExecutorCompletionService<SourceBatch> completions,
+            ArrayList<Future<SourceBatch>> work,
+            int batchSource,
+            String healthKey,
+            SourceBatchLoader loader
+    ) {
+        if (!SourceHealthManager.tryAcquire(healthKey)) return;
+
+        work.add(completions.submit(() -> {
+            long started = System.nanoTime();
+            List<NativeContentItem> items = loader.load();
+            if (!Thread.currentThread().isInterrupted()) {
+                if (hasUsableBatch(items)) {
+                    SourceHealthManager.recordSuccess(
+                            healthKey, System.nanoTime() - started);
+                } else {
+                    SourceHealthManager.recordFailure(healthKey);
+                }
+            }
+            return new SourceBatch(batchSource, items);
+        }));
+    }
+
+    private static boolean hasUsableBatch(List<NativeContentItem> items) {
+        if (items == null) return false;
+        for (NativeContentItem item : items) {
+            if (item != null && item.url != null && !item.url.isEmpty()) return true;
+        }
+        return false;
     }
 
     private List<NativeContentItem> loadRegularBatch(Context context) {
@@ -614,6 +646,10 @@ final class ChaosSourceMixer {
         ArrayList<String> shuffled = new ArrayList<>(catalog);
         Collections.shuffle(shuffled, random);
         sourceDeck.addAll(shuffled);
+    }
+
+    private interface SourceBatchLoader {
+        List<NativeContentItem> load();
     }
 
     private static final class SourceBatch {
