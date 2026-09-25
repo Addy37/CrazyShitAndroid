@@ -67,11 +67,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final CrazyShitRepository repository = new CrazyShitRepository();
     private final BrowseRepository browseRepository = new BrowseRepository();
     private final EfuktRepository efuktRepository = new EfuktRepository();
+    private final WebVideoSourceRepository webVideoRepository = new WebVideoSourceRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
     private final FapzoneCreatorRepository fapzoneCreatorRepository =
             new FapzoneCreatorRepository();
     private final BrowseArtworkResolver browseArtworkResolver;
-    private final ExecutorService io = Executors.newFixedThreadPool(3);
+    private final ExecutorService io = Executors.newFixedThreadPool(4);
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
     private final ChaosFeedView chaosView;
 
@@ -372,7 +373,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private void openShowDetails(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
-        String source = EfuktRepository.isEfuktUrl(item.url)
+        String source = WebVideoSourceRepository.isKaoticUrl(item.url)
+                ? NativeFeedBrowserActivity.SOURCE_KAOTIC
+                : EfuktRepository.isEfuktUrl(item.url)
                 ? NativeFeedBrowserActivity.SOURCE_EFUKT
                 : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
         activity.startActivity(NativeFeedBrowserActivity.createShowDetails(
@@ -396,7 +399,18 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     host::onOpenItem
             );
             page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
-            addSeriesSourceSelector(page);
+            // Shows is now a single combined hub. Keep the legacy source preference
+            // pinned to the hub so upgrades from older installs cannot reopen a hidden
+            // CrazyShit / EFukt / Categories sub-tab.
+            page.seriesSource = SERIES_SOURCE_HUB;
+            activity.getSharedPreferences("app_prefs", Activity.MODE_PRIVATE)
+                    .edit()
+                    .putInt(PREF_SERIES_SOURCE, SERIES_SOURCE_HUB)
+                    .apply();
+            page.showsHub.setVisibility(View.VISIBLE);
+            page.refresh.setVisibility(View.GONE);
+            page.empty.setVisibility(View.GONE);
+            page.progress.setVisibility(View.GONE);
             page.empty.setOnClickListener(v -> {
                 String url = page.seriesSource == SERIES_SOURCE_EFUKT
                         ? EfuktRepository.SERIES
@@ -958,7 +972,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.showsHub.clear();
 
         final int generation = page.generation;
-        AtomicInteger remaining = new AtomicInteger(3);
+        AtomicInteger remaining = new AtomicInteger(4);
 
         page.showsHubTasks.add(io.submit(() -> {
             List<NativeContentItem> result = java.util.Collections.emptyList();
@@ -1000,6 +1014,24 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             activity.runOnUiThread(() -> {
                 if (generation == page.generation && page.showsHub != null) {
                     page.showsHub.setCategories(items);
+                }
+            });
+            finishShowsHubSource(page, generation, remaining);
+        }));
+
+        page.showsHubTasks.add(io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = webVideoRepository.fetchCategories(
+                        activity,
+                        WebVideoSourceRepository.Source.KAOTIC
+                );
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = result;
+            activity.runOnUiThread(() -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setKaoticCategories(items);
                 }
             });
             finishShowsHubSource(page, generation, remaining);

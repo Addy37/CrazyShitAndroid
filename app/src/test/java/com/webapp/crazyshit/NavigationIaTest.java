@@ -313,26 +313,46 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
-    @Test public void collectionsKeepsCategoriesAsPersistedFourthSource() {
+    @Test public void showsAlwaysUsesCombinedHubAndRemovesSourceRail() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
-                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+                .putBoolean("access_notice_2_8_3_accepted", true)
+                .putInt("native_series_source", 3)
+                .apply();
         Bundle state = new Bundle();
         state.putInt("primary_page", MainPagerAdapter.PAGE_SERIES);
         ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
                 .create(state).start().resume().visible();
         shadowOf(android.os.Looper.getMainLooper()).idle();
         NativeMainActivity activity = controller.get();
-        View categories = findByDescription(activity.getWindow().getDecorView(),
-                "Show Categories collections");
-        assertNotNull(categories);
-        categories.performClick();
-        assertEquals(3, context.getSharedPreferences("app_prefs", 0)
+
+        assertEquals(4, context.getSharedPreferences("app_prefs", 0)
                 .getInt("native_series_source", -1));
+        assertNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show Featured collections"));
+        assertNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show CrazyShit collections"));
+        assertNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show EFukt collections"));
+        assertNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show Categories collections"));
+
+        MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
+        Object[] pages = ReflectionHelpers.getField(adapter, "pages");
+        Object shows = pages[MainPagerAdapter.PAGE_SERIES];
+        ShowsHubView hub = ReflectionHelpers.getField(shows, "showsHub");
+        androidx.swiperefreshlayout.widget.SwipeRefreshLayout refresh =
+                ReflectionHelpers.getField(shows, "refresh");
+        assertNotNull(hub);
+        assertEquals(View.VISIBLE, hub.getVisibility());
+        assertEquals(View.GONE, refresh.getVisibility());
+        android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
+        assertEquals("Shows", title.getText().toString());
+
         controller.pause().stop().destroy();
     }
 
-    @Test public void collectionsRemovesOnlyFapAndMigratesItsOldSelectionToCrazyShit() {
+    @Test public void showsMigratesLegacyOnlyFapSelectionToCombinedHub() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()
                 .putBoolean("access_notice_2_8_3_accepted", true)
@@ -343,34 +363,8 @@ public class NavigationIaTest {
         ActivityController<NativeMainActivity> controller = Robolectric.buildActivity(NativeMainActivity.class)
                 .create(state).start().resume().visible();
         shadowOf(android.os.Looper.getMainLooper()).idle();
-        NativeMainActivity activity = controller.get();
-        assertEquals(0, context.getSharedPreferences("app_prefs", 0)
+        assertEquals(4, context.getSharedPreferences("app_prefs", 0)
                 .getInt("native_series_source", -1));
-        assertNull(findByDescription(activity.getWindow().getDecorView(),
-                "Show OnlyFap collections"));
-        View crazyShit = findByDescription(activity.getWindow().getDecorView(),
-                "Show CrazyShit collections");
-        assertNotNull(crazyShit);
-        android.view.ViewGroup selector = (android.view.ViewGroup) crazyShit.getParent();
-        assertFalse(selector.getClipChildren());
-        assertFalse(selector.getClipToPadding());
-        assertTrue(selector.getParent() instanceof FrostedOverlayLayout);
-        FrostedOverlayLayout root = (FrostedOverlayLayout) selector.getParent();
-        assertSame(selector, root.frostedOverlayForTest());
-        MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
-        Object[] pages = ReflectionHelpers.getField(adapter, "pages");
-        Object shows = pages[MainPagerAdapter.PAGE_SERIES];
-        androidx.swiperefreshlayout.widget.SwipeRefreshLayout refresh =
-                ReflectionHelpers.getField(shows, "refresh");
-        androidx.recyclerview.widget.RecyclerView recycler =
-                ReflectionHelpers.getField(shows, "recycler");
-        assertEquals(0, ((android.widget.FrameLayout.LayoutParams)
-                refresh.getLayoutParams()).topMargin);
-        assertEquals(BrowseUi.dp(activity, 61), recycler.getPaddingTop());
-        assertFalse(recycler.getClipToPadding());
-        assertNull(findByDescription(activity.getWindow().getDecorView(), "My profile"));
-        android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
-        assertEquals("Shows", title.getText().toString());
         controller.pause().stop().destroy();
     }
 
