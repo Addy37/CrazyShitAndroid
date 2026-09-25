@@ -374,7 +374,7 @@ public final class SearchActivity extends Activity {
         startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, item.title,
                 item.searchQuery.isEmpty() ? item.title : item.searchQuery,
                 FapelloRepository.isModelUrl(item.url) ? item.url : "",
-                CreatorGalleryPreloader.sessionId(item)));
+                CreatorGalleryPreloader.sessionId(this, item)));
     }
 
     private void startOnlyFapSearch(String query) {
