@@ -43,7 +43,29 @@ final class ChaosStarterSources {
         ArrayList<Future<?>> requests = new ArrayList<>();
         for (int source : new int[]{CRAZYSHIT, KAOTIC, EFUKT}) {
             final int selected = source;
-            requests.add(completions.submit(() -> loader.load(selected)));
+            final String healthKey = sourceKey(selected);
+            if (!SourceHealthManager.tryAcquire(healthKey)) continue;
+            requests.add(completions.submit(() -> {
+                long started = System.nanoTime();
+                try {
+                    List<NativeContentItem> results = loader.load(selected);
+                    if (!Thread.currentThread().isInterrupted()) {
+                        if (hasPlayable(results)) {
+                            SourceHealthManager.recordSuccess(
+                                    healthKey, System.nanoTime() - started);
+                        } else {
+                            SourceHealthManager.recordFailure(healthKey);
+                        }
+                    }
+                    return results;
+                } catch (Exception failed) {
+                    if (!Thread.currentThread().isInterrupted()
+                            && !(failed instanceof InterruptedException)) {
+                        SourceHealthManager.recordFailure(healthKey);
+                    }
+                    throw failed;
+                }
+            }));
         }
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMillis);
         LinkedHashMap<String, NativeContentItem> playable = new LinkedHashMap<>();
@@ -74,5 +96,22 @@ final class ChaosStarterSources {
         } finally {
             for (Future<?> request : requests) request.cancel(true);
         }
+    }
+
+    private static boolean hasPlayable(List<NativeContentItem> items) {
+        if (items == null) return false;
+        for (NativeContentItem item : items) {
+            if (item != null && NativeContentItem.KIND_MEDIA.equals(item.kind)
+                    && item.url != null && !item.url.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String sourceKey(int source) {
+        if (source == CRAZYSHIT) return SourceHealthManager.CRAZYSHIT;
+        if (source == KAOTIC) return SourceHealthManager.KAOTIC;
+        return SourceHealthManager.EFUKT;
     }
 }
