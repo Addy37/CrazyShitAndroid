@@ -715,6 +715,7 @@ public final class NativeFeedBrowserActivity extends Activity {
         } else {
             adapter.replace(new ArrayList<>());
         }
+        updateShowDetailsHeader();
         load(false);
     }
 
@@ -796,6 +797,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                     } else if (result.isEmpty() || (append && added == 0) || isEfukt()) {
                         endReached = true;
                     }
+                    updateShowDetailsHeader();
                     if (isBunkr() && !isCreatorGallery()) {
                         if (append) {
                             BunkrGallerySessionStore.append(
@@ -1609,6 +1611,16 @@ public final class NativeFeedBrowserActivity extends Activity {
         return !isEfukt() && !isBunkr();
     }
 
+    private String showSourceLabel() {
+        if (isEfukt()) return "EFUKT SERIES";
+        if (NativeContentItem.KIND_CATEGORY.equals(showKind)) return "CRAZYSHIT CATEGORY";
+        return "CRAZYSHIT SHOW";
+    }
+
+    private void updateShowDetailsHeader() {
+        if (showDetailsHeader != null) showDetailsHeader.setItemCount(itemCount());
+    }
+
     private int itemCount() {
         return isBunkr()
                 ? (bunkrGalleryAdapter == null ? 0 : bunkrGalleryAdapter.getItemCount())
@@ -1642,6 +1654,7 @@ public final class NativeFeedBrowserActivity extends Activity {
                 } else if (feed != null) {
                     adapter.replace(ContentItemCodec.decodeList(feed.optJSONArray("items"), 2000));
                     currentPage = feed.optInt("page"); endReached = feed.optBoolean("end");
+                    updateShowDetailsHeader();
                 } else {
                     if (isBunkr()) {
                         bunkrGallerySessionId = isCreatorGallery()
@@ -1719,6 +1732,7 @@ public final class NativeFeedBrowserActivity extends Activity {
             updateCreatorEmptyState();
         } else if (adapter != null) {
             adapter.refreshPlaybackState();
+            updateShowDetailsHeader();
         }
         applyLayout();
     }
