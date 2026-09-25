@@ -207,14 +207,55 @@ public final class NativeFeedBrowserActivity extends Activity {
             BunkrGallerySessionStore.Snapshot warm = isCreatorGallery()
                     ? BunkrGallerySessionStore.snapshot(bunkrGallerySessionId) : null;
             if (warm != null && !warm.items.isEmpty()) {
-                replaceBunkrItems(warm.items);
-                currentPage = warm.currentPage;
-                endReached = warm.endReached;
-                progress.setVisibility(View.GONE);
-                if (!endReached) load(true);
-            } else load(false);
+                showHotCreatorSnapshot(warm);
+            } else if (isCreatorGallery() && !bunkrGallerySessionId.isEmpty()) {
+                // A persisted hot-gallery id can survive process death. Restore it off the UI
+                // thread, paint it immediately, then continue refreshing in the background.
+                loading = true;
+                progress.setVisibility(View.VISIBLE);
+                if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.VISIBLE);
+                String restoreId = bunkrGallerySessionId;
+                io.execute(() -> {
+                    BunkrGallerySessionStore.Snapshot restored =
+                            BunkrGallerySessionStore.restore(this, restoreId);
+                    runOnUiThread(() -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        loading = false;
+                        if (restored != null && !restored.items.isEmpty()
+                                && creatorQuery.equalsIgnoreCase(restored.creatorQuery)) {
+                            showHotCreatorSnapshot(restored);
+                        } else {
+                            load(false);
+                        }
+                    });
+                });
+            } else {
+                load(false);
+            }
+        } else {
+            restoreBrowser();
         }
-        else restoreBrowser();
+    }
+
+    private void showHotCreatorSnapshot(BunkrGallerySessionStore.Snapshot warm) {
+        replaceBunkrItems(warm.items);
+        currentPage = warm.currentPage;
+        endReached = warm.endReached;
+        progress.setVisibility(View.GONE);
+        if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
+        empty.setVisibility(View.GONE);
+        refresh.setRefreshing(false);
+        if (!endReached) {
+            // Render first. The follow-up request happens after this frame so cached content is
+            // never held behind a network refresh.
+            recyclerOrCreatorPager().post(() -> load(true));
+        }
+    }
+
+    private View recyclerOrCreatorPager() {
+        if (creatorTabsPager != null) return creatorTabsPager;
+        if (recycler != null) return recycler;
+        return refresh;
     }
 
     private void buildUi() {
