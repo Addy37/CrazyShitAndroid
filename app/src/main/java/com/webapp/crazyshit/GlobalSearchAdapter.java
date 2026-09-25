@@ -247,7 +247,13 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         result.card.setContentDescription(item.title);
         result.card.setOnClickListener(v -> listener.onOpen(item));
         if (item.isCreator()) {
-            CreatorGalleryPreloader.warm(result.card.getContext(), item);
+            CreatorGalleryPreloader.warm(
+                    result.card.getContext(),
+                    item,
+                    position < 6
+                            ? CreatorGalleryPreloader.PRIORITY_HIGH
+                            : CreatorGalleryPreloader.PRIORITY_NORMAL
+            );
         }
         loadImage(result.image, item);
         requestRenderedThumbnail(item);
