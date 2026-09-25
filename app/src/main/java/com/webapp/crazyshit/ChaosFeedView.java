@@ -1385,7 +1385,7 @@ public final class ChaosFeedView extends FrameLayout {
                         creator,
                         creator,
                         "",
-                        ShitTokCreatorGalleryPreloader.sessionId(creator)
+                        ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
                 ));
             });
 
