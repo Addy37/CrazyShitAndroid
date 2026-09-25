@@ -97,7 +97,9 @@ final class HomeSourceRepository {
         for (int i = first; i <= last; i++) {
             final int selected = i;
             final String healthKey = sourceKey(selected);
-            if (!SourceHealthManager.tryAcquire(healthKey)) continue;
+            // Automatic multi-source loading may skip an open circuit. An explicit source
+            // selection still gets one normal attempt because the user deliberately chose it.
+            if (source == 0 && !SourceHealthManager.tryAcquire(healthKey)) continue;
             requests.add(completed.submit(() -> {
                 long started = System.nanoTime();
                 try {
