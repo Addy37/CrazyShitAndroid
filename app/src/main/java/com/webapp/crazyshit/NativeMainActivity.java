@@ -208,6 +208,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         primaryPager.setUserInputEnabled(false);
         primaryPager.setOffscreenPageLimit(MainPagerAdapter.PAGE_COUNT - 1);
         primaryPager.setAdapter(primaryPagerAdapter);
+        primaryPager.setCurrentItem(MainPagerAdapter.PAGE_CHAOS, false);
         primaryPager.setPageTransformer((page, position) -> {
             if (ZeroChillMotion.animationsEnabled(page.getContext())) {
                 float distance = Math.min(1f, Math.abs(position));
