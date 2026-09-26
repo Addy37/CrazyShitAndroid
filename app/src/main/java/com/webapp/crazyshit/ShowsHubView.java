@@ -615,7 +615,7 @@ final class ShowsHubView extends FrameLayout {
         ContinueAdapter adapter = new ContinueAdapter();
         rail.setAdapter(adapter);
         rail.setPadding(dp(2), 0, dp(22), 0);
-        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(166)));
+        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(150)));
 
         block.setVisibility(View.GONE);
         return new ContinueShelf(block, rail, adapter);
@@ -834,7 +834,7 @@ final class ShowsHubView extends FrameLayout {
             ZeroChillMotion.installPressFeedback(card);
 
             RecyclerView.LayoutParams params =
-                    new RecyclerView.LayoutParams(dp(248), dp(156));
+                    new RecyclerView.LayoutParams(dp(248), dp(140));
             params.setMargins(dp(3), dp(2), dp(10), dp(4));
             card.setLayoutParams(params);
 
