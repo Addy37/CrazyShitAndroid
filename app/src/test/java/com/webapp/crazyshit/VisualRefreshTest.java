@@ -176,7 +176,7 @@ public class VisualRefreshTest {
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertTrue(nav instanceof ZeroChillBottomNavigationView);
         assertEquals(
-                MainPagerAdapter.PAGE_HOME,
+                0,
                 Math.round(((ZeroChillBottomNavigationView) nav).pagerPositionForTest())
         );
         ZeroChillBottomNavigationView slidingNav = (ZeroChillBottomNavigationView) nav;
@@ -185,21 +185,22 @@ public class VisualRefreshTest {
         nav.draw(new Canvas(navBitmap));
         navBitmap.recycle();
         android.graphics.RectF capsule = ReflectionHelpers.getField(slidingNav, "indicatorRect");
-        View homeTab = nav.findViewById(1);
         View showsTab = nav.findViewById(2);
-        assertEquals((homeTab.getWidth() + showsTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
+        View shitTokTab = nav.findViewById(4);
+        assertEquals((showsTab.getWidth() + shitTokTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
                 capsule.width(), 1f);
         assertEquals(BrowseUi.dp(main, 4), capsule.top, 1f);
         assertEquals(nav.getHeight() + BrowseUi.dp(main, 10), capsule.bottom, 1f);
         assertEquals(0.5f, slidingNav.pagerPositionForTest(), 0.001f);
         slidingNav.setPagerPosition(0f);
-        assertEquals(5, nav.getMenu().size());
-        assertEquals("Home", nav.getMenu().findItem(1).getTitle());
+        assertEquals(4, nav.getMenu().size());
+        assertNull(nav.getMenu().findItem(1));
         assertEquals("Shows", nav.getMenu().findItem(2).getTitle());
         assertEquals("ShitTok", nav.getMenu().findItem(4).getTitle());
         assertEquals("OnlyFap", nav.getMenu().findItem(3).getTitle());
-        assertEquals("More", nav.getMenu().findItem(5).getTitle());
-        for (int id : new int[] {1, 2, 4, 3, 5}) {
+        assertEquals("Library", nav.getMenu().findItem(6).getTitle());
+        assertNull(nav.getMenu().findItem(5));
+        for (int id : new int[] {2, 4, 3, 6}) {
             View tab = nav.findViewById(id);
             assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
             assertEquals(nav.getHeight(), tab.getHeight());
