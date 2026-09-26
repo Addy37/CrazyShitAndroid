@@ -653,27 +653,27 @@ final class OnlyFapHubView extends FrameLayout {
             }
 
             OnlyFapHeroPolicy.Artwork header = null;
-            if (artwork.size() < 3) {
-                try {
-                    OnlyHavenRepository repository = new OnlyHavenRepository();
-                    String query = clean(creator.searchQuery).isEmpty()
-                            ? creator.title
-                            : creator.searchQuery;
-                    List<OnlyHavenRepository.Creator> matches =
-                            repository.searchCreators(getContext().getApplicationContext(), query, 6);
-                    OnlyHavenRepository.Creator best = chooseOnlyHavenMatch(query, matches);
-                    if (best != null) {
+            try {
+                OnlyHavenRepository repository = new OnlyHavenRepository();
+                String query = clean(creator.searchQuery).isEmpty()
+                        ? creator.title
+                        : creator.searchQuery;
+                List<OnlyHavenRepository.Creator> matches =
+                        repository.searchCreators(getContext().getApplicationContext(), query, 6);
+                OnlyHavenRepository.Creator best = chooseOnlyHavenMatch(query, matches);
+                if (best != null) {
+                    if (artwork.size() < 3) {
                         try {
                             OnlyFapHeroPolicy.addMedia(artwork,
                                     repository.fetchCreatorMedia(
                                             getContext().getApplicationContext(), best, 1, 8),
                                     best.url);
                         } catch (IOException ignored) { }
-                        header = new OnlyFapHeroPolicy.Artwork(
-                                repository.creatorHeaderUrl(best), best.url, false);
                     }
-                } catch (IOException ignored) {
+                    header = new OnlyFapHeroPolicy.Artwork(
+                            repository.creatorHeaderUrl(best), best.url, false);
                 }
+            } catch (IOException ignored) {
             }
 
             // A good wide banner remains useful when gallery media is unavailable or fails.
