@@ -673,6 +673,7 @@ final class OnlyFapHubView extends FrameLayout {
             showHero(0, false);
         } else {
             updateHeroDots();
+            scheduleHeroRotation();
         }
     }
 
