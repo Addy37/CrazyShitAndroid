@@ -34,21 +34,23 @@ public class OnlyFapHeroPolicyTest {
         assertEquals("Backup One", selected.get(2).title);
     }
 
-    @Test public void artworkUsesHeaderThenFullImagesThenPreviewThenAvatar() {
+    @Test public void artworkUsesFullImagesThenPreviewThenHeaderThenAvatar() {
         List<OnlyFapHeroPolicy.Artwork> choices = new ArrayList<>();
-        choices.add(new OnlyFapHeroPolicy.Artwork("https://img.example/header.webp", "profile", false));
         NativeContentItem image = media(NativeContentItem.KIND_IMAGE,
                 "https://img.example/full.jpg", "https://img.example/thumb.jpg");
         NativeContentItem video = media(NativeContentItem.KIND_MEDIA,
                 "https://img.example/video.mp4", "https://img.example/poster.webp");
         OnlyFapHeroPolicy.addMedia(choices, Arrays.asList(video, image), "gallery");
-        choices.add(new OnlyFapHeroPolicy.Artwork("https://img.example/avatar.webp", "profile", true));
+        choices.add(new OnlyFapHeroPolicy.Artwork(
+                "https://img.example/header.webp", "profile", false));
+        choices.add(new OnlyFapHeroPolicy.Artwork(
+                "https://img.example/avatar.webp", "profile", true));
         List<OnlyFapHeroPolicy.Artwork> unique = OnlyFapHeroPolicy.distinctArtwork(choices);
-        assertEquals("https://img.example/header.webp", unique.get(0).url);
-        assertEquals("https://img.example/full.jpg", unique.get(1).url);
-        assertEquals("https://img.example/poster.webp", unique.get(2).url);
+        assertEquals("https://img.example/full.jpg", unique.get(0).url);
+        assertEquals("https://img.example/poster.webp", unique.get(1).url);
+        assertEquals("https://img.example/header.webp", unique.get(2).url);
         assertTrue(unique.get(unique.size() - 1).avatar);
-        assertFalse(unique.get(1).avatar);
+        assertFalse(unique.get(0).avatar);
     }
 
     @Test public void missingHeaderStillPicksPortraitMediaBeforeAvatar() {
