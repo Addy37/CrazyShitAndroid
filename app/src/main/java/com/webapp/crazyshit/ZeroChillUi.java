@@ -173,4 +173,10 @@ final class ZeroChillUi {
         card.setStrokeColor(color(context, R.color.zc_edge));
         card.setRippleColor(ColorStateList.valueOf(color(context, R.color.zc_cyan_container)));
     }
+
+    static void styleMediaCard(MaterialCardView card, int radiusResource) {
+        if (card == null) return;
+        styleMaterialCard(card, radiusResource);
+        card.setStrokeWidth(0);
+    }
 }

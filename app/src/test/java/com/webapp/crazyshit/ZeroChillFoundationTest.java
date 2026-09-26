@@ -90,6 +90,10 @@ public class ZeroChillFoundationTest {
         assertEquals(activity.getColor(R.color.zc_surface_glass),
                 card.getCardBackgroundColor().getDefaultColor());
         assertEquals(activity.getColor(R.color.zc_edge), card.getStrokeColor());
+
+        MaterialCardView mediaCard = new MaterialCardView(activity);
+        ZeroChillUi.styleMediaCard(mediaCard, R.dimen.zc_radius_medium);
+        assertEquals(0, mediaCard.getStrokeWidth());
         activity.finish();
     }
 
