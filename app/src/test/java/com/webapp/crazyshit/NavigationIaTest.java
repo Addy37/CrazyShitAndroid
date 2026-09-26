@@ -354,6 +354,28 @@ public class NavigationIaTest {
         controller.pause().stop().destroy();
     }
 
+    @Test public void libraryViewAllOpensAsStandaloneHistorySection() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        Intent intent = new Intent(context, FavoritesActivity.class)
+                .putExtra(FavoritesActivity.EXTRA_START_TAB, FavoritesActivity.START_HISTORY);
+
+        ActivityController<FavoritesActivity> controller =
+                Robolectric.buildActivity(FavoritesActivity.class, intent)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        FavoritesActivity activity = controller.get();
+        ViewPager2 pager = ReflectionHelpers.getField(activity, "pager");
+        assertFalse(pager.isUserInputEnabled());
+        assertEquals(FavoritesActivity.START_HISTORY, pager.getCurrentItem());
+        assertNotNull(findByDescription(
+                activity.getWindow().getDecorView(),
+                "History section"
+        ));
+
+        controller.pause().stop().destroy();
+    }
+
     @Test public void showsAlwaysUsesCombinedHubAndRemovesSourceRail() {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences("app_prefs", 0).edit()

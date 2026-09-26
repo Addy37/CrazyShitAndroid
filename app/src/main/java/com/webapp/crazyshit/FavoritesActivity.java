@@ -44,8 +44,11 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Local Library with three eagerly built pages. BETA14_LIBRARY_SWIPE is kept as a
- * marker so the old gesture-patch is skipped. ViewPager2 now owns the drag itself.
+ * Dedicated Library section destination.
+ *
+ * The Library hub chooses Continue Watching, History, or Watch Later before launching this screen.
+ * ViewPager2 remains as the compatibility container, but user paging is disabled so each launch
+ * behaves as a standalone destination.
  */
 public class FavoritesActivity extends Activity {
     public static final String EXTRA_SELECTED_URL = "selected_url";
@@ -65,9 +68,6 @@ public class FavoritesActivity extends Activity {
 
     private final LinearLayout[] listContainers = new LinearLayout[PAGE_COUNT];
     private final View[] pageViews = new View[PAGE_COUNT];
-    private MaterialButton continueTab;
-    private MaterialButton historyTab;
-    private MaterialButton watchLaterTab;
     private TextView clearAction;
     private ViewPager2 pager;
     private int tab = TAB_CONTINUE;
@@ -122,9 +122,10 @@ public class FavoritesActivity extends Activity {
         LinearLayout heading = new LinearLayout(this);
         heading.setOrientation(LinearLayout.VERTICAL);
         heading.setPadding(dp(12), 0, 0, 0);
-        TextView title = text("Library", 28, Color.WHITE);
+        TextView title = text(sectionTitle(), 28, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
-        TextView subtitle = text("Continue Watching • History • Watch Later", 12, Color.rgb(170, 170, 180));
+        title.setContentDescription(sectionTitle() + " section");
+        TextView subtitle = text(sectionSubtitle(), 12, Color.rgb(170, 170, 180));
         heading.addView(title);
         heading.addView(subtitle);
         header.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -138,35 +139,17 @@ public class FavoritesActivity extends Activity {
         header.addView(clearAction, new LinearLayout.LayoutParams(dp(62), dp(52)));
         root.addView(header);
 
-        LinearLayout tabs = new LinearLayout(this);
-        tabs.setOrientation(LinearLayout.HORIZONTAL);
-        tabs.setPadding(0, dp(12), 0, dp(8));
-        continueTab = tabButton("Continue", TAB_CONTINUE);
-        historyTab = tabButton("History", TAB_HISTORY);
-        watchLaterTab = tabButton("Watch Later", TAB_WATCH_LATER);
-        tabs.addView(continueTab, tabParams());
-        tabs.addView(historyTab, tabParams());
-        tabs.addView(watchLaterTab, tabParams());
-        root.addView(tabs);
-
         for (int i = 0; i < PAGE_COUNT; i++) pageViews[i] = buildPage(i);
 
         pager = new ViewPager2(this);
         pager.setOrientation(ViewPager2.ORIENTATION_HORIZONTAL);
+        pager.setUserInputEnabled(false);
         pager.setOffscreenPageLimit(PAGE_COUNT - 1);
         pager.setAdapter(new LibraryPagerAdapter());
-        pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
-            @Override
-            public void onPageSelected(int position) {
-                tab = position;
-                updateTabs();
-            }
-        });
         pager.setCurrentItem(tab, false);
         root.addView(pager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         setContentView(root);
-        updateTabs();
     }
 
     private View buildPage(int index) {
@@ -183,32 +166,16 @@ public class FavoritesActivity extends Activity {
         return page;
     }
 
-    private MaterialButton tabButton(String label, int target) {
-        MaterialButton button = new MaterialButton(this);
-        button.setText(label);
-        button.setTextSize(12);
-        button.setAllCaps(false);
-        button.setMinWidth(0);
-        button.setMinimumWidth(0);
-        button.setOnClickListener(v -> {
-            if (pager == null || pager.getCurrentItem() == target) return;
-            haptic(v);
-            pager.setCurrentItem(target, true);
-        });
-        return button;
+    private String sectionTitle() {
+        if (tab == TAB_HISTORY) return "History";
+        if (tab == TAB_WATCH_LATER) return "Watch Later";
+        return "Continue Watching";
     }
 
-    private LinearLayout.LayoutParams tabParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1f);
-        params.setMargins(dp(3), 0, dp(3), 0);
-        return params;
-    }
-
-    private void updateTabs() {
-        continueTab.setEnabled(tab != TAB_CONTINUE);
-        historyTab.setEnabled(tab != TAB_HISTORY);
-        watchLaterTab.setEnabled(tab != TAB_WATCH_LATER);
-        clearAction.setText("CLEAR");
+    private String sectionSubtitle() {
+        if (tab == TAB_HISTORY) return "Recently watched";
+        if (tab == TAB_WATCH_LATER) return "Saved for another time";
+        return "Pick up where you left off";
     }
 
     private void renderAllPages() {
@@ -216,9 +183,13 @@ public class FavoritesActivity extends Activity {
         for (LinearLayout list : listContainers) {
             if (list != null) list.removeAllViews();
         }
-        renderHistory(listContainers[TAB_CONTINUE], true);
-        renderHistory(listContainers[TAB_HISTORY], false);
-        renderWatchLater(listContainers[TAB_WATCH_LATER]);
+        if (tab == TAB_HISTORY) {
+            renderHistory(listContainers[TAB_HISTORY], false);
+        } else if (tab == TAB_WATCH_LATER) {
+            renderWatchLater(listContainers[TAB_WATCH_LATER]);
+        } else {
+            renderHistory(listContainers[TAB_CONTINUE], true);
+        }
     }
 
     private void renderHistory(LinearLayout target, boolean continueOnly) {
