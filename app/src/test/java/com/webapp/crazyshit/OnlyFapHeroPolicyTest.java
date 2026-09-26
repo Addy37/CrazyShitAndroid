@@ -55,6 +55,15 @@ public class OnlyFapHeroPolicyTest {
         assertFalse(unique.get(0).avatar);
     }
 
+    @Test public void portraitHeroRequiresClearlyVerticalDimensions() {
+        assertTrue(OnlyFapHeroPolicy.isGoodPortraitDimensions(1080, 1920));
+        assertTrue(OnlyFapHeroPolicy.isGoodPortraitDimensions(1200, 1500));
+        assertFalse(OnlyFapHeroPolicy.isGoodPortraitDimensions(1000, 1100));
+        assertFalse(OnlyFapHeroPolicy.isGoodPortraitDimensions(1200, 1200));
+        assertFalse(OnlyFapHeroPolicy.isGoodPortraitDimensions(1920, 1080));
+        assertFalse(OnlyFapHeroPolicy.isGoodPortraitDimensions(0, 1920));
+    }
+
     @Test public void missingHeaderStillPicksPortraitMediaBeforeAvatar() {
         List<OnlyFapHeroPolicy.Artwork> choices = new ArrayList<>();
         choices.add(new OnlyFapHeroPolicy.Artwork("", "profile", false));
