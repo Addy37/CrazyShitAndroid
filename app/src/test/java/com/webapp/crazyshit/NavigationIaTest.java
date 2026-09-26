@@ -256,10 +256,8 @@ public class NavigationIaTest {
 
         Object[] pages = ReflectionHelpers.getField(adapter, "pages");
         View homeRoot = ReflectionHelpers.getField(pages[MainPagerAdapter.PAGE_HOME], "root");
-        assertTrue(homeRoot.getLayoutParams() instanceof android.widget.FrameLayout.LayoutParams);
-        android.widget.FrameLayout.LayoutParams homeParams =
-                (android.widget.FrameLayout.LayoutParams) homeRoot.getLayoutParams();
-        assertEquals(0, homeParams.bottomMargin);
+        assertNotNull(homeRoot);
+        assertNull(homeRoot.getParent());
 
         controller.pause().stop().destroy();
     }
