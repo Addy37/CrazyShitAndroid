@@ -166,7 +166,7 @@ public final class CreatorsActivity extends Activity {
             favoriteParams.setMargins(0, dp(1), dp(1), 0);
             avatarFrame.addView(favorite, favoriteParams);
 
-            TextView name = BrowseUi.text(CreatorsActivity.this, "", 12.5f, Color.WHITE);
+            TextView name = BrowseUi.text(CreatorsActivity.this, "", 13, Color.WHITE);
             name.setGravity(Gravity.CENTER);
             name.setMaxLines(2);
             name.setEllipsize(TextUtils.TruncateAt.END);
