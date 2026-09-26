@@ -725,7 +725,7 @@ final class OnlyFapHubView extends FrameLayout {
                     .load(remoteImage(choice.url, choice.referer))
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
                     .fitCenter()
-                    .submit(dp(360), dp(540));
+                    .submit(360, 540);
             Bitmap bitmap = target.get();
             return bitmap != null &&
                     OnlyFapHeroPolicy.isGoodPortraitDimensions(
