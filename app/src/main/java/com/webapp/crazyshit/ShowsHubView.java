@@ -114,11 +114,9 @@ final class ShowsHubView extends FrameLayout {
         content.addView(eyebrow, eyebrowParams);
 
         heroCard = new MaterialCardView(context);
-        ZeroChillUi.styleMaterialCard(heroCard, R.dimen.zc_radius_large);
+        ZeroChillUi.styleMediaCard(heroCard, R.dimen.zc_radius_large);
         heroCard.setRadius(dp(22));
         heroCard.setCardElevation(0f);
-        heroCard.setStrokeWidth(dp(1));
-        heroCard.setStrokeColor(ZeroChillUi.color(context, R.color.zc_edge));
         heroCard.setClickable(true);
         heroCard.setFocusable(true);
         ZeroChillMotion.installPressFeedback(heroCard);
@@ -804,11 +802,9 @@ final class ShowsHubView extends FrameLayout {
                 int viewType
         ) {
             MaterialCardView card = new MaterialCardView(getContext());
-            ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
+            ZeroChillUi.styleMediaCard(card, R.dimen.zc_radius_medium);
             card.setRadius(dp(18));
             card.setCardElevation(0f);
-            card.setStrokeWidth(dp(1));
-            card.setStrokeColor(ZeroChillUi.color(getContext(), R.color.zc_edge));
             card.setClickable(true);
             card.setFocusable(true);
             ZeroChillMotion.installPressFeedback(card);
@@ -932,11 +928,9 @@ final class ShowsHubView extends FrameLayout {
         @Override
         public RailHolder onCreateViewHolder(@NonNull android.view.ViewGroup parent, int viewType) {
             MaterialCardView card = new MaterialCardView(getContext());
-            ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
+            ZeroChillUi.styleMediaCard(card, R.dimen.zc_radius_medium);
             card.setRadius(dp(18));
             card.setCardElevation(0f);
-            card.setStrokeWidth(dp(1));
-            card.setStrokeColor(ZeroChillUi.color(getContext(), R.color.zc_edge));
             card.setClickable(true);
             card.setFocusable(true);
             ZeroChillMotion.installPressFeedback(card);
