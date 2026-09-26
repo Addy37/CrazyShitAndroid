@@ -79,6 +79,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_MEDIA_REFERER = "media_referer";
     public static final String EXTRA_POSTER_URL = "poster_url";
     public static final String EXTRA_SHOWS_ORIGIN = "shows_origin";
+    public static final String EXTRA_SHOWS_CONTINUE_RESUME = "shows_continue_resume";
 
     private static final String SITE = "https://crazyshit.com/";
     private static final int CONTROL_TIMEOUT_MS = 2600;
@@ -114,6 +115,9 @@ public class VideoDetailActivity extends Activity {
     private ProgressBar loading;
     private ImageView startupPoster;
     private ProgressBar startupPosterLoading;
+    private FrameLayout showsLaunchCurtain;
+    private ImageView showsLaunchFrame;
+    private ZeroChillLoadingView showsLaunchLoader;
     private SeekBar portraitSeekBar;
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
@@ -136,6 +140,7 @@ public class VideoDetailActivity extends Activity {
     private String mediaReferer;
     private String posterUrl;
     private boolean showsOrigin;
+    private boolean showsContinueResume;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
     private long requestedStartPosition;
@@ -155,6 +160,10 @@ public class VideoDetailActivity extends Activity {
     private int relatedPlayGeneration;
     private boolean portraitSeekScrubbing;
     private Boolean showsPortraitOrientation;
+    private boolean showsFirstFrameRendered;
+    private boolean showsOrientationSettled;
+    private boolean showsCurtainDismissScheduled;
+    private int showsTargetOrientation = Configuration.ORIENTATION_UNDEFINED;
     private long lastShowsFramePositionMs = -1L;
 
     private final Runnable portraitProgressTicker = new Runnable() {
@@ -239,6 +248,7 @@ public class VideoDetailActivity extends Activity {
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
         posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         showsOrigin = getIntent().getBooleanExtra(EXTRA_SHOWS_ORIGIN, false);
+        showsContinueResume = getIntent().getBooleanExtra(EXTRA_SHOWS_CONTINUE_RESUME, false);
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -485,8 +495,88 @@ public class VideoDetailActivity extends Activity {
         lp.gravity = Gravity.CENTER;
         root.addView(loading, lp);
 
+        if (showsOrigin) installShowsLaunchCurtain();
+
         updateMetadataUi();
         setContentView(root);
+    }
+
+    private void installShowsLaunchCurtain() {
+        showsLaunchCurtain = new FrameLayout(this);
+        showsLaunchCurtain.setBackgroundColor(Color.BLACK);
+        showsLaunchCurtain.setClickable(true);
+        showsLaunchCurtain.setFocusable(true);
+        showsLaunchCurtain.setImportantForAccessibility(
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        );
+
+        if (showsContinueResume) {
+            java.io.File frame = ShowsContinueFrameStore.find(this, pageUrl);
+            if (frame != null) {
+                showsLaunchFrame = new ImageView(this);
+                showsLaunchFrame.setBackgroundColor(Color.BLACK);
+                showsLaunchFrame.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                showsLaunchCurtain.addView(
+                        showsLaunchFrame,
+                        new FrameLayout.LayoutParams(-1, -1)
+                );
+                Glide.with(showsLaunchFrame)
+                        .load(frame)
+                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                        .skipMemoryCache(false)
+                        .dontAnimate()
+                        .into(showsLaunchFrame);
+
+                View shade = new View(this);
+                shade.setBackgroundColor(Color.argb(104, 0, 0, 0));
+                showsLaunchCurtain.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+            }
+        }
+
+        LinearLayout center = new LinearLayout(this);
+        center.setOrientation(LinearLayout.VERTICAL);
+        center.setGravity(Gravity.CENTER);
+        center.setPadding(dp(22), dp(18), dp(22), dp(18));
+
+        showsLaunchLoader = new ZeroChillLoadingView(this, "ZEROCHILL");
+        center.addView(showsLaunchLoader, new LinearLayout.LayoutParams(-2, -2));
+
+        TextView cue = new TextView(this);
+        cue.setText(showsContinueResume && requestedStartPosition > 0L
+                ? "RESUMING · " + showsResumeTime(requestedStartPosition)
+                : "PREPARING VIDEO");
+        cue.setTextSize(10.5f);
+        cue.setTextColor(showsContinueResume
+                ? UiPalette.PRIMARY
+                : Color.rgb(150, 170, 180));
+        cue.setLetterSpacing(0.11f);
+        cue.setGravity(Gravity.CENTER);
+        cue.setTypeface(null, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams cueParams = new LinearLayout.LayoutParams(-2, -2);
+        cueParams.topMargin = dp(10);
+        center.addView(cue, cueParams);
+
+        FrameLayout.LayoutParams centerParams =
+                new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER);
+        showsLaunchCurtain.addView(center, centerParams);
+        root.addView(showsLaunchCurtain, new FrameLayout.LayoutParams(-1, -1));
+    }
+
+    private static String showsResumeTime(long millis) {
+        long total = Math.max(0L, millis / 1000L);
+        long hours = total / 3600L;
+        long minutes = (total % 3600L) / 60L;
+        long seconds = total % 60L;
+        if (hours > 0L) {
+            return String.format(
+                    java.util.Locale.US,
+                    "%d:%02d:%02d",
+                    hours,
+                    minutes,
+                    seconds
+            );
+        }
+        return String.format(java.util.Locale.US, "%d:%02d", minutes, seconds);
     }
 
     private LinearLayout.LayoutParams actionParams() {
@@ -523,6 +613,11 @@ public class VideoDetailActivity extends Activity {
 
     private void showStartupPoster() {
         if (startupPoster == null) return;
+        if (showsOrigin) {
+            startupPosterDismissed = true;
+            hideStartupPosterNow();
+            return;
+        }
 
         startupPosterDismissed = false;
         startupPoster.animate().cancel();
@@ -806,7 +901,13 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onRenderedFirstFrame() {
-                dismissStartupPoster();
+                if (showsOrigin) {
+                    showsFirstFrameRendered = true;
+                    hideStartupPosterNow();
+                    maybeDismissShowsLaunchCurtain();
+                } else {
+                    dismissStartupPoster();
+                }
             }
 
             @Override
@@ -825,6 +926,13 @@ public class VideoDetailActivity extends Activity {
                 );
                 if (showsOrigin) {
                     portraitVideo = isPortrait;
+                    showsTargetOrientation = isPortrait
+                            ? Configuration.ORIENTATION_PORTRAIT
+                            : Configuration.ORIENTATION_LANDSCAPE;
+                    showsOrientationSettled = orientationMatches(
+                            getResources().getConfiguration().orientation,
+                            showsTargetOrientation
+                    );
                     if (showsPortraitOrientation == null ||
                             showsPortraitOrientation.booleanValue() != isPortrait) {
                         showsPortraitOrientation = isPortrait;
@@ -834,6 +942,7 @@ public class VideoDetailActivity extends Activity {
                         );
                     }
                     applyOrientation(getResources().getConfiguration().orientation);
+                    maybeDismissShowsLaunchCurtain();
                     return;
                 }
                 if (portraitVideo == isPortrait) return;
@@ -851,6 +960,11 @@ public class VideoDetailActivity extends Activity {
         if (width <= 0 || height <= 0) return false;
         float ratio = pixelWidthHeightRatio > 0f ? pixelWidthHeightRatio : 1f;
         return height > (width * ratio);
+    }
+
+    static boolean orientationMatches(int currentOrientation, int targetOrientation) {
+        return targetOrientation != Configuration.ORIENTATION_UNDEFINED &&
+                currentOrientation == targetOrientation;
     }
 
     static float portraitProgressFraction(long positionMs, long durationMs) {
@@ -1689,6 +1803,7 @@ public class VideoDetailActivity extends Activity {
     private void showPlaybackFailure() {
         if (failureShown || isFinishing()) return;
         failureShown = true;
+        dismissShowsLaunchCurtain(true);
         RatingFeedbackPrompt.recordPlaybackError(this);
         new AlertDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
@@ -1711,7 +1826,14 @@ public class VideoDetailActivity extends Activity {
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         abortRelatedBackPreview();
+        if (showsOrigin && showsTargetOrientation != Configuration.ORIENTATION_UNDEFINED) {
+            showsOrientationSettled = orientationMatches(
+                    newConfig.orientation,
+                    showsTargetOrientation
+            );
+        }
         applyOrientation(newConfig.orientation);
+        maybeDismissShowsLaunchCurtain();
     }
 
     private void applyOrientation(int orientation) {
@@ -1743,6 +1865,68 @@ public class VideoDetailActivity extends Activity {
         updatePortraitProgress();
         if (canShowPortraitSeekBar()) showPortraitSeekBar();
         shell.requestApplyInsets();
+    }
+
+    private void maybeDismissShowsLaunchCurtain() {
+        if (!showsOrigin || showsLaunchCurtain == null ||
+                showsLaunchCurtain.getVisibility() != View.VISIBLE ||
+                showsCurtainDismissScheduled ||
+                !showsFirstFrameRendered ||
+                !showsOrientationSettled ||
+                showsTargetOrientation == Configuration.ORIENTATION_UNDEFINED) {
+            return;
+        }
+
+        showsCurtainDismissScheduled = true;
+        showsLaunchCurtain.postDelayed(() -> {
+            showsCurtainDismissScheduled = false;
+            if (isFinishing() || showsLaunchCurtain == null ||
+                    !showsFirstFrameRendered ||
+                    !orientationMatches(
+                            getResources().getConfiguration().orientation,
+                            showsTargetOrientation
+                    )) {
+                return;
+            }
+            dismissShowsLaunchCurtain(false);
+        }, 90L);
+    }
+
+    private void dismissShowsLaunchCurtain(boolean immediate) {
+        if (showsLaunchCurtain == null ||
+                showsLaunchCurtain.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        showsCurtainDismissScheduled = false;
+
+        Runnable finish = () -> {
+            if (showsLaunchLoader != null) showsLaunchLoader.setVisibility(View.GONE);
+            if (showsLaunchFrame != null) {
+                try {
+                    Glide.with(showsLaunchFrame).clear(showsLaunchFrame);
+                } catch (Exception ignored) {
+                }
+                showsLaunchFrame.setImageDrawable(null);
+            }
+            if (showsLaunchCurtain != null) {
+                showsLaunchCurtain.animate().cancel();
+                showsLaunchCurtain.setAlpha(1f);
+                showsLaunchCurtain.setVisibility(View.GONE);
+            }
+        };
+
+        if (immediate || !ZeroChillMotion.animationsEnabled(this)) {
+            finish.run();
+            return;
+        }
+
+        showsLaunchCurtain.animate().cancel();
+        showsLaunchCurtain.animate()
+                .alpha(0f)
+                .setDuration(170L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(finish)
+                .start();
     }
 
     private void setPortraitFullscreen(boolean enabled) {
@@ -2076,6 +2260,7 @@ public class VideoDetailActivity extends Activity {
     protected void onDestroy() {
         if (orientationListener != null) orientationListener.disable();
         abortRelatedBackPreview();
+        dismissShowsLaunchCurtain(true);
         if (portraitFullscreen ||
                 getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
             setFullscreenUi(false);

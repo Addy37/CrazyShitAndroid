@@ -58,7 +58,7 @@ final class WatchStatePolish {
     }
 
     static void showResumeToast(VideoDetailActivity activity) {
-        if (activity == null || activity.isFinishing()) return;
+        if (activity == null || activity.isFinishing() || activity.isShowsOrigin()) return;
         if (!activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
                 .getBoolean("remember_video_position", true)) return;
 

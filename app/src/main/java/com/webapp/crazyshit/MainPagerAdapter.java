@@ -446,6 +446,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 intent.putExtra(PlayerActivity.EXTRA_START_POSITION, history.positionMs);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
+                intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_CONTINUE_RESUME, true);
                 intent.putExtra(
                         VideoDetailActivity.EXTRA_MEDIA_REFERER,
                         resolved.requestReferer
