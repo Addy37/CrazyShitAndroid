@@ -215,6 +215,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (page.kind == PageKind.ONLYFAP && page.onlyFapHub != null) {
             if (page.itemCount() == 0 && !page.loading && !page.endReached) {
                 loadOnlyFapHub(page);
+            } else if (OnlyFapRefreshPolicy.shouldRefresh(
+                    page.onlyFapLastLoadedElapsedMs,
+                    android.os.SystemClock.elapsedRealtime(),
+                    page.loading
+            )) {
+                refresh(page.index);
             }
             return;
         }
@@ -1375,6 +1381,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             if (generation != page.generation) return;
             page.loading = false;
             page.endReached = true;
+            page.onlyFapLastLoadedElapsedMs = android.os.SystemClock.elapsedRealtime();
             page.onlyFapHubTasks.clear();
             if (page.onlyFapHub != null) page.onlyFapHub.finishLoading();
         });
@@ -1649,6 +1656,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         boolean loading;
         boolean endReached;
         int generation;
+        long onlyFapLastLoadedElapsedMs;
 
         Page(int index, PageKind kind, String preferenceKey, String baseUrl) {
             this.index = index;
