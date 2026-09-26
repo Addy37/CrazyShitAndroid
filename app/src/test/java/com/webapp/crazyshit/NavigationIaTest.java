@@ -347,7 +347,7 @@ public class NavigationIaTest {
         assertEquals(View.VISIBLE, hub.getVisibility());
         assertEquals(View.GONE, refresh.getVisibility());
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
-        assertEquals("Shows", title.getText().toString());
+        assertEquals("ZEROCHILL Shows", title.getText().toString());
 
         controller.pause().stop().destroy();
     }

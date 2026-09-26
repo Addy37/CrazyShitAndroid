@@ -401,6 +401,77 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         ));
     }
 
+    private void openShowsVideo(NativeContentItem item) {
+        if (item == null || !item.isVideo() || item.url == null || item.url.trim().isEmpty()) {
+            return;
+        }
+
+        io.execute(() -> {
+            CrazyShitRepository.StreamInfo stream = null;
+            try {
+                stream = PlayableSourceRouter.resolve(activity, item);
+            } catch (Exception ignored) {
+            }
+            CrazyShitRepository.StreamInfo resolved = stream;
+            activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
+                if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    android.content.Intent fallback =
+                            new android.content.Intent(activity, WebFallbackActivity.class);
+                    fallback.putExtra(WebFallbackActivity.EXTRA_URL, item.url);
+                    activity.startActivity(fallback);
+                    return;
+                }
+
+                String resolvedPage = resolved.pageUrl == null || resolved.pageUrl.isEmpty()
+                        ? item.url
+                        : resolved.pageUrl;
+                String source = WebVideoSourceRepository.isKaoticUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_KAOTIC
+                        : EfuktRepository.isEfuktUrl(resolvedPage)
+                        ? NativeFeedBrowserActivity.SOURCE_EFUKT
+                        : NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
+
+                android.content.Intent intent =
+                        new android.content.Intent(activity, VideoDetailActivity.class);
+                intent.putExtra(PlayerActivity.EXTRA_MEDIA_URL, resolved.mediaUrl);
+                intent.putExtra(PlayerActivity.EXTRA_PAGE_URL, resolvedPage);
+                intent.putExtra(PlayerActivity.EXTRA_TITLE, item.title);
+                intent.putExtra(VideoDetailActivity.EXTRA_VIEWS, item.views);
+                intent.putExtra(VideoDetailActivity.EXTRA_UPLOADER, item.uploader);
+                intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
+                intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
+                intent.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, true);
+                intent.putExtra(
+                        VideoDetailActivity.EXTRA_MEDIA_REFERER,
+                        resolved.requestReferer
+                );
+                if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
+                    intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
+                }
+                try {
+                    intent.putExtra(
+                            PlayerActivity.EXTRA_USER_AGENT,
+                            android.webkit.WebSettings.getDefaultUserAgent(activity)
+                    );
+                } catch (Exception ignored) {
+                }
+                try {
+                    String cookies = android.webkit.CookieManager.getInstance()
+                            .getCookie(resolved.mediaUrl);
+                    if ((cookies == null || cookies.isEmpty()) && resolvedPage != null) {
+                        cookies = android.webkit.CookieManager.getInstance().getCookie(resolvedPage);
+                    }
+                    if (cookies != null) {
+                        intent.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
+                    }
+                } catch (Exception ignored) {
+                }
+                activity.startActivity(intent);
+            });
+        });
+    }
+
     private void openShowsResume(PlaybackHistoryStore.Item history) {
         if (history == null || history.pageUrl == null || history.pageUrl.trim().isEmpty()) return;
         NativeContentItem item = new NativeContentItem(
@@ -490,9 +561,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     this::openShowDetails,
                     this::openShowsResume,
                     item -> ShowsCollectionWarmCache.request(activity, item),
-                    item -> {
-                        if (item != null && item.isVideo()) host.onOpenItem(item);
-                    }
+                    this::openShowsVideo
             );
             page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
             // Shows is now a single combined hub. Keep the legacy source preference
