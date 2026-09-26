@@ -544,7 +544,7 @@ final class ShowsHubView extends FrameLayout {
     private void onContinueFrameUpdated(String pageUrl) {
         if (!isAttachedToWindow()) return;
         continueShelf.rail.post(() -> {
-            if (isAttachedToWindow()) continueShelf.adapter.notifyDataSetChanged();
+            if (isAttachedToWindow()) continueShelf.adapter.refreshArtwork(pageUrl);
         });
     }
 
@@ -780,6 +780,16 @@ final class ShowsHubView extends FrameLayout {
                 items.addAll(next.subList(0, count));
             }
             notifyDataSetChanged();
+        }
+
+        void refreshArtwork(String pageUrl) {
+            if (pageUrl == null || pageUrl.isEmpty()) return;
+            for (int i = 0; i < items.size(); i++) {
+                if (pageUrl.equals(items.get(i).pageUrl)) {
+                    notifyItemChanged(i);
+                    return;
+                }
+            }
         }
 
         @Override
