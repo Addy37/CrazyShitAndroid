@@ -58,6 +58,7 @@ public final class CrazyShitRepository {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         LinkedHashMap<String, Integer> mediaPositions = new LinkedHashMap<>();
         String pendingHeader = "";
+        long currentPublishedAt = 0L;
         int sectionOrdinal = 0;
         int mediaCount = 0;
 
@@ -65,14 +66,20 @@ public final class CrazyShitRepository {
             String tag = node.tagName();
             if (!"a".equalsIgnoreCase(tag)) {
                 String header = extractSectionHeader(node);
-                if (!header.isEmpty()) pendingHeader = header;
+                if (!header.isEmpty()) {
+                    pendingHeader = header;
+                    currentPublishedAt = SourcePublishedDate.parse(
+                            header,
+                            System.currentTimeMillis()
+                    );
+                }
                 continue;
             }
 
             String url = normalizeUrl(node.absUrl("href"));
             if (!isMediaPage(url)) continue;
 
-            NativeContentItem candidate = buildMediaItem(node, url);
+            NativeContentItem candidate = buildMediaItem(node, url, currentPublishedAt);
             Integer oldPosition = mediaPositions.get(url);
             if (oldPosition != null) {
                 NativeContentItem old = result.get(oldPosition);
@@ -112,7 +119,7 @@ public final class CrazyShitRepository {
             String url = normalizeUrl(link.absUrl("href"));
             if (!isMediaPage(url)) continue;
 
-            NativeContentItem candidate = buildMediaItem(link, url);
+            NativeContentItem candidate = buildMediaItem(link, url, 0L);
             NativeContentItem old = items.get(url);
             items.put(url, old == null ? candidate : old.merge(candidate));
         }
@@ -126,11 +133,17 @@ public final class CrazyShitRepository {
         return result;
     }
 
-    private NativeContentItem buildMediaItem(Element link, String url) {
+    private NativeContentItem buildMediaItem(Element link, String url, long publishedAtMillis) {
         Element scope = findCardScope(link);
         String title = findTitle(link, scope, url);
         String image = findImage(link, scope);
         Meta meta = findMeta(scope, title);
+        long published = publishedAtMillis > 0L
+                ? publishedAtMillis
+                : SourcePublishedDate.parse(
+                        scope == null ? "" : scope.text(),
+                        System.currentTimeMillis()
+                );
         return new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
                 title,
@@ -138,7 +151,10 @@ public final class CrazyShitRepository {
                 image,
                 meta.views,
                 meta.uploader,
-                meta.comments
+                meta.comments,
+                "",
+                "",
+                published
         );
     }
 
