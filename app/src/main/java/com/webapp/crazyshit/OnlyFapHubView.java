@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
@@ -32,6 +33,7 @@ import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
+import com.bumptech.glide.request.FutureTarget;
 import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
 import com.google.android.material.card.MaterialCardView;
@@ -65,8 +67,8 @@ final class OnlyFapHubView extends FrameLayout {
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long HERO_ROTATION_MS = 13_000L;
-    private static final int HERO_MAX_ITEMS = 5;
-    private static final int HERO_RESOLVE_LIMIT = 7;
+    private static final int HERO_MAX_ITEMS = 8;
+    private static final int HERO_RESOLVE_LIMIT = 16;
 
     private final Listener listener;
     private final ScrollView scroll;
@@ -257,8 +259,20 @@ final class OnlyFapHubView extends FrameLayout {
         heroDotsParams.gravity = Gravity.CENTER_HORIZONTAL;
         heroCopy.addView(heroDots, heroDotsParams);
 
-        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(440));
-        content.addView(heroCard, heroParams);
+        HorizontalSwipeFrameLayout heroSwipe = new HorizontalSwipeFrameLayout(context);
+        heroSwipe.setListener(new HorizontalSwipeFrameLayout.Listener() {
+            @Override public void onSwipeLeft() {
+                if (heroItems.size() > 1) showHero(heroIndex + 1, true);
+            }
+
+            @Override public void onSwipeRight() {
+                if (heroItems.size() > 1) showHero(heroIndex - 1, true);
+            }
+        });
+        heroSwipe.addView(heroCard, new FrameLayout.LayoutParams(-1, -1));
+
+        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(540));
+        content.addView(heroSwipe, heroParams);
 
         body = new LinearLayout(context);
         body.setOrientation(LinearLayout.VERTICAL);
@@ -622,81 +636,107 @@ final class OnlyFapHubView extends FrameLayout {
         final int generation = heroGeneration;
         heroIo.execute(() -> {
             if (closed || generation != heroGeneration) return;
-            ArrayList<OnlyFapHeroPolicy.Artwork> artwork = new ArrayList<>();
 
-            List<NativeContentItem> fapelloMedia = Collections.emptyList();
-            // New Creators primarily come from Fapello. Resolve full gallery images first so
-            // portrait creator photography drives the cinematic hero instead of listing avatars.
+            ArrayList<OnlyFapHeroPolicy.Artwork> portraitArtwork = new ArrayList<>();
+
+            // Fapello is the primary source for New Creators. Resolve actual gallery files,
+            // validate their decoded proportions, and keep only portrait-oriented images.
             if (FapelloRepository.isModelUrl(creator.url)) {
                 try {
                     FapelloRepository fapello = new FapelloRepository();
-                    fapelloMedia = fapello.fetchModelMedia(
+                    List<NativeContentItem> media = fapello.fetchModelMedia(
                             getContext().getApplicationContext(),
                             new FapelloRepository.Model(creator.title, creator.url, creator.imageUrl),
                             1);
                     int checked = 0;
-                    for (NativeContentItem item : fapelloMedia) {
-                        if (checked >= 2 || artwork.size() >= 3) break;
+                    for (NativeContentItem item : media) {
+                        if (checked >= 6 || portraitArtwork.size() >= 2) break;
                         if (item == null || !item.isImage()) continue;
                         checked++;
                         try {
                             CrazyShitRepository.StreamInfo full = fapello.resolvePlayable(
                                     getContext().getApplicationContext(), item.url);
-                            OnlyFapHeroPolicy.addDirectImages(artwork,
-                                    Collections.singletonList(new NativeContentItem(
-                                            NativeContentItem.KIND_IMAGE, item.title, full.mediaUrl,
-                                            item.imageUrl, "", "", "")), full.requestReferer);
+                            OnlyFapHeroPolicy.Artwork choice =
+                                    new OnlyFapHeroPolicy.Artwork(
+                                            full.mediaUrl,
+                                            full.requestReferer,
+                                            false
+                                    );
+                            if (isGoodPortraitArtwork(choice)) {
+                                portraitArtwork.add(choice);
+                            }
                         } catch (IOException ignored) { }
                     }
-                    if (artwork.size() < 3) OnlyFapHeroPolicy.addDirectImages(
-                            artwork, fapelloMedia, creator.url);
                 } catch (IOException ignored) { }
             }
 
-            OnlyFapHeroPolicy.Artwork header = null;
-            List<NativeContentItem> onlyHavenMedia = Collections.emptyList();
-            String onlyHavenReferer = "";
-            try {
-                OnlyHavenRepository repository = new OnlyHavenRepository();
-                String query = clean(creator.searchQuery).isEmpty()
-                        ? creator.title
-                        : creator.searchQuery;
-                List<OnlyHavenRepository.Creator> matches =
-                        repository.searchCreators(getContext().getApplicationContext(), query, 6);
-                OnlyHavenRepository.Creator best = chooseOnlyHavenMatch(query, matches);
-                if (best != null) {
-                    onlyHavenReferer = best.url;
-                    if (artwork.size() < 3) {
-                        try {
-                            onlyHavenMedia = repository.fetchCreatorMedia(
-                                    getContext().getApplicationContext(), best, 1, 8);
-                            OnlyFapHeroPolicy.addDirectImages(
-                                    artwork, onlyHavenMedia, best.url);
-                        } catch (IOException ignored) { }
+            // If Fapello did not provide a usable portrait, try OnlyHaven creator media.
+            if (portraitArtwork.size() < 2) {
+                try {
+                    OnlyHavenRepository repository = new OnlyHavenRepository();
+                    String query = clean(creator.searchQuery).isEmpty()
+                            ? creator.title
+                            : creator.searchQuery;
+                    List<OnlyHavenRepository.Creator> matches =
+                            repository.searchCreators(
+                                    getContext().getApplicationContext(),
+                                    query,
+                                    6
+                            );
+                    OnlyHavenRepository.Creator best = chooseOnlyHavenMatch(query, matches);
+                    if (best != null) {
+                        List<NativeContentItem> media = repository.fetchCreatorMedia(
+                                getContext().getApplicationContext(),
+                                best,
+                                1,
+                                12
+                        );
+                        ArrayList<OnlyFapHeroPolicy.Artwork> candidates = new ArrayList<>();
+                        OnlyFapHeroPolicy.addDirectImages(candidates, media, best.url);
+                        for (OnlyFapHeroPolicy.Artwork choice : candidates) {
+                            if (portraitArtwork.size() >= 2) break;
+                            if (isGoodPortraitArtwork(choice)) {
+                                portraitArtwork.add(choice);
+                            }
+                        }
                     }
-                    header = new OnlyFapHeroPolicy.Artwork(
-                            repository.creatorHeaderUrl(best), best.url, false);
-                }
-            } catch (IOException ignored) {
+                } catch (IOException ignored) { }
             }
 
-            // Priority: full gallery image -> wide banner -> other media preview -> avatar.
-            if (header != null) artwork.add(header);
-            if (artwork.size() < 3) {
-                OnlyFapHeroPolicy.addPreviews(artwork, fapelloMedia, creator.url);
-            }
-            if (artwork.size() < 3) {
-                OnlyFapHeroPolicy.addPreviews(artwork, onlyHavenMedia, onlyHavenReferer);
-            }
-            artwork.add(new OnlyFapHeroPolicy.Artwork(creator.imageUrl,
-                    clean(creator.uploader).isEmpty() ? creator.url : creator.uploader, true));
-            List<OnlyFapHeroPolicy.Artwork> choices = OnlyFapHeroPolicy.distinctArtwork(artwork);
-            if (!choices.isEmpty()) post(() -> {
+            List<OnlyFapHeroPolicy.Artwork> choices =
+                    OnlyFapHeroPolicy.distinctArtwork(portraitArtwork);
+            // No portrait image means no hero slot for this creator.
+            if (choices.isEmpty()) return;
+
+            post(() -> {
                 if (generation == heroGeneration) {
                     addHeroCandidate(new HeroCandidate(creator, choices));
                 }
             });
         });
+    }
+
+    private boolean isGoodPortraitArtwork(OnlyFapHeroPolicy.Artwork choice) {
+        if (choice == null || clean(choice.url).isEmpty()) return false;
+        FutureTarget<Bitmap> target = null;
+        try {
+            target = Glide.with(getContext().getApplicationContext())
+                    .asBitmap()
+                    .load(remoteImage(choice.url, choice.referer))
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .fitCenter()
+                    .submit(dp(360), dp(540));
+            Bitmap bitmap = target.get();
+            return bitmap != null &&
+                    OnlyFapHeroPolicy.isGoodPortraitDimensions(
+                            bitmap.getWidth(),
+                            bitmap.getHeight()
+                    );
+        } catch (Exception ignored) {
+            return false;
+        } finally {
+            if (target != null) target.cancel(true);
+        }
     }
 
     private OnlyHavenRepository.Creator chooseOnlyHavenMatch(
