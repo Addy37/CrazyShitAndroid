@@ -66,8 +66,7 @@ final class OnlyFapHubView extends FrameLayout {
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final long HERO_ROTATION_MS = 13_000L;
     private static final int HERO_MAX_ITEMS = 5;
-    private static final int HERO_RESOLVE_LIMIT = 9;
-    private static final float HERO_MIN_ASPECT = 1.28f;
+    private static final int HERO_RESOLVE_LIMIT = 7;
 
     private final Listener listener;
     private final ScrollView scroll;
@@ -88,7 +87,7 @@ final class OnlyFapHubView extends FrameLayout {
     private final CreatorShelf popularShelf;
 
     private final Handler heroHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService heroIo = Executors.newSingleThreadExecutor();
+    private final ExecutorService heroIo = Executors.newFixedThreadPool(3);
     private final Set<String> requestedHeroCreators = new HashSet<>();
     private final Set<String> rejectedHeroUrls = new HashSet<>();
     private final List<HeroCandidate> heroItems = new ArrayList<>();
@@ -97,10 +96,12 @@ final class OnlyFapHubView extends FrameLayout {
     private List<NativeContentItem> newItems = Collections.emptyList();
     private List<NativeContentItem> hotItems = Collections.emptyList();
     private List<NativeContentItem> popularItems = Collections.emptyList();
+    private boolean shelvesFinished;
     private HeroCandidate heroItem;
     private int heroIndex = -1;
     private boolean active;
     private boolean closed;
+    private volatile int heroGeneration;
     private Bundle pendingRestoreState;
 
     OnlyFapHubView(Context context, Listener listener) {
@@ -353,10 +354,12 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void clear() {
+        heroGeneration++;
         trendingItems = Collections.emptyList();
         newItems = Collections.emptyList();
         hotItems = Collections.emptyList();
         popularItems = Collections.emptyList();
+        shelvesFinished = false;
         trendingShelf.adapter.replace(Collections.emptyList());
         newShelf.adapter.replace(Collections.emptyList());
         hotShelf.adapter.replace(Collections.emptyList());
@@ -386,28 +389,28 @@ final class OnlyFapHubView extends FrameLayout {
         trendingItems = safe(items);
         trendingShelf.adapter.replace(trendingItems);
         trendingShelf.container.setVisibility(trendingItems.isEmpty() ? View.GONE : View.VISIBLE);
-        requestHeroCandidates();
+        refreshHeroCandidates();
     }
 
     void setNewCreators(List<NativeContentItem> items) {
         newItems = safe(items);
         newShelf.adapter.replace(newItems);
         newShelf.container.setVisibility(newItems.isEmpty() ? View.GONE : View.VISIBLE);
-        requestHeroCandidates();
+        refreshHeroCandidates();
     }
 
     void setHot(List<NativeContentItem> items) {
         hotItems = safe(items);
         hotShelf.adapter.replace(hotItems);
         hotShelf.container.setVisibility(hotItems.isEmpty() ? View.GONE : View.VISIBLE);
-        requestHeroCandidates();
+        refreshHeroCandidates();
     }
 
     void setPopular(List<NativeContentItem> items) {
         popularItems = safe(items);
         popularShelf.adapter.replace(popularItems);
         popularShelf.container.setVisibility(popularItems.isEmpty() ? View.GONE : View.VISIBLE);
-        requestHeroCandidates();
+        refreshHeroCandidates();
     }
 
     void refreshFavorites() {
@@ -422,6 +425,7 @@ final class OnlyFapHubView extends FrameLayout {
             );
         }
         favoritesSection.setVisibility(favorites.isEmpty() ? View.GONE : View.VISIBLE);
+        refreshHeroCandidates();
         trendingShelf.adapter.refreshFavorites();
         newShelf.adapter.refreshFavorites();
         hotShelf.adapter.refreshFavorites();
@@ -429,6 +433,8 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     void finishLoading() {
+        shelvesFinished = true;
+        refreshHeroCandidates();
         loadingLabel.setVisibility(itemCount() == 0 ? View.VISIBLE : View.GONE);
         if (itemCount() == 0) {
             loadingLabel.setText("OnlyFap creators could not load right now.");
@@ -570,61 +576,53 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void requestHeroCandidates() {
         if (closed) return;
-
-        LinkedHashMap<String, NativeContentItem> candidates = new LinkedHashMap<>();
-        addCreators(candidates, trendingItems, 6);
-        addCreators(candidates, hotItems, 3);
-        addCreators(candidates, popularItems, 3);
-        addCreators(candidates, newItems, 3);
-
-        ArrayList<NativeContentItem> shuffled = new ArrayList<>(candidates.values());
-        Collections.shuffle(shuffled);
-        int considered = 0;
-        for (NativeContentItem creator : shuffled) {
-            if (considered >= HERO_RESOLVE_LIMIT) break;
-            considered++;
-
+        List<NativeContentItem> candidates = OnlyFapHeroPolicy.select(
+                newItems,
+                shelvesFinished ? CreatorCatalog.all(getContext()) : Collections.emptyList(),
+                CreatorFavoriteStore.names(getContext()),
+                trendingItems, hotItems, popularItems,
+                HERO_RESOLVE_LIMIT
+        );
+        for (NativeContentItem creator : candidates) {
             String key = CreatorFavoriteStore.key(creator);
-            if (key.isEmpty()) continue;
-
-            if (heroItems.size() < HERO_MAX_ITEMS && findHeroCandidate(key) == null) {
-                String fallbackUrl = clean(creator.imageUrl);
-                if (!fallbackUrl.isEmpty()) {
-                    String fallbackReferer = clean(creator.uploader).isEmpty()
-                            ? creator.url
-                            : creator.uploader;
-                    addHeroCandidate(new HeroCandidate(
-                            creator,
-                            fallbackUrl,
-                            fallbackReferer
-                    ));
-                }
-            }
-
             if (requestedHeroCreators.add(key)) {
                 resolveHeroAsync(creator);
             }
         }
     }
 
-    private void addCreators(
-            Map<String, NativeContentItem> destination,
-            List<NativeContentItem> source,
-            int limit
-    ) {
-        if (source == null) return;
-        int count = Math.min(limit, source.size());
-        for (int i = 0; i < count; i++) {
-            NativeContentItem creator = source.get(i);
-            if (creator == null || !creator.isCreator()) continue;
-            String key = CreatorFavoriteStore.key(creator);
-            if (!key.isEmpty()) destination.putIfAbsent(key, creator);
+    private void refreshHeroCandidates() {
+        if (closed) return;
+        Set<String> excluded = OnlyFapHeroPolicy.excluded(
+                CreatorFavoriteStore.names(getContext()), trendingItems, hotItems, popularItems
+        );
+        boolean selectedRemoved = heroItem != null &&
+                excluded.contains(CreatorFavoriteStore.key(heroItem.creator));
+        heroItems.removeIf(item -> excluded.contains(CreatorFavoriteStore.key(item.creator)));
+        if (selectedRemoved) {
+            heroItem = null;
+            heroIndex = -1;
+            if (!heroItems.isEmpty()) showHero(0, false);
+            else {
+                heroHandler.removeCallbacksAndMessages(null);
+                Glide.with(heroImage).clear(heroImage);
+                heroImage.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
+                heroTitle.setText("Discover creators");
+                heroAction.setVisibility(View.GONE);
+                heroDots.setVisibility(View.GONE);
+            }
+        } else if (heroItem != null) {
+            heroIndex = heroItems.indexOf(heroItem);
+            updateHeroDots();
         }
+        requestHeroCandidates();
     }
 
     private void resolveHeroAsync(NativeContentItem creator) {
+        final int generation = heroGeneration;
         heroIo.execute(() -> {
-            if (closed) return;
+            if (closed || generation != heroGeneration) return;
+            ArrayList<OnlyFapHeroPolicy.Artwork> artwork = new ArrayList<>();
             try {
                 OnlyHavenRepository repository = new OnlyHavenRepository();
                 String query = clean(creator.searchQuery).isEmpty()
@@ -633,16 +631,52 @@ final class OnlyFapHubView extends FrameLayout {
                 List<OnlyHavenRepository.Creator> matches =
                         repository.searchCreators(getContext().getApplicationContext(), query, 6);
                 OnlyHavenRepository.Creator best = chooseOnlyHavenMatch(query, matches);
-                if (best == null) return;
-                String headerUrl = repository.creatorHeaderUrl(best);
-                if (clean(headerUrl).isEmpty()) return;
-                post(() -> upgradeHeroCandidate(
-                        creator,
-                        headerUrl,
-                        best.url
-                ));
+                if (best != null) {
+                    artwork.add(new OnlyFapHeroPolicy.Artwork(
+                            repository.creatorHeaderUrl(best), best.url, false));
+                    try {
+                        OnlyFapHeroPolicy.addMedia(artwork,
+                                repository.fetchCreatorMedia(getContext().getApplicationContext(),
+                                        best, 1, 8), best.url);
+                    } catch (IOException ignored) { }
+                }
             } catch (IOException ignored) {
             }
+            // New Creators primarily come from Fapello. Its actual gallery images are
+            // preferable to the small listing avatar even when OnlyHaven has no match.
+            if (FapelloRepository.isModelUrl(creator.url) && artwork.size() < 3) {
+                try {
+                    FapelloRepository fapello = new FapelloRepository();
+                    List<NativeContentItem> media = fapello.fetchModelMedia(
+                            getContext().getApplicationContext(),
+                            new FapelloRepository.Model(creator.title, creator.url, creator.imageUrl),
+                            1);
+                    int checked = 0;
+                    for (NativeContentItem item : media) {
+                        if (checked >= 2 || artwork.size() >= 3) break;
+                        if (item == null || !item.isImage()) continue;
+                        checked++;
+                        try {
+                            CrazyShitRepository.StreamInfo full = fapello.resolvePlayable(
+                                    getContext().getApplicationContext(), item.url);
+                            OnlyFapHeroPolicy.addMedia(artwork,
+                                    Collections.singletonList(new NativeContentItem(
+                                            NativeContentItem.KIND_IMAGE, item.title, full.mediaUrl,
+                                            item.imageUrl, "", "", "")), full.requestReferer);
+                        } catch (IOException ignored) { }
+                    }
+                    if (artwork.size() < 3) OnlyFapHeroPolicy.addMedia(
+                            artwork, media, creator.url);
+                } catch (IOException ignored) { }
+            }
+            artwork.add(new OnlyFapHeroPolicy.Artwork(creator.imageUrl,
+                    clean(creator.uploader).isEmpty() ? creator.url : creator.uploader, true));
+            List<OnlyFapHeroPolicy.Artwork> choices = OnlyFapHeroPolicy.distinctArtwork(artwork);
+            if (!choices.isEmpty()) post(() -> {
+                if (generation == heroGeneration) {
+                    addHeroCandidate(new HeroCandidate(creator, choices));
+                }
+            });
         });
     }
 
@@ -667,12 +701,15 @@ final class OnlyFapHubView extends FrameLayout {
     private void addHeroCandidate(HeroCandidate candidate) {
         if (closed || candidate == null || heroItems.size() >= HERO_MAX_ITEMS) return;
         String key = CreatorFavoriteStore.key(candidate.creator);
-        if (key.isEmpty() || findHeroCandidate(key) != null) return;
+        if (key.isEmpty() || findHeroCandidate(key) != null ||
+                OnlyFapHeroPolicy.excluded(CreatorFavoriteStore.names(getContext()),
+                        trendingItems, hotItems, popularItems).contains(key)) return;
         heroItems.add(candidate);
         if (heroItem == null) {
             showHero(0, false);
         } else {
             updateHeroDots();
+            scheduleHeroRotation();
         }
     }
 
@@ -686,32 +723,14 @@ final class OnlyFapHubView extends FrameLayout {
         return null;
     }
 
-    private void upgradeHeroCandidate(
-            NativeContentItem creator,
-            String wideImageUrl,
-            String referer
-    ) {
-        if (closed || creator == null || clean(wideImageUrl).isEmpty()) return;
-        HeroCandidate candidate =
-                findHeroCandidate(CreatorFavoriteStore.key(creator));
-        if (candidate == null) return;
-        candidate.setPreferred(wideImageUrl, referer);
-        if (candidate == heroItem) {
-            loadHeroArtwork(candidate);
-        }
-    }
-
     private void showHero(int requestedIndex, boolean animate) {
         if (heroItems.isEmpty()) return;
         int index = Math.floorMod(requestedIndex, heroItems.size());
         HeroCandidate next = heroItems.get(index);
+        while (rejectedHeroUrls.contains(next.currentImageUrl()) && next.advance()) { }
         if (rejectedHeroUrls.contains(next.currentImageUrl())) {
-            if (next.usingPreferred()) {
-                next.useFallback();
-            } else {
-                rejectHero(next);
-                return;
-            }
+            rejectHero(next);
+            return;
         }
 
         heroIndex = index;
@@ -742,9 +761,8 @@ final class OnlyFapHubView extends FrameLayout {
         if (closed || candidate == null) return;
         final String imageUrl = candidate.currentImageUrl();
         final String referer = candidate.currentReferer();
-        final boolean preferred = candidate.usingPreferred();
         if (clean(imageUrl).isEmpty()) {
-            handleHeroArtworkFailure(candidate, imageUrl, preferred);
+            handleHeroArtworkFailure(candidate, imageUrl);
             return;
         }
         try {
@@ -765,8 +783,7 @@ final class OnlyFapHubView extends FrameLayout {
                         ) {
                             post(() -> handleHeroArtworkFailure(
                                     candidate,
-                                    imageUrl,
-                                    preferred
+                                    imageUrl
                             ));
                             return false;
                         }
@@ -779,36 +796,23 @@ final class OnlyFapHubView extends FrameLayout {
                                 DataSource dataSource,
                                 boolean first
                         ) {
-                            if (!preferred) return false;
-                            int width = resource == null ? 0 : resource.getIntrinsicWidth();
-                            int height = resource == null ? 0 : resource.getIntrinsicHeight();
-                            float ratio = height <= 0 ? 0f : width / (float) height;
-                            if (ratio > 0f && ratio < HERO_MIN_ASPECT) {
-                                post(() -> handleHeroArtworkFailure(
-                                        candidate,
-                                        imageUrl,
-                                        true
-                                ));
-                                return true;
-                            }
                             return false;
                         }
                     })
                     .into(heroImage);
         } catch (Exception ignored) {
-            handleHeroArtworkFailure(candidate, imageUrl, preferred);
+            handleHeroArtworkFailure(candidate, imageUrl);
         }
     }
 
     private void handleHeroArtworkFailure(
             HeroCandidate candidate,
-            String failedUrl,
-            boolean preferred
+            String failedUrl
     ) {
-        if (closed || candidate == null) return;
+        if (closed || candidate == null || !heroItems.contains(candidate) ||
+                !failedUrl.equals(candidate.currentImageUrl())) return;
         if (!clean(failedUrl).isEmpty()) rejectedHeroUrls.add(failedUrl);
-        if (preferred && candidate.hasFallback()) {
-            candidate.useFallback();
+        if (candidate.advance()) {
             if (candidate == heroItem) loadHeroArtwork(candidate);
             return;
         }
@@ -981,46 +985,36 @@ final class OnlyFapHubView extends FrameLayout {
 
     private static final class HeroCandidate {
         final NativeContentItem creator;
-        final String fallbackImageUrl;
-        final String fallbackReferer;
-        String preferredImageUrl = "";
-        String preferredReferer = "";
-        boolean usePreferred;
+        final List<OnlyFapHeroPolicy.Artwork> artwork;
+        int artworkIndex;
 
-        HeroCandidate(
-                NativeContentItem creator,
-                String fallbackImageUrl,
-                String fallbackReferer
-        ) {
+        HeroCandidate(NativeContentItem creator, List<OnlyFapHeroPolicy.Artwork> artwork) {
             this.creator = creator;
-            this.fallbackImageUrl = fallbackImageUrl == null ? "" : fallbackImageUrl.trim();
-            this.fallbackReferer = fallbackReferer == null ? "" : fallbackReferer.trim();
+            this.artwork = artwork;
         }
 
-        void setPreferred(String imageUrl, String referer) {
-            preferredImageUrl = imageUrl == null ? "" : imageUrl.trim();
-            preferredReferer = referer == null ? "" : referer.trim();
-            usePreferred = !preferredImageUrl.isEmpty();
+        // Kept for the rotation regression fixture, which only needs one image.
+        HeroCandidate(NativeContentItem creator, String imageUrl, String referer) {
+            this(creator, Collections.singletonList(
+                    new OnlyFapHeroPolicy.Artwork(imageUrl, referer, true)));
         }
 
-        boolean usingPreferred() {
-            return usePreferred && !preferredImageUrl.isEmpty();
+        boolean advance() {
+            if (artworkIndex + 1 >= artwork.size()) return false;
+            artworkIndex++;
+            return true;
         }
 
-        boolean hasFallback() {
-            return !fallbackImageUrl.isEmpty();
-        }
-
-        void useFallback() {
-            usePreferred = false;
+        boolean usingAvatar() {
+            return artwork.get(artworkIndex).avatar;
         }
 
         String currentImageUrl() {
-            return usingPreferred() ? preferredImageUrl : fallbackImageUrl;
+            return artwork.get(artworkIndex).url;
         }
 
         String currentReferer() {
-            return usingPreferred() ? preferredReferer : fallbackReferer;
+            return artwork.get(artworkIndex).referer;
         }
     }
 
