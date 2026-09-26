@@ -101,6 +101,10 @@ public final class EfuktRepository {
             if (title.length() < 2) continue;
             String image = findImage(link, scope, doc.location());
             String description = findDescription(scope, title);
+            long publishedAt = SourcePublishedDate.parse(
+                    scope == null ? "" : scope.text(),
+                    System.currentTimeMillis()
+            );
             NativeContentItem candidate = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA,
                     title,
@@ -109,7 +113,9 @@ public final class EfuktRepository {
                     "",
                     "EFukt",
                     "",
-                    description
+                    description,
+                    "",
+                    publishedAt
             );
             NativeContentItem old = items.get(url);
             items.put(url, old == null ? candidate : old.merge(candidate));

@@ -51,6 +51,7 @@ final class ShowsHubView extends FrameLayout {
     private static final int HERO_MAX_ITEMS = 5;
 
     private final Listener listener;
+    private final Listener weeklyListener;
     private final ContinueListener continueListener;
     private final PrewarmListener prewarmListener;
     private final ShowsContinueFrameStore.Listener continueFrameListener =
@@ -67,11 +68,13 @@ final class ShowsHubView extends FrameLayout {
     private final TextView heroDots;
     private final TextView loadingLabel;
     private final ContinueShelf continueShelf;
+    private final Shelf thisWeekShelf;
     private final Shelf crazyShelf;
     private final Shelf efuktShelf;
     private final Shelf categoryShelf;
     private final Shelf kaoticCategoryShelf;
 
+    private List<NativeContentItem> thisWeekItems = Collections.emptyList();
     private List<NativeContentItem> crazyItems = Collections.emptyList();
     private List<NativeContentItem> efuktItems = Collections.emptyList();
     private List<NativeContentItem> categoryItems = Collections.emptyList();
@@ -88,8 +91,19 @@ final class ShowsHubView extends FrameLayout {
             ContinueListener continueListener,
             PrewarmListener prewarmListener
     ) {
+        this(context, listener, continueListener, prewarmListener, listener);
+    }
+
+    ShowsHubView(
+            Context context,
+            Listener listener,
+            ContinueListener continueListener,
+            PrewarmListener prewarmListener,
+            Listener weeklyListener
+    ) {
         super(context);
         this.listener = listener;
+        this.weeklyListener = weeklyListener;
         this.continueListener = continueListener;
         this.prewarmListener = prewarmListener;
         setBackgroundColor(ZeroChillUi.background(context));
@@ -211,6 +225,14 @@ final class ShowsHubView extends FrameLayout {
         content.addView(loadingLabel, loadingParams);
 
         continueShelf = addContinueShelf();
+        thisWeekShelf = addShelf(
+                "This Week",
+                "Fresh from CrazyShit, EFukt and Kaotic",
+                true,
+                weeklyListener,
+                true,
+                false
+        );
         crazyShelf = addShelf("CrazyShit Shows", "Series and recurring collections", false);
         efuktShelf = addShelf("EFukt Series", "Browse EFukt by series", false);
         categoryShelf = addShelf("CrazyShit Categories", "Jump into a type of content", true);
@@ -222,6 +244,7 @@ final class ShowsHubView extends FrameLayout {
     }
 
     void clear() {
+        thisWeekItems = Collections.emptyList();
         crazyItems = Collections.emptyList();
         efuktItems = Collections.emptyList();
         categoryItems = Collections.emptyList();
@@ -233,10 +256,12 @@ final class ShowsHubView extends FrameLayout {
         heroItem = null;
         heroIndex = -1;
         heroDots.setVisibility(View.GONE);
+        thisWeekShelf.adapter.replace(Collections.emptyList());
         crazyShelf.adapter.replace(Collections.emptyList());
         efuktShelf.adapter.replace(Collections.emptyList());
         categoryShelf.adapter.replace(Collections.emptyList());
         kaoticCategoryShelf.adapter.replace(Collections.emptyList());
+        thisWeekShelf.container.setVisibility(View.GONE);
         crazyShelf.container.setVisibility(View.GONE);
         efuktShelf.container.setVisibility(View.GONE);
         categoryShelf.container.setVisibility(View.GONE);
@@ -249,6 +274,16 @@ final class ShowsHubView extends FrameLayout {
         heroAction.setVisibility(View.GONE);
         Glide.with(heroImage).clear(heroImage);
         heroImage.setImageDrawable(new ColorDrawable(Color.rgb(13, 16, 19)));
+    }
+
+    void setThisWeek(List<NativeContentItem> items) {
+        thisWeekItems = safe(items);
+        thisWeekShelf.adapter.replace(thisWeekItems);
+        preloadShelfArtwork(thisWeekItems, 5);
+        thisWeekShelf.container.setVisibility(
+                thisWeekItems.isEmpty() ? View.GONE : View.VISIBLE
+        );
+        if (!thisWeekItems.isEmpty()) loadingLabel.setVisibility(View.GONE);
     }
 
     void setCrazyShit(List<NativeContentItem> items) {
@@ -296,6 +331,7 @@ final class ShowsHubView extends FrameLayout {
         out.putInt("scroll_y", scroll.getScrollY());
         out.putInt("hero_index", heroIndex);
         saveRailState(out, "continue", continueShelf.rail);
+        saveRailState(out, "this_week", thisWeekShelf.rail);
         saveRailState(out, "crazy", crazyShelf.rail);
         saveRailState(out, "efukt", efuktShelf.rail);
         saveRailState(out, "categories", categoryShelf.rail);
@@ -307,7 +343,7 @@ final class ShowsHubView extends FrameLayout {
     }
 
     int itemCount() {
-        return crazyItems.size() + efuktItems.size()
+        return thisWeekItems.size() + crazyItems.size() + efuktItems.size()
                 + categoryItems.size() + kaoticCategoryItems.size();
     }
 
@@ -514,6 +550,7 @@ final class ShowsHubView extends FrameLayout {
         }
 
         restoreRailState(state, "continue", continueShelf.rail);
+        restoreRailState(state, "this_week", thisWeekShelf.rail);
         restoreRailState(state, "crazy", crazyShelf.rail);
         restoreRailState(state, "efukt", efuktShelf.rail);
         restoreRailState(state, "categories", categoryShelf.rail);
@@ -618,6 +655,17 @@ final class ShowsHubView extends FrameLayout {
     }
 
     private Shelf addShelf(String title, String subtitle, boolean wideCards) {
+        return addShelf(title, subtitle, wideCards, listener, false, true);
+    }
+
+    private Shelf addShelf(
+            String title,
+            String subtitle,
+            boolean wideCards,
+            Listener clickListener,
+            boolean showSource,
+            boolean prewarmCollections
+    ) {
         LinearLayout block = new LinearLayout(getContext());
         block.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(-1, -2);
@@ -651,7 +699,12 @@ final class ShowsHubView extends FrameLayout {
         manager.setInitialPrefetchItemCount(5);
         rail.setLayoutManager(manager);
 
-        RailAdapter adapter = new RailAdapter(wideCards);
+        RailAdapter adapter = new RailAdapter(
+                wideCards,
+                clickListener,
+                showSource,
+                prewarmCollections
+        );
         rail.setAdapter(adapter);
         rail.setPadding(dp(2), 0, dp(22), 0);
         block.addView(rail, new LinearLayout.LayoutParams(
@@ -905,10 +958,21 @@ final class ShowsHubView extends FrameLayout {
 
     private final class RailAdapter extends RecyclerView.Adapter<RailHolder> {
         private final boolean wide;
+        private final Listener clickListener;
+        private final boolean showSource;
+        private final boolean prewarmCollections;
         private final List<NativeContentItem> items = new ArrayList<>();
 
-        RailAdapter(boolean wide) {
+        RailAdapter(
+                boolean wide,
+                Listener clickListener,
+                boolean showSource,
+                boolean prewarmCollections
+        ) {
             this.wide = wide;
+            this.clickListener = clickListener;
+            this.showSource = showSource;
+            this.prewarmCollections = prewarmCollections;
             setHasStableIds(true);
         }
 
@@ -959,6 +1023,15 @@ final class ShowsHubView extends FrameLayout {
             ));
             frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
+            TextView source = text("", 10.5f, UiPalette.PRIMARY);
+            source.setTypeface(null, android.graphics.Typeface.BOLD);
+            source.setLetterSpacing(0.06f);
+            source.setVisibility(showSource ? View.VISIBLE : View.GONE);
+            FrameLayout.LayoutParams sourceParams =
+                    new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
+            sourceParams.setMargins(dp(11), dp(9), dp(11), 0);
+            frame.addView(source, sourceParams);
+
             TextView title = text("", wide ? 14f : 14.5f, Color.WHITE);
             title.setTypeface(null, android.graphics.Typeface.BOLD);
             title.setMaxLines(2);
@@ -967,16 +1040,18 @@ final class ShowsHubView extends FrameLayout {
             title.setPadding(dp(11), dp(8), dp(11), dp(10));
             frame.addView(title, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 
-            return new RailHolder(card, image, title);
+            return new RailHolder(card, image, source, title);
         }
 
         @Override
         public void onBindViewHolder(@NonNull RailHolder holder, int position) {
             NativeContentItem item = items.get(position);
             holder.title.setText(item.title);
+            holder.source.setText(showSource ? WeeklyShowsFeed.sourceLabel(item) : "");
+            holder.source.setVisibility(showSource ? View.VISIBLE : View.GONE);
             holder.card.setContentDescription("Open " + item.title);
             holder.card.setOnClickListener(v -> {
-                if (listener != null) listener.onOpen(item);
+                if (clickListener != null) clickListener.onOpen(item);
             });
             loadArtwork(holder.image, item, false);
         }
@@ -988,7 +1063,9 @@ final class ShowsHubView extends FrameLayout {
             if (position < 0 || position >= items.size()) return;
             NativeContentItem item = items.get(position);
             preloadArtwork(item);
-            if (prewarmListener != null) prewarmListener.onPrewarm(item);
+            if (prewarmCollections && prewarmListener != null) {
+                prewarmListener.onPrewarm(item);
+            }
         }
 
         @Override
@@ -1057,12 +1134,14 @@ final class ShowsHubView extends FrameLayout {
     private static final class RailHolder extends RecyclerView.ViewHolder {
         final MaterialCardView card;
         final ImageView image;
+        final TextView source;
         final TextView title;
 
-        RailHolder(MaterialCardView card, ImageView image, TextView title) {
+        RailHolder(MaterialCardView card, ImageView image, TextView source, TextView title) {
             super(card);
             this.card = card;
             this.image = image;
+            this.source = source;
             this.title = title;
         }
     }

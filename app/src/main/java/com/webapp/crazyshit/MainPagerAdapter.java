@@ -72,7 +72,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final FapzoneCreatorRepository fapzoneCreatorRepository =
             new FapzoneCreatorRepository();
     private final BrowseArtworkResolver browseArtworkResolver;
-    private final ExecutorService io = Executors.newFixedThreadPool(4);
+    private final ExecutorService io = Executors.newFixedThreadPool(5);
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
     private final ChaosFeedView chaosView;
 
@@ -489,7 +489,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     activity,
                     this::openShowDetails,
                     this::openShowsResume,
-                    item -> ShowsCollectionWarmCache.request(activity, item)
+                    item -> ShowsCollectionWarmCache.request(activity, item),
+                    item -> {
+                        if (item != null && item.isVideo()) host.onOpenItem(item);
+                    }
             );
             page.root.addView(page.showsHub, new FrameLayout.LayoutParams(-1, -1));
             // Shows is now a single combined hub. Keep the legacy source preference
@@ -1067,6 +1070,38 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         final int generation = page.generation;
         AtomicInteger remaining = new AtomicInteger(4);
 
+        page.showsWeeklyTask = io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = homeRepository.fetch(
+                        activity,
+                        0,
+                        1,
+                        items -> showWeeklyShowsProgress(page, generation, items)
+                );
+            } catch (Exception ignored) {
+            }
+            java.util.ArrayList<NativeContentItem> weeklyCandidates =
+                    new java.util.ArrayList<>(result);
+            try {
+                weeklyCandidates.addAll(repository.fetchFeed(
+                        activity,
+                        CrazyShitRepository.HOME,
+                        2
+                ));
+            } catch (Exception ignored) {
+            }
+            final List<NativeContentItem> items = WeeklyShowsFeed.build(
+                    weeklyCandidates,
+                    System.currentTimeMillis()
+            );
+            activity.runOnUiThread(() -> {
+                if (generation == page.generation && page.showsHub != null) {
+                    page.showsHub.setThisWeek(items);
+                }
+            });
+        });
+
         page.showsHubTasks.add(io.submit(() -> {
             List<NativeContentItem> result = java.util.Collections.emptyList();
             try {
@@ -1131,6 +1166,22 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         }));
     }
 
+    private void showWeeklyShowsProgress(
+            Page page,
+            int generation,
+            List<NativeContentItem> items
+    ) {
+        List<NativeContentItem> weekly = WeeklyShowsFeed.build(
+                items,
+                System.currentTimeMillis()
+        );
+        if (weekly.isEmpty()) return;
+        activity.runOnUiThread(() -> {
+            if (generation != page.generation || page.showsHub == null) return;
+            page.showsHub.setThisWeek(weekly);
+        });
+    }
+
     private void finishShowsHubSource(Page page, int generation, AtomicInteger remaining) {
         if (remaining.decrementAndGet() != 0) return;
         activity.runOnUiThread(() -> {
@@ -1144,6 +1195,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private void cancelShowsHubTasks(Page page) {
         if (page == null) return;
+        if (page.showsWeeklyTask != null) {
+            page.showsWeeklyTask.cancel(true);
+            page.showsWeeklyTask = null;
+        }
         for (java.util.concurrent.Future<?> task : page.showsHubTasks) {
             if (task != null) task.cancel(true);
         }
@@ -1253,6 +1308,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         int homeSource;
         int displayHomeSource;
         java.util.concurrent.Future<?> loadTask;
+        java.util.concurrent.Future<?> showsWeeklyTask;
         final java.util.List<java.util.concurrent.Future<?>> showsHubTasks =
                 new java.util.ArrayList<>();
         final java.util.List<TextView> homeChips = new java.util.ArrayList<>();
