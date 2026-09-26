@@ -239,13 +239,6 @@ final class OnlyFapHubHeaderAdapter
         nameParams.topMargin = dp(5);
         wrapper.addView(name, nameParams);
 
-        CreatorGalleryPreloader.warm(
-                context,
-                creator,
-                index < 4
-                        ? CreatorGalleryPreloader.PRIORITY_HIGH
-                        : CreatorGalleryPreloader.PRIORITY_NORMAL
-        );
         return wrapper;
     }
 
