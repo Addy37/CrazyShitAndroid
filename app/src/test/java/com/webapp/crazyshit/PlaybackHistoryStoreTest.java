@@ -64,6 +64,64 @@ public class PlaybackHistoryStoreTest {
     }
 
     @Test
+    public void showsContinueWatchingIncludesStartedVideosBeforeThirtySeconds() {
+        PlaybackHistoryStore.record(
+                context,
+                "First short start",
+                "https://crazyshit.com/video/first-short-start/",
+                "",
+                13_000L,
+                54_000L,
+                false,
+                true
+        );
+        PlaybackHistoryStore.record(
+                context,
+                "Second short start",
+                "https://crazyshit.com/video/second-short-start/",
+                "",
+                20_000L,
+                96_000L,
+                false,
+                true
+        );
+        PlaybackHistoryStore.record(
+                context,
+                "Third short start",
+                "https://crazyshit.com/video/third-short-start/",
+                "",
+                8_000L,
+                80_000L,
+                false,
+                true
+        );
+
+        List<PlaybackHistoryStore.Item> shows =
+                PlaybackHistoryStore.continueWatchingShows(context);
+
+        assertEquals(3, shows.size());
+        assertEquals("Third short start", shows.get(0).title);
+        assertEquals("Second short start", shows.get(1).title);
+        assertEquals("First short start", shows.get(2).title);
+    }
+
+    @Test
+    public void showsContinueWatchingStillIgnoresAccidentalStartsUnderFiveSeconds() {
+        PlaybackHistoryStore.record(
+                context,
+                "Accidental start",
+                "https://crazyshit.com/video/accidental-start/",
+                "",
+                4_000L,
+                80_000L,
+                false,
+                true
+        );
+
+        assertTrue(PlaybackHistoryStore.continueWatchingShows(context).isEmpty());
+    }
+
+    @Test
     public void laterPlaybackKeepsKnownShowsClassificationAndPoster() {
         String pageUrl = "https://crazyshit.com/video/show-clip/";
         PlaybackHistoryStore.record(

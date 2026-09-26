@@ -123,7 +123,7 @@ public final class PlaybackHistoryStore {
     public static List<Item> continueWatchingShows(Context context) {
         ArrayList<Item> out = new ArrayList<>();
         for (Item item : load(context)) {
-            if (!item.fromShows || !isContinueCandidate(item)) continue;
+            if (!item.fromShows || !isShowsContinueCandidate(item)) continue;
             out.add(item);
         }
         return out;
@@ -147,6 +147,12 @@ public final class PlaybackHistoryStore {
     private static boolean isContinueCandidate(Item item) {
         if (item == null || item.complete) return false;
         if (item.positionMs < MIN_CONTINUE_MS) return false;
+        return item.durationMs <= 0L || !isComplete(item.positionMs, item.durationMs);
+    }
+
+    private static boolean isShowsContinueCandidate(Item item) {
+        if (item == null || item.complete) return false;
+        if (item.positionMs < MIN_HISTORY_MS) return false;
         return item.durationMs <= 0L || !isComplete(item.positionMs, item.durationMs);
     }
 
