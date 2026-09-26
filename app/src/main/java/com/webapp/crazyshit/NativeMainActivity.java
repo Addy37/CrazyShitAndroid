@@ -82,6 +82,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private ViewPager2 primaryPager;
     private MainPagerAdapter primaryPagerAdapter;
     private AppUpdater appUpdater;
+    private boolean chaosClearDisplay;
 
     private Screen screen = Screen.CHAOS;
     private final Runnable ratingPromptCheck = () -> {
@@ -103,7 +104,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private int portraitInsetRight = -1;
     private int portraitInsetBottom = -1;
     private boolean restoringPortraitFromFullscreen;
-    private boolean chaosClearDisplay;
 
     @Override
     protected void onCreate(Bundle state) {
