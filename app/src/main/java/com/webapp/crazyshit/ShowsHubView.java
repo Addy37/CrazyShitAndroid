@@ -119,7 +119,7 @@ final class ShowsHubView extends FrameLayout {
         content.setPadding(dp(12), dp(26), dp(12), dp(34));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
-        TextView eyebrow = text("ZEROCHILL SHOWS", 11f,
+        TextView eyebrow = text("FEATURED", 11f,
                 ZeroChillUi.color(context, R.color.zc_cyan));
         eyebrow.setTypeface(null, android.graphics.Typeface.BOLD);
         eyebrow.setLetterSpacing(0.12f);
@@ -230,7 +230,7 @@ final class ShowsHubView extends FrameLayout {
                 "Fresh from CrazyShit, EFukt and Kaotic",
                 true,
                 weeklyListener,
-                true,
+                false,
                 false
         );
         crazyShelf = addShelf("CrazyShit Shows", "Series and recurring collections", false);
@@ -598,42 +598,9 @@ final class ShowsHubView extends FrameLayout {
         heading.setOrientation(LinearLayout.VERTICAL);
         heading.setPadding(dp(3), 0, dp(3), dp(9));
 
-        TextView titleView = text(
-                "CONTINUE WATCHING",
-                11f,
-                ZeroChillUi.color(getContext(), R.color.zc_cyan)
-        );
+        TextView titleView = text("Continue Watching", 22f, Color.WHITE);
         titleView.setTypeface(null, android.graphics.Typeface.BOLD);
-        titleView.setLetterSpacing(0.08f);
-        titleView.setPadding(dp(10), dp(5), dp(10), dp(5));
-        GradientDrawable continueBadge = new GradientDrawable();
-        continueBadge.setColor(Color.argb(
-                42,
-                Color.red(UiPalette.PRIMARY),
-                Color.green(UiPalette.PRIMARY),
-                Color.blue(UiPalette.PRIMARY)
-        ));
-        continueBadge.setStroke(
-                dp(1),
-                Color.argb(
-                        150,
-                        Color.red(UiPalette.PRIMARY),
-                        Color.green(UiPalette.PRIMARY),
-                        Color.blue(UiPalette.PRIMARY)
-                )
-        );
-        continueBadge.setCornerRadius(dp(14));
-        titleView.setBackground(continueBadge);
         heading.addView(titleView, new LinearLayout.LayoutParams(-2, -2));
-
-        TextView subtitleView = text(
-                "Shows videos you started",
-                12f,
-                ZeroChillUi.color(getContext(), R.color.zc_text_secondary)
-        );
-        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-2, -2);
-        subtitleParams.topMargin = dp(4);
-        heading.addView(subtitleView, subtitleParams);
         block.addView(heading);
 
         RecyclerView rail = new RecyclerView(getContext());
@@ -648,7 +615,7 @@ final class ShowsHubView extends FrameLayout {
         ContinueAdapter adapter = new ContinueAdapter();
         rail.setAdapter(adapter);
         rail.setPadding(dp(2), 0, dp(22), 0);
-        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(150)));
+        block.addView(rail, new LinearLayout.LayoutParams(-1, dp(166)));
 
         block.setVisibility(View.GONE);
         return new ContinueShelf(block, rail, adapter);
@@ -794,15 +761,19 @@ final class ShowsHubView extends FrameLayout {
         return new ArrayList<>(items);
     }
 
-    private String formatTime(long millis) {
-        long total = Math.max(0L, millis / 1000L);
-        long hours = total / 3600L;
-        long minutes = (total % 3600L) / 60L;
-        long seconds = total % 60L;
-        if (hours > 0L) {
-            return String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, seconds);
+    private String formatTimeRemaining(long positionMs, long durationMs) {
+        if (durationMs <= 0L) return "";
+        long remainingMs = Math.max(0L, durationMs - Math.max(0L, positionMs));
+        long totalMinutes = Math.max(1L, (remainingMs + 59_999L) / 60_000L);
+        long hours = totalMinutes / 60L;
+        long minutes = totalMinutes % 60L;
+        if (hours > 0L && minutes > 0L) {
+            return String.format(java.util.Locale.US, "%dh %dm left", hours, minutes);
         }
-        return String.format(java.util.Locale.US, "%d:%02d", minutes, seconds);
+        if (hours > 0L) {
+            return String.format(java.util.Locale.US, "%dh left", hours);
+        }
+        return String.format(java.util.Locale.US, "%dm left", minutes);
     }
 
     private TextView text(String value, float size, int color) {
@@ -863,7 +834,7 @@ final class ShowsHubView extends FrameLayout {
             ZeroChillMotion.installPressFeedback(card);
 
             RecyclerView.LayoutParams params =
-                    new RecyclerView.LayoutParams(dp(220), dp(140));
+                    new RecyclerView.LayoutParams(dp(248), dp(156));
             params.setMargins(dp(3), dp(2), dp(10), dp(4));
             card.setLayoutParams(params);
 
@@ -886,26 +857,31 @@ final class ShowsHubView extends FrameLayout {
             ));
             frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-            TextView meta = text("", 10.5f, UiPalette.PRIMARY);
+            TextView meta = text("", 12f, Color.WHITE);
             meta.setTypeface(null, android.graphics.Typeface.BOLD);
-            meta.setLetterSpacing(0.05f);
+            meta.setPadding(dp(10), dp(6), dp(10), dp(6));
+            GradientDrawable metaBackground = new GradientDrawable();
+            metaBackground.setColor(Color.argb(205, 8, 10, 12));
+            metaBackground.setCornerRadius(dp(8));
+            meta.setBackground(metaBackground);
             FrameLayout.LayoutParams metaParams =
-                    new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
-            metaParams.setMargins(dp(11), dp(10), dp(11), 0);
+                    new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+            metaParams.setMargins(dp(10), dp(10), dp(10), 0);
             frame.addView(meta, metaParams);
 
-            TextView title = text("", 14.5f, Color.WHITE);
+            TextView title = text("", 16.5f, Color.WHITE);
             title.setTypeface(null, android.graphics.Typeface.BOLD);
             title.setMaxLines(2);
             title.setEllipsize(android.text.TextUtils.TruncateAt.END);
             title.setGravity(Gravity.BOTTOM);
-            title.setPadding(dp(11), dp(8), dp(11), dp(12));
+            title.setPadding(dp(12), dp(8), dp(12), dp(20));
             frame.addView(title, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 
             FrameLayout progressTrack = new FrameLayout(getContext());
-            progressTrack.setBackgroundColor(Color.argb(190, 5, 8, 10));
+            progressTrack.setBackgroundColor(Color.argb(170, 18, 20, 22));
             FrameLayout.LayoutParams trackParams =
                     new FrameLayout.LayoutParams(-1, dp(4), Gravity.BOTTOM);
+            trackParams.setMargins(dp(10), 0, dp(10), dp(7));
             frame.addView(progressTrack, trackParams);
 
             View progressFill = new View(getContext());
@@ -929,7 +905,9 @@ final class ShowsHubView extends FrameLayout {
                     ""
             );
             holder.title.setText(history.title);
-            holder.meta.setText("CONTINUE · " + formatTime(history.positionMs));
+            String remaining = formatTimeRemaining(history.positionMs, history.durationMs);
+            holder.meta.setText(remaining);
+            holder.meta.setVisibility(remaining.isEmpty() ? View.GONE : View.VISIBLE);
             holder.card.setContentDescription("Resume " + history.title);
             float progress = history.durationMs <= 0L
                     ? 0f
