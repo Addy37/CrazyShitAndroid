@@ -35,7 +35,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     public static final int PAGE_ONLYFAP = 3;
     public static final int PAGE_LIBRARY = 4;
     @Deprecated public static final int PAGE_CATEGORIES = PAGE_ONLYFAP;
-    public static final int PAGE_COUNT = 5;
+    public static final int PAGE_COUNT = 4;
     private static final int PAGE_ARRAY_COUNT = 4;
     private static final int SERIES_SOURCE_CRAZYSHIT = 0;
     private static final int SERIES_SOURCE_EFUKT = 1;
@@ -225,9 +225,29 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         io.shutdownNow();
     }
 
+    static int pagerPositionForPage(int page) {
+        if (page == PAGE_SERIES) return 0;
+        if (page == PAGE_CHAOS) return 1;
+        if (page == PAGE_ONLYFAP) return 2;
+        if (page == PAGE_LIBRARY) return 3;
+        return -1;
+    }
+
+    static int pageForPagerPosition(int position) {
+        if (position == 0) return PAGE_SERIES;
+        if (position == 1) return PAGE_CHAOS;
+        if (position == 2) return PAGE_ONLYFAP;
+        if (position == 3) return PAGE_LIBRARY;
+        return PAGE_CHAOS;
+    }
+
+    static boolean isPrimaryPage(int page) {
+        return pagerPositionForPage(page) >= 0;
+    }
+
     @Override
     public long getItemId(int position) {
-        return 10_000L + position;
+        return 10_000L + pageForPagerPosition(position);
     }
 
     @Override
@@ -246,13 +266,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        int pageIndex = pageForPagerPosition(position);
         View pageView;
-        if (position == PAGE_CHAOS) {
+        if (pageIndex == PAGE_CHAOS) {
             pageView = chaosView;
-        } else if (position == PAGE_LIBRARY) {
+        } else if (pageIndex == PAGE_LIBRARY) {
             pageView = libraryView;
         } else {
-            Page page = pageAt(position);
+            Page page = pageAt(pageIndex);
             if (page == null) return;
             pageView = page.root;
         }
