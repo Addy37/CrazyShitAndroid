@@ -250,6 +250,7 @@ final class WebVideoSourceRepository {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         LinkedHashMap<String, Integer> positions = new LinkedHashMap<>();
         String pendingHeader = "";
+        long currentPublishedAt = 0L;
         int sectionOrdinal = 0;
         int mediaCount = 0;
 
@@ -258,7 +259,13 @@ final class WebVideoSourceRepository {
             if (!"a".equalsIgnoreCase(tag)) {
                 if (source == Source.KAOTIC) {
                     String section = kaoticSection(node);
-                    if (!section.isEmpty()) pendingHeader = section;
+                    if (!section.isEmpty()) {
+                        pendingHeader = section;
+                        currentPublishedAt = SourcePublishedDate.parse(
+                                section,
+                                System.currentTimeMillis()
+                        );
+                    }
                 } else if (source == Source.ITEMFIX && mediaCount > 0 &&
                         "popular fixes".equalsIgnoreCase(clean(node.ownText()))) {
                     break;
@@ -276,6 +283,12 @@ final class WebVideoSourceRepository {
             if (title.length() < 2) continue;
             String image = image(node, scope, document.location());
             String views = views(scope);
+            long publishedAt = source == Source.KAOTIC
+                    ? currentPublishedAt
+                    : SourcePublishedDate.parse(
+                            scope == null ? "" : scope.text(),
+                            System.currentTimeMillis()
+                    );
             NativeContentItem candidate = new NativeContentItem(
                     NativeContentItem.KIND_MEDIA,
                     title,
@@ -283,7 +296,10 @@ final class WebVideoSourceRepository {
                     image,
                     views,
                     source.label,
-                    ""
+                    "",
+                    "",
+                    "",
+                    publishedAt
             );
 
             String feedKey = feedKey(source, pageUrl);
