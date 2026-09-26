@@ -13,6 +13,7 @@ import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -69,6 +70,8 @@ public class FavoritesActivity extends Activity {
     private final LinearLayout[] listContainers = new LinearLayout[PAGE_COUNT];
     private final View[] pageViews = new View[PAGE_COUNT];
     private TextView clearAction;
+    private EditText input;
+    private TextView count;
     private ViewPager2 pager;
     private int tab = TAB_CONTINUE;
 
@@ -92,6 +95,10 @@ public class FavoritesActivity extends Activity {
                 new RenderedThumbnailResolver(this, this::onThumbnailResolved)
         };
         buildUi();
+        if (state != null && input != null) {
+            input.setText(state.getString("query", ""));
+            input.setSelection(input.length());
+        }
     }
 
     @Override
@@ -100,44 +107,49 @@ public class FavoritesActivity extends Activity {
         renderAllPages();
     }
 
+    @Override
+    protected void onSaveInstanceState(Bundle state) {
+        state.putString("query", searchQuery());
+        super.onSaveInstanceState(state);
+    }
+
     private void buildUi() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(13, 13, 15));
-        root.setPadding(dp(18), dp(18), dp(18), dp(24));
+        LinearLayout root = BrowseUi.screen(this);
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(12), dp(8), dp(12), dp(8));
 
-        MaterialButton back = new MaterialButton(this);
-        back.setText("‹");
-        back.setTextSize(28);
-        back.setContentDescription("Back");
-        back.setMinWidth(dp(48));
-        back.setMinimumWidth(dp(48));
-        back.setOnClickListener(v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        TextView back = BrowseUi.action(this, "‹", "Back", v -> finish());
+        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
-        LinearLayout heading = new LinearLayout(this);
-        heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setPadding(dp(12), 0, 0, 0);
-        TextView title = text(sectionTitle(), 28, Color.WHITE);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        TextView title = BrowseUi.text(this, sectionTitle(), 20, Color.WHITE);
+        title.setPadding(dp(12), 0, 0, 0);
         title.setContentDescription(sectionTitle() + " section");
-        TextView subtitle = text(sectionSubtitle(), 12, Color.rgb(170, 170, 180));
-        heading.addView(title);
-        heading.addView(subtitle);
-        header.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        clearAction = text("CLEAR", 12, UiPalette.PRIMARY);
-        clearAction.setTypeface(null, android.graphics.Typeface.BOLD);
-        clearAction.setGravity(Gravity.CENTER);
-        clearAction.setPadding(dp(10), dp(10), dp(10), dp(10));
-        clearAction.setClickable(true);
-        clearAction.setOnClickListener(v -> confirmClear());
-        header.addView(clearAction, new LinearLayout.LayoutParams(dp(62), dp(52)));
+        clearAction = BrowseUi.action(this, "⋮", "Section options", this::showSectionMenu);
+        clearAction.setTextSize(24);
+        header.addView(clearAction, new LinearLayout.LayoutParams(dp(48), dp(48)));
         root.addView(header);
+
+        input = new EditText(this);
+        input.setHint("Search " + sectionTitle());
+        input.setHintTextColor(BrowseUi.MUTED);
+        input.setTextColor(Color.WHITE);
+        input.setTextSize(16);
+        input.setSingleLine(true);
+        input.setPadding(dp(14), 0, dp(14), 0);
+        input.setBackground(BrowseUi.rounded(this, BrowseUi.SURFACE, 14));
+        input.setContentDescription("Search " + sectionTitle());
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
+        inputParams.setMargins(dp(12), 0, dp(12), dp(8));
+        root.addView(input, inputParams);
+
+        count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
+        count.setPadding(dp(16), dp(4), dp(16), dp(8));
+        root.addView(count);
 
         for (int i = 0; i < PAGE_COUNT; i++) pageViews[i] = buildPage(i);
 
@@ -150,6 +162,11 @@ public class FavoritesActivity extends Activity {
         root.addView(pager, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         setContentView(root);
+        input.addTextChangedListener(BrowseUi.onText(value -> renderAllPages()));
+        getWindow().setSoftInputMode(
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        );
     }
 
     private View buildPage(int index) {
@@ -159,7 +176,7 @@ public class FavoritesActivity extends Activity {
         scroll.setFillViewport(true);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(0, dp(6), 0, dp(24));
+        list.setPadding(dp(12), dp(6), dp(12), dp(24));
         listContainers[index] = list;
         scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
         page.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
@@ -172,11 +189,6 @@ public class FavoritesActivity extends Activity {
         return "Continue Watching";
     }
 
-    private String sectionSubtitle() {
-        if (tab == TAB_HISTORY) return "Recently watched";
-        if (tab == TAB_WATCH_LATER) return "Saved for another time";
-        return "Pick up where you left off";
-    }
 
     private void renderAllPages() {
         thumbnailTargets.clear();
@@ -194,11 +206,25 @@ public class FavoritesActivity extends Activity {
 
     private void renderHistory(LinearLayout target, boolean continueOnly) {
         if (target == null) return;
-        List<PlaybackHistoryStore.Item> items = continueOnly
+        List<PlaybackHistoryStore.Item> allItems = continueOnly
                 ? PlaybackHistoryStore.continueWatching(this)
                 : PlaybackHistoryStore.load(this);
 
-        if (items.isEmpty()) {
+        String query = searchQuery();
+        List<PlaybackHistoryStore.Item> items = new ArrayList<>();
+        for (PlaybackHistoryStore.Item item : allItems) {
+            if (LibrarySearch.matches(
+                    query,
+                    item.title,
+                    item.pageUrl,
+                    item.fromShows ? "shows" : ""
+            )) {
+                items.add(item);
+            }
+        }
+        updateCount(items.size(), allItems.size(), continueOnly ? "In progress" : "Recent first");
+
+        if (allItems.isEmpty()) {
             showEmpty(
                     target,
                     continueOnly ? "Nothing to continue" : "No watch history yet",
@@ -206,6 +232,10 @@ public class FavoritesActivity extends Activity {
                             ? "Videos watched for at least 30 seconds appear here until they're nearly finished."
                             : "Videos you watch in the native player will appear here."
             );
+            return;
+        }
+        if (items.isEmpty()) {
+            showEmpty(target, "No matching videos", "Try a different title, source, or keyword.");
             return;
         }
 
@@ -312,11 +342,25 @@ public class FavoritesActivity extends Activity {
 
     private void renderWatchLater(LinearLayout target) {
         if (target == null) return;
-        List<FavoriteStore.Item> items = FavoriteStore.load(this);
-        if (items.isEmpty()) {
+        List<FavoriteStore.Item> allItems = FavoriteStore.load(this);
+        String query = searchQuery();
+        List<FavoriteStore.Item> items = new ArrayList<>();
+        for (FavoriteStore.Item item : allItems) {
+            if (LibrarySearch.matches(query, item.title, item.url)) {
+                items.add(item);
+            }
+        }
+        updateCount(items.size(), allItems.size(), "Saved");
+
+        if (allItems.isEmpty()) {
             showEmpty(target, "Nothing saved yet", "Long-press a video card and choose Save to Watch Later.");
             return;
         }
+        if (items.isEmpty()) {
+            showEmpty(target, "No matching videos", "Try a different title, source, or keyword.");
+            return;
+        }
+
         List<View> cards = new ArrayList<>();
         for (FavoriteStore.Item item : items) {
             cards.add(makeWatchLaterCard(item));
@@ -570,6 +614,34 @@ public class FavoritesActivity extends Activity {
         data.putExtra(EXTRA_SELECTED_URL, url);
         setResult(RESULT_OK, data);
         finish();
+    }
+
+    private String searchQuery() {
+        return input == null ? "" : input.getText().toString();
+    }
+
+    private void updateCount(int visible, int total, String label) {
+        if (count == null) return;
+        String noun = total == 1 ? "video" : "videos";
+        if (LibrarySearch.normalize(searchQuery()).isEmpty()) {
+            count.setText(total + " " + noun + " · " + label);
+        } else {
+            count.setText(visible + " of " + total + " " + noun + " · Search results");
+        }
+    }
+
+    private void showSectionMenu(View anchor) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        String label = tab == TAB_WATCH_LATER
+                ? "Clear Watch Later"
+                : "Clear watch history";
+        menu.getMenu().add(label);
+        menu.setOnMenuItemClickListener(item -> {
+            haptic(anchor);
+            confirmClear();
+            return true;
+        });
+        menu.show();
     }
 
     private void confirmClear() {
