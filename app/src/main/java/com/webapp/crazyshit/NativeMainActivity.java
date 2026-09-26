@@ -87,7 +87,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private Screen screen = Screen.CHAOS;
     private final Runnable ratingPromptCheck = () -> {
         if (screen != Screen.CHAOS || primaryPager == null
-                || primaryPager.getCurrentItem() != MainPagerAdapter.PAGE_CHAOS
+                || currentPrimaryPage() != MainPagerAdapter.PAGE_CHAOS
                 || chaosClearDisplay
                 || (miniPlayer != null && miniPlayer.isVisible())) return;
         RatingFeedbackPrompt.maybeShow(this);
@@ -128,9 +128,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private void startAppContent() {
         int startPage = restoredPrimaryPage;
-        if (primaryPagerAdapter == null
-                || startPage < MainPagerAdapter.PAGE_SERIES
-                || startPage >= primaryPagerAdapter.getItemCount()) {
+        if (primaryPagerAdapter == null || !MainPagerAdapter.isPrimaryPage(startPage)) {
             startPage = MainPagerAdapter.PAGE_CHAOS;
         }
         showPrimaryPage(startPage, false);
@@ -208,7 +206,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         primaryPager.setUserInputEnabled(false);
         primaryPager.setOffscreenPageLimit(MainPagerAdapter.PAGE_COUNT - 1);
         primaryPager.setAdapter(primaryPagerAdapter);
-        primaryPager.setCurrentItem(MainPagerAdapter.PAGE_CHAOS, false);
+        primaryPager.setCurrentItem(
+                MainPagerAdapter.pagerPositionForPage(MainPagerAdapter.PAGE_CHAOS),
+                false
+        );
         primaryPager.setPageTransformer((page, position) -> {
             if (ZeroChillMotion.animationsEnabled(page.getContext())) {
                 float distance = Math.min(1f, Math.abs(position));
@@ -226,18 +227,16 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             @Override
             public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
                 if (bottomNavigation != null) {
-                    bottomNavigation.setPagerPosition(
-                            navPositionForPage(position + positionOffset)
-                    );
+                    bottomNavigation.setPagerPosition(position + positionOffset);
                 }
             }
 
             @Override
             public void onPageSelected(int position) {
                 if (bottomNavigation != null) {
-                    bottomNavigation.setPagerPosition(navPositionForPage(position));
+                    bottomNavigation.setPagerPosition(position);
                 }
-                showPagerChrome(position);
+                showPagerChrome(MainPagerAdapter.pageForPagerPosition(position));
             }
         });
         shell.addView(primaryPager, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -326,10 +325,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                     @Override
                     public void onNavigationDragBy(float deltaPageFraction) {
                         if (primaryPager != null && primaryPager.isFakeDragging()) {
-                            if (primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_SERIES
-                                    && deltaPageFraction < 0f) {
-                                return;
-                            }
                             float pageWidth = Math.max(1f, primaryPager.getWidth());
                             // The capsule moves toward the destination icon while the page
                             // content moves in the opposite direction underneath it.
@@ -343,10 +338,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                         float releasePosition = bottomNavigation == null
                                 ? primaryPager.getCurrentItem()
                                 : bottomNavigation.pagerPositionForTest();
-                        int target = MainPagerAdapter.PAGE_SERIES + Math.round(releasePosition);
-                        target = Math.max(
-                                MainPagerAdapter.PAGE_SERIES,
-                                Math.min(MainPagerAdapter.PAGE_LIBRARY, target)
+                        int target = Math.max(
+                                0,
+                                Math.min(MainPagerAdapter.PAGE_COUNT - 1, Math.round(releasePosition))
                         );
                         primaryPager.endFakeDrag();
                         primaryPager.setCurrentItem(
@@ -457,7 +451,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void showHome() {
-        showPrimaryPage(MainPagerAdapter.PAGE_HOME, true);
+        showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
     }
 
     private void showSeries() {
@@ -471,7 +465,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     boolean isOnlyFapSearchContext() {
         return primaryPager != null &&
                 primaryPager.getVisibility() == View.VISIBLE &&
-                primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_ONLYFAP;
+                currentPrimaryPage() == MainPagerAdapter.PAGE_ONLYFAP;
     }
 
     void openContextualSearch() {
@@ -481,17 +475,22 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         startActivity(intent);
     }
 
-    private float navPositionForPage(float pagePosition) {
-        return Math.max(
-                0f,
-                Math.min(3f, pagePosition - MainPagerAdapter.PAGE_SERIES)
-        );
+    private int currentPrimaryPage() {
+        if (primaryPager == null || primaryPagerAdapter == null) {
+            return MainPagerAdapter.PAGE_CHAOS;
+        }
+        return MainPagerAdapter.pageForPagerPosition(primaryPager.getCurrentItem());
     }
 
     private void showPrimaryPage(int position, boolean smooth) {
         if (primaryPager == null) return;
+        int pagerPosition = MainPagerAdapter.pagerPositionForPage(position);
+        if (pagerPosition < 0) return;
         showPagerChrome(position);
-        primaryPager.setCurrentItem(position, smooth && ZeroChillMotion.animationsEnabled(this));
+        primaryPager.setCurrentItem(
+                pagerPosition,
+                smooth && ZeroChillMotion.animationsEnabled(this)
+        );
     }
 
     private void showPagerChrome(int position) {
@@ -824,9 +823,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private boolean isFeedScreen() {
-        if (primaryPager != null && primaryPager.getVisibility() == View.VISIBLE) {
-            return primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_HOME;
-        }
         return isLegacyFeedScreen();
     }
 
@@ -914,7 +910,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private int currentViewMode() {
         if (primaryPager != null && primaryPager.getVisibility() == View.VISIBLE && primaryPagerAdapter != null) {
-            return primaryPagerAdapter.viewMode(primaryPager.getCurrentItem());
+            return primaryPagerAdapter.viewMode(currentPrimaryPage());
         }
         return getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getInt(viewPreferenceKey(), NativeFeedAdapter.VIEW_LIST);
@@ -930,7 +926,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void applyFeedLayout() {
         int mode = currentViewMode();
         if (primaryPager != null && primaryPager.getVisibility() == View.VISIBLE && primaryPagerAdapter != null) {
-            primaryPagerAdapter.setViewMode(primaryPager.getCurrentItem(), mode);
+            primaryPagerAdapter.setViewMode(currentPrimaryPage(), mode);
             return;
         }
         feedAdapter.setViewMode(mode);
@@ -960,7 +956,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 checked = NativeFeedAdapter.VIEW_LIST;
             }
             if (primaryPager != null && primaryPager.getVisibility() == View.VISIBLE && primaryPagerAdapter != null) {
-                primaryPagerAdapter.setViewMode(primaryPager.getCurrentItem(), checked);
+                primaryPagerAdapter.setViewMode(currentPrimaryPage(), checked);
             } else {
                 getSharedPreferences("app_prefs", MODE_PRIVATE)
                         .edit()
@@ -1130,7 +1126,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
             return;
         }
-        if (primaryPager != null && primaryPager.getCurrentItem() != MainPagerAdapter.PAGE_CHAOS) {
+        if (primaryPager != null && currentPrimaryPage() != MainPagerAdapter.PAGE_CHAOS) {
             showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
             return;
         }
@@ -1202,7 +1198,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
-        if (primaryPager != null) state.putInt("primary_page", primaryPager.getCurrentItem());
+        if (primaryPager != null) state.putInt("primary_page", currentPrimaryPage());
         if (primaryPagerAdapter != null) primaryPagerAdapter.saveState(state);
         super.onSaveInstanceState(state);
     }
