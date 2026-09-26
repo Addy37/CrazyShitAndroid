@@ -69,6 +69,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private FrameLayout overlayRoot;
     private LinearLayout shell;
+    private View topBar;
     private TextView headerTitle;
     private TextView headerSubtitle;
     private RecyclerView recycler;
@@ -165,7 +166,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
         overlayRoot.addView(shell, new FrameLayout.LayoutParams(-1, -1));
 
-        shell.addView(buildTopBar(), new LinearLayout.LayoutParams(
+        topBar = buildTopBar();
+        shell.addView(topBar, new LinearLayout.LayoutParams(
                 -1,
                 ZeroChillUi.dimension(this, R.dimen.zc_top_bar_height)
         ));
@@ -191,6 +193,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             @Override
             public void onOpenComments(NativeContentItem item) {
                 openComments(item);
+            }
+
+            @Override
+            public void onOpenMore() {
+                showMoreSheet();
             }
 
             @Override
@@ -392,6 +399,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         bar.setPadding(dp(18), 0, dp(12), 0);
         bar.setBackgroundColor(ZeroChillUi.background(this));
         bar.setElevation(0f);
+        bar.setContentDescription("Primary top bar");
 
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
@@ -613,13 +621,16 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void setChaosFullscreenChrome(boolean fullscreen) {
-        View topBar = null;
-        if (headerTitle != null && headerTitle.getParent() instanceof View) {
-            View labels = (View) headerTitle.getParent();
-            if (labels.getParent() instanceof View) topBar = (View) labels.getParent();
-            else topBar = labels;
+        boolean immersiveOnlyFap =
+                !fullscreen &&
+                screen == Screen.ONLYFAP &&
+                primaryPager != null &&
+                primaryPager.getVisibility() == View.VISIBLE;
+        if (topBar != null) {
+            topBar.setVisibility(
+                    fullscreen || immersiveOnlyFap ? View.GONE : View.VISIBLE
+            );
         }
-        if (topBar != null) topBar.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
         if (bottomNavigation != null) {
             bottomNavigation.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
         }
