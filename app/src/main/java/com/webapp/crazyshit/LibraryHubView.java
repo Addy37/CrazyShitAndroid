@@ -258,9 +258,12 @@ final class LibraryHubView extends ScrollView {
         nameParams.topMargin = dp(7);
         wrapper.addView(name, nameParams);
 
-        wrapper.setOnClickListener(v -> {
+        View.OnClickListener openCreator = v -> {
             if (listener != null) listener.onOpenCreator(creator);
-        });
+        };
+        wrapper.setOnClickListener(openCreator);
+        avatar.setOnClickListener(openCreator);
+        avatar.setContentDescription("Open " + creator.title);
         return wrapper;
     }
 
