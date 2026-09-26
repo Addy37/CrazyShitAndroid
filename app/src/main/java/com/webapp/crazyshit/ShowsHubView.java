@@ -47,7 +47,7 @@ final class ShowsHubView extends FrameLayout {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
-    private static final long HERO_ROTATION_MS = 14_000L;
+    private static final long HERO_ROTATION_MS = 13_000L;
     private static final int HERO_MAX_ITEMS = 5;
 
     private final Listener listener;
@@ -59,6 +59,7 @@ final class ShowsHubView extends FrameLayout {
     private final Handler heroHandler = new Handler(Looper.getMainLooper());
     private final ScrollView scroll;
     private final LinearLayout content;
+    private final LinearLayout body;
     private final MaterialCardView heroCard;
     private final ImageView heroImage;
     private final TextView heroSource;
@@ -116,23 +117,17 @@ final class ShowsHubView extends FrameLayout {
 
         content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(12), dp(26), dp(12), dp(34));
+        content.setPadding(0, 0, 0, dp(36));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
-
-        TextView eyebrow = text("FEATURED", 11f,
-                ZeroChillUi.color(context, R.color.zc_cyan));
-        eyebrow.setTypeface(null, android.graphics.Typeface.BOLD);
-        eyebrow.setLetterSpacing(0.12f);
-        LinearLayout.LayoutParams eyebrowParams = new LinearLayout.LayoutParams(-1, -2);
-        eyebrowParams.setMargins(dp(4), dp(4), dp(4), dp(7));
-        content.addView(eyebrow, eyebrowParams);
 
         heroCard = new MaterialCardView(context);
         ZeroChillUi.styleMediaCard(heroCard, R.dimen.zc_radius_large);
-        heroCard.setRadius(dp(22));
+        heroCard.setRadius(0f);
+        heroCard.setStrokeWidth(0);
         heroCard.setCardElevation(0f);
         heroCard.setClickable(true);
         heroCard.setFocusable(true);
+        heroCard.setContentDescription("Shows featured title");
         ZeroChillMotion.installPressFeedback(heroCard);
 
         FrameLayout heroFrame = new FrameLayout(context);
@@ -141,35 +136,49 @@ final class ShowsHubView extends FrameLayout {
         heroImage = new ImageView(context);
         heroImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
         heroImage.setBackground(new ColorDrawable(Color.rgb(13, 16, 19)));
+        heroImage.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         heroFrame.addView(heroImage, new FrameLayout.LayoutParams(-1, -1));
 
         View heroShade = new View(context);
         heroShade.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[] {
-                        Color.argb(18, 0, 0, 0),
-                        Color.argb(64, 0, 0, 0),
-                        Color.argb(246, 0, 0, 0)
+                        Color.argb(6, 0, 0, 0),
+                        Color.argb(24, 0, 0, 0),
+                        Color.argb(92, 0, 0, 0),
+                        Color.argb(218, 0, 0, 0),
+                        Color.BLACK
                 }
         ));
+        heroShade.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         heroFrame.addView(heroShade, new FrameLayout.LayoutParams(-1, -1));
 
-        heroDots = text("", 15f, Color.WHITE);
+        LinearLayout heroBar = new LinearLayout(context);
+        heroBar.setOrientation(LinearLayout.HORIZONTAL);
+        heroBar.setGravity(Gravity.CENTER_VERTICAL);
+        heroBar.setPadding(dp(20), dp(5), dp(20), 0);
+
+        TextView heroBrand = text("Shows", 28f, Color.WHITE);
+        heroBrand.setTypeface(null, android.graphics.Typeface.BOLD);
+        heroBrand.setSingleLine(true);
+        heroBrand.setShadowLayer(dp(8), 0f, dp(2), Color.argb(150, 0, 0, 0));
+        heroBar.addView(heroBrand, new LinearLayout.LayoutParams(-1, dp(58)));
+
+        heroFrame.addView(heroBar, new FrameLayout.LayoutParams(
+                -1,
+                dp(64),
+                Gravity.TOP
+        ));
+
+        heroDots = text("", 13f, Color.WHITE);
         heroDots.setGravity(Gravity.CENTER);
         heroDots.setVisibility(View.GONE);
         heroDots.setContentDescription("Featured show position");
-        FrameLayout.LayoutParams heroDotsParams = new FrameLayout.LayoutParams(
-                -2,
-                dp(32),
-                Gravity.TOP | Gravity.END
-        );
-        heroDotsParams.setMargins(0, dp(12), dp(12), 0);
-        heroFrame.addView(heroDots, heroDotsParams);
 
         LinearLayout heroCopy = new LinearLayout(context);
         heroCopy.setOrientation(LinearLayout.VERTICAL);
-        heroCopy.setGravity(Gravity.BOTTOM);
-        heroCopy.setPadding(dp(18), dp(18), dp(18), dp(18));
+        heroCopy.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        heroCopy.setPadding(dp(24), dp(28), dp(24), dp(20));
         heroFrame.addView(heroCopy,
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 
@@ -177,8 +186,11 @@ final class ShowsHubView extends FrameLayout {
         heroSource.setVisibility(View.GONE);
         heroCopy.addView(heroSource);
 
-        heroTitle = text("A new way to browse Shows", 27f, Color.WHITE);
+        heroTitle = text("A new way to browse Shows", 29f, Color.WHITE);
         heroTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        heroTitle.setGravity(Gravity.CENTER);
+        heroTitle.setTextAlignment(TEXT_ALIGNMENT_CENTER);
+        heroTitle.setShadowLayer(dp(8), 0f, dp(2), Color.argb(160, 0, 0, 0));
         heroTitle.setMaxLines(2);
         heroTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams heroTitleParams = new LinearLayout.LayoutParams(-1, -2);
@@ -190,28 +202,43 @@ final class ShowsHubView extends FrameLayout {
                 13f,
                 ZeroChillUi.color(context, R.color.zc_text_secondary)
         );
+        heroHint.setGravity(Gravity.CENTER);
+        heroHint.setTextAlignment(TEXT_ALIGNMENT_CENTER);
         heroHint.setMaxLines(2);
-        heroHint.setLineSpacing(0f, 1.06f);
+        heroHint.setLineSpacing(0f, 1.05f);
         LinearLayout.LayoutParams heroHintParams = new LinearLayout.LayoutParams(-1, -2);
         heroHintParams.topMargin = dp(5);
         heroCopy.addView(heroHint, heroHintParams);
 
-        heroAction = text("VIEW SHOW", 13f, Color.BLACK);
+        heroAction = text("VIEW SHOW", 13f, Color.WHITE);
         heroAction.setTypeface(null, android.graphics.Typeface.BOLD);
         heroAction.setGravity(Gravity.CENTER);
         heroAction.setVisibility(View.GONE);
         GradientDrawable actionBackground = new GradientDrawable();
-        actionBackground.setColor(UiPalette.PRIMARY);
-        actionBackground.setCornerRadius(dp(19));
+        actionBackground.setColor(Color.argb(205, 15, 18, 22));
+        actionBackground.setCornerRadius(dp(20));
+        actionBackground.setStroke(dp(1), Color.argb(80, 255, 255, 255));
         heroAction.setBackground(actionBackground);
+        heroAction.setContentDescription("Open featured show");
         LinearLayout.LayoutParams heroActionParams =
-                new LinearLayout.LayoutParams(dp(116), dp(38));
-        heroActionParams.topMargin = dp(13);
+                new LinearLayout.LayoutParams(dp(128), dp(40));
+        heroActionParams.topMargin = dp(14);
+        heroActionParams.gravity = Gravity.CENTER_HORIZONTAL;
         heroCopy.addView(heroAction, heroActionParams);
 
-        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(258));
-        heroParams.setMargins(0, 0, 0, dp(14));
+        LinearLayout.LayoutParams heroDotsParams =
+                new LinearLayout.LayoutParams(-2, dp(28));
+        heroDotsParams.topMargin = dp(8);
+        heroDotsParams.gravity = Gravity.CENTER_HORIZONTAL;
+        heroCopy.addView(heroDots, heroDotsParams);
+
+        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(350));
         content.addView(heroCard, heroParams);
+
+        body = new LinearLayout(context);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(12), dp(4), dp(12), 0);
+        content.addView(body, new LinearLayout.LayoutParams(-1, -2));
 
         loadingLabel = text(
                 "Loading Shows…",
@@ -221,7 +248,7 @@ final class ShowsHubView extends FrameLayout {
         loadingLabel.setGravity(Gravity.CENTER_HORIZONTAL);
         LinearLayout.LayoutParams loadingParams = new LinearLayout.LayoutParams(-1, -2);
         loadingParams.setMargins(0, 0, 0, dp(10));
-        content.addView(loadingLabel, loadingParams);
+        body.addView(loadingLabel, loadingParams);
 
         continueShelf = addContinueShelf();
         thisWeekShelf = addShelf(
@@ -423,12 +450,9 @@ final class ShowsHubView extends FrameLayout {
         Runnable apply = () -> {
             heroIndex = index;
             heroItem = next;
-            boolean efukt = EfuktRepository.isEfuktUrl(next.url);
-            heroSource.setText(efukt ? "EFUKT" : "CRAZYSHIT");
+            heroSource.setText("");
             heroTitle.setText(next.title);
-            heroHint.setText(efukt
-                    ? "Featured from EFukt Series"
-                    : "Featured from CrazyShit Shows");
+            heroHint.setText("Series · Open show");
             heroAction.setVisibility(View.VISIBLE);
             loadArtwork(heroImage, next, true);
             updateHeroDots();
@@ -443,11 +467,11 @@ final class ShowsHubView extends FrameLayout {
             return;
         }
         heroCard.animate()
-                .alpha(0.48f)
-                .setDuration(180L)
+                .alpha(0.72f)
+                .setDuration(110L)
                 .withEndAction(() -> {
                     apply.run();
-                    heroCard.animate().alpha(1f).setDuration(320L).start();
+                    heroCard.animate().alpha(1f).setDuration(180L).start();
                 })
                 .start();
     }
@@ -463,7 +487,7 @@ final class ShowsHubView extends FrameLayout {
             dots.append(index == heroIndex ? "●" : "○");
         }
         heroDots.setText(dots.toString());
-        heroDots.setTextColor(UiPalette.PRIMARY);
+        heroDots.setTextColor(Color.WHITE);
         heroDots.setContentDescription(
                 "Featured show " + (heroIndex + 1) + " of " + heroItems.size()
         );
@@ -591,7 +615,7 @@ final class ShowsHubView extends FrameLayout {
         block.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(-1, -2);
         blockParams.setMargins(0, 0, 0, dp(12));
-        content.addView(block, blockParams);
+        body.addView(block, blockParams);
 
         LinearLayout heading = new LinearLayout(getContext());
         heading.setOrientation(LinearLayout.VERTICAL);
@@ -636,7 +660,7 @@ final class ShowsHubView extends FrameLayout {
         block.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(-1, -2);
         blockParams.setMargins(0, 0, 0, dp(18));
-        content.addView(block, blockParams);
+        body.addView(block, blockParams);
 
         LinearLayout heading = new LinearLayout(getContext());
         heading.setOrientation(LinearLayout.VERTICAL);
