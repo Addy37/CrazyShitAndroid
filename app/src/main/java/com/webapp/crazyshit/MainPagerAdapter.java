@@ -1081,8 +1081,17 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 );
             } catch (Exception ignored) {
             }
+            ArrayList<NativeContentItem> weeklyCandidates = new ArrayList<>(result);
+            try {
+                weeklyCandidates.addAll(repository.fetchFeed(
+                        activity,
+                        CrazyShitRepository.HOME,
+                        2
+                ));
+            } catch (Exception ignored) {
+            }
             final List<NativeContentItem> items = WeeklyShowsFeed.build(
-                    result,
+                    weeklyCandidates,
                     System.currentTimeMillis()
             );
             activity.runOnUiThread(() -> {
