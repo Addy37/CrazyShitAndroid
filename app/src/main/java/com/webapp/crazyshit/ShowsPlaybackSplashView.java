@@ -65,7 +65,7 @@ final class ShowsPlaybackSplashView extends FrameLayout {
     @Override
     public void setVisibility(int visibility) {
         super.setVisibility(visibility);
-        updateAnimation();
+        if (horns != null) updateAnimation();
     }
 
     void stop() {
