@@ -238,10 +238,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     public void saveState(android.os.Bundle out) {
         if (out == null) return;
         Page shows = pageAt(PAGE_SERIES);
-        if (shows == null || shows.showsHub == null) return;
-        android.os.Bundle showsState = new android.os.Bundle();
-        shows.showsHub.saveState(showsState);
-        out.putBundle("shows_hub_state", showsState);
+        if (shows != null && shows.showsHub != null) {
+            android.os.Bundle showsState = new android.os.Bundle();
+            shows.showsHub.saveState(showsState);
+            out.putBundle("shows_hub_state", showsState);
+        }
 
         Page onlyFap = pageAt(PAGE_ONLYFAP);
         if (onlyFap != null && onlyFap.onlyFapHub != null) {
@@ -1253,6 +1254,130 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 });
             }
         });
+    }
+
+    private void loadOnlyFapHub(Page page) {
+        if (page == null || page.onlyFapHub == null || page.loading) return;
+        cancelOnlyFapHubTasks(page);
+        page.loading = true;
+        page.endReached = false;
+        page.empty.setVisibility(View.GONE);
+        page.progress.setVisibility(View.GONE);
+        page.onlyFapHub.clear();
+        page.onlyFapHub.refreshFavorites();
+
+        final int generation = page.generation;
+        AtomicInteger remaining = new AtomicInteger(2);
+
+        page.onlyFapHubTasks.add(io.submit(() -> {
+            List<NativeContentItem> result = java.util.Collections.emptyList();
+            try {
+                result = fapzoneCreatorRepository.fetch(
+                        activity,
+                        FapzoneCreatorRepository.MODE_TOP_50,
+                        items -> showOnlyFapHubProgress(
+                                page,
+                                generation,
+                                FapzoneCreatorRepository.MODE_TOP_50,
+                                items
+                        )
+                );
+            } catch (Exception ignored) {
+            }
+            if (!result.isEmpty()) CreatorCatalog.remember(activity, result);
+            final List<NativeContentItem> items = result;
+            activity.runOnUiThread(() -> {
+                if (generation == page.generation && page.onlyFapHub != null) {
+                    page.onlyFapHub.setTrending(items);
+                }
+            });
+            finishOnlyFapHubSource(page, generation, remaining);
+        }));
+
+        page.onlyFapHubTasks.add(io.submit(() -> {
+            int[] modes = {
+                    FapzoneCreatorRepository.MODE_NEW,
+                    FapzoneCreatorRepository.MODE_HOT,
+                    FapzoneCreatorRepository.MODE_POPULAR
+            };
+            for (int mode : modes) {
+                if (Thread.currentThread().isInterrupted()) break;
+                List<NativeContentItem> result = java.util.Collections.emptyList();
+                try {
+                    result = fapzoneCreatorRepository.fetch(
+                            activity,
+                            mode,
+                            items -> showOnlyFapHubProgress(
+                                    page,
+                                    generation,
+                                    mode,
+                                    items
+                            )
+                    );
+                } catch (Exception ignored) {
+                }
+                if (!result.isEmpty()) CreatorCatalog.remember(activity, result);
+                final List<NativeContentItem> items = result;
+                activity.runOnUiThread(() -> {
+                    if (generation != page.generation || page.onlyFapHub == null) return;
+                    applyOnlyFapShelf(page.onlyFapHub, mode, items);
+                });
+            }
+            finishOnlyFapHubSource(page, generation, remaining);
+        }));
+    }
+
+    private void showOnlyFapHubProgress(
+            Page page,
+            int generation,
+            int mode,
+            List<NativeContentItem> items
+    ) {
+        if (items == null || items.isEmpty()) return;
+        activity.runOnUiThread(() -> {
+            if (generation != page.generation || page.onlyFapHub == null) return;
+            applyOnlyFapShelf(page.onlyFapHub, mode, items);
+        });
+    }
+
+    private void applyOnlyFapShelf(
+            OnlyFapHubView hub,
+            int mode,
+            List<NativeContentItem> items
+    ) {
+        if (hub == null) return;
+        if (mode == FapzoneCreatorRepository.MODE_NEW) {
+            hub.setNewCreators(items);
+        } else if (mode == FapzoneCreatorRepository.MODE_HOT) {
+            hub.setHot(items);
+        } else if (mode == FapzoneCreatorRepository.MODE_POPULAR) {
+            hub.setPopular(items);
+        } else {
+            hub.setTrending(items);
+        }
+    }
+
+    private void finishOnlyFapHubSource(
+            Page page,
+            int generation,
+            AtomicInteger remaining
+    ) {
+        if (remaining.decrementAndGet() != 0) return;
+        activity.runOnUiThread(() -> {
+            if (generation != page.generation) return;
+            page.loading = false;
+            page.endReached = true;
+            page.onlyFapHubTasks.clear();
+            if (page.onlyFapHub != null) page.onlyFapHub.finishLoading();
+        });
+    }
+
+    private void cancelOnlyFapHubTasks(Page page) {
+        if (page == null) return;
+        for (java.util.concurrent.Future<?> task : page.onlyFapHubTasks) {
+            if (task != null) task.cancel(true);
+        }
+        page.onlyFapHubTasks.clear();
     }
 
     private void loadShowsHub(Page page) {
