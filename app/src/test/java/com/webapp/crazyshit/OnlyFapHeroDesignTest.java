@@ -31,11 +31,13 @@ public class OnlyFapHeroDesignTest {
 
         ScrollView scroll = (ScrollView) hub.getChildAt(0);
         LinearLayout content = (LinearLayout) scroll.getChildAt(0);
-        MaterialCardView hero = (MaterialCardView) content.getChildAt(0);
+        HorizontalSwipeFrameLayout heroSwipe =
+                (HorizontalSwipeFrameLayout) content.getChildAt(0);
+        MaterialCardView hero = (MaterialCardView) heroSwipe.getChildAt(0);
 
-        int expectedHeight = Math.round(440f * activity.getResources()
+        int expectedHeight = Math.round(540f * activity.getResources()
                 .getDisplayMetrics().density);
-        assertEquals(expectedHeight, hero.getLayoutParams().height);
+        assertEquals(expectedHeight, heroSwipe.getLayoutParams().height);
         assertEquals(0f, hero.getRadius(), 0.01f);
 
         hub.close();
