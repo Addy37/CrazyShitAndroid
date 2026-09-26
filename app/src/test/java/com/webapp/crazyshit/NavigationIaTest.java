@@ -98,32 +98,40 @@ public class NavigationIaTest {
         assertNull(findMenuItem(nav, "Home"));
         assertNull(findMenuItem(nav, "More"));
         assertNotNull(findByDescription(activity.getWindow().getDecorView(), "More"));
+        View search = findByDescription(activity.getWindow().getDecorView(),
+                "Search OnlyFap creators");
+        View favorites = findByDescription(activity.getWindow().getDecorView(),
+                "Open favorite creators");
         View modeButton = findByDescription(activity.getWindow().getDecorView(),
                 "Show Trending OnlyFap creators");
         View badge = findByDescription(activity.getWindow().getDecorView(), "Creator list mode");
+        assertNotNull(search);
+        assertNotNull(favorites);
         assertNotNull(modeButton);
         assertNotNull(badge);
-        View modeRow = (View) modeButton.getParent();
-        View caption = (View) badge.getParent();
-        android.widget.FrameLayout.LayoutParams modeParams =
-                (android.widget.FrameLayout.LayoutParams) modeRow.getLayoutParams();
-        android.widget.FrameLayout.LayoutParams captionParams =
-                (android.widget.FrameLayout.LayoutParams) caption.getLayoutParams();
+
         Object[] pages = ReflectionHelpers.getField(adapter, "pages");
         Object onlyFap = pages[MainPagerAdapter.PAGE_ONLYFAP];
         androidx.swiperefreshlayout.widget.SwipeRefreshLayout refresh =
                 ReflectionHelpers.getField(onlyFap, "refresh");
         android.widget.FrameLayout.LayoutParams refreshParams =
                 (android.widget.FrameLayout.LayoutParams) refresh.getLayoutParams();
-        assertTrue(captionParams.topMargin >= modeParams.topMargin + modeParams.height);
         assertEquals(0, refreshParams.topMargin);
-        assertTrue(modeRow.getParent() instanceof FrostedOverlayLayout);
-        FrostedOverlayLayout root = (FrostedOverlayLayout) modeRow.getParent();
-        assertSame(modeRow, root.frostedOverlayForTest());
+
         androidx.recyclerview.widget.RecyclerView recycler =
                 ReflectionHelpers.getField(onlyFap, "recycler");
-        assertEquals(BrowseUi.dp(activity, 127), recycler.getPaddingTop());
+        assertTrue(recycler.getAdapter() instanceof androidx.recyclerview.widget.ConcatAdapter);
+        assertTrue(recycler.getLayoutManager() instanceof androidx.recyclerview.widget.GridLayoutManager);
+        androidx.recyclerview.widget.GridLayoutManager grid =
+                (androidx.recyclerview.widget.GridLayoutManager) recycler.getLayoutManager();
+        assertEquals(grid.getSpanCount(), grid.getSpanSizeLookup().getSpanSize(0));
+        assertEquals(0, recycler.getPaddingTop());
         assertFalse(recycler.getClipToPadding());
+
+        search.performClick();
+        Intent searchIntent = shadowOf(activity).getNextStartedActivity();
+        assertEquals(SearchActivity.class.getName(), searchIntent.getComponent().getClassName());
+
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("OnlyFap", title.getText().toString());
         controller.pause().stop().destroy();
