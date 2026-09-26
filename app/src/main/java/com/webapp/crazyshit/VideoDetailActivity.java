@@ -1898,7 +1898,6 @@ public class VideoDetailActivity extends Activity {
             return;
         }
         showsCurtainDismissScheduled = false;
-        showsLaunchCurtain.removeCallbacks(null);
 
         Runnable finish = () -> {
             if (showsLaunchLoader != null) showsLaunchLoader.setVisibility(View.GONE);
