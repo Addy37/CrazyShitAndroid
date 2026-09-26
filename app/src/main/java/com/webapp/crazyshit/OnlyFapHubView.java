@@ -624,35 +624,38 @@ final class OnlyFapHubView extends FrameLayout {
             if (closed || generation != heroGeneration) return;
             ArrayList<OnlyFapHeroPolicy.Artwork> artwork = new ArrayList<>();
 
+            List<NativeContentItem> fapelloMedia = Collections.emptyList();
             // New Creators primarily come from Fapello. Resolve full gallery images first so
             // portrait creator photography drives the cinematic hero instead of listing avatars.
             if (FapelloRepository.isModelUrl(creator.url)) {
                 try {
                     FapelloRepository fapello = new FapelloRepository();
-                    List<NativeContentItem> media = fapello.fetchModelMedia(
+                    fapelloMedia = fapello.fetchModelMedia(
                             getContext().getApplicationContext(),
                             new FapelloRepository.Model(creator.title, creator.url, creator.imageUrl),
                             1);
                     int checked = 0;
-                    for (NativeContentItem item : media) {
+                    for (NativeContentItem item : fapelloMedia) {
                         if (checked >= 2 || artwork.size() >= 3) break;
                         if (item == null || !item.isImage()) continue;
                         checked++;
                         try {
                             CrazyShitRepository.StreamInfo full = fapello.resolvePlayable(
                                     getContext().getApplicationContext(), item.url);
-                            OnlyFapHeroPolicy.addMedia(artwork,
+                            OnlyFapHeroPolicy.addDirectImages(artwork,
                                     Collections.singletonList(new NativeContentItem(
                                             NativeContentItem.KIND_IMAGE, item.title, full.mediaUrl,
                                             item.imageUrl, "", "", "")), full.requestReferer);
                         } catch (IOException ignored) { }
                     }
-                    if (artwork.size() < 3) OnlyFapHeroPolicy.addMedia(
-                            artwork, media, creator.url);
+                    if (artwork.size() < 3) OnlyFapHeroPolicy.addDirectImages(
+                            artwork, fapelloMedia, creator.url);
                 } catch (IOException ignored) { }
             }
 
             OnlyFapHeroPolicy.Artwork header = null;
+            List<NativeContentItem> onlyHavenMedia = Collections.emptyList();
+            String onlyHavenReferer = "";
             try {
                 OnlyHavenRepository repository = new OnlyHavenRepository();
                 String query = clean(creator.searchQuery).isEmpty()
@@ -662,12 +665,13 @@ final class OnlyFapHubView extends FrameLayout {
                         repository.searchCreators(getContext().getApplicationContext(), query, 6);
                 OnlyHavenRepository.Creator best = chooseOnlyHavenMatch(query, matches);
                 if (best != null) {
+                    onlyHavenReferer = best.url;
                     if (artwork.size() < 3) {
                         try {
-                            OnlyFapHeroPolicy.addMedia(artwork,
-                                    repository.fetchCreatorMedia(
-                                            getContext().getApplicationContext(), best, 1, 8),
-                                    best.url);
+                            onlyHavenMedia = repository.fetchCreatorMedia(
+                                    getContext().getApplicationContext(), best, 1, 8);
+                            OnlyFapHeroPolicy.addDirectImages(
+                                    artwork, onlyHavenMedia, best.url);
                         } catch (IOException ignored) { }
                     }
                     header = new OnlyFapHeroPolicy.Artwork(
@@ -676,8 +680,14 @@ final class OnlyFapHubView extends FrameLayout {
             } catch (IOException ignored) {
             }
 
-            // A good wide banner remains useful when gallery media is unavailable or fails.
+            // Priority: full gallery image -> wide banner -> other media preview -> avatar.
             if (header != null) artwork.add(header);
+            if (artwork.size() < 3) {
+                OnlyFapHeroPolicy.addPreviews(artwork, fapelloMedia, creator.url);
+            }
+            if (artwork.size() < 3) {
+                OnlyFapHeroPolicy.addPreviews(artwork, onlyHavenMedia, onlyHavenReferer);
+            }
             artwork.add(new OnlyFapHeroPolicy.Artwork(creator.imageUrl,
                     clean(creator.uploader).isEmpty() ? creator.url : creator.uploader, true));
             List<OnlyFapHeroPolicy.Artwork> choices = OnlyFapHeroPolicy.distinctArtwork(artwork);
