@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -16,6 +17,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -236,81 +238,105 @@ public class FavoritesActivity extends Activity {
             return;
         }
 
+        List<View> cards = new ArrayList<>();
         for (PlaybackHistoryStore.Item item : items) {
-            target.addView(makeHistoryCard(item, continueOnly), cardParams());
+            cards.add(makeHistoryCard(item, continueOnly));
         }
+        addTwoColumnGrid(target, cards);
     }
 
-    private MaterialCardView makeHistoryCard(PlaybackHistoryStore.Item item, boolean continueOnly) {
-        MaterialCardView card = card();
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.TOP);
-        row.setPadding(dp(8), dp(8), dp(10), dp(8));
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setOnClickListener(v -> select(item.pageUrl));
+    private View makeHistoryCard(PlaybackHistoryStore.Item item, boolean continueOnly) {
+        LinearLayout wrapper = new LinearLayout(this);
+        wrapper.setOrientation(LinearLayout.VERTICAL);
+        wrapper.setClickable(true);
+        wrapper.setFocusable(true);
+        wrapper.setContentDescription((continueOnly ? "Continue watching " : "History item ") + item.title);
+        wrapper.setOnClickListener(v -> select(item.pageUrl));
+        ZeroChillMotion.installPressFeedback(wrapper);
 
-        row.addView(makeThumbnail(item.pageUrl), new LinearLayout.LayoutParams(dp(138), dp(88)));
+        MaterialCardView card = new MaterialCardView(this);
+        card.setCardBackgroundColor(Color.rgb(18, 18, 21));
+        card.setRadius(dp(16));
+        card.setCardElevation(0f);
+        card.setStrokeWidth(0);
 
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(12), dp(5), 0, 0);
-        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+        FrameLayout media = new FrameLayout(this);
+        card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
+        media.addView(makeThumbnail(item.pageUrl), new FrameLayout.LayoutParams(-1, -1));
 
-        TextView title = text(item.title, 15, Color.WHITE);
+        View shade = new View(this);
+        shade.setBackground(bottomShade());
+        media.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+
+        TextView title = text(item.title, 13, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
-        copy.addView(title);
+        FrameLayout.LayoutParams titleParams =
+                new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        titleParams.setMargins(dp(10), 0, dp(34), dp(11));
+        media.addView(title, titleParams);
 
-        int percent = item.progressPercent();
-        String progressText;
-        if (item.complete) {
-            progressText = "Finished";
-        } else if (item.durationMs > 0L) {
-            progressText = formatTime(item.positionMs) + " / " + formatTime(item.durationMs) + "  •  " + percent + "%";
+        if (continueOnly && item.durationMs > 0L) {
+            long remainingMs = Math.max(0L, item.durationMs - item.positionMs);
+            TextView remaining = overlayPill(formatTime(remainingMs) + " left");
+            FrameLayout.LayoutParams remainingParams =
+                    new FrameLayout.LayoutParams(-2, dp(24), Gravity.TOP | Gravity.START);
+            remainingParams.setMargins(dp(8), dp(8), 0, 0);
+            media.addView(remaining, remainingParams);
+
+            FrameLayout track = new FrameLayout(this);
+            track.setBackground(rounded(Color.argb(110, 255, 255, 255), dp(2)));
+            FrameLayout.LayoutParams trackParams =
+                    new FrameLayout.LayoutParams(-1, dp(3), Gravity.BOTTOM);
+            trackParams.setMargins(dp(8), 0, dp(8), dp(6));
+            media.addView(track, trackParams);
+
+            View fill = new View(this);
+            fill.setBackground(rounded(UiPalette.PRIMARY, dp(2)));
+            int width = Math.max(dp(3), Math.round(dp(142) * (item.progressPercent() / 100f)));
+            track.addView(fill, new FrameLayout.LayoutParams(width, -1));
+        }
+
+        TextView more = overflowButton("Options for " + item.title);
+        more.setOnClickListener(v -> showHistoryMenu(v, item, continueOnly));
+        FrameLayout.LayoutParams moreParams =
+                new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP | Gravity.END);
+        moreParams.setMargins(0, dp(5), dp(5), 0);
+        media.addView(more, moreParams);
+
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(102)));
+
+        String meta;
+        if (continueOnly) {
+            meta = item.durationMs > 0L
+                    ? item.progressPercent() + "% watched"
+                    : formatTime(item.positionMs) + " watched";
         } else {
-            progressText = formatTime(item.positionMs) + " watched";
+            meta = item.lastWatched > 0L
+                    ? "Watched " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                    .format(new Date(item.lastWatched))
+                    : "Watched";
         }
-        TextView progressLabel = text(progressText, 12, Color.rgb(190, 190, 198));
-        progressLabel.setPadding(0, dp(5), 0, 0);
-        copy.addView(progressLabel);
+        TextView detail = text(meta, 10, Color.rgb(145, 145, 155));
+        detail.setMaxLines(1);
+        detail.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
+        detailParams.setMargins(dp(3), dp(6), dp(3), dp(2));
+        wrapper.addView(detail, detailParams);
+        return wrapper;
+    }
 
-        if (item.durationMs > 0L && !item.complete) {
-            ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-            bar.setMax(100);
-            bar.setProgress(percent);
-            LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(-1, dp(4));
-            barParams.setMargins(0, dp(6), 0, dp(2));
-            copy.addView(bar, barParams);
-        }
-
-        LinearLayout footer = new LinearLayout(this);
-        footer.setOrientation(LinearLayout.HORIZONTAL);
-        footer.setGravity(Gravity.CENTER_VERTICAL);
-        footer.setPadding(0, dp(5), 0, 0);
-
-        String watched = item.lastWatched > 0L
-                ? "Watched " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-                .format(new Date(item.lastWatched))
-                : "Watched";
-        TextView date = text(watched, 10, Color.rgb(135, 135, 145));
-        date.setMaxLines(1);
-        date.setEllipsize(TextUtils.TruncateAt.END);
-        footer.addView(date, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        MaterialButton remove = compactAction(continueOnly ? "Remove" : "Delete");
-        remove.setOnClickListener(v -> {
-            haptic(v);
+    private void showHistoryMenu(View anchor, PlaybackHistoryStore.Item item, boolean continueOnly) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add(continueOnly ? "Remove from Continue Watching" : "Delete from history");
+        menu.setOnMenuItemClickListener(clicked -> {
+            haptic(anchor);
             PlaybackHistoryStore.remove(this, item.pageUrl);
             renderAllPages();
+            return true;
         });
-        footer.addView(remove, new LinearLayout.LayoutParams(-2, dp(38)));
-        copy.addView(footer);
-
-        card.addView(row);
-        return card;
+        menu.show();
     }
 
     private void renderWatchLater(LinearLayout target) {
@@ -320,59 +346,143 @@ public class FavoritesActivity extends Activity {
             showEmpty(target, "Nothing saved yet", "Long-press a video card and choose Save to Watch Later.");
             return;
         }
+        List<View> cards = new ArrayList<>();
         for (FavoriteStore.Item item : items) {
-            target.addView(makeWatchLaterCard(item), cardParams());
+            cards.add(makeWatchLaterCard(item));
         }
+        addTwoColumnGrid(target, cards);
     }
 
-    private MaterialCardView makeWatchLaterCard(FavoriteStore.Item item) {
-        MaterialCardView card = card();
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.TOP);
-        row.setPadding(dp(8), dp(8), dp(10), dp(8));
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setOnClickListener(v -> select(item.url));
+    private View makeWatchLaterCard(FavoriteStore.Item item) {
+        LinearLayout wrapper = new LinearLayout(this);
+        wrapper.setOrientation(LinearLayout.VERTICAL);
+        wrapper.setClickable(true);
+        wrapper.setFocusable(true);
+        wrapper.setContentDescription("Watch Later " + item.title);
+        wrapper.setOnClickListener(v -> select(item.url));
+        ZeroChillMotion.installPressFeedback(wrapper);
 
-        row.addView(makeThumbnail(item.url), new LinearLayout.LayoutParams(dp(138), dp(88)));
+        MaterialCardView card = new MaterialCardView(this);
+        card.setCardBackgroundColor(Color.rgb(18, 18, 21));
+        card.setRadius(dp(16));
+        card.setCardElevation(0f);
+        card.setStrokeWidth(0);
 
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(12), dp(5), 0, 0);
-        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+        FrameLayout media = new FrameLayout(this);
+        card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
+        media.addView(makeThumbnail(item.url), new FrameLayout.LayoutParams(-1, -1));
 
-        TextView title = text(item.title, 15, Color.WHITE);
+        View shade = new View(this);
+        shade.setBackground(bottomShade());
+        media.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+
+        TextView title = text(item.title, 13, Color.WHITE);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
-        copy.addView(title);
+        FrameLayout.LayoutParams titleParams =
+                new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        titleParams.setMargins(dp(10), 0, dp(34), dp(10));
+        media.addView(title, titleParams);
+
+        TextView more = overflowButton("Options for " + item.title);
+        more.setOnClickListener(v -> showWatchLaterMenu(v, item));
+        FrameLayout.LayoutParams moreParams =
+                new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP | Gravity.END);
+        moreParams.setMargins(0, dp(5), dp(5), 0);
+        media.addView(more, moreParams);
+
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(102)));
 
         String date = item.savedAt > 0L
                 ? "Saved " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                 .format(new Date(item.savedAt))
                 : "Saved";
-        TextView saved = text(date, 11, Color.rgb(145, 145, 155));
-        saved.setPadding(0, dp(6), 0, 0);
+        TextView saved = text(date, 10, Color.rgb(145, 145, 155));
         saved.setMaxLines(1);
         saved.setEllipsize(TextUtils.TruncateAt.END);
-        copy.addView(saved);
+        LinearLayout.LayoutParams savedParams = new LinearLayout.LayoutParams(-1, -2);
+        savedParams.setMargins(dp(3), dp(6), dp(3), dp(2));
+        wrapper.addView(saved, savedParams);
+        return wrapper;
+    }
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setGravity(Gravity.END);
-        actions.setPadding(0, dp(8), 0, 0);
-        MaterialButton remove = compactAction("Remove");
-        remove.setOnClickListener(v -> {
-            haptic(v);
+    private void showWatchLaterMenu(View anchor, FavoriteStore.Item item) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add("Remove from Watch Later");
+        menu.setOnMenuItemClickListener(clicked -> {
+            haptic(anchor);
             FavoriteStore.remove(this, item.url);
             Toast.makeText(this, "Removed from Watch Later.", Toast.LENGTH_SHORT).show();
             renderAllPages();
+            return true;
         });
-        actions.addView(remove, new LinearLayout.LayoutParams(-2, dp(38)));
-        copy.addView(actions);
+        menu.show();
+    }
 
-        card.addView(row);
-        return card;
+    private void addTwoColumnGrid(LinearLayout target, List<View> cards) {
+        for (int i = 0; i < cards.size(); i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.TOP);
+
+            LinearLayout.LayoutParams left =
+                    new LinearLayout.LayoutParams(0, -2, 1f);
+            left.setMargins(0, dp(5), dp(5), dp(7));
+            row.addView(cards.get(i), left);
+
+            if (i + 1 < cards.size()) {
+                LinearLayout.LayoutParams right =
+                        new LinearLayout.LayoutParams(0, -2, 1f);
+                right.setMargins(dp(5), dp(5), 0, dp(7));
+                row.addView(cards.get(i + 1), right);
+            } else {
+                View spacer = new View(this);
+                LinearLayout.LayoutParams spacerParams =
+                        new LinearLayout.LayoutParams(0, 1, 1f);
+                spacerParams.setMargins(dp(5), 0, 0, 0);
+                row.addView(spacer, spacerParams);
+            }
+            target.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        }
+    }
+
+    private TextView overflowButton(String description) {
+        TextView view = text("⋮", 22, Color.WHITE);
+        view.setGravity(Gravity.CENTER);
+        view.setContentDescription(description);
+        view.setClickable(true);
+        view.setFocusable(true);
+        view.setBackground(rounded(Color.argb(150, 0, 0, 0), dp(17)));
+        return view;
+    }
+
+    private TextView overlayPill(String value) {
+        TextView view = text(value, 9, Color.WHITE);
+        view.setGravity(Gravity.CENTER);
+        view.setPadding(dp(8), 0, dp(8), 0);
+        view.setBackground(rounded(Color.argb(180, 0, 0, 0), dp(12)));
+        return view;
+    }
+
+    private GradientDrawable bottomShade() {
+        GradientDrawable shade = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {
+                        Color.TRANSPARENT,
+                        Color.argb(32, 0, 0, 0),
+                        Color.argb(225, 0, 0, 0)
+                }
+        );
+        return shade;
+    }
+
+    private GradientDrawable rounded(int color, float radius) {
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.RECTANGLE);
+        background.setColor(color);
+        background.setCornerRadius(radius);
+        return background;
     }
 
     private FrameLayout makeThumbnail(String pageUrl) {
