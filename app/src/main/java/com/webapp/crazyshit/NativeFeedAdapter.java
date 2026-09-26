@@ -408,7 +408,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     ) {
         MaterialCardView card = new MaterialCardView(parent.getContext());
         card.setTag(STYLE_TAG);
-        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
+        ZeroChillUi.styleMediaCard(card, R.dimen.zc_radius_medium);
         card.setRadius(dp(parent, radius));
         ZeroChillMotion.installPressFeedback(card);
         RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
@@ -713,7 +713,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         holder.watchBadge.setVisibility(View.GONE);
         holder.progressTrack.setVisibility(View.GONE);
         holder.progressFill.setScaleX(0f);
-        holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_edge));
+        holder.card.setStrokeWidth(0);
         if (item == null || item.isMeme()) return;
 
         PlaybackHistoryStore.Item history = playbackByUrl.get(item.url);
@@ -729,7 +729,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                     R.dimen.zc_radius_pill
             ));
             holder.watchBadge.setVisibility(View.VISIBLE);
-            holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_divider));
             return;
         }
 
@@ -742,7 +741,6 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 R.dimen.zc_radius_pill
         ));
         holder.watchBadge.setVisibility(View.VISIBLE);
-        holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim));
 
         if (history.durationMs > 0L) {
             float fraction = Math.max(0f, Math.min(1f, history.positionMs / (float) history.durationMs));
