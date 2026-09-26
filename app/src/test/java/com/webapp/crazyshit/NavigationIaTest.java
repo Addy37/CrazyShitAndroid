@@ -100,13 +100,20 @@ public class NavigationIaTest {
         assertNotNull(findByDescription(activity.getWindow().getDecorView(), "More"));
         View search = findByDescription(activity.getWindow().getDecorView(),
                 "Search OnlyFap creators");
+        View heroMore = findByDescription(activity.getWindow().getDecorView(),
+                "OnlyFap More");
         View featuredAction = findByDescription(activity.getWindow().getDecorView(),
                 "Open featured creator gallery");
         View trendingShelf = findByDescription(activity.getWindow().getDecorView(),
                 "Trending creators shelf");
+        View primaryTopBar = findByDescription(activity.getWindow().getDecorView(),
+                "Primary top bar");
         assertNotNull(search);
+        assertNotNull(heroMore);
         assertNotNull(featuredAction);
         assertNotNull(trendingShelf);
+        assertNotNull(primaryTopBar);
+        assertEquals(View.GONE, primaryTopBar.getVisibility());
         assertNull(findByDescription(activity.getWindow().getDecorView(),
                 "Show Trending OnlyFap creators"));
 
@@ -125,6 +132,13 @@ public class NavigationIaTest {
 
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("OnlyFap", title.getText().toString());
+
+        BottomNavigationView navForChrome =
+                ReflectionHelpers.getField(activity, "bottomNavigation");
+        navForChrome.setSelectedItemId(6);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(View.VISIBLE, primaryTopBar.getVisibility());
+
         controller.pause().stop().destroy();
     }
 
