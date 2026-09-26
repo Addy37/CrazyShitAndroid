@@ -24,6 +24,26 @@ public class VideoDetailProgressTest {
     }
 
     @Test
+    public void orientationMatchWaitsForRequestedShowsOrientation() {
+        assertTrue(VideoDetailActivity.orientationMatches(
+                android.content.res.Configuration.ORIENTATION_PORTRAIT,
+                android.content.res.Configuration.ORIENTATION_PORTRAIT
+        ));
+        assertTrue(VideoDetailActivity.orientationMatches(
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE,
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        ));
+        assertFalse(VideoDetailActivity.orientationMatches(
+                android.content.res.Configuration.ORIENTATION_PORTRAIT,
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        ));
+        assertFalse(VideoDetailActivity.orientationMatches(
+                android.content.res.Configuration.ORIENTATION_PORTRAIT,
+                android.content.res.Configuration.ORIENTATION_UNDEFINED
+        ));
+    }
+
+    @Test
     public void videoSizeClassificationUsesDisplayAspectRatio() {
         assertTrue(VideoDetailActivity.isPortraitVideoSize(1080, 1920, 1f));
         assertFalse(VideoDetailActivity.isPortraitVideoSize(1920, 1080, 1f));
