@@ -372,6 +372,14 @@ public class NavigationIaTest {
                 activity.getWindow().getDecorView(),
                 "History section"
         ));
+        assertNotNull(findByDescription(
+                activity.getWindow().getDecorView(),
+                "Search History"
+        ));
+        assertNotNull(findByDescription(
+                activity.getWindow().getDecorView(),
+                "Section options"
+        ));
 
         controller.pause().stop().destroy();
     }
