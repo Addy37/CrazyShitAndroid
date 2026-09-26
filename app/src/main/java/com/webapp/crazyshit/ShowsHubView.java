@@ -23,6 +23,7 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
+import com.bumptech.glide.signature.ObjectKey;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
@@ -52,6 +53,8 @@ final class ShowsHubView extends FrameLayout {
     private final Listener listener;
     private final ContinueListener continueListener;
     private final PrewarmListener prewarmListener;
+    private final ShowsContinueFrameStore.Listener continueFrameListener =
+            this::onContinueFrameUpdated;
     private final Handler heroHandler = new Handler(Looper.getMainLooper());
     private final ScrollView scroll;
     private final LinearLayout content;
@@ -525,14 +528,24 @@ final class ShowsHubView extends FrameLayout {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        ShowsContinueFrameStore.addListener(continueFrameListener);
+        refreshContinueWatching();
         scheduleHeroRotation();
     }
 
     @Override
     protected void onDetachedFromWindow() {
+        ShowsContinueFrameStore.removeListener(continueFrameListener);
         heroHandler.removeCallbacksAndMessages(null);
         heroCard.animate().cancel();
         super.onDetachedFromWindow();
+    }
+
+    private void onContinueFrameUpdated(String pageUrl) {
+        if (!isAttachedToWindow()) return;
+        continueShelf.rail.post(() -> {
+            if (isAttachedToWindow()) continueShelf.adapter.refreshArtwork(pageUrl);
+        });
     }
 
     private void openHero() {
@@ -713,6 +726,9 @@ final class ShowsHubView extends FrameLayout {
         }
         Glide.with(view)
                 .load(savedFrame)
+                .signature(new ObjectKey(
+                        savedFrame.lastModified() + ":" + savedFrame.length()
+                ))
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                 .skipMemoryCache(false)
                 .centerCrop()
@@ -764,6 +780,16 @@ final class ShowsHubView extends FrameLayout {
                 items.addAll(next.subList(0, count));
             }
             notifyDataSetChanged();
+        }
+
+        void refreshArtwork(String pageUrl) {
+            if (pageUrl == null || pageUrl.isEmpty()) return;
+            for (int i = 0; i < items.size(); i++) {
+                if (pageUrl.equals(items.get(i).pageUrl)) {
+                    notifyItemChanged(i);
+                    return;
+                }
+            }
         }
 
         @Override
