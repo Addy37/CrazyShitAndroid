@@ -543,7 +543,9 @@ final class ShowsHubView extends FrameLayout {
 
     private void onContinueFrameUpdated(String pageUrl) {
         if (!isAttachedToWindow()) return;
-        continueShelf.rail.post(() -> continueShelf.adapter.notifyDataSetChanged());
+        continueShelf.rail.post(() -> {
+            if (isAttachedToWindow()) continueShelf.adapter.notifyDataSetChanged();
+        });
     }
 
     private void openHero() {
