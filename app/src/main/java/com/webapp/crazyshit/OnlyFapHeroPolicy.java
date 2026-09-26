@@ -65,19 +65,35 @@ final class OnlyFapHeroPolicy {
 
     static void addMedia(List<Artwork> artwork, List<NativeContentItem> media,
             String referer) {
-        if (media == null) return;
-        // Actual image files precede video posters and thumbnails. Portrait images
-        // remain eligible because the full-bleed ImageView can crop them cleanly.
+        addDirectImages(artwork, media, referer);
+        addPreviews(artwork, media, referer);
+    }
+
+    static void addDirectImages(List<Artwork> artwork, List<NativeContentItem> media,
+            String referer) {
+        if (artwork == null || media == null) return;
+        // Full image files are the preferred cinematic hero source.
         for (NativeContentItem item : media) {
             if (item == null || !item.isImage() || !directImage(item.url)) continue;
             artwork.add(new Artwork(item.url, referer, false));
             if (artwork.size() >= 3) return;
         }
+    }
+
+    static void addPreviews(List<Artwork> artwork, List<NativeContentItem> media,
+            String referer) {
+        if (artwork == null || media == null) return;
+        // Posters and thumbnails are useful fallbacks, but should come after a wide banner.
         for (NativeContentItem item : media) {
             if (item == null || !directImage(item.imageUrl)) continue;
             artwork.add(new Artwork(item.imageUrl, referer, false));
             if (artwork.size() >= 3) return;
         }
+    }
+
+    static boolean isGoodPortraitDimensions(int width, int height) {
+        if (width <= 0 || height <= 0) return false;
+        return height >= Math.round(width * 1.18f);
     }
 
     static List<Artwork> distinctArtwork(List<Artwork> input) {
