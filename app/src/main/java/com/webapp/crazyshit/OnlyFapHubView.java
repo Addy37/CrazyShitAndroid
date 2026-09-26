@@ -50,8 +50,8 @@ import java.util.concurrent.Executors;
 /**
  * Cinematic creator-discovery landing page for OnlyFap.
  *
- * Creator cards always open the existing unified creator gallery. The hero resolves wide
- * OnlyHaven creator-header artwork instead of stretching portrait creator thumbnails.
+ * Creator cards always open the existing unified creator gallery. The hero prefers
+ * high-resolution creator gallery artwork, with wide headers and avatars as fallbacks.
  */
 final class OnlyFapHubView extends FrameLayout {
     interface Listener {
@@ -257,7 +257,7 @@ final class OnlyFapHubView extends FrameLayout {
         heroDotsParams.gravity = Gravity.CENTER_HORIZONTAL;
         heroCopy.addView(heroDots, heroDotsParams);
 
-        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(350));
+        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(440));
         content.addView(heroCard, heroParams);
 
         body = new LinearLayout(context);
@@ -623,28 +623,10 @@ final class OnlyFapHubView extends FrameLayout {
         heroIo.execute(() -> {
             if (closed || generation != heroGeneration) return;
             ArrayList<OnlyFapHeroPolicy.Artwork> artwork = new ArrayList<>();
-            try {
-                OnlyHavenRepository repository = new OnlyHavenRepository();
-                String query = clean(creator.searchQuery).isEmpty()
-                        ? creator.title
-                        : creator.searchQuery;
-                List<OnlyHavenRepository.Creator> matches =
-                        repository.searchCreators(getContext().getApplicationContext(), query, 6);
-                OnlyHavenRepository.Creator best = chooseOnlyHavenMatch(query, matches);
-                if (best != null) {
-                    artwork.add(new OnlyFapHeroPolicy.Artwork(
-                            repository.creatorHeaderUrl(best), best.url, false));
-                    try {
-                        OnlyFapHeroPolicy.addMedia(artwork,
-                                repository.fetchCreatorMedia(getContext().getApplicationContext(),
-                                        best, 1, 8), best.url);
-                    } catch (IOException ignored) { }
-                }
-            } catch (IOException ignored) {
-            }
-            // New Creators primarily come from Fapello. Its actual gallery images are
-            // preferable to the small listing avatar even when OnlyHaven has no match.
-            if (FapelloRepository.isModelUrl(creator.url) && artwork.size() < 3) {
+
+            // New Creators primarily come from Fapello. Resolve full gallery images first so
+            // portrait creator photography drives the cinematic hero instead of listing avatars.
+            if (FapelloRepository.isModelUrl(creator.url)) {
                 try {
                     FapelloRepository fapello = new FapelloRepository();
                     List<NativeContentItem> media = fapello.fetchModelMedia(
@@ -669,6 +651,33 @@ final class OnlyFapHubView extends FrameLayout {
                             artwork, media, creator.url);
                 } catch (IOException ignored) { }
             }
+
+            OnlyFapHeroPolicy.Artwork header = null;
+            if (artwork.size() < 3) {
+                try {
+                    OnlyHavenRepository repository = new OnlyHavenRepository();
+                    String query = clean(creator.searchQuery).isEmpty()
+                            ? creator.title
+                            : creator.searchQuery;
+                    List<OnlyHavenRepository.Creator> matches =
+                            repository.searchCreators(getContext().getApplicationContext(), query, 6);
+                    OnlyHavenRepository.Creator best = chooseOnlyHavenMatch(query, matches);
+                    if (best != null) {
+                        try {
+                            OnlyFapHeroPolicy.addMedia(artwork,
+                                    repository.fetchCreatorMedia(
+                                            getContext().getApplicationContext(), best, 1, 8),
+                                    best.url);
+                        } catch (IOException ignored) { }
+                        header = new OnlyFapHeroPolicy.Artwork(
+                                repository.creatorHeaderUrl(best), best.url, false);
+                    }
+                } catch (IOException ignored) {
+                }
+            }
+
+            // A good wide banner remains useful when gallery media is unavailable or fails.
+            if (header != null) artwork.add(header);
             artwork.add(new OnlyFapHeroPolicy.Artwork(creator.imageUrl,
                     clean(creator.uploader).isEmpty() ? creator.url : creator.uploader, true));
             List<OnlyFapHeroPolicy.Artwork> choices = OnlyFapHeroPolicy.distinctArtwork(artwork);
