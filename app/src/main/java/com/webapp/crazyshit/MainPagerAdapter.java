@@ -1081,7 +1081,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 );
             } catch (Exception ignored) {
             }
-            ArrayList<NativeContentItem> weeklyCandidates = new ArrayList<>(result);
+            java.util.ArrayList<NativeContentItem> weeklyCandidates =
+                    new java.util.ArrayList<>(result);
             try {
                 weeklyCandidates.addAll(repository.fetchFeed(
                         activity,
