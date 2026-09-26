@@ -112,10 +112,11 @@ public class VisualRefreshTest {
         nav.setSelectedItemId(3);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         androidx.viewpager2.widget.ViewPager2 viewPager = ReflectionHelpers.getField(main, "primaryPager");
-        assertEquals(MainPagerAdapter.PAGE_ONLYFAP, viewPager.getCurrentItem());
-        // Home is intentionally dormant in public navigation. Drive its retained
-        // compatibility page directly so this test still protects the old Home rendering.
-        viewPager.setCurrentItem(MainPagerAdapter.PAGE_HOME, false);
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(viewPager.getCurrentItem())
+        );
+        // Home remains constructed and testable, but is intentionally not an active pager page.
         UiPolishController.attach(main);
         ResponsiveFitmentController.applySoon(main);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
@@ -124,7 +125,7 @@ public class VisualRefreshTest {
 
         TextView headerTitle = ReflectionHelpers.getField(main, "headerTitle");
         TextView headerSubtitle = ReflectionHelpers.getField(main, "headerSubtitle");
-        assertEquals("ZEROCHILL", headerTitle.getText().toString());
+        assertEquals("OnlyFap", headerTitle.getText().toString());
         assertEquals(View.GONE, headerSubtitle.getVisibility());
         LinearLayout shell = ReflectionHelpers.getField(main, "shell");
         assertTrue(shell instanceof FrostedNavigationLayout);
@@ -138,10 +139,13 @@ public class VisualRefreshTest {
 
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
         assertNull(homeList.getItemAnimator());
-        NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(1);
-        assertNotNull(visibleCard);
-        NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
-        assertNotNull(visibleSection);
+        RecyclerView holderParent = new RecyclerView(main);
+        NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder)
+                feed.onCreateViewHolder(holderParent, feed.getItemViewType(1));
+        feed.onBindViewHolder(visibleCard, 1);
+        NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder)
+                feed.onCreateViewHolder(holderParent, feed.getItemViewType(0));
+        feed.onBindViewHolder(visibleSection, 0);
         assertEquals("TODAY'S CRAZY SHIT", visibleSection.sectionTitle.getText().toString());
         com.google.android.material.card.MaterialCardView sectionCard =
                 (com.google.android.material.card.MaterialCardView) visibleSection.itemView;
@@ -155,7 +159,10 @@ public class VisualRefreshTest {
         assertEquals(0, card.getStrokeWidth());
         assertEquals(main.getColor(R.color.zc_surface_glass), card.getCardBackgroundColor().getDefaultColor());
         capture(root, "home-lifecycle", 360, 800);
-        assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(viewPager.getCurrentItem())
+        );
         assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
                 nav.getLayoutParams().height);
         assertSame(nav, ((FrostedNavigationLayout) shell).frostedNavigationViewForTest());
@@ -176,7 +183,7 @@ public class VisualRefreshTest {
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertTrue(nav instanceof ZeroChillBottomNavigationView);
         assertEquals(
-                0,
+                MainPagerAdapter.pagerPositionForPage(MainPagerAdapter.PAGE_ONLYFAP),
                 Math.round(((ZeroChillBottomNavigationView) nav).pagerPositionForTest())
         );
         ZeroChillBottomNavigationView slidingNav = (ZeroChillBottomNavigationView) nav;
