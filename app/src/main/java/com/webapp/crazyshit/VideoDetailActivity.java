@@ -82,7 +82,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_SHOWS_CONTINUE_RESUME = "shows_continue_resume";
 
     private static final String SITE = "https://crazyshit.com/";
-    private static final int CONTROL_TIMEOUT_MS = 2600;
+    private static final int CONTROL_TIMEOUT_MS = 2500;
     private static final int RELATED_HISTORY_LIMIT = 24;
     private static final int RELATED_THUMBNAIL_WORKERS = 4;
     private static final long RELATED_SLIDE_OUT_MS = 105L;
@@ -866,7 +866,11 @@ public class VideoDetailActivity extends Activity {
 
         DefaultMediaSourceFactory sourceFactory =
                 new DefaultMediaSourceFactory(this).setDataSourceFactory(httpFactory);
-        player = new ExoPlayer.Builder(this).setMediaSourceFactory(sourceFactory).build();
+        player = new ExoPlayer.Builder(this)
+                .setMediaSourceFactory(sourceFactory)
+                .setSeekBackIncrementMs(10_000L)
+                .setSeekForwardIncrementMs(10_000L)
+                .build();
         playerView.setPlayer(player);
 
         MediaItem.Builder item = new MediaItem.Builder().setUri(mediaUrl);
