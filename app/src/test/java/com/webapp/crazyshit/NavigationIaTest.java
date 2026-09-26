@@ -125,6 +125,7 @@ public class NavigationIaTest {
         androidx.recyclerview.widget.GridLayoutManager grid =
                 (androidx.recyclerview.widget.GridLayoutManager) recycler.getLayoutManager();
         assertEquals(grid.getSpanCount(), grid.getSpanSizeLookup().getSpanSize(0));
+        assertEquals(grid.getSpanCount(), grid.getSpanSizeLookup().getSpanSize(1));
         assertEquals(0, recycler.getPaddingTop());
         assertFalse(recycler.getClipToPadding());
 
