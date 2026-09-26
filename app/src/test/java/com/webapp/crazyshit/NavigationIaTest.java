@@ -218,7 +218,7 @@ public class NavigationIaTest {
                 MainPagerAdapter.PAGE_LIBRARY,
                 MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
         );
-        assertNotNull(findByDescription(activity.getWindow().getDecorView(), "History"));
+        assertNotNull(findByDescription(activity.getWindow().getDecorView(), "Library media hub"));
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("Library", title.getText().toString());
 

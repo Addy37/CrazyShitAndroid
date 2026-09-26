@@ -99,7 +99,30 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             }
         });
         chaosView.setActive(false);
-        libraryView = new LibraryHubView(activity);
+        libraryView = new LibraryHubView(activity, new LibraryHubView.Listener() {
+            @Override
+            public void onOpenItem(NativeContentItem item) {
+                host.onOpenItem(item);
+            }
+
+            @Override
+            public void onOpenHistory(PlaybackHistoryStore.Item item) {
+                openShowsResume(item);
+            }
+
+            @Override
+            public void onOpenCreator(NativeContentItem creator) {
+                if (creator == null) return;
+                CreatorGalleryPreloader.warm(activity, creator);
+                activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+                        activity,
+                        creator.title,
+                        creator.searchQuery.isEmpty() ? creator.title : creator.searchQuery,
+                        NativeFeedBrowserActivity.creatorProfileHint(creator),
+                        CreatorGalleryPreloader.sessionId(activity, creator)
+                ));
+            }
+        });
 
     }
 
@@ -167,6 +190,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             shows.showsHub.setActive(position == PAGE_SERIES);
         }
         if (position == PAGE_CHAOS) return;
+        if (position == PAGE_LIBRARY) {
+            libraryView.refresh();
+            return;
+        }
         Page page = pageAt(position);
         if (page != null && page.itemCount() == 0 && !page.loading && !page.endReached) {
             load(page, false);
@@ -181,6 +208,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (home != null && home.feedAdapter != null) home.feedAdapter.refreshPlaybackState();
         Page shows = pageAt(PAGE_SERIES);
         if (shows != null && shows.showsHub != null) shows.showsHub.refreshContinueWatching();
+        libraryView.refresh();
     }
 
     public void saveState(android.os.Bundle out) {
@@ -213,6 +241,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     public void close() {
         chaosView.close();
+        libraryView.close();
         browseArtworkResolver.close();
         for (Page page : pages) {
             if (page == null) continue;
