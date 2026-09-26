@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.jsoup.Jsoup;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -17,6 +18,10 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class HomeSourceTest {
+    @Before public void resetSourceHealth() {
+        SourceHealthManager.resetForTests();
+    }
+
     private NativeContentItem item(String url) {
         return new NativeContentItem(NativeContentItem.KIND_MEDIA, "Sample video", url, "", "", "", "");
     }

@@ -40,12 +40,27 @@ final class HomeSourceRepository {
         if (selected != 1 || page != 1) {
             return new FeedResult(selected, fetch(context, selected, page));
         }
-        for (int source : new int[]{1, 3, 2}) {
+
+        Integer[] candidates = {1, 3, 2};
+        Arrays.sort(candidates, Comparator.comparingInt(
+                source -> SourceHealthManager.priority(sourceKey(source))));
+
+        for (int source : candidates) {
+            String healthKey = sourceKey(source);
+            if (!SourceHealthManager.tryAcquire(healthKey)) continue;
+
+            long started = System.nanoTime();
             try {
                 List<NativeContentItem> items = fetchOne(context, source, 1,
                         Math.min(timeoutMillis, INITIAL_SOURCE_MILLIS));
-                if (hasMedia(items)) return new FeedResult(source, items);
+                if (hasMedia(items)) {
+                    SourceHealthManager.recordSuccess(
+                            healthKey, System.nanoTime() - started);
+                    return new FeedResult(source, items);
+                }
+                SourceHealthManager.recordFailure(healthKey);
             } catch (IOException ignored) {
+                SourceHealthManager.recordFailure(healthKey);
                 // Try the next source for this request only; do not change the saved selection.
             }
         }
@@ -75,13 +90,37 @@ final class HomeSourceRepository {
     }
     List<NativeContentItem> fetch(Context context, int source, int page,
                                   Consumer<List<NativeContentItem>> progress) throws Exception {
-        CompletionService<List<NativeContentItem>> completed = new ExecutorCompletionService<>(IO);
-        List<Future<List<NativeContentItem>>> requests = new ArrayList<>();
+        CompletionService<SourceResponse> completed = new ExecutorCompletionService<>(IO);
+        List<Future<SourceResponse>> requests = new ArrayList<>();
         int first = source == 0 ? 1 : source;
         int last = source == 0 ? 3 : source;
         for (int i = first; i <= last; i++) {
             final int selected = i;
-            requests.add(completed.submit(() -> loader.fetch(context, selected, page)));
+            final String healthKey = sourceKey(selected);
+            // Automatic multi-source loading may skip an open circuit. An explicit source
+            // selection still gets one normal attempt because the user deliberately chose it.
+            if (source == 0 && !SourceHealthManager.tryAcquire(healthKey)) continue;
+            requests.add(completed.submit(() -> {
+                long started = System.nanoTime();
+                try {
+                    List<NativeContentItem> items = loader.fetch(context, selected, page);
+                    if (!Thread.currentThread().isInterrupted()) {
+                        if (page > 1 || hasMedia(items)) {
+                            SourceHealthManager.recordSuccess(
+                                    healthKey, System.nanoTime() - started);
+                        } else {
+                            SourceHealthManager.recordFailure(healthKey);
+                        }
+                    }
+                    return new SourceResponse(selected, items);
+                } catch (Exception failed) {
+                    if (!Thread.currentThread().isInterrupted()
+                            && !(failed instanceof InterruptedException)) {
+                        SourceHealthManager.recordFailure(healthKey);
+                    }
+                    throw failed;
+                }
+            }));
         }
         LinkedHashMap<String, NativeContentItem> visible = new LinkedHashMap<>();
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
@@ -90,10 +129,12 @@ final class HomeSourceRepository {
             for (int i = 0; i < requests.size(); i++) {
                 long remaining = deadline - System.nanoTime();
                 if (remaining <= 0) break;
-                Future<List<NativeContentItem>> request = completed.poll(remaining, TimeUnit.NANOSECONDS);
+                Future<SourceResponse> request = completed.poll(
+                        remaining, TimeUnit.NANOSECONDS);
                 if (request == null) break;
                 try {
-                    List<NativeContentItem> items = request.get();
+                    SourceResponse response = request.get();
+                    List<NativeContentItem> items = response.items;
                     if (items == null) continue;
                     reached++;
                     for (NativeContentItem item : items) {
@@ -101,7 +142,9 @@ final class HomeSourceRepository {
                             visible.putIfAbsent(item.url, item);
                         }
                     }
-                    if (progress != null && !visible.isEmpty()) progress.accept(new ArrayList<>(visible.values()));
+                    if (progress != null && !visible.isEmpty()) {
+                        progress.accept(new ArrayList<>(visible.values()));
+                    }
                 } catch (ExecutionException unavailable) {
                     // Keep the other sources usable when one host fails.
                 }
@@ -113,5 +156,22 @@ final class HomeSourceRepository {
             throw new IOException("No Home source returned media. Retry or select another source.");
         }
         return new ArrayList<>(visible.values());
+    }
+
+    private static String sourceKey(int source) {
+        if (source == 1) return SourceHealthManager.CRAZYSHIT;
+        if (source == 2) return SourceHealthManager.EFUKT;
+        if (source == 3) return SourceHealthManager.KAOTIC;
+        return "home-" + source;
+    }
+
+    private static final class SourceResponse {
+        final int source;
+        final List<NativeContentItem> items;
+
+        SourceResponse(int source, List<NativeContentItem> items) {
+            this.source = source;
+            this.items = items;
+        }
     }
 }

@@ -14,6 +14,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -29,6 +30,10 @@ import static org.robolectric.Shadows.shadowOf;
 @Config(application = Application.class, sdk = 35, qualifiers = "w411dp-h891dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class VisualRefreshTest {
+    @Before public void resetSourceHealth() {
+        SourceHealthManager.resetForTests();
+    }
+
     private NativeContentItem creator() {
         return new NativeContentItem(NativeContentItem.KIND_CREATOR, "Alex Rivera",
                 "https://fapello.com/alex-rivera/", "", "", "", "", "", "Alex Rivera");
