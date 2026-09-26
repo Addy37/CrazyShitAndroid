@@ -37,7 +37,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         void onNavigationDragEnd(boolean canceled);
     }
 
-    private static final int[] PAGE_NAV_IDS = {1, 2, 4, 3};
+    private static final int[] PAGE_NAV_IDS = {2, 4, 3, 6};
     private static final long REFLECTION_SETTLE_MS = 180L;
     private static final float HORIZONTAL_DOMINANCE = 1.25f;
 
@@ -172,7 +172,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         View second = findViewById(PAGE_NAV_IDS[1]);
         if (first == null || second == null ||
                 first.getWidth() <= 0 || second.getWidth() <= 0) {
-            return Math.max(1f, getWidth() / 5f);
+            return Math.max(1f, getWidth() / 4f);
         }
         descendantRect(first, firstRect);
         descendantRect(second, secondRect);
