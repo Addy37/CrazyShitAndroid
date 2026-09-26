@@ -98,34 +98,76 @@ public class NavigationIaTest {
         assertNull(findMenuItem(nav, "Home"));
         assertNull(findMenuItem(nav, "More"));
         assertNotNull(findByDescription(activity.getWindow().getDecorView(), "More"));
-        View modeButton = findByDescription(activity.getWindow().getDecorView(),
-                "Show Trending OnlyFap creators");
-        View badge = findByDescription(activity.getWindow().getDecorView(), "Creator list mode");
-        assertNotNull(modeButton);
-        assertNotNull(badge);
-        View modeRow = (View) modeButton.getParent();
-        View caption = (View) badge.getParent();
-        android.widget.FrameLayout.LayoutParams modeParams =
-                (android.widget.FrameLayout.LayoutParams) modeRow.getLayoutParams();
-        android.widget.FrameLayout.LayoutParams captionParams =
-                (android.widget.FrameLayout.LayoutParams) caption.getLayoutParams();
+        View search = findByDescription(activity.getWindow().getDecorView(),
+                "Search OnlyFap creators");
+        View featuredAction = findByDescription(activity.getWindow().getDecorView(),
+                "Open featured creator gallery");
+        View trendingShelf = findByDescription(activity.getWindow().getDecorView(),
+                "Trending creators shelf");
+        assertNotNull(search);
+        assertNotNull(featuredAction);
+        assertNotNull(trendingShelf);
+        assertNull(findByDescription(activity.getWindow().getDecorView(),
+                "Show Trending OnlyFap creators"));
+
         Object[] pages = ReflectionHelpers.getField(adapter, "pages");
         Object onlyFap = pages[MainPagerAdapter.PAGE_ONLYFAP];
         androidx.swiperefreshlayout.widget.SwipeRefreshLayout refresh =
                 ReflectionHelpers.getField(onlyFap, "refresh");
-        android.widget.FrameLayout.LayoutParams refreshParams =
-                (android.widget.FrameLayout.LayoutParams) refresh.getLayoutParams();
-        assertTrue(captionParams.topMargin >= modeParams.topMargin + modeParams.height);
-        assertEquals(0, refreshParams.topMargin);
-        assertTrue(modeRow.getParent() instanceof FrostedOverlayLayout);
-        FrostedOverlayLayout root = (FrostedOverlayLayout) modeRow.getParent();
-        assertSame(modeRow, root.frostedOverlayForTest());
-        androidx.recyclerview.widget.RecyclerView recycler =
-                ReflectionHelpers.getField(onlyFap, "recycler");
-        assertEquals(BrowseUi.dp(activity, 127), recycler.getPaddingTop());
-        assertFalse(recycler.getClipToPadding());
+        assertEquals(View.GONE, refresh.getVisibility());
+        OnlyFapHubView hub = ReflectionHelpers.getField(onlyFap, "onlyFapHub");
+        assertNotNull(hub);
+
+        search.performClick();
+        Intent searchIntent = shadowOf(activity).getNextStartedActivity();
+        assertEquals(SearchActivity.class.getName(),
+                searchIntent.getComponent().getClassName());
+
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("OnlyFap", title.getText().toString());
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void onlyFapCreatorCardRoutesToGalleryInsteadOfPlayback() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create().start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
+        NativeContentItem creator = new NativeContentItem(
+                NativeContentItem.KIND_CREATOR,
+                "Test Creator",
+                "https://fapello.com/test-creator/",
+                "https://cdn.example.com/test.jpg",
+                "",
+                "https://fapello.com/test-creator/",
+                "",
+                "",
+                "test creator"
+        );
+
+        ReflectionHelpers.callInstanceMethod(
+                adapter,
+                "openBrowseItem",
+                ReflectionHelpers.ClassParameter.from(NativeContentItem.class, creator)
+        );
+
+        Intent started = shadowOf(activity).getNextStartedActivity();
+        assertEquals(
+                NativeFeedBrowserActivity.class.getName(),
+                started.getComponent().getClassName()
+        );
+        assertEquals(
+                "test creator",
+                started.getStringExtra(NativeFeedBrowserActivity.EXTRA_BUNKR_CREATOR_QUERY)
+        );
+
         controller.pause().stop().destroy();
     }
 
