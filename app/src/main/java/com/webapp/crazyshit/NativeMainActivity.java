@@ -503,6 +503,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (headerTitle != null) {
             if (position == MainPagerAdapter.PAGE_HOME) {
                 setZeroChillWordmark();
+            } else if (position == MainPagerAdapter.PAGE_SERIES) {
+                setShowsWordmark();
             } else {
                 headerTitle.setText(feedTitle);
                 headerTitle.setTextColor(ZeroChillUi.color(this, R.color.zc_text_primary));
@@ -524,6 +526,31 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         wordmark.setSpan(
                 new ForegroundColorSpan(ZeroChillUi.color(this, R.color.zc_cyan)),
                 4,
+                wordmark.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        headerTitle.setText(wordmark);
+    }
+
+    private void setShowsWordmark() {
+        SpannableString wordmark = new SpannableString("ZEROCHILL Shows");
+        int primary = ZeroChillUi.color(this, R.color.zc_text_primary);
+        int accent = ZeroChillUi.color(this, R.color.zc_cyan);
+        wordmark.setSpan(
+                new ForegroundColorSpan(primary),
+                0,
+                4,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        wordmark.setSpan(
+                new ForegroundColorSpan(accent),
+                4,
+                9,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        wordmark.setSpan(
+                new ForegroundColorSpan(primary),
+                9,
                 wordmark.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
         );
