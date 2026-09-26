@@ -162,7 +162,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         boolean creatorCard = isCreatorViewType(viewType);
         MaterialCardView card = new MaterialCardView(parent.getContext());
-        ZeroChillUi.styleMaterialCard(card, R.dimen.zc_radius_medium);
+        ZeroChillUi.styleMediaCard(card, R.dimen.zc_radius_medium);
         card.setRadius(dp(parent, creatorCard ? 9 : 16));
         card.setCardElevation(dp(parent, creatorCard ? 1 : 2));
         card.setClickable(true);
@@ -418,15 +418,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
     }
 
     private void styleCreatorCard(Holder holder, int rank) {
-        if (rank == 1) {
-            holder.card.setStrokeWidth(dp(holder.card, 2));
-            holder.card.setStrokeColor(ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan));
-        } else {
-            holder.card.setStrokeWidth(dp(holder.card, 1));
-            holder.card.setStrokeColor(rank <= 3
-                    ? ZeroChillUi.color(holder.card.getContext(), R.color.zc_cyan_dim)
-                    : ZeroChillUi.color(holder.card.getContext(), R.color.zc_edge));
-        }
+        holder.card.setStrokeWidth(0);
 
         GradientDrawable rankBackground = new GradientDrawable();
         rankBackground.setCornerRadius(dp(holder.card, 15));
