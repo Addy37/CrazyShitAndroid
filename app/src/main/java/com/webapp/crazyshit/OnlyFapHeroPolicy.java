@@ -91,6 +91,11 @@ final class OnlyFapHeroPolicy {
         }
     }
 
+    static boolean isGoodPortraitDimensions(int width, int height) {
+        if (width <= 0 || height <= 0) return false;
+        return height >= Math.round(width * 1.18f);
+    }
+
     static List<Artwork> distinctArtwork(List<Artwork> input) {
         LinkedHashMap<String, Artwork> result = new LinkedHashMap<>();
         if (input != null) for (Artwork choice : input) {
