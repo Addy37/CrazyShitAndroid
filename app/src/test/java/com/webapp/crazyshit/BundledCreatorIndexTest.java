@@ -28,12 +28,18 @@ public class BundledCreatorIndexTest {
 
     @Test public void largeIndexLimitsResultsAndRepeatedQueries() throws Exception {
         StringBuilder rows = new StringBuilder();
-        for (int i = 0; i < 5000; i++) rows.append("Creator ").append(i).append('\n');
+        for (int i = 0; i < 25000; i++) {
+            rows.append("Creator ").append(i);
+            if (i == 17777) rows.append("\tfar_away_alias");
+            rows.append('\n');
+        }
         BundledCreatorIndex index = index(rows.toString());
-        assertEquals(5000, index.size());
+        assertEquals(25000, index.size());
         for (int i = 0; i < 20; i++) {
             assertEquals(12, index.matching("creator", 12).size());
-            assertEquals("Creator 4999", index.matching("creator 4999", 12).get(0).title);
+            assertEquals("Creator 24999", index.matching("creator 24999", 12).get(0).title);
+            assertEquals("Creator 17777", index.matching("away alias", 12).get(0).title);
+            assertEquals("Creator 17777", index.matching("ator 17777", 12).get(0).title);
         }
     }
 
