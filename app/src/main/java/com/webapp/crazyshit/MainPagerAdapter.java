@@ -1068,9 +1068,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.showsHub.clear();
 
         final int generation = page.generation;
-        AtomicInteger remaining = new AtomicInteger(5);
+        AtomicInteger remaining = new AtomicInteger(4);
 
-        page.showsHubTasks.add(io.submit(() -> {
+        page.showsWeeklyTask = io.submit(() -> {
             List<NativeContentItem> result = java.util.Collections.emptyList();
             try {
                 result = homeRepository.fetch(
@@ -1099,8 +1099,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                     page.showsHub.setThisWeek(items);
                 }
             });
-            finishShowsHubSource(page, generation, remaining);
-        }));
+        });
 
         page.showsHubTasks.add(io.submit(() -> {
             List<NativeContentItem> result = java.util.Collections.emptyList();
@@ -1195,6 +1194,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     private void cancelShowsHubTasks(Page page) {
         if (page == null) return;
+        if (page.showsWeeklyTask != null) {
+            page.showsWeeklyTask.cancel(true);
+            page.showsWeeklyTask = null;
+        }
         for (java.util.concurrent.Future<?> task : page.showsHubTasks) {
             if (task != null) task.cancel(true);
         }
@@ -1304,6 +1307,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         int homeSource;
         int displayHomeSource;
         java.util.concurrent.Future<?> loadTask;
+        java.util.concurrent.Future<?> showsWeeklyTask;
         final java.util.List<java.util.concurrent.Future<?>> showsHubTasks =
                 new java.util.ArrayList<>();
         final java.util.List<TextView> homeChips = new java.util.ArrayList<>();
