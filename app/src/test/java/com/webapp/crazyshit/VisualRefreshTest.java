@@ -113,7 +113,9 @@ public class VisualRefreshTest {
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         androidx.viewpager2.widget.ViewPager2 viewPager = ReflectionHelpers.getField(main, "primaryPager");
         assertEquals(MainPagerAdapter.PAGE_ONLYFAP, viewPager.getCurrentItem());
-        nav.setSelectedItemId(1);
+        // Home is intentionally dormant in public navigation. Drive its retained
+        // compatibility page directly so this test still protects the old Home rendering.
+        viewPager.setCurrentItem(MainPagerAdapter.PAGE_HOME, false);
         UiPolishController.attach(main);
         ResponsiveFitmentController.applySoon(main);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
@@ -128,9 +130,11 @@ public class VisualRefreshTest {
         assertTrue(shell instanceof FrostedNavigationLayout);
         View topBar = shell.getChildAt(0);
         assertTrue(topBar instanceof LinearLayout);
-        assertEquals(2, ((LinearLayout) topBar).getChildCount());
+        assertEquals(3, ((LinearLayout) topBar).getChildCount());
         View search = ((LinearLayout) topBar).getChildAt(1);
         assertEquals("Global Search", String.valueOf(search.getContentDescription()));
+        View more = ((LinearLayout) topBar).getChildAt(2);
+        assertEquals("More", String.valueOf(more.getContentDescription()));
 
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
         assertNull(homeList.getItemAnimator());
