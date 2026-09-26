@@ -22,8 +22,12 @@ import static org.robolectric.Shadows.shadowOf;
 @Config(application = Application.class, sdk = 35)
 public class OnlyFapHeroRotationTest {
     @Test public void lateSecondHeroStartsRotationTimer() throws Exception {
-        OnlyFapHubView hub = new OnlyFapHubView(
+        android.content.Context themedContext = new android.view.ContextThemeWrapper(
                 RuntimeEnvironment.getApplication(),
+                R.style.Theme_CrazyShit
+        );
+        OnlyFapHubView hub = new OnlyFapHubView(
+                themedContext,
                 new OnlyFapHubView.Listener() {
                     @Override public void onOpenCreator(NativeContentItem creator) {}
                     @Override public void onSearch() {}
