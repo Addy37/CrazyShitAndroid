@@ -65,6 +65,12 @@ public final class CrazyShitRepository {
         for (Element node : doc.getAllElements()) {
             String tag = node.tagName();
             if (!"a".equalsIgnoreCase(tag)) {
+                String ownText = clean(node.ownText());
+                if (isHomeFeedBoundary(ownText)) {
+                    pendingHeader = "";
+                    currentPublishedAt = 0L;
+                    continue;
+                }
                 String header = extractSectionHeader(node);
                 if (!header.isEmpty()) {
                     pendingHeader = header;
@@ -174,6 +180,15 @@ public final class CrazyShitRepository {
         Matcher combinedMatch = SECTION_HEADER.matcher(combined);
         if (combinedMatch.find()) return clean(combinedMatch.group(1));
         return "";
+    }
+
+    private boolean isHomeFeedBoundary(String value) {
+        if (value == null) return false;
+        String text = clean(value).toLowerCase(Locale.US);
+        return text.equals("popular series")
+                || text.equals("more series")
+                || text.equals("top trending")
+                || text.equals("more trending");
     }
 
     private boolean isHomeFeed(String baseUrl) {
