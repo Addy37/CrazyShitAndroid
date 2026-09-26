@@ -31,6 +31,7 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
 import com.google.android.material.card.MaterialCardView;
@@ -56,6 +57,7 @@ final class OnlyFapHubView extends FrameLayout {
     interface Listener {
         void onOpenCreator(NativeContentItem creator);
         void onSearch();
+        void onMore();
         void onViewAllFavorites();
     }
 
@@ -70,6 +72,7 @@ final class OnlyFapHubView extends FrameLayout {
     private final Listener listener;
     private final ScrollView scroll;
     private final LinearLayout content;
+    private final LinearLayout body;
     private final MaterialCardView heroCard;
     private final ImageView heroImage;
     private final TextView heroTitle;
@@ -113,20 +116,13 @@ final class OnlyFapHubView extends FrameLayout {
 
         content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(12), dp(24), dp(12), dp(36));
+        content.setPadding(0, 0, 0, dp(36));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
-
-        TextView eyebrow = text("FEATURED CREATORS", 11f,
-                ZeroChillUi.color(context, R.color.zc_cyan));
-        eyebrow.setTypeface(null, android.graphics.Typeface.BOLD);
-        eyebrow.setLetterSpacing(0.12f);
-        LinearLayout.LayoutParams eyebrowParams = new LinearLayout.LayoutParams(-1, -2);
-        eyebrowParams.setMargins(dp(4), dp(4), dp(4), dp(7));
-        content.addView(eyebrow, eyebrowParams);
 
         heroCard = new MaterialCardView(context);
         ZeroChillUi.styleMediaCard(heroCard, R.dimen.zc_radius_large);
-        heroCard.setRadius(dp(22));
+        heroCard.setRadius(0f);
+        heroCard.setStrokeWidth(0);
         heroCard.setCardElevation(0f);
         heroCard.setClickable(true);
         heroCard.setFocusable(true);
@@ -146,40 +142,80 @@ final class OnlyFapHubView extends FrameLayout {
         heroShade.setBackground(new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{
-                        Color.argb(8, 0, 0, 0),
-                        Color.argb(54, 0, 0, 0),
-                        Color.argb(246, 0, 0, 0)
+                        Color.argb(6, 0, 0, 0),
+                        Color.argb(24, 0, 0, 0),
+                        Color.argb(92, 0, 0, 0),
+                        Color.argb(218, 0, 0, 0),
+                        Color.BLACK
                 }
         ));
         heroShade.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         heroFrame.addView(heroShade, new FrameLayout.LayoutParams(-1, -1));
 
-        heroDots = text("", 15f, Color.WHITE);
+        LinearLayout heroBar = new LinearLayout(context);
+        heroBar.setOrientation(LinearLayout.HORIZONTAL);
+        heroBar.setGravity(Gravity.CENTER_VERTICAL);
+        heroBar.setPadding(dp(20), dp(5), dp(12), 0);
+
+        TextView heroBrand = text("OnlyFap", 28f, Color.WHITE);
+        heroBrand.setTypeface(null, android.graphics.Typeface.BOLD);
+        heroBrand.setSingleLine(true);
+        heroBrand.setShadowLayer(dp(8), 0f, dp(2), Color.argb(150, 0, 0, 0));
+        heroBar.addView(heroBrand, new LinearLayout.LayoutParams(0, dp(58), 1f));
+
+        ImageView heroSearch = new ImageView(context);
+        heroSearch.setImageResource(R.drawable.ic_nav_search);
+        heroSearch.setPadding(dp(12), dp(12), dp(12), dp(12));
+        heroSearch.setColorFilter(ZeroChillUi.color(context, R.color.zc_cyan));
+        heroSearch.setBackground(BrowseUi.rounded(
+                context,
+                Color.argb(165, 7, 10, 13),
+                24
+        ));
+        heroSearch.setClickable(true);
+        heroSearch.setFocusable(true);
+        heroSearch.setContentDescription("Search OnlyFap creators");
+        heroSearch.setOnClickListener(v -> listener.onSearch());
+        ZeroChillMotion.installPressFeedback(heroSearch);
+        heroBar.addView(heroSearch, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+        ImageView heroMore = new ImageView(context);
+        heroMore.setImageResource(R.drawable.ic_nav_more);
+        heroMore.setPadding(dp(11), dp(11), dp(11), dp(11));
+        heroMore.setColorFilter(Color.WHITE);
+        heroMore.setClickable(true);
+        heroMore.setFocusable(true);
+        heroMore.setContentDescription("OnlyFap More");
+        heroMore.setOnClickListener(v -> listener.onMore());
+        ZeroChillMotion.installPressFeedback(heroMore);
+        LinearLayout.LayoutParams heroMoreParams =
+                new LinearLayout.LayoutParams(dp(44), dp(48));
+        heroMoreParams.setMarginStart(dp(4));
+        heroBar.addView(heroMore, heroMoreParams);
+
+        heroFrame.addView(heroBar, new FrameLayout.LayoutParams(
+                -1,
+                dp(64),
+                Gravity.TOP
+        ));
+
+        heroDots = text("", 13f, Color.WHITE);
         heroDots.setGravity(Gravity.CENTER);
         heroDots.setVisibility(View.GONE);
         heroDots.setContentDescription("Featured creator position");
-        FrameLayout.LayoutParams dotsParams = new FrameLayout.LayoutParams(
-                -2,
-                dp(32),
-                Gravity.TOP | Gravity.END
-        );
-        dotsParams.setMargins(0, dp(12), dp(12), 0);
-        heroFrame.addView(heroDots, dotsParams);
 
         LinearLayout heroCopy = new LinearLayout(context);
         heroCopy.setOrientation(LinearLayout.VERTICAL);
-        heroCopy.setGravity(Gravity.BOTTOM);
-        heroCopy.setPadding(dp(18), dp(18), dp(18), dp(18));
+        heroCopy.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        heroCopy.setPadding(dp(24), dp(28), dp(24), dp(20));
         heroFrame.addView(heroCopy,
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 
-        TextView heroLabel = text("ONLYFAP CREATOR", 11f, UiPalette.PRIMARY);
-        heroLabel.setTypeface(null, android.graphics.Typeface.BOLD);
-        heroLabel.setLetterSpacing(0.08f);
-        heroCopy.addView(heroLabel);
-
-        heroTitle = text("Discover creators", 27f, Color.WHITE);
+        heroTitle = text("Discover creators", 29f, Color.WHITE);
         heroTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        heroTitle.setGravity(Gravity.CENTER);
+        heroTitle.setTextAlignment(TEXT_ALIGNMENT_CENTER);
+        heroTitle.setShadowLayer(dp(8), 0f, dp(2), Color.argb(160, 0, 0, 0));
         heroTitle.setMaxLines(2);
         heroTitle.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams heroTitleParams = new LinearLayout.LayoutParams(-1, -2);
@@ -191,46 +227,42 @@ final class OnlyFapHubView extends FrameLayout {
                 13f,
                 ZeroChillUi.color(context, R.color.zc_text_secondary)
         );
+        heroHint.setGravity(Gravity.CENTER);
+        heroHint.setTextAlignment(TEXT_ALIGNMENT_CENTER);
         heroHint.setMaxLines(2);
         heroHint.setLineSpacing(0f, 1.05f);
         LinearLayout.LayoutParams heroHintParams = new LinearLayout.LayoutParams(-1, -2);
         heroHintParams.topMargin = dp(5);
         heroCopy.addView(heroHint, heroHintParams);
 
-        heroAction = text("OPEN GALLERY", 13f, Color.BLACK);
+        heroAction = text("VIEW GALLERY", 13f, Color.WHITE);
         heroAction.setTypeface(null, android.graphics.Typeface.BOLD);
         heroAction.setGravity(Gravity.CENTER);
         heroAction.setVisibility(View.GONE);
         GradientDrawable actionBackground = new GradientDrawable();
-        actionBackground.setColor(UiPalette.PRIMARY);
-        actionBackground.setCornerRadius(dp(19));
+        actionBackground.setColor(Color.argb(205, 15, 18, 22));
+        actionBackground.setCornerRadius(dp(20));
+        actionBackground.setStroke(dp(1), Color.argb(80, 255, 255, 255));
         heroAction.setBackground(actionBackground);
         heroAction.setContentDescription("Open featured creator gallery");
-        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(dp(132), dp(38));
-        actionParams.topMargin = dp(13);
+        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(dp(136), dp(40));
+        actionParams.topMargin = dp(14);
+        actionParams.gravity = Gravity.CENTER_HORIZONTAL;
         heroCopy.addView(heroAction, actionParams);
 
-        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(258));
-        heroParams.setMargins(0, 0, 0, dp(14));
+        LinearLayout.LayoutParams heroDotsParams =
+                new LinearLayout.LayoutParams(-2, dp(28));
+        heroDotsParams.topMargin = dp(8);
+        heroDotsParams.gravity = Gravity.CENTER_HORIZONTAL;
+        heroCopy.addView(heroDots, heroDotsParams);
+
+        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(-1, dp(350));
         content.addView(heroCard, heroParams);
 
-        TextView search = text("⌕  Search OnlyFap creators", 15.5f,
-                ZeroChillUi.color(context, R.color.zc_text_secondary));
-        search.setGravity(Gravity.CENTER_VERTICAL);
-        search.setPadding(dp(16), 0, dp(16), 0);
-        search.setBackground(BrowseUi.rounded(
-                context,
-                ZeroChillUi.color(context, R.color.zc_surface_glass),
-                17
-        ));
-        search.setClickable(true);
-        search.setFocusable(true);
-        search.setContentDescription("Search OnlyFap creators");
-        search.setOnClickListener(v -> listener.onSearch());
-        ZeroChillMotion.installPressFeedback(search);
-        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(-1, dp(52));
-        searchParams.setMargins(0, 0, 0, dp(14));
-        content.addView(search, searchParams);
+        body = new LinearLayout(context);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(12), dp(4), dp(12), 0);
+        content.addView(body, new LinearLayout.LayoutParams(-1, -2));
 
         favoritesSection = new LinearLayout(context);
         favoritesSection.setOrientation(LinearLayout.VERTICAL);
@@ -281,7 +313,7 @@ final class OnlyFapHubView extends FrameLayout {
         LinearLayout.LayoutParams favoriteSectionParams =
                 new LinearLayout.LayoutParams(-1, -2);
         favoriteSectionParams.setMargins(0, 0, 0, dp(12));
-        content.addView(favoritesSection, favoriteSectionParams);
+        body.addView(favoritesSection, favoriteSectionParams);
 
         loadingLabel = text(
                 "Loading creators…",
@@ -291,7 +323,7 @@ final class OnlyFapHubView extends FrameLayout {
         loadingLabel.setGravity(Gravity.CENTER_HORIZONTAL);
         LinearLayout.LayoutParams loadingParams = new LinearLayout.LayoutParams(-1, -2);
         loadingParams.setMargins(0, 0, 0, dp(10));
-        content.addView(loadingLabel, loadingParams);
+        body.addView(loadingLabel, loadingParams);
 
         trendingShelf = addCreatorShelf(
                 "Trending",
@@ -480,7 +512,7 @@ final class OnlyFapHubView extends FrameLayout {
 
         LinearLayout.LayoutParams sectionParams = new LinearLayout.LayoutParams(-1, -2);
         sectionParams.setMargins(0, 0, 0, dp(14));
-        content.addView(section, sectionParams);
+        body.addView(section, sectionParams);
 
         return new CreatorShelf(section, rail, adapter);
     }
@@ -537,7 +569,7 @@ final class OnlyFapHubView extends FrameLayout {
     }
 
     private void requestHeroCandidates() {
-        if (closed || heroItems.size() >= HERO_MAX_ITEMS) return;
+        if (closed) return;
 
         LinkedHashMap<String, NativeContentItem> candidates = new LinkedHashMap<>();
         addCreators(candidates, trendingItems, 6);
@@ -547,13 +579,31 @@ final class OnlyFapHubView extends FrameLayout {
 
         ArrayList<NativeContentItem> shuffled = new ArrayList<>(candidates.values());
         Collections.shuffle(shuffled);
-        int scheduled = 0;
+        int considered = 0;
         for (NativeContentItem creator : shuffled) {
-            if (scheduled >= HERO_RESOLVE_LIMIT || heroItems.size() >= HERO_MAX_ITEMS) break;
+            if (considered >= HERO_RESOLVE_LIMIT) break;
+            considered++;
+
             String key = CreatorFavoriteStore.key(creator);
-            if (key.isEmpty() || !requestedHeroCreators.add(key)) continue;
-            scheduled++;
-            resolveHeroAsync(creator);
+            if (key.isEmpty()) continue;
+
+            if (heroItems.size() < HERO_MAX_ITEMS && findHeroCandidate(key) == null) {
+                String fallbackUrl = clean(creator.imageUrl);
+                if (!fallbackUrl.isEmpty()) {
+                    String fallbackReferer = clean(creator.uploader).isEmpty()
+                            ? creator.url
+                            : creator.uploader;
+                    addHeroCandidate(new HeroCandidate(
+                            creator,
+                            fallbackUrl,
+                            fallbackReferer
+                    ));
+                }
+            }
+
+            if (requestedHeroCreators.add(key)) {
+                resolveHeroAsync(creator);
+            }
         }
     }
 
@@ -586,11 +636,11 @@ final class OnlyFapHubView extends FrameLayout {
                 if (best == null) return;
                 String headerUrl = repository.creatorHeaderUrl(best);
                 if (clean(headerUrl).isEmpty()) return;
-                post(() -> addHeroCandidate(new HeroCandidate(
+                post(() -> upgradeHeroCandidate(
                         creator,
                         headerUrl,
                         best.url
-                )));
+                ));
             } catch (IOException ignored) {
             }
         });
@@ -616,10 +666,8 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void addHeroCandidate(HeroCandidate candidate) {
         if (closed || candidate == null || heroItems.size() >= HERO_MAX_ITEMS) return;
-        for (HeroCandidate existing : heroItems) {
-            if (CreatorFavoriteStore.key(existing.creator)
-                    .equals(CreatorFavoriteStore.key(candidate.creator))) return;
-        }
+        String key = CreatorFavoriteStore.key(candidate.creator);
+        if (key.isEmpty() || findHeroCandidate(key) != null) return;
         heroItems.add(candidate);
         if (heroItem == null) {
             showHero(0, false);
@@ -628,13 +676,42 @@ final class OnlyFapHubView extends FrameLayout {
         }
     }
 
+    private HeroCandidate findHeroCandidate(String key) {
+        if (key == null || key.isEmpty()) return null;
+        for (HeroCandidate candidate : heroItems) {
+            if (key.equals(CreatorFavoriteStore.key(candidate.creator))) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private void upgradeHeroCandidate(
+            NativeContentItem creator,
+            String wideImageUrl,
+            String referer
+    ) {
+        if (closed || creator == null || clean(wideImageUrl).isEmpty()) return;
+        HeroCandidate candidate =
+                findHeroCandidate(CreatorFavoriteStore.key(creator));
+        if (candidate == null) return;
+        candidate.setPreferred(wideImageUrl, referer);
+        if (candidate == heroItem) {
+            loadHeroArtwork(candidate);
+        }
+    }
+
     private void showHero(int requestedIndex, boolean animate) {
         if (heroItems.isEmpty()) return;
         int index = Math.floorMod(requestedIndex, heroItems.size());
         HeroCandidate next = heroItems.get(index);
-        if (rejectedHeroUrls.contains(next.imageUrl)) {
-            rejectHero(next);
-            return;
+        if (rejectedHeroUrls.contains(next.currentImageUrl())) {
+            if (next.usingPreferred()) {
+                next.useFallback();
+            } else {
+                rejectHero(next);
+                return;
+            }
         }
 
         heroIndex = index;
@@ -663,11 +740,19 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void loadHeroArtwork(HeroCandidate candidate) {
         if (closed || candidate == null) return;
+        final String imageUrl = candidate.currentImageUrl();
+        final String referer = candidate.currentReferer();
+        final boolean preferred = candidate.usingPreferred();
+        if (clean(imageUrl).isEmpty()) {
+            handleHeroArtworkFailure(candidate, imageUrl, preferred);
+            return;
+        }
         try {
             Glide.with(heroImage)
-                    .load(remoteImage(candidate.imageUrl, candidate.referer))
+                    .load(remoteImage(imageUrl, referer))
                     .centerCrop()
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .transition(DrawableTransitionOptions.withCrossFade(220))
                     .placeholder(new ColorDrawable(Color.rgb(13, 16, 19)))
                     .error(new ColorDrawable(Color.rgb(13, 16, 19)))
                     .listener(new RequestListener<Drawable>() {
@@ -678,7 +763,11 @@ final class OnlyFapHubView extends FrameLayout {
                                 Target<Drawable> target,
                                 boolean first
                         ) {
-                            post(() -> rejectHero(candidate));
+                            post(() -> handleHeroArtworkFailure(
+                                    candidate,
+                                    imageUrl,
+                                    preferred
+                            ));
                             return false;
                         }
 
@@ -690,11 +779,16 @@ final class OnlyFapHubView extends FrameLayout {
                                 DataSource dataSource,
                                 boolean first
                         ) {
+                            if (!preferred) return false;
                             int width = resource == null ? 0 : resource.getIntrinsicWidth();
                             int height = resource == null ? 0 : resource.getIntrinsicHeight();
                             float ratio = height <= 0 ? 0f : width / (float) height;
                             if (ratio > 0f && ratio < HERO_MIN_ASPECT) {
-                                post(() -> rejectHero(candidate));
+                                post(() -> handleHeroArtworkFailure(
+                                        candidate,
+                                        imageUrl,
+                                        true
+                                ));
                                 return true;
                             }
                             return false;
@@ -702,13 +796,27 @@ final class OnlyFapHubView extends FrameLayout {
                     })
                     .into(heroImage);
         } catch (Exception ignored) {
-            rejectHero(candidate);
+            handleHeroArtworkFailure(candidate, imageUrl, preferred);
         }
+    }
+
+    private void handleHeroArtworkFailure(
+            HeroCandidate candidate,
+            String failedUrl,
+            boolean preferred
+    ) {
+        if (closed || candidate == null) return;
+        if (!clean(failedUrl).isEmpty()) rejectedHeroUrls.add(failedUrl);
+        if (preferred && candidate.hasFallback()) {
+            candidate.useFallback();
+            if (candidate == heroItem) loadHeroArtwork(candidate);
+            return;
+        }
+        rejectHero(candidate);
     }
 
     private void rejectHero(HeroCandidate candidate) {
         if (closed || candidate == null) return;
-        rejectedHeroUrls.add(candidate.imageUrl);
         int removed = heroItems.indexOf(candidate);
         if (removed >= 0) heroItems.remove(removed);
         if (heroItems.isEmpty()) {
@@ -717,7 +825,7 @@ final class OnlyFapHubView extends FrameLayout {
             heroDots.setVisibility(View.GONE);
             heroAction.setVisibility(View.GONE);
             heroTitle.setText("Discover creators");
-            heroHint.setText("Finding wide creator artwork for Featured…");
+            heroHint.setText("Loading featured creator artwork…");
             requestHeroCandidates();
             return;
         }
@@ -873,13 +981,46 @@ final class OnlyFapHubView extends FrameLayout {
 
     private static final class HeroCandidate {
         final NativeContentItem creator;
-        final String imageUrl;
-        final String referer;
+        final String fallbackImageUrl;
+        final String fallbackReferer;
+        String preferredImageUrl = "";
+        String preferredReferer = "";
+        boolean usePreferred;
 
-        HeroCandidate(NativeContentItem creator, String imageUrl, String referer) {
+        HeroCandidate(
+                NativeContentItem creator,
+                String fallbackImageUrl,
+                String fallbackReferer
+        ) {
             this.creator = creator;
-            this.imageUrl = imageUrl;
-            this.referer = referer;
+            this.fallbackImageUrl = fallbackImageUrl == null ? "" : fallbackImageUrl.trim();
+            this.fallbackReferer = fallbackReferer == null ? "" : fallbackReferer.trim();
+        }
+
+        void setPreferred(String imageUrl, String referer) {
+            preferredImageUrl = imageUrl == null ? "" : imageUrl.trim();
+            preferredReferer = referer == null ? "" : referer.trim();
+            usePreferred = !preferredImageUrl.isEmpty();
+        }
+
+        boolean usingPreferred() {
+            return usePreferred && !preferredImageUrl.isEmpty();
+        }
+
+        boolean hasFallback() {
+            return !fallbackImageUrl.isEmpty();
+        }
+
+        void useFallback() {
+            usePreferred = false;
+        }
+
+        String currentImageUrl() {
+            return usingPreferred() ? preferredImageUrl : fallbackImageUrl;
+        }
+
+        String currentReferer() {
+            return usingPreferred() ? preferredReferer : fallbackReferer;
         }
     }
 
