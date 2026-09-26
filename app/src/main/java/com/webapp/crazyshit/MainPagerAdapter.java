@@ -203,7 +203,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     public void onHostResume() {
         chaosView.onHostResume();
         Page onlyFap = pageAt(PAGE_ONLYFAP);
-        if (onlyFap != null && onlyFap.browseAdapter != null) onlyFap.browseAdapter.notifyDataSetChanged();
+        if (onlyFap != null && onlyFap.browseAdapter != null) {
+            onlyFap.browseAdapter.notifyDataSetChanged();
+        }
+        if (onlyFap != null && onlyFap.onlyFapHeaderAdapter != null) {
+            onlyFap.onlyFapHeaderAdapter.refreshFavorites();
+        }
         Page home = pageAt(PAGE_HOME);
         if (home != null && home.feedAdapter != null) home.feedAdapter.refreshPlaybackState();
         Page shows = pageAt(PAGE_SERIES);
@@ -717,109 +722,44 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             prefs.edit().putInt(PREF_FAPZONE_MODE, page.fapzoneMode).apply();
         }
 
-        LinearLayout modes = new LinearLayout(activity);
-        modes.setOrientation(LinearLayout.HORIZONTAL);
-        modes.setGravity(Gravity.CENTER);
-        modes.setPadding(dp(12), dp(6), dp(12), dp(6));
-        modes.setBackground(ZeroChillUi.sourceRailGlass(activity));
+        page.onlyFapHeaderAdapter = new OnlyFapHubHeaderAdapter(
+                activity,
+                page.fapzoneMode,
+                new OnlyFapHubHeaderAdapter.Listener() {
+                    @Override
+                    public void onSearch() {
+                        activity.startActivity(SearchActivity.createBunkrSearch(activity));
+                    }
 
-        page.fapzoneTop = fapzoneModeButton("Trending");
-        page.fapzoneNew = fapzoneModeButton("New");
-        page.fapzoneHot = fapzoneModeButton("Hot");
-        page.fapzonePopular = fapzoneModeButton("Popular");
-        TextView[] modeButtons = {
-                page.fapzoneTop,
-                page.fapzoneNew,
-                page.fapzoneHot,
-                page.fapzonePopular
-        };
-        for (int index = 0; index < modeButtons.length; index++) {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(36), 1f);
-            if (index > 0) params.setMarginStart(dp(3));
-            if (index + 1 < modeButtons.length) params.setMarginEnd(dp(3));
-            modes.addView(modeButtons[index], params);
-        }
+                    @Override
+                    public void onFavorites() {
+                        activity.startActivity(new android.content.Intent(
+                                activity,
+                                CreatorsActivity.class
+                        ));
+                    }
 
-        page.fapzoneTop.setOnClickListener(v -> switchFapzoneMode(
-                page, FapzoneCreatorRepository.MODE_TOP_50));
-        page.fapzoneNew.setOnClickListener(v -> switchFapzoneMode(
-                page, FapzoneCreatorRepository.MODE_NEW));
-        page.fapzoneHot.setOnClickListener(v -> switchFapzoneMode(
-                page, FapzoneCreatorRepository.MODE_HOT));
-        page.fapzonePopular.setOnClickListener(v -> switchFapzoneMode(
-                page, FapzoneCreatorRepository.MODE_POPULAR));
-        page.fapzoneModes = modes;
+                    @Override
+                    public void onModeSelected(int mode) {
+                        switchFapzoneMode(page, mode);
+                    }
 
-        FrameLayout.LayoutParams modeParams = new FrameLayout.LayoutParams(-1, dp(52));
-        modeParams.gravity = Gravity.TOP;
-        modeParams.setMargins(dp(8), 0, dp(8), 0);
-        page.root.addView(modes, modeParams);
-        ((FrostedOverlayLayout) page.root).setFrostedOverlay(modes);
-
-        LinearLayout caption = new LinearLayout(activity);
-        caption.setOrientation(LinearLayout.HORIZONTAL);
-        caption.setGravity(Gravity.CENTER_VERTICAL);
-        caption.setPadding(dp(17), dp(7), dp(17), dp(9));
-        caption.setBackground(ZeroChillUi.panelGlass(activity));
-
-        LinearLayout captionCopy = new LinearLayout(activity);
-        captionCopy.setOrientation(LinearLayout.VERTICAL);
-        captionCopy.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView captionTitle = new TextView(activity);
-        captionTitle.setText(FapzoneCreatorRepository.titleFor(page.fapzoneMode));
-        captionTitle.setTextColor(Color.WHITE);
-        captionTitle.setTextSize(17);
-        captionTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        captionTitle.setMaxLines(1);
-        captionTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        captionCopy.addView(captionTitle, new LinearLayout.LayoutParams(-1, -2));
-
-        TextView captionHint = new TextView(activity);
-        captionHint.setText(FapzoneCreatorRepository.hintFor(page.fapzoneMode));
-        ZeroChillUi.styleSecondary(captionHint);
-        captionHint.setTextSize(11.5f);
-        captionHint.setMaxLines(1);
-        captionHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, -2);
-        hintParams.topMargin = dp(1);
-        captionCopy.addView(captionHint, hintParams);
-        caption.addView(captionCopy, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView countBadge = new TextView(activity);
-        countBadge.setText(FapzoneCreatorRepository.badgeFor(page.fapzoneMode));
-        countBadge.setTextColor(Color.BLACK);
-        countBadge.setTextSize(13);
-        countBadge.setTypeface(null, android.graphics.Typeface.BOLD);
-        countBadge.setGravity(Gravity.CENTER);
-        countBadge.setContentDescription("Creator list mode");
-        GradientDrawable badgeBackground = new GradientDrawable();
-        badgeBackground.setColor(UiPalette.PRIMARY);
-        badgeBackground.setCornerRadius(dp(17));
-        countBadge.setBackground(badgeBackground);
-        LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(dp(50), dp(30));
-        badgeParams.setMarginStart(dp(12));
-        caption.addView(countBadge, badgeParams);
-
-        page.seriesCaptionTitle = captionTitle;
-        page.seriesCaptionHint = captionHint;
-        page.seriesCaptionBadge = countBadge;
-        page.seriesCaption = caption;
-
-        FrameLayout.LayoutParams captionParams = new FrameLayout.LayoutParams(-1, dp(64));
-        captionParams.gravity = Gravity.TOP;
-        captionParams.setMargins(dp(8), dp(56), dp(8), 0);
-        page.root.addView(caption, captionParams);
-
-        FrameLayout.LayoutParams refreshParams =
-                (FrameLayout.LayoutParams) page.refresh.getLayoutParams();
-        refreshParams.topMargin = 0;
-        page.refresh.setLayoutParams(refreshParams);
-        page.recycler.setPadding(dp(4), dp(127), dp(4), dp(26));
+                    @Override
+                    public void onOpenCreator(NativeContentItem creator) {
+                        if (creator == null) return;
+                        CreatorGalleryPreloader.warm(activity, creator);
+                        openBrowseItem(creator);
+                    }
+                }
+        );
+        page.onlyFapConcatAdapter = new androidx.recyclerview.widget.ConcatAdapter(
+                page.onlyFapHeaderAdapter,
+                page.browseAdapter
+        );
+        page.recycler.setAdapter(page.onlyFapConcatAdapter);
+        page.recycler.setPadding(dp(4), 0, dp(4), dp(26));
         page.browseAdapter.setWideCreatorCards(true);
         applyBrowseLayout(page, true);
-        updateFapzoneModeButtons(page);
-        updateFapzoneCaption(page);
     }
 
     private TextView fapzoneModeButton(String label) {
@@ -874,7 +814,6 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 .putInt(PREF_FAPZONE_MODE, mode)
                 .apply();
         updateFapzoneModeButtons(page);
-        updateFapzoneCaption(page);
         page.generation++;
         page.loading = false;
         page.endReached = false;
@@ -916,36 +855,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     private void updateFapzoneModeButtons(Page page) {
-        if (page == null) return;
-        styleFapzoneModeButton(
-                page.fapzoneTop,
-                page.fapzoneMode == FapzoneCreatorRepository.MODE_TOP_50
-        );
-        styleFapzoneModeButton(
-                page.fapzoneNew,
-                page.fapzoneMode == FapzoneCreatorRepository.MODE_NEW
-        );
-        styleFapzoneModeButton(
-                page.fapzoneHot,
-                page.fapzoneMode == FapzoneCreatorRepository.MODE_HOT
-        );
-        styleFapzoneModeButton(
-                page.fapzonePopular,
-                page.fapzoneMode == FapzoneCreatorRepository.MODE_POPULAR
-        );
+        if (page == null || page.onlyFapHeaderAdapter == null) return;
+        page.onlyFapHeaderAdapter.setMode(page.fapzoneMode);
     }
 
     private void updateFapzoneCaption(Page page) {
-        if (page == null) return;
-        if (page.seriesCaptionTitle != null) {
-            page.seriesCaptionTitle.setText(FapzoneCreatorRepository.titleFor(page.fapzoneMode));
-        }
-        if (page.seriesCaptionHint != null) {
-            page.seriesCaptionHint.setText(FapzoneCreatorRepository.hintFor(page.fapzoneMode));
-        }
-        if (page.seriesCaptionBadge != null) {
-            page.seriesCaptionBadge.setText(FapzoneCreatorRepository.badgeFor(page.fapzoneMode));
-        }
+        updateFapzoneModeButtons(page);
     }
 
     private void applyBrowseLayout(Page page, boolean wideCards) {
@@ -964,6 +879,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         GridLayoutManager.SpanSizeLookup spanLookup = new GridLayoutManager.SpanSizeLookup() {
             @Override
             public int getSpanSize(int adapterPosition) {
+                if (page.kind == PageKind.ONLYFAP && page.onlyFapHeaderAdapter != null) {
+                    if (adapterPosition == 0) return columns;
+                    return page.browseAdapter.creatorSpanSize(adapterPosition - 1, columns);
+                }
                 return page.browseAdapter.creatorSpanSize(adapterPosition, columns);
             }
         };
@@ -1412,6 +1331,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         TextView empty;
         NativeFeedAdapter feedAdapter;
         NativeCategoryAdapter browseAdapter;
+        OnlyFapHubHeaderAdapter onlyFapHeaderAdapter;
+        androidx.recyclerview.widget.ConcatAdapter onlyFapConcatAdapter;
         ShowsHubView showsHub;
         TextView featuredSource;
         TextView crazyShitSource;
