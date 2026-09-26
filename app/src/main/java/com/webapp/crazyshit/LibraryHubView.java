@@ -36,6 +36,7 @@ import java.util.Map;
 final class LibraryHubView extends ScrollView {
     interface Listener {
         void onOpenItem(NativeContentItem item);
+        void onOpenHistory(PlaybackHistoryStore.Item item);
         void onOpenCreator(NativeContentItem creator);
     }
 
@@ -198,7 +199,7 @@ final class LibraryHubView extends ScrollView {
         }
 
         card.setContentDescription("Continue watching " + item.title);
-        card.setOnClickListener(v -> openVideo(item.title, item.pageUrl, item.posterUrl));
+        card.setOnClickListener(v -> openHistoryItem(item));
         return card;
     }
 
@@ -352,10 +353,33 @@ final class LibraryHubView extends ScrollView {
         for (int i = 0; i < count; i++) {
             PlaybackHistoryStore.Item item = items.get(i);
             rail.addView(
-                    compactMediaCard(item.title, item.pageUrl, item.posterUrl, "", true),
+                    historyCard(item),
                     mediaRailParams(168, 105, i == count - 1)
             );
         }
+    }
+
+    private View historyCard(PlaybackHistoryStore.Item item) {
+        MaterialCardView card = mediaCard(16);
+        FrameLayout frame = new FrameLayout(activity);
+        card.addView(frame, new MaterialCardView.LayoutParams(-1, -1));
+
+        ImageView image = mediaImage(frame);
+        loadMediaImage(image, item.pageUrl, item.posterUrl, false);
+
+        View shade = new View(activity);
+        shade.setBackground(bottomShade());
+        frame.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+
+        TextView title = mediaTitle(item.title, 13.5f);
+        FrameLayout.LayoutParams titleParams =
+                new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        titleParams.setMargins(dp(10), 0, dp(10), dp(8));
+        frame.addView(title, titleParams);
+
+        card.setContentDescription(item.title);
+        card.setOnClickListener(v -> openHistoryItem(item));
+        return card;
     }
 
     private View compactMediaCard(
@@ -616,6 +640,15 @@ final class LibraryHubView extends ScrollView {
                 .addHeader("User-Agent", USER_AGENT);
         if (pageUrl != null && !pageUrl.isEmpty()) headers.addHeader("Referer", pageUrl);
         return new GlideUrl(imageUrl, headers.build());
+    }
+
+    private void openHistoryItem(PlaybackHistoryStore.Item item) {
+        if (item == null || clean(item.pageUrl).isEmpty()) return;
+        if (listener != null && item.fromShows) {
+            listener.onOpenHistory(item);
+            return;
+        }
+        openVideo(item.title, item.pageUrl, item.posterUrl);
     }
 
     private void openVideo(String title, String pageUrl, String posterUrl) {
