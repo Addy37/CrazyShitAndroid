@@ -173,9 +173,8 @@ final class ShowsHubView extends FrameLayout {
         heroFrame.addView(heroCopy,
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 
-        heroSource = text("FEATURED", 11f, UiPalette.PRIMARY);
-        heroSource.setTypeface(null, android.graphics.Typeface.BOLD);
-        heroSource.setLetterSpacing(0.08f);
+        heroSource = text("", 11f, UiPalette.PRIMARY);
+        heroSource.setVisibility(View.GONE);
         heroCopy.addView(heroSource);
 
         heroTitle = text("A new way to browse Shows", 27f, Color.WHITE);
