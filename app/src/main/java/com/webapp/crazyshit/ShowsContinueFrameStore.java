@@ -2,6 +2,8 @@ package com.webapp.crazyshit;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.os.Handler;
+import android.os.Looper;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -9,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -24,8 +27,23 @@ final class ShowsContinueFrameStore {
     private static final int MAX_FILES = 32;
     private static final long MAX_BYTES = 8L * 1024L * 1024L;
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final CopyOnWriteArraySet<Listener> LISTENERS =
+            new CopyOnWriteArraySet<>();
+
+    interface Listener {
+        void onFrameUpdated(String pageUrl);
+    }
 
     private ShowsContinueFrameStore() {
+    }
+
+    static void addListener(Listener listener) {
+        if (listener != null) LISTENERS.add(listener);
+    }
+
+    static void removeListener(Listener listener) {
+        if (listener != null) LISTENERS.remove(listener);
     }
 
     static File find(Context context, String pageUrl) {
@@ -44,7 +62,7 @@ final class ShowsContinueFrameStore {
         Context app = context.getApplicationContext();
         IO.execute(() -> {
             try {
-                save(app, cleanUrl, bitmap);
+                if (save(app, cleanUrl, bitmap)) notifyUpdated(cleanUrl);
             } finally {
                 recycle(bitmap);
             }
@@ -57,37 +75,49 @@ final class ShowsContinueFrameStore {
         Context app = context.getApplicationContext();
         IO.execute(() -> {
             File file = new File(directory(app), key(cleanUrl) + ".jpg");
-            if (file.exists()) file.delete();
+            if (file.exists() && file.delete()) notifyUpdated(cleanUrl);
         });
     }
 
-    private static void save(Context context, String pageUrl, Bitmap bitmap) {
+    private static boolean save(Context context, String pageUrl, Bitmap bitmap) {
         File dir = directory(context);
-        if (!dir.exists() && !dir.mkdirs() && !dir.isDirectory()) return;
+        if (!dir.exists() && !dir.mkdirs() && !dir.isDirectory()) return false;
 
         File target = new File(dir, key(pageUrl) + ".jpg");
         File temp = new File(dir, target.getName() + ".tmp");
         try (FileOutputStream out = new FileOutputStream(temp, false)) {
             if (!bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
                 temp.delete();
-                return;
+                return false;
             }
             out.flush();
         } catch (Exception ignored) {
             temp.delete();
-            return;
+            return false;
         }
 
         if (target.exists() && !target.delete()) {
             temp.delete();
-            return;
+            return false;
         }
         if (!temp.renameTo(target)) {
             temp.delete();
-            return;
+            return false;
         }
         target.setLastModified(System.currentTimeMillis());
         trim(dir);
+        return true;
+    }
+
+    private static void notifyUpdated(String pageUrl) {
+        MAIN.post(() -> {
+            for (Listener listener : LISTENERS) {
+                try {
+                    listener.onFrameUpdated(pageUrl);
+                } catch (Exception ignored) {
+                }
+            }
+        });
     }
 
     private static void trim(File dir) {
