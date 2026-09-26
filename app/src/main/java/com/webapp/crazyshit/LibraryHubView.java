@@ -60,6 +60,7 @@ final class LibraryHubView extends ScrollView {
         this.listener = listener;
 
         setFillViewport(true);
+        setContentDescription("Library media hub");
         setVerticalScrollBarEnabled(false);
         setClipToPadding(false);
         setBackgroundColor(ZeroChillUi.background(activity));
@@ -414,6 +415,7 @@ final class LibraryHubView extends ScrollView {
         TextView heading = text(title, 21f,
                 ZeroChillUi.color(activity, R.color.zc_text_primary));
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
+        heading.setContentDescription(title);
         copy.addView(heading);
 
         TextView hint = text(subtitle, 11.5f,
