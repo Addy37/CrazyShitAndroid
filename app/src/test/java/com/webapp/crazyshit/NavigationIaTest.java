@@ -85,8 +85,11 @@ public class NavigationIaTest {
         ViewPager2 pager = ReflectionHelpers.getField(activity, "primaryPager");
         BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
         MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
-        assertEquals(5, adapter.getItemCount());
-        assertEquals(MainPagerAdapter.PAGE_ONLYFAP, pager.getCurrentItem());
+        assertEquals(4, adapter.getItemCount());
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
         assertNull(nav.getMenu().findItem(1));
         assertEquals("Shows", nav.getMenu().findItem(2).getTitle());
         assertEquals("ShitTok", nav.getMenu().findItem(4).getTitle());
@@ -142,7 +145,10 @@ public class NavigationIaTest {
                 ReflectionHelpers.getField(activity, "bottomNavigation");
 
         assertFalse(pager.isUserInputEnabled());
-        assertEquals(MainPagerAdapter.PAGE_CHAOS, pager.getCurrentItem());
+        assertEquals(
+                MainPagerAdapter.PAGE_CHAOS,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
 
         View chaos = nav.findViewById(4);
         View onlyFap = nav.findViewById(3);
@@ -179,7 +185,10 @@ public class NavigationIaTest {
         ));
         shadowOf(android.os.Looper.getMainLooper()).idle();
 
-        assertEquals(MainPagerAdapter.PAGE_ONLYFAP, pager.getCurrentItem());
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
         assertEquals(2f, nav.pagerPositionForTest(), 0.01f);
         controller.pause().stop().destroy();
     }
@@ -198,11 +207,17 @@ public class NavigationIaTest {
         NativeMainActivity activity = controller.get();
         ViewPager2 pager = ReflectionHelpers.getField(activity, "primaryPager");
         BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
-        assertEquals(MainPagerAdapter.PAGE_CHAOS, pager.getCurrentItem());
+        assertEquals(
+                MainPagerAdapter.PAGE_CHAOS,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
 
         nav.setSelectedItemId(6);
         shadowOf(android.os.Looper.getMainLooper()).idle();
-        assertEquals(MainPagerAdapter.PAGE_LIBRARY, pager.getCurrentItem());
+        assertEquals(
+                MainPagerAdapter.PAGE_LIBRARY,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
         assertNotNull(findByDescription(activity.getWindow().getDecorView(), "History"));
         android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
         assertEquals("Library", title.getText().toString());
