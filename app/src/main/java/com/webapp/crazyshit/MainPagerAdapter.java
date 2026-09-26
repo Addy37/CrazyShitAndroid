@@ -170,10 +170,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.generation++;
         if (page.loadTask != null) page.loadTask.cancel(true);
         cancelShowsHubTasks(page);
+        cancelOnlyFapHubTasks(page);
         if (page.kind == PageKind.SERIES &&
                 page.seriesSource == SERIES_SOURCE_HUB &&
                 page.showsHub != null) {
             page.showsHub.clear();
+        }
+        if (page.kind == PageKind.ONLYFAP && page.onlyFapHub != null) {
+            page.onlyFapHub.clear();
+            page.currentPage = 0;
+            page.endReached = false;
+            page.loading = false;
+            loadOnlyFapHub(page);
+            return;
         }
         page.empty.setVisibility(View.GONE);
         page.currentPage = 0;
@@ -189,13 +198,24 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (shows != null && shows.showsHub != null) {
             shows.showsHub.setActive(position == PAGE_SERIES);
         }
+        Page onlyFap = pageAt(PAGE_ONLYFAP);
+        if (onlyFap != null && onlyFap.onlyFapHub != null) {
+            onlyFap.onlyFapHub.setActive(position == PAGE_ONLYFAP);
+        }
         if (position == PAGE_CHAOS) return;
         if (position == PAGE_LIBRARY) {
             libraryView.refresh();
             return;
         }
         Page page = pageAt(position);
-        if (page != null && page.itemCount() == 0 && !page.loading && !page.endReached) {
+        if (page == null) return;
+        if (page.kind == PageKind.ONLYFAP && page.onlyFapHub != null) {
+            if (page.itemCount() == 0 && !page.loading && !page.endReached) {
+                loadOnlyFapHub(page);
+            }
+            return;
+        }
+        if (page.itemCount() == 0 && !page.loading && !page.endReached) {
             load(page, false);
         }
     }
@@ -203,7 +223,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     public void onHostResume() {
         chaosView.onHostResume();
         Page onlyFap = pageAt(PAGE_ONLYFAP);
-        if (onlyFap != null && onlyFap.browseAdapter != null) onlyFap.browseAdapter.notifyDataSetChanged();
+        if (onlyFap != null && onlyFap.onlyFapHub != null) {
+            onlyFap.onlyFapHub.refreshFavorites();
+        } else if (onlyFap != null && onlyFap.browseAdapter != null) {
+            onlyFap.browseAdapter.notifyDataSetChanged();
+        }
         Page home = pageAt(PAGE_HOME);
         if (home != null && home.feedAdapter != null) home.feedAdapter.refreshPlaybackState();
         Page shows = pageAt(PAGE_SERIES);
@@ -218,13 +242,25 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         android.os.Bundle showsState = new android.os.Bundle();
         shows.showsHub.saveState(showsState);
         out.putBundle("shows_hub_state", showsState);
+
+        Page onlyFap = pageAt(PAGE_ONLYFAP);
+        if (onlyFap != null && onlyFap.onlyFapHub != null) {
+            android.os.Bundle onlyFapState = new android.os.Bundle();
+            onlyFap.onlyFapHub.saveState(onlyFapState);
+            out.putBundle("onlyfap_hub_state", onlyFapState);
+        }
     }
 
     public void restoreState(android.os.Bundle state) {
         if (state == null) return;
         Page shows = pageAt(PAGE_SERIES);
-        if (shows == null || shows.showsHub == null) return;
-        shows.showsHub.restoreState(state.getBundle("shows_hub_state"));
+        if (shows != null && shows.showsHub != null) {
+            shows.showsHub.restoreState(state.getBundle("shows_hub_state"));
+        }
+        Page onlyFap = pageAt(PAGE_ONLYFAP);
+        if (onlyFap != null && onlyFap.onlyFapHub != null) {
+            onlyFap.onlyFapHub.restoreState(state.getBundle("onlyfap_hub_state"));
+        }
     }
 
     public void onHostPause() {
@@ -248,6 +284,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.generation++;
             if (page.loadTask != null) page.loadTask.cancel(true);
             cancelShowsHubTasks(page);
+            cancelOnlyFapHubTasks(page);
+            if (page.onlyFapHub != null) page.onlyFapHub.close();
             if (page.browseAdapter != null) page.browseAdapter.close();
             if (page.feedAdapter != null) page.feedAdapter.close();
         }
@@ -643,8 +681,38 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 activity.startActivity(intent);
             });
         } else if (kind == PageKind.ONLYFAP) {
-            addOnlyFapControls(page);
-            page.empty.setOnClickListener(v -> refresh(PAGE_ONLYFAP));
+            page.onlyFapHub = new OnlyFapHubView(
+                    activity,
+                    new OnlyFapHubView.Listener() {
+                        @Override
+                        public void onOpenCreator(NativeContentItem creator) {
+                            if (creator == null) return;
+                            CreatorGalleryPreloader.warm(
+                                    activity,
+                                    creator,
+                                    CreatorGalleryPreloader.PRIORITY_HIGH
+                            );
+                            openBrowseItem(creator);
+                        }
+
+                        @Override
+                        public void onSearch() {
+                            activity.startActivity(SearchActivity.createBunkrSearch(activity));
+                        }
+
+                        @Override
+                        public void onViewAllFavorites() {
+                            activity.startActivity(new android.content.Intent(
+                                    activity,
+                                    CreatorsActivity.class
+                            ));
+                        }
+                    }
+            );
+            page.root.addView(page.onlyFapHub, new FrameLayout.LayoutParams(-1, -1));
+            page.refresh.setVisibility(View.GONE);
+            page.empty.setVisibility(View.GONE);
+            page.progress.setVisibility(View.GONE);
         }
         return page;
     }
@@ -1071,6 +1139,10 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             loadShowsHub(page);
             return;
         }
+        if (page.kind == PageKind.ONLYFAP && page.onlyFapHub != null) {
+            loadOnlyFapHub(page);
+            return;
+        }
         if (page.kind != PageKind.FEED) append = false;
         page.loading = true;
         final int generation = page.generation;
@@ -1413,6 +1485,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         NativeFeedAdapter feedAdapter;
         NativeCategoryAdapter browseAdapter;
         ShowsHubView showsHub;
+        OnlyFapHubView onlyFapHub;
         TextView featuredSource;
         TextView crazyShitSource;
         TextView efuktSource;
@@ -1436,6 +1509,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         java.util.concurrent.Future<?> showsWeeklyTask;
         final java.util.List<java.util.concurrent.Future<?>> showsHubTasks =
                 new java.util.ArrayList<>();
+        final java.util.List<java.util.concurrent.Future<?>> onlyFapHubTasks =
+                new java.util.ArrayList<>();
         final java.util.List<TextView> homeChips = new java.util.ArrayList<>();
         int currentPage;
         boolean loading;
@@ -1453,6 +1528,9 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             if (feedAdapter != null) return feedAdapter.getItemCount();
             if (kind == PageKind.SERIES && seriesSource == SERIES_SOURCE_HUB && showsHub != null) {
                 return showsHub.itemCount();
+            }
+            if (kind == PageKind.ONLYFAP && onlyFapHub != null) {
+                return onlyFapHub.itemCount();
             }
             return browseAdapter == null ? 0 : browseAdapter.getItemCount();
         }
