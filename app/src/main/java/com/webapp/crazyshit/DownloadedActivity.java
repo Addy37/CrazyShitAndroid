@@ -18,8 +18,11 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
+
+import androidx.recyclerview.widget.GridLayoutManager;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -108,9 +111,10 @@ public final class DownloadedActivity extends Activity {
         root.addView(header, new LinearLayout.LayoutParams(-1, dp(62)));
 
         recycler = new androidx.recyclerview.widget.RecyclerView(this);
-        recycler.setLayoutManager(new androidx.recyclerview.widget.LinearLayoutManager(this));
+        recycler.setLayoutManager(new GridLayoutManager(this, 2));
         recycler.setItemAnimator(null);
-        recycler.setPadding(dp(12), dp(8), dp(12), dp(16));
+        recycler.setPadding(dp(10), dp(8), dp(10), dp(20));
+        recycler.setClipToPadding(false);
         downloadsAdapter = new DownloadsAdapter();
         recycler.setAdapter(downloadsAdapter);
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -180,8 +184,9 @@ public final class DownloadedActivity extends Activity {
         public int getItemCount() { return entries.size(); }
         public DownloadHolder onCreateViewHolder(android.view.ViewGroup parent, int type) {
             FrameLayout frame = new FrameLayout(DownloadedActivity.this);
-            androidx.recyclerview.widget.RecyclerView.LayoutParams params = new androidx.recyclerview.widget.RecyclerView.LayoutParams(-1, -2);
-            params.setMargins(0, dp(5), 0, dp(5));
+            androidx.recyclerview.widget.RecyclerView.LayoutParams params =
+                    new androidx.recyclerview.widget.RecyclerView.LayoutParams(-1, -2);
+            params.setMargins(dp(5), dp(5), dp(5), dp(8));
             frame.setLayoutParams(params);
             return new DownloadHolder(frame);
         }
@@ -207,94 +212,137 @@ public final class DownloadedActivity extends Activity {
     }
 
     private View downloadCard(VideoDownloadStore.Entry entry) {
+        LinearLayout wrapper = new LinearLayout(this);
+        wrapper.setOrientation(LinearLayout.VERTICAL);
+        wrapper.setClickable(true);
+        wrapper.setFocusable(true);
+        wrapper.setContentDescription(entry.title + ". " + VideoDownloadStore.statusText(entry));
+        wrapper.setOnClickListener(v -> VideoDownloadStore.open(this, entry));
+        ZeroChillMotion.installPressFeedback(wrapper);
+
         MaterialCardView card = new MaterialCardView(this);
-        card.setCardBackgroundColor(Color.rgb(23, 23, 27));
-        card.setRadius(dp(18));
-        card.setStrokeWidth(dp(1));
-        card.setStrokeColor(Color.rgb(46, 46, 53));
+        card.setCardBackgroundColor(Color.rgb(18, 18, 21));
+        card.setRadius(dp(16));
         card.setCardElevation(0f);
+        card.setStrokeWidth(0);
 
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.TOP);
-        row.setPadding(dp(8), dp(8), dp(9), dp(8));
+        FrameLayout media = new FrameLayout(this);
+        card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
+        media.addView(thumbnail(entry), new FrameLayout.LayoutParams(-1, -1));
 
-        row.addView(thumbnail(entry), new LinearLayout.LayoutParams(dp(126), dp(82)));
-
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(11), dp(3), 0, 0);
-        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView title = text(entry.title, 15, Color.WHITE, true);
-        title.setMaxLines(2);
-        title.setEllipsize(TextUtils.TruncateAt.END);
-        copy.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        View shade = new View(this);
+        shade.setBackground(new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {
+                        Color.TRANSPARENT,
+                        Color.argb(28, 0, 0, 0),
+                        Color.argb(225, 0, 0, 0)
+                }
+        ));
+        media.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
         int statusColor = entry.status == DownloadManager.STATUS_FAILED
                 ? Color.rgb(255, 130, 120)
                 : entry.status == DownloadManager.STATUS_SUCCESSFUL
                 ? UiPalette.PRIMARY
-                : Color.rgb(205, 205, 214);
-        TextView status = text(VideoDownloadStore.statusText(entry), 12, statusColor, true);
-        status.setPadding(0, dp(5), 0, 0);
-        copy.addView(status, new LinearLayout.LayoutParams(-1, -2));
+                : Color.WHITE;
+        TextView status = overlayPill(VideoDownloadStore.statusText(entry), statusColor);
+        FrameLayout.LayoutParams statusParams =
+                new FrameLayout.LayoutParams(-2, dp(24), Gravity.TOP | Gravity.START);
+        statusParams.setMargins(dp(8), dp(8), 0, 0);
+        media.addView(status, statusParams);
+
+        TextView more = overflowButton("Download options for " + entry.title);
+        more.setOnClickListener(v -> showDownloadMenu(v, entry));
+        FrameLayout.LayoutParams moreParams =
+                new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP | Gravity.END);
+        moreParams.setMargins(0, dp(5), dp(5), 0);
+        media.addView(more, moreParams);
+
+        TextView title = text(entry.title, 13, Color.WHITE, true);
+        title.setMaxLines(2);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        FrameLayout.LayoutParams titleParams =
+                new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        titleParams.setMargins(dp(10), 0, dp(34), dp(10));
+        media.addView(title, titleParams);
 
         if (entry.status == DownloadManager.STATUS_RUNNING ||
                 entry.status == DownloadManager.STATUS_PENDING ||
                 entry.status == DownloadManager.STATUS_PAUSED) {
-            ProgressBar progress = new ProgressBar(
-                    this,
-                    null,
-                    android.R.attr.progressBarStyleHorizontal
-            );
-            progress.setMax(100);
-            progress.setIndeterminate(entry.totalBytes <= 0L);
-            if (entry.totalBytes > 0L) {
-                progress.setProgress((int) Math.min(
-                        100L,
-                        entry.downloadedBytes * 100L / entry.totalBytes
-                ));
-            }
-            LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(-1, dp(4));
-            progressParams.setMargins(0, dp(6), 0, dp(2));
-            copy.addView(progress, progressParams);
+            FrameLayout track = new FrameLayout(this);
+            track.setBackground(rounded(Color.argb(105, 255, 255, 255), dp(2)));
+            FrameLayout.LayoutParams trackParams =
+                    new FrameLayout.LayoutParams(-1, dp(3), Gravity.BOTTOM);
+            trackParams.setMargins(dp(8), 0, dp(8), dp(6));
+            media.addView(track, trackParams);
+
+            View fill = new View(this);
+            fill.setBackground(rounded(UiPalette.PRIMARY, dp(2)));
+            int percent = entry.totalBytes > 0L
+                    ? (int) Math.min(100L, entry.downloadedBytes * 100L / entry.totalBytes)
+                    : 8;
+            int width = Math.max(dp(3), Math.round(dp(142) * (percent / 100f)));
+            track.addView(fill, new FrameLayout.LayoutParams(width, -1));
         }
 
-        LinearLayout footer = new LinearLayout(this);
-        footer.setOrientation(LinearLayout.HORIZONTAL);
-        footer.setGravity(Gravity.CENTER_VERTICAL);
-        footer.setPadding(0, dp(4), 0, 0);
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(102)));
 
-        String detail = detailText(entry);
-        TextView details = text(detail, 10, Color.rgb(137, 137, 147), false);
+        TextView details = text(detailText(entry), 10, Color.rgb(137, 137, 147), false);
         details.setMaxLines(1);
         details.setEllipsize(TextUtils.TruncateAt.END);
-        footer.addView(details, new LinearLayout.LayoutParams(0, -2, 1f));
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
+        detailParams.setMargins(dp(3), dp(6), dp(3), dp(2));
+        wrapper.addView(details, detailParams);
+        return wrapper;
+    }
 
+    private TextView overlayPill(String value, int textColor) {
+        TextView view = text(value, 9, textColor, true);
+        view.setGravity(Gravity.CENTER);
+        view.setPadding(dp(8), 0, dp(8), 0);
+        view.setBackground(rounded(Color.argb(185, 0, 0, 0), dp(12)));
+        return view;
+    }
+
+    private TextView overflowButton(String description) {
+        TextView view = text("⋮", 22, Color.WHITE, false);
+        view.setGravity(Gravity.CENTER);
+        view.setContentDescription(description);
+        view.setClickable(true);
+        view.setFocusable(true);
+        view.setBackground(rounded(Color.argb(150, 0, 0, 0), dp(17)));
+        return view;
+    }
+
+    private void showDownloadMenu(View anchor, VideoDownloadStore.Entry entry) {
+        PopupMenu menu = new PopupMenu(this, anchor);
         if (entry.status == DownloadManager.STATUS_SUCCESSFUL) {
-            footer.addView(action("PLAY", () -> VideoDownloadStore.open(this, entry)),
-                    new LinearLayout.LayoutParams(-2, dp(48)));
+            menu.getMenu().add("Play");
         } else if (entry.status == DownloadManager.STATUS_FAILED) {
-            footer.addView(action("RETRY", () -> VideoDownloadStore.retry(this, entry)),
-                    new LinearLayout.LayoutParams(-2, dp(48)));
+            menu.getMenu().add("Retry");
         } else if (entry.id < 0L && entry.status == DownloadManager.STATUS_PAUSED) {
-            footer.addView(action("RESUME", () -> VideoDownloadStore.retry(this, entry)),
-                    new LinearLayout.LayoutParams(-2, dp(48)));
+            menu.getMenu().add("Resume");
         } else if (entry.id < 0L) {
-            footer.addView(action("PAUSE", () -> VideoDownloadStore.pause(this, entry)),
-                    new LinearLayout.LayoutParams(-2, dp(48)));
+            menu.getMenu().add("Pause");
         }
-        footer.addView(action("REMOVE", () -> confirmRemove(entry)),
-                new LinearLayout.LayoutParams(-2, dp(48)));
-        copy.addView(footer, new LinearLayout.LayoutParams(-1, -2));
+        menu.getMenu().add("Remove");
 
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setContentDescription(entry.title + ". " + VideoDownloadStore.statusText(entry));
-        row.setOnClickListener(v -> VideoDownloadStore.open(this, entry));
-        card.addView(row);
-        return card;
+        menu.setOnMenuItemClickListener(item -> {
+            String action = item.getTitle().toString();
+            anchor.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            if ("Play".equals(action)) {
+                VideoDownloadStore.open(this, entry);
+            } else if ("Retry".equals(action) || "Resume".equals(action)) {
+                VideoDownloadStore.retry(this, entry);
+            } else if ("Pause".equals(action)) {
+                VideoDownloadStore.pause(this, entry);
+            } else if ("Remove".equals(action)) {
+                confirmRemove(entry);
+            }
+            return true;
+        });
+        menu.show();
     }
 
     private View thumbnail(VideoDownloadStore.Entry entry) {
