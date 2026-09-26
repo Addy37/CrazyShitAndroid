@@ -51,6 +51,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private static final int NAV_ONLYFAP = NAV_CATEGORIES;
     private static final int NAV_CHAOS = 4;
     private static final int NAV_MORE = 5;
+    private static final int NAV_LIBRARY = 6;
     private static final int PLAYER_REQUEST = 3001;
     static final int FAVORITES_REQUEST = 3002;
 
@@ -59,6 +60,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         SERIES,
         ONLYFAP,
         CHAOS,
+        LIBRARY,
         SEARCH
     }
 
@@ -80,11 +82,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private ViewPager2 primaryPager;
     private MainPagerAdapter primaryPagerAdapter;
     private AppUpdater appUpdater;
+    private boolean chaosClearDisplay;
 
-    private Screen screen = Screen.HOME;
+    private Screen screen = Screen.CHAOS;
     private final Runnable ratingPromptCheck = () -> {
-        if (screen != Screen.HOME || primaryPager == null
-                || primaryPager.getCurrentItem() != MainPagerAdapter.PAGE_HOME
+        if (screen != Screen.CHAOS || primaryPager == null
+                || currentPrimaryPage() != MainPagerAdapter.PAGE_CHAOS
+                || chaosClearDisplay
                 || (miniPlayer != null && miniPlayer.isVisible())) return;
         RatingFeedbackPrompt.maybeShow(this);
     };
@@ -100,7 +104,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private int portraitInsetRight = -1;
     private int portraitInsetBottom = -1;
     private boolean restoringPortraitFromFullscreen;
-    private boolean chaosClearDisplay;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -124,9 +127,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void startAppContent() {
-        if (restoredPrimaryPage >= 0 && primaryPagerAdapter != null && restoredPrimaryPage < primaryPagerAdapter.getItemCount())
-            showPrimaryPage(restoredPrimaryPage, false);
-        else showHome();
+        int startPage = restoredPrimaryPage;
+        if (primaryPagerAdapter == null || !MainPagerAdapter.isPrimaryPage(startPage)) {
+            startPage = MainPagerAdapter.PAGE_CHAOS;
+        }
+        showPrimaryPage(startPage, false);
         dispatchLauncherShortcut();
         NotificationCoordinator.maybeOfferPermission(this);
         scheduleRatingPromptCheck();
@@ -139,7 +144,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (!AccessNoticeDialog.isAccepted(this)) {
             return;
         }
-        showHome();
+        showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, false);
         dispatchLauncherShortcut();
     }
 
@@ -201,6 +206,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         primaryPager.setUserInputEnabled(false);
         primaryPager.setOffscreenPageLimit(MainPagerAdapter.PAGE_COUNT - 1);
         primaryPager.setAdapter(primaryPagerAdapter);
+        primaryPager.setCurrentItem(
+                MainPagerAdapter.pagerPositionForPage(MainPagerAdapter.PAGE_CHAOS),
+                false
+        );
         primaryPager.setPageTransformer((page, position) -> {
             if (ZeroChillMotion.animationsEnabled(page.getContext())) {
                 float distance = Math.min(1f, Math.abs(position));
@@ -227,7 +236,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 if (bottomNavigation != null) {
                     bottomNavigation.setPagerPosition(position);
                 }
-                showPagerChrome(position);
+                showPagerChrome(MainPagerAdapter.pageForPagerPosition(position));
             }
         });
         shell.addView(primaryPager, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -297,11 +306,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         bottomNavigation.setElevation(ZeroChillUi.dimension(this, R.dimen.zc_elevation_navigation));
         bottomNavigation.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
         Menu menu = bottomNavigation.getMenu();
-        menu.add(Menu.NONE, NAV_HOME, 0, "Home").setIcon(R.drawable.ic_nav_home);
-        menu.add(Menu.NONE, NAV_SERIES, 1, "Shows").setIcon(R.drawable.ic_nav_series);
-        menu.add(Menu.NONE, NAV_CHAOS, 2, "ShitTok").setIcon(R.drawable.ic_nav_chaos);
-        menu.add(Menu.NONE, NAV_ONLYFAP, 3, "OnlyFap").setIcon(R.drawable.ic_nav_onlyfap);
-        menu.add(Menu.NONE, NAV_MORE, 4, "More").setIcon(R.drawable.ic_nav_more);
+        menu.add(Menu.NONE, NAV_SERIES, 0, "Shows").setIcon(R.drawable.ic_nav_series);
+        menu.add(Menu.NONE, NAV_CHAOS, 1, "ShitTok").setIcon(R.drawable.ic_nav_chaos);
+        menu.add(Menu.NONE, NAV_ONLYFAP, 2, "OnlyFap").setIcon(R.drawable.ic_nav_onlyfap);
+        menu.add(Menu.NONE, NAV_LIBRARY, 3, "Library").setIcon(R.drawable.ic_more_library);
         bottomNavigation.setOnNavigationDragListener(
                 new ZeroChillBottomNavigationView.OnNavigationDragListener() {
                     @Override
@@ -331,8 +339,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                                 ? primaryPager.getCurrentItem()
                                 : bottomNavigation.pagerPositionForTest();
                         int target = Math.max(
-                                MainPagerAdapter.PAGE_HOME,
-                                Math.min(MainPagerAdapter.PAGE_ONLYFAP, Math.round(releasePosition))
+                                0,
+                                Math.min(MainPagerAdapter.PAGE_COUNT - 1, Math.round(releasePosition))
                         );
                         primaryPager.endFakeDrag();
                         primaryPager.setCurrentItem(
@@ -344,10 +352,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         );
         bottomNavigation.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
-            if (id == NAV_HOME) {
-                showHome();
-                return true;
-            }
             if (id == NAV_SERIES) {
                 showSeries();
                 return true;
@@ -360,9 +364,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
                 return true;
             }
-            if (id == NAV_MORE) {
-                showMoreSheet();
-                return false;
+            if (id == NAV_LIBRARY) {
+                showPrimaryPage(MainPagerAdapter.PAGE_LIBRARY, true);
+                return true;
             }
             return false;
         });
@@ -426,11 +430,28 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             openContextualSearch();
         });
         bar.addView(search, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+        ImageView more = new ImageView(this);
+        more.setImageResource(R.drawable.ic_nav_more);
+        more.setPadding(dp(11), dp(11), dp(11), dp(11));
+        more.setContentDescription("More");
+        more.setColorFilter(ZeroChillUi.color(this, R.color.zc_text_secondary));
+        more.setClickable(true);
+        more.setFocusable(true);
+        ZeroChillMotion.installPressFeedback(more);
+        more.setOnClickListener(v -> {
+            haptic(v);
+            showMoreSheet();
+        });
+        LinearLayout.LayoutParams moreParams =
+                new LinearLayout.LayoutParams(dp(44), dp(48));
+        moreParams.setMarginStart(dp(3));
+        bar.addView(more, moreParams);
         return bar;
     }
 
     private void showHome() {
-        showPrimaryPage(MainPagerAdapter.PAGE_HOME, true);
+        showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
     }
 
     private void showSeries() {
@@ -444,7 +465,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     boolean isOnlyFapSearchContext() {
         return primaryPager != null &&
                 primaryPager.getVisibility() == View.VISIBLE &&
-                primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_ONLYFAP;
+                currentPrimaryPage() == MainPagerAdapter.PAGE_ONLYFAP;
     }
 
     void openContextualSearch() {
@@ -454,10 +475,22 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         startActivity(intent);
     }
 
+    private int currentPrimaryPage() {
+        if (primaryPager == null || primaryPagerAdapter == null) {
+            return MainPagerAdapter.PAGE_CHAOS;
+        }
+        return MainPagerAdapter.pageForPagerPosition(primaryPager.getCurrentItem());
+    }
+
     private void showPrimaryPage(int position, boolean smooth) {
         if (primaryPager == null) return;
+        int pagerPosition = MainPagerAdapter.pagerPositionForPage(position);
+        if (pagerPosition < 0) return;
         showPagerChrome(position);
-        primaryPager.setCurrentItem(position, smooth && ZeroChillMotion.animationsEnabled(this));
+        primaryPager.setCurrentItem(
+                pagerPosition,
+                smooth && ZeroChillMotion.animationsEnabled(this)
+        );
     }
 
     private void showPagerChrome(int position) {
@@ -491,6 +524,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             feedBaseUrl = CrazyShitRepository.HOME;
             feedTitle = "ShitTok";
             selectNavSilently(NAV_CHAOS);
+        } else if (position == MainPagerAdapter.PAGE_LIBRARY) {
+            screen = Screen.LIBRARY;
+            feedBaseUrl = CrazyShitRepository.HOME;
+            feedTitle = "Library";
+            selectNavSilently(NAV_LIBRARY);
         } else {
             screen = Screen.HOME;
             feedBaseUrl = CrazyShitRepository.HOME;
@@ -512,7 +550,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         }
         if (headerSubtitle != null) headerSubtitle.setVisibility(View.GONE);
         applyChaosFullscreenChrome();
-        if (position == MainPagerAdapter.PAGE_HOME) scheduleRatingPromptCheck();
+        if (position == MainPagerAdapter.PAGE_CHAOS) scheduleRatingPromptCheck();
     }
 
     private void setZeroChillWordmark() {
@@ -785,9 +823,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private boolean isFeedScreen() {
-        if (primaryPager != null && primaryPager.getVisibility() == View.VISIBLE) {
-            return primaryPager.getCurrentItem() == MainPagerAdapter.PAGE_HOME;
-        }
         return isLegacyFeedScreen();
     }
 
@@ -875,7 +910,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     private int currentViewMode() {
         if (primaryPager != null && primaryPager.getVisibility() == View.VISIBLE && primaryPagerAdapter != null) {
-            return primaryPagerAdapter.viewMode(primaryPager.getCurrentItem());
+            return primaryPagerAdapter.viewMode(currentPrimaryPage());
         }
         return getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .getInt(viewPreferenceKey(), NativeFeedAdapter.VIEW_LIST);
@@ -891,7 +926,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private void applyFeedLayout() {
         int mode = currentViewMode();
         if (primaryPager != null && primaryPager.getVisibility() == View.VISIBLE && primaryPagerAdapter != null) {
-            primaryPagerAdapter.setViewMode(primaryPager.getCurrentItem(), mode);
+            primaryPagerAdapter.setViewMode(currentPrimaryPage(), mode);
             return;
         }
         feedAdapter.setViewMode(mode);
@@ -921,7 +956,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 checked = NativeFeedAdapter.VIEW_LIST;
             }
             if (primaryPager != null && primaryPager.getVisibility() == View.VISIBLE && primaryPagerAdapter != null) {
-                primaryPagerAdapter.setViewMode(primaryPager.getCurrentItem(), checked);
+                primaryPagerAdapter.setViewMode(currentPrimaryPage(), checked);
             } else {
                 getSharedPreferences("app_prefs", MODE_PRIVATE)
                         .edit()
@@ -1088,11 +1123,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             return;
         }
         if (legacyContent != null && legacyContent.getVisibility() == View.VISIBLE) {
-            showHome();
+            showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
             return;
         }
-        if (primaryPager != null && primaryPager.getCurrentItem() != MainPagerAdapter.PAGE_HOME) {
-            showHome();
+        if (primaryPager != null && currentPrimaryPage() != MainPagerAdapter.PAGE_CHAOS) {
+            showPrimaryPage(MainPagerAdapter.PAGE_CHAOS, true);
             return;
         }
         finish();
@@ -1163,7 +1198,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
-        if (primaryPager != null) state.putInt("primary_page", primaryPager.getCurrentItem());
+        if (primaryPager != null) state.putInt("primary_page", currentPrimaryPage());
         if (primaryPagerAdapter != null) primaryPagerAdapter.saveState(state);
         super.onSaveInstanceState(state);
     }

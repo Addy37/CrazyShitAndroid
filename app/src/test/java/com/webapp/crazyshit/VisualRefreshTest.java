@@ -112,8 +112,11 @@ public class VisualRefreshTest {
         nav.setSelectedItemId(3);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
         androidx.viewpager2.widget.ViewPager2 viewPager = ReflectionHelpers.getField(main, "primaryPager");
-        assertEquals(MainPagerAdapter.PAGE_ONLYFAP, viewPager.getCurrentItem());
-        nav.setSelectedItemId(1);
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(viewPager.getCurrentItem())
+        );
+        // Home remains constructed and testable, but is intentionally not an active pager page.
         UiPolishController.attach(main);
         ResponsiveFitmentController.applySoon(main);
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
@@ -122,22 +125,27 @@ public class VisualRefreshTest {
 
         TextView headerTitle = ReflectionHelpers.getField(main, "headerTitle");
         TextView headerSubtitle = ReflectionHelpers.getField(main, "headerSubtitle");
-        assertEquals("ZEROCHILL", headerTitle.getText().toString());
+        assertEquals("OnlyFap", headerTitle.getText().toString());
         assertEquals(View.GONE, headerSubtitle.getVisibility());
         LinearLayout shell = ReflectionHelpers.getField(main, "shell");
         assertTrue(shell instanceof FrostedNavigationLayout);
         View topBar = shell.getChildAt(0);
         assertTrue(topBar instanceof LinearLayout);
-        assertEquals(2, ((LinearLayout) topBar).getChildCount());
+        assertEquals(3, ((LinearLayout) topBar).getChildCount());
         View search = ((LinearLayout) topBar).getChildAt(1);
         assertEquals("Global Search", String.valueOf(search.getContentDescription()));
+        View more = ((LinearLayout) topBar).getChildAt(2);
+        assertEquals("More", String.valueOf(more.getContentDescription()));
 
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
         assertNull(homeList.getItemAnimator());
-        NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(1);
-        assertNotNull(visibleCard);
-        NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder) homeList.findViewHolderForAdapterPosition(0);
-        assertNotNull(visibleSection);
+        RecyclerView holderParent = new RecyclerView(main);
+        NativeFeedAdapter.Holder visibleCard = (NativeFeedAdapter.Holder)
+                feed.onCreateViewHolder(holderParent, feed.getItemViewType(1));
+        feed.onBindViewHolder(visibleCard, 1);
+        NativeFeedAdapter.Holder visibleSection = (NativeFeedAdapter.Holder)
+                feed.onCreateViewHolder(holderParent, feed.getItemViewType(0));
+        feed.onBindViewHolder(visibleSection, 0);
         assertEquals("TODAY'S CRAZY SHIT", visibleSection.sectionTitle.getText().toString());
         com.google.android.material.card.MaterialCardView sectionCard =
                 (com.google.android.material.card.MaterialCardView) visibleSection.itemView;
@@ -151,7 +159,10 @@ public class VisualRefreshTest {
         assertEquals(0, card.getStrokeWidth());
         assertEquals(main.getColor(R.color.zc_surface_glass), card.getCardBackgroundColor().getDefaultColor());
         capture(root, "home-lifecycle", 360, 800);
-        assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(viewPager.getCurrentItem())
+        );
         assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
                 nav.getLayoutParams().height);
         assertSame(nav, ((FrostedNavigationLayout) shell).frostedNavigationViewForTest());
@@ -172,7 +183,7 @@ public class VisualRefreshTest {
         assertTrue(nav.isItemActiveIndicatorEnabled());
         assertTrue(nav instanceof ZeroChillBottomNavigationView);
         assertEquals(
-                MainPagerAdapter.PAGE_HOME,
+                MainPagerAdapter.pagerPositionForPage(MainPagerAdapter.PAGE_ONLYFAP),
                 Math.round(((ZeroChillBottomNavigationView) nav).pagerPositionForTest())
         );
         ZeroChillBottomNavigationView slidingNav = (ZeroChillBottomNavigationView) nav;
@@ -181,21 +192,22 @@ public class VisualRefreshTest {
         nav.draw(new Canvas(navBitmap));
         navBitmap.recycle();
         android.graphics.RectF capsule = ReflectionHelpers.getField(slidingNav, "indicatorRect");
-        View homeTab = nav.findViewById(1);
         View showsTab = nav.findViewById(2);
-        assertEquals((homeTab.getWidth() + showsTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
+        View shitTokTab = nav.findViewById(4);
+        assertEquals((showsTab.getWidth() + shitTokTab.getWidth()) / 2f - BrowseUi.dp(main, 8),
                 capsule.width(), 1f);
         assertEquals(BrowseUi.dp(main, 4), capsule.top, 1f);
         assertEquals(nav.getHeight() + BrowseUi.dp(main, 10), capsule.bottom, 1f);
         assertEquals(0.5f, slidingNav.pagerPositionForTest(), 0.001f);
         slidingNav.setPagerPosition(0f);
-        assertEquals(5, nav.getMenu().size());
-        assertEquals("Home", nav.getMenu().findItem(1).getTitle());
+        assertEquals(4, nav.getMenu().size());
+        assertNull(nav.getMenu().findItem(1));
         assertEquals("Shows", nav.getMenu().findItem(2).getTitle());
         assertEquals("ShitTok", nav.getMenu().findItem(4).getTitle());
         assertEquals("OnlyFap", nav.getMenu().findItem(3).getTitle());
-        assertEquals("More", nav.getMenu().findItem(5).getTitle());
-        for (int id : new int[] {1, 2, 4, 3, 5}) {
+        assertEquals("Library", nav.getMenu().findItem(6).getTitle());
+        assertNull(nav.getMenu().findItem(5));
+        for (int id : new int[] {2, 4, 3, 6}) {
             View tab = nav.findViewById(id);
             assertTrue("Tab " + id + " width=" + tab.getWidth() + " nav=" + nav.getWidth(), tab.getWidth() >= BrowseUi.dp(main, 48));
             assertEquals(nav.getHeight(), tab.getHeight());

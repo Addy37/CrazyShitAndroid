@@ -24,16 +24,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Keeps Home, Shows, ShitTok and OnlyFap alive for true horizontal paging.
+ * Keeps dormant Home compatibility plus Shows, ShitTok, OnlyFap and Library alive for paging.
  * Chaos itself owns a nested vertical ViewPager2 for Shorts/Reels-style playback.
  */
 public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapter.Holder> {
     public static final int PAGE_HOME = 0;
     public static final int PAGE_SERIES = 1;
     public static final int PAGE_CHAOS = 2;
-    /** Stable slot 3 is preserved for upgrades; it now hosts the public OnlyFap tab. */
+    /** Stable slot 3 is preserved for upgrades; it hosts the public OnlyFap tab. */
     public static final int PAGE_ONLYFAP = 3;
-    @Deprecated public static final int PAGE_LIBRARY = PAGE_ONLYFAP;
+    public static final int PAGE_LIBRARY = 4;
     @Deprecated public static final int PAGE_CATEGORIES = PAGE_ONLYFAP;
     public static final int PAGE_COUNT = 4;
     private static final int PAGE_ARRAY_COUNT = 4;
@@ -75,6 +75,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private final ExecutorService io = Executors.newFixedThreadPool(5);
     private final Page[] pages = new Page[PAGE_ARRAY_COUNT];
     private final ChaosFeedView chaosView;
+    private final LibraryHubView libraryView;
 
     public MainPagerAdapter(Activity activity, Host host) {
         this.activity = activity;
@@ -98,12 +99,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             }
         });
         chaosView.setActive(false);
+        libraryView = new LibraryHubView(activity);
 
     }
 
     public String titleFor(int position) {
         if (position == PAGE_SERIES) return "Shows";
         if (position == PAGE_ONLYFAP) return "OnlyFap";
+        if (position == PAGE_LIBRARY) return "Library";
         if (position == PAGE_CHAOS) return "ShitTok";
         return "Home";
     }
@@ -117,7 +120,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     public void setViewMode(int position, int mode) {
-        if (position == PAGE_CHAOS) return;
+        if (position == PAGE_CHAOS || position == PAGE_LIBRARY) return;
         Page page = pageAt(position);
         if (page == null || page.kind != PageKind.FEED) return;
 
@@ -138,6 +141,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             chaosView.refresh();
             return;
         }
+        if (position == PAGE_LIBRARY) return;
         Page page = pageAt(position);
         if (page == null) return;
         page.generation++;
@@ -221,9 +225,29 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         io.shutdownNow();
     }
 
+    static int pagerPositionForPage(int page) {
+        if (page == PAGE_SERIES) return 0;
+        if (page == PAGE_CHAOS) return 1;
+        if (page == PAGE_ONLYFAP) return 2;
+        if (page == PAGE_LIBRARY) return 3;
+        return -1;
+    }
+
+    static int pageForPagerPosition(int position) {
+        if (position == 0) return PAGE_SERIES;
+        if (position == 1) return PAGE_CHAOS;
+        if (position == 2) return PAGE_ONLYFAP;
+        if (position == 3) return PAGE_LIBRARY;
+        return PAGE_CHAOS;
+    }
+
+    static boolean isPrimaryPage(int page) {
+        return pagerPositionForPage(page) >= 0;
+    }
+
     @Override
     public long getItemId(int position) {
-        return 10_000L + position;
+        return 10_000L + pageForPagerPosition(position);
     }
 
     @Override
@@ -242,11 +266,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        int pageIndex = pageForPagerPosition(position);
         View pageView;
-        if (position == PAGE_CHAOS) {
+        if (pageIndex == PAGE_CHAOS) {
             pageView = chaosView;
+        } else if (pageIndex == PAGE_LIBRARY) {
+            pageView = libraryView;
         } else {
-            Page page = pageAt(position);
+            Page page = pageAt(pageIndex);
             if (page == null) return;
             pageView = page.root;
         }

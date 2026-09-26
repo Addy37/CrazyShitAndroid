@@ -86,13 +86,18 @@ public class NavigationIaTest {
         BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
         MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
         assertEquals(4, adapter.getItemCount());
-        assertEquals(MainPagerAdapter.PAGE_ONLYFAP, pager.getCurrentItem());
-        assertEquals("Home", nav.getMenu().findItem(1).getTitle());
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
+        assertNull(nav.getMenu().findItem(1));
         assertEquals("Shows", nav.getMenu().findItem(2).getTitle());
         assertEquals("ShitTok", nav.getMenu().findItem(4).getTitle());
         assertEquals("OnlyFap", nav.getMenu().findItem(3).getTitle());
-        assertEquals("More", nav.getMenu().findItem(5).getTitle());
-        assertNull(findMenuItem(nav, "Library"));
+        assertEquals("Library", nav.getMenu().findItem(6).getTitle());
+        assertNull(findMenuItem(nav, "Home"));
+        assertNull(findMenuItem(nav, "More"));
+        assertNotNull(findByDescription(activity.getWindow().getDecorView(), "More"));
         View modeButton = findByDescription(activity.getWindow().getDecorView(),
                 "Show Trending OnlyFap creators");
         View badge = findByDescription(activity.getWindow().getDecorView(), "Creator list mode");
@@ -140,23 +145,27 @@ public class NavigationIaTest {
                 ReflectionHelpers.getField(activity, "bottomNavigation");
 
         assertFalse(pager.isUserInputEnabled());
-        assertEquals(MainPagerAdapter.PAGE_HOME, pager.getCurrentItem());
+        assertEquals(
+                MainPagerAdapter.PAGE_CHAOS,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
 
-        View home = nav.findViewById(1);
-        View shows = nav.findViewById(2);
-        assertNotNull(home);
-        assertNotNull(shows);
+        View chaos = nav.findViewById(4);
+        View onlyFap = nav.findViewById(3);
+        assertNotNull(chaos);
+        assertNotNull(onlyFap);
+        assertNull(nav.findViewById(1));
 
-        android.graphics.Rect homeRect = new android.graphics.Rect();
-        android.graphics.Rect showsRect = new android.graphics.Rect();
-        home.getDrawingRect(homeRect);
-        shows.getDrawingRect(showsRect);
-        nav.offsetDescendantRectToMyCoords(home, homeRect);
-        nav.offsetDescendantRectToMyCoords(shows, showsRect);
+        android.graphics.Rect chaosRect = new android.graphics.Rect();
+        android.graphics.Rect onlyFapRect = new android.graphics.Rect();
+        chaos.getDrawingRect(chaosRect);
+        onlyFap.getDrawingRect(onlyFapRect);
+        nav.offsetDescendantRectToMyCoords(chaos, chaosRect);
+        nav.offsetDescendantRectToMyCoords(onlyFap, onlyFapRect);
 
-        float downX = homeRect.exactCenterX();
-        float downY = homeRect.exactCenterY();
-        float targetX = showsRect.exactCenterX();
+        float downX = chaosRect.exactCenterX();
+        float downY = chaosRect.exactCenterY();
+        float targetX = onlyFapRect.exactCenterX();
         long downTime = android.os.SystemClock.uptimeMillis();
 
         nav.dispatchTouchEvent(android.view.MotionEvent.obtain(
@@ -176,9 +185,43 @@ public class NavigationIaTest {
         ));
         shadowOf(android.os.Looper.getMainLooper()).idle();
 
-        assertEquals(MainPagerAdapter.PAGE_SERIES, pager.getCurrentItem());
-        assertEquals((float) MainPagerAdapter.PAGE_SERIES,
-                nav.pagerPositionForTest(), 0.01f);
+        assertEquals(
+                MainPagerAdapter.PAGE_ONLYFAP,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
+        assertEquals(2f, nav.pagerPositionForTest(), 0.01f);
+        controller.pause().stop().destroy();
+    }
+
+    @Test public void dormantHomeRestoreFallsBackToShitTokAndLibraryIsPrimaryTab() {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("access_notice_2_8_3_accepted", true).apply();
+        Bundle state = new Bundle();
+        state.putInt("primary_page", MainPagerAdapter.PAGE_HOME);
+        ActivityController<NativeMainActivity> controller =
+                Robolectric.buildActivity(NativeMainActivity.class)
+                        .create(state).start().resume().visible();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+
+        NativeMainActivity activity = controller.get();
+        ViewPager2 pager = ReflectionHelpers.getField(activity, "primaryPager");
+        BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
+        assertEquals(
+                MainPagerAdapter.PAGE_CHAOS,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
+
+        nav.setSelectedItemId(6);
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(
+                MainPagerAdapter.PAGE_LIBRARY,
+                MainPagerAdapter.pageForPagerPosition(pager.getCurrentItem())
+        );
+        assertNotNull(findByDescription(activity.getWindow().getDecorView(), "History"));
+        android.widget.TextView title = ReflectionHelpers.getField(activity, "headerTitle");
+        assertEquals("Library", title.getText().toString());
+
         controller.pause().stop().destroy();
     }
 
@@ -213,10 +256,8 @@ public class NavigationIaTest {
 
         Object[] pages = ReflectionHelpers.getField(adapter, "pages");
         View homeRoot = ReflectionHelpers.getField(pages[MainPagerAdapter.PAGE_HOME], "root");
-        assertTrue(homeRoot.getLayoutParams() instanceof android.widget.FrameLayout.LayoutParams);
-        android.widget.FrameLayout.LayoutParams homeParams =
-                (android.widget.FrameLayout.LayoutParams) homeRoot.getLayoutParams();
-        assertEquals(0, homeParams.bottomMargin);
+        assertNotNull(homeRoot);
+        assertNull(homeRoot.getParent());
 
         controller.pause().stop().destroy();
     }
