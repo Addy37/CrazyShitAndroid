@@ -148,9 +148,8 @@ public class VisualRefreshTest {
         visibleCard.image.setImageResource(R.drawable.ic_nav_chaos);
         visibleCard.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) visibleCard.itemView;
-        assertEquals(BrowseUi.dp(main, 1), card.getStrokeWidth());
+        assertEquals(0, card.getStrokeWidth());
         assertEquals(main.getColor(R.color.zc_surface_glass), card.getCardBackgroundColor().getDefaultColor());
-        assertEquals(main.getColor(R.color.zc_edge), card.getStrokeColor());
         capture(root, "home-lifecycle", 360, 800);
         assertEquals(MainPagerAdapter.PAGE_HOME, viewPager.getCurrentItem());
         assertEquals(main.getResources().getDimensionPixelSize(R.dimen.zc_bottom_nav_height),
@@ -221,7 +220,7 @@ public class VisualRefreshTest {
 
         assertEquals(host.get().getColor(R.color.zc_surface_glass),
                 holder.card.getCardBackgroundColor().getDefaultColor());
-        assertEquals(host.get().getColor(R.color.zc_cyan), holder.card.getStrokeColor());
+        assertEquals(0, holder.card.getStrokeWidth());
         assertEquals(0.62f, holder.backdrop.getAlpha(), 0.001f);
         assertEquals(Boolean.TRUE, holder.card.getTag(R.id.zerochill_motion_installed));
 
