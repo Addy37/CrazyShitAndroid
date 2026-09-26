@@ -106,6 +106,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             }
 
             @Override
+            public void onOpenHistory(PlaybackHistoryStore.Item item) {
+                openShowsResume(item);
+            }
+
+            @Override
             public void onOpenCreator(NativeContentItem creator) {
                 if (creator == null) return;
                 CreatorGalleryPreloader.warm(activity, creator);
