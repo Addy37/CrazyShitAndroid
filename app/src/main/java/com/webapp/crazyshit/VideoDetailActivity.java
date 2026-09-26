@@ -14,6 +14,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -87,6 +88,8 @@ public class VideoDetailActivity extends Activity {
     private static final int RELATED_THUMBNAIL_WORKERS = 4;
     private static final long RELATED_SLIDE_OUT_MS = 105L;
     private static final long RELATED_SLIDE_IN_MS = 175L;
+    private static final long SHOWS_IDENT_MIN_MS =
+            ShowsPlaybackSplashView.FIRST_REVEAL_COMPLETE_MS + 50L;
     private static final String THUMB_UA =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
@@ -116,8 +119,7 @@ public class VideoDetailActivity extends Activity {
     private ImageView startupPoster;
     private ProgressBar startupPosterLoading;
     private FrameLayout showsLaunchCurtain;
-    private ImageView showsLaunchFrame;
-    private ZeroChillLoadingView showsLaunchLoader;
+    private ShowsPlaybackSplashView showsLaunchLoader;
     private SeekBar portraitSeekBar;
     private ExoPlayer player;
     private RenderedThumbnailResolver[] thumbnailResolvers;
@@ -140,7 +142,6 @@ public class VideoDetailActivity extends Activity {
     private String mediaReferer;
     private String posterUrl;
     private boolean showsOrigin;
-    private boolean showsContinueResume;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
     private boolean recoveryResumed;
     private long requestedStartPosition;
@@ -164,6 +165,7 @@ public class VideoDetailActivity extends Activity {
     private boolean showsOrientationSettled;
     private boolean showsCurtainDismissScheduled;
     private int showsTargetOrientation = Configuration.ORIENTATION_UNDEFINED;
+    private long showsIdentStartedAt;
     private long lastShowsFramePositionMs = -1L;
 
     private final Runnable portraitProgressTicker = new Runnable() {
@@ -248,7 +250,6 @@ public class VideoDetailActivity extends Activity {
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
         posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         showsOrigin = getIntent().getBooleanExtra(EXTRA_SHOWS_ORIGIN, false);
-        showsContinueResume = getIntent().getBooleanExtra(EXTRA_SHOWS_CONTINUE_RESUME, false);
         requestedStartPosition = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
 
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
@@ -510,73 +511,15 @@ public class VideoDetailActivity extends Activity {
                 View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         );
 
-        if (showsContinueResume) {
-            java.io.File frame = ShowsContinueFrameStore.find(this, pageUrl);
-            if (frame != null) {
-                showsLaunchFrame = new ImageView(this);
-                showsLaunchFrame.setBackgroundColor(Color.BLACK);
-                showsLaunchFrame.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                showsLaunchCurtain.addView(
-                        showsLaunchFrame,
-                        new FrameLayout.LayoutParams(-1, -1)
-                );
-                Glide.with(showsLaunchFrame)
-                        .load(frame)
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .skipMemoryCache(false)
-                        .dontAnimate()
-                        .into(showsLaunchFrame);
-
-                View shade = new View(this);
-                shade.setBackgroundColor(Color.argb(104, 0, 0, 0));
-                showsLaunchCurtain.addView(shade, new FrameLayout.LayoutParams(-1, -1));
-            }
-        }
-
-        LinearLayout center = new LinearLayout(this);
-        center.setOrientation(LinearLayout.VERTICAL);
-        center.setGravity(Gravity.CENTER);
-        center.setPadding(dp(22), dp(18), dp(22), dp(18));
-
-        showsLaunchLoader = new ZeroChillLoadingView(this, "ZEROCHILL");
-        center.addView(showsLaunchLoader, new LinearLayout.LayoutParams(-2, -2));
-
-        TextView cue = new TextView(this);
-        cue.setText(showsContinueResume && requestedStartPosition > 0L
-                ? "RESUMING · " + showsResumeTime(requestedStartPosition)
-                : "PREPARING VIDEO");
-        cue.setTextSize(10.5f);
-        cue.setTextColor(showsContinueResume
-                ? UiPalette.PRIMARY
-                : Color.rgb(150, 170, 180));
-        cue.setLetterSpacing(0.11f);
-        cue.setGravity(Gravity.CENTER);
-        cue.setTypeface(null, android.graphics.Typeface.BOLD);
-        LinearLayout.LayoutParams cueParams = new LinearLayout.LayoutParams(-2, -2);
-        cueParams.topMargin = dp(10);
-        center.addView(cue, cueParams);
-
-        FrameLayout.LayoutParams centerParams =
-                new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER);
-        showsLaunchCurtain.addView(center, centerParams);
+        showsLaunchLoader = new ShowsPlaybackSplashView(this);
+        FrameLayout.LayoutParams mascotParams = new FrameLayout.LayoutParams(
+                dp(ShowsPlaybackSplashView.MASCOT_SIZE_DP),
+                dp(ShowsPlaybackSplashView.MASCOT_SIZE_DP),
+                Gravity.CENTER
+        );
+        showsLaunchCurtain.addView(showsLaunchLoader, mascotParams);
         root.addView(showsLaunchCurtain, new FrameLayout.LayoutParams(-1, -1));
-    }
-
-    private static String showsResumeTime(long millis) {
-        long total = Math.max(0L, millis / 1000L);
-        long hours = total / 3600L;
-        long minutes = (total % 3600L) / 60L;
-        long seconds = total % 60L;
-        if (hours > 0L) {
-            return String.format(
-                    java.util.Locale.US,
-                    "%d:%02d:%02d",
-                    hours,
-                    minutes,
-                    seconds
-            );
-        }
-        return String.format(java.util.Locale.US, "%d:%02d", minutes, seconds);
+        showsIdentStartedAt = SystemClock.uptimeMillis();
     }
 
     private LinearLayout.LayoutParams actionParams() {
@@ -1882,6 +1825,9 @@ public class VideoDetailActivity extends Activity {
         }
 
         showsCurtainDismissScheduled = true;
+        long elapsed = Math.max(0L, SystemClock.uptimeMillis() - showsIdentStartedAt);
+        long minimumRemaining = Math.max(0L, SHOWS_IDENT_MIN_MS - elapsed);
+        long delay = Math.max(90L, minimumRemaining);
         showsLaunchCurtain.postDelayed(() -> {
             showsCurtainDismissScheduled = false;
             if (isFinishing() || showsLaunchCurtain == null ||
@@ -1893,7 +1839,7 @@ public class VideoDetailActivity extends Activity {
                 return;
             }
             dismissShowsLaunchCurtain(false);
-        }, 90L);
+        }, delay);
     }
 
     private void dismissShowsLaunchCurtain(boolean immediate) {
@@ -1904,13 +1850,9 @@ public class VideoDetailActivity extends Activity {
         showsCurtainDismissScheduled = false;
 
         Runnable finish = () -> {
-            if (showsLaunchLoader != null) showsLaunchLoader.setVisibility(View.GONE);
-            if (showsLaunchFrame != null) {
-                try {
-                    Glide.with(showsLaunchFrame).clear(showsLaunchFrame);
-                } catch (Exception ignored) {
-                }
-                showsLaunchFrame.setImageDrawable(null);
+            if (showsLaunchLoader != null) {
+                showsLaunchLoader.stop();
+                showsLaunchLoader.setVisibility(View.GONE);
             }
             if (showsLaunchCurtain != null) {
                 showsLaunchCurtain.animate().cancel();
